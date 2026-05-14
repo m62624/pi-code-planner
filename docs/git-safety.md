@@ -1,13 +1,169 @@
 # Git Safety
 
+Git safety is the foundation for every higher-level planner workflow. While a
+plan is active, direct git writes must go through planner-controlled layers so
+runtime state, expected branch/commit, and recovery metadata stay synchronized.
+
+## Layers
+
+Current git layers:
+
+1. Read layer
+   - `GitRunner`
+   - `getRepoState`
+   - `parsePorcelainStatus`
+
+2. Safety layer
+   - branch naming validation
+   - policy decisions
+   - recovery analysis
+   - direct tool-call guard analysis
+
+3. Write layer
+   - internal `RunnerGitWriter`
+   - public `GitMutations`
+
+4. Public composition/tool layer
+   - `GitCore`
+   - preflight service
+   - Pi tools in `src/tools/planner-git-tools.ts`
+
+See [API Inventory](api.md#git-read-layer) for exact TypeScript APIs.
+
 ## Public API Boundary
 
 `RunnerGitWriter` is an internal executor only. It must not be exposed directly
 to Pi tools, model-facing commands, or planner flows.
 
-Public planner operations must use `GitMutations` or a higher-level tool/recovery
-layer. That layer is responsible for policy checks, `pendingOperation`, rereading
-the repository state after writes, and updating `state.json`.
+Public planner operations must use `GitMutations` or a higher-level
+tool/recovery/workflow layer. That layer is responsible for:
+
+- policy checks
+- `pendingOperation`
+- rereading repository state after writes
+- updating `state.json`
+- updating expected branch/commit
+
+Raw branch-name switch/merge/delete helpers are private inside `GitMutations`.
+Public methods should use ids such as `planId`, `workItemId`, and `attemptId`.
+
+## Read State
+
+`RepoState` captures the current repository view:
+
+```ts
+interface RepoState {
+  cwd: string;
+  repoRoot: string | null;
+  isRepo: boolean;
+  currentBranch: string | null;
+  currentCommit: string | null;
+  isDetachedHead: boolean;
+  status: GitStatusSummary;
+}
+```
+
+`GitStatusSummary` tracks:
+
+- staged files
+- unstaged files
+- untracked files
+- conflicted files
+- dirty/conflict booleans
+
+## Policy Checks
+
+`checkGitPolicy` currently covers:
+
+- `start_plan`
+- `start_work_item`
+- `finish_work_item`
+- `switch_branch`
+- `delete_branch`
+- `merge_branch`
+- `delete_plan`
+- `recover_external_change`
+
+Policy can return:
+
+- `allow`
+- `block`
+- `recovery_required`
+
+Typical blockers:
+
+- repository missing
+- no active plan
+- detached HEAD
+- wrong branch
+- unexpected commit
+- dirty worktree
+- conflicts
+- no changes
+- protected branch
+- unknown branch
+
+## Recovery Analysis
+
+`analyzeGitRecovery(state, repo)` compares runtime state with real git state.
+
+Statuses:
+
+- `ok`
+- `inactive`
+- `init_required`
+- `pending_operation`
+- `detached_head`
+- `conflicts`
+- `dirty_worktree`
+- `external_branch_change`
+- `external_commit_change`
+- `registered_experiment_branch`
+- `registered_child_branch`
+- `unknown_branch`
+
+Normal planner operations should block when recovery is required, except for
+explicit recovery tools and carefully scoped operations such as finishing a work
+item with expected dirty changes.
+
+## Preflight
+
+`GitPreflightService` combines recovery analysis and policy checks before tools
+call mutations.
+
+Supported preflight operations:
+
+- `initialize_repo`
+- `start_plan`
+- `start_work_item`
+- `finish_work_item`
+- `switch_branch`
+- `merge_branch`
+- `delete_branch`
+- `recovery`
+
+Public tools should call preflight first, then call a mutation only when
+preflight allows it.
+
+## Mutations
+
+`GitMutations` is the current public write API. It persists `pendingOperation`
+before git writes and clears it only after rereading repo state.
+
+Implemented operations:
+
+- initialize repo
+- create plan branch
+- create child branch
+- create experiment branch
+- select experiment branch
+- commit work item
+- switch to managed branches
+- merge experiment branch
+- delete child/experiment branch
+- accept current git state
+- soft reset to expected
+- hard reset to expected with explicit confirmation
 
 ## Dangerous Operations
 
@@ -18,11 +174,24 @@ These operations must stay behind policy, runtime state, and `pendingOperation`:
 - force delete branch
 - merge
 - branch switch while a plan is active
+- commit while a plan is active
 
 `hardResetToExpected` requires explicit confirmation. Raw `hardReset` on
-`RunnerGitWriter` is not a public API.
+`RunnerGitWriter` is not public API.
 
-## Branch Names
+## Direct Tool-Call Guard
+
+`analyzeGitToolCall` checks shell-like tool calls while a plan is active.
+
+It blocks commands matching:
+
+- `git.blockedCommitPatterns`
+- `git.blockedDangerousPatterns`
+
+The guard is analysis-only today. Full event-hook integration still needs to be
+connected to Pi `tool_call`/`user_bash` events.
+
+## Branch Naming
 
 Git branch names are refs. A branch named `planner/plan` prevents creating
 another branch named `planner/plan/work/parser`, because Git cannot use the same
@@ -51,25 +220,39 @@ The default machine-readable setting is:
 }
 ```
 
+Supported placeholders:
+
+- `{planId}`
+- `{workItemId}`
+- `{attemptId}`
+
+Required placeholders:
+
+- `plan` requires `{planId}`
+- `child` requires `{planId}` and `{workItemId}`
+- `experiment` requires `{planId}`, `{workItemId}`, and `{attemptId}`
+
 Branch naming templates are settings, not markdown instructions. They are parsed
-and validated by code because they affect git safety. Markdown may tell the model
-not to invent branch names, but it must not define the branch naming contract.
+and validated by code because they affect git safety.
 
-## Source Markdown Layout
+## Planner Git Tools
 
-Code for instruction parsing lives in `src/instructions`.
+Current public Pi tools:
 
-Bundled markdown templates live in `src/instructions/markdown` so parser code and
-markdown files do not share the same directory level.
+- `planner_initialize_repo`
+- `planner_start_plan`
+- `planner_start_work_item`
+- `planner_start_experiment`
+- `planner_select_experiment`
+- `planner_finish_work_item`
+- `planner_delete_child_branch`
+- `planner_delete_experiment_branch`
+- `planner_accept_current_git_state`
+- `planner_soft_reset_to_expected`
+- `planner_hard_reset_to_expected`
 
-Generated user-editable instruction files still live under:
-
-```text
-getAgentDir()/extensions/pi-planner/instructions/*.md
-<project>/.pi/extensions/pi-planner/instructions/*.md
-```
-
-Those runtime paths are intentionally separate from bundled source templates.
+These are low-level git tools. Future planner tools should sit above them and
+model plan/work item workflow concepts directly.
 
 ## Real Git Integration Tests
 
@@ -91,3 +274,4 @@ try {
 ```
 
 Integration tests must not run destructive git commands in the project checkout.
+

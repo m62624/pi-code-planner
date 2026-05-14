@@ -3,6 +3,10 @@
 pi-planner uses JSON settings for machine-readable configuration and markdown
 files for model-facing instructions.
 
+This document describes the settings contract. Runtime state is documented in
+[Runtime State](runtime-state.md). Git behavior is documented in
+[Git Safety](git-safety.md).
+
 ## Locations
 
 Global extension settings:
@@ -20,7 +24,20 @@ Project override settings:
 Project settings override global settings. Missing project fields inherit from
 global settings and built-in defaults.
 
-## Editable Fields
+## Generated Files
+
+On initialization, the extension ensures global files exist:
+
+```text
+getAgentDir()/extensions/pi-planner/settings.json
+getAgentDir()/extensions/pi-planner/state.json
+getAgentDir()/extensions/pi-planner/instructions/*.md
+```
+
+`settings.json` is user-editable configuration. `state.json` is runtime state and
+must not be edited as settings.
+
+## Editable Settings
 
 ```json
 {
@@ -63,9 +80,30 @@ global settings and built-in defaults.
 }
 ```
 
+## Field Summary
+
+| Field | Purpose | Details |
+| --- | --- | --- |
+| `version` | Settings schema version. | Currently `1`. |
+| `instructions` | Names of model-facing markdown files. | See [Instructions](#instructions). |
+| `refactor` | Basic refactor-loop defaults. | See [Refactor](#refactor). |
+| `git` | Git safety and branch configuration. | See [Git Safety](git-safety.md). |
+| `verificationCommands` | Project checks to run before finishing work. | Reserved for future planner workflow. |
+
 ## Instructions
 
 `instructions` maps instruction names to markdown files.
+
+Supported instruction names:
+
+- `discovery`
+- `plan`
+- `work_item`
+- `refactor`
+- `api_check`
+- `documentation`
+- `compact`
+- `commit_style`
 
 Relative paths are resolved from the owning settings directory:
 
@@ -75,6 +113,9 @@ Relative paths are resolved from the owning settings directory:
 Project markdown files win over global markdown files when they exist at the
 same configured path.
 
+Use [Instruction Sections](instruction-sections.md) when one markdown file needs
+multiple operation-specific prompts.
+
 ## Refactor
 
 `refactor.maxIterations` controls the default maximum number of refactor
@@ -83,49 +124,25 @@ iterations.
 `refactor.compactAfterEachIteration` controls whether compaction should happen
 after each finished iteration.
 
-## Git Guardrails
+The future tournament workflow will add richer TDD/refactor settings. The target
+workflow is documented in [Workflow](workflow.md).
 
-`git.shellToolNames` lists tool names that should be treated as shell execution
-tools for git command interception.
+## Git Settings Summary
+
+`git.shellToolNames` lists shell-like tools that should be checked for direct git
+commands while a plan is active.
 
 `git.blockedCommitPatterns` contains regular expressions for direct commit
 commands that must be blocked while a plan is active.
 
 `git.blockedDangerousPatterns` contains regular expressions for dangerous git
-commands that must be routed through planner tools instead of direct shell calls.
+commands that must be routed through planner tools.
 
-## Branch Naming
+`git.branchNaming` is the branch naming contract. It is parsed and validated by
+code. See [Git Safety](git-safety.md#branch-naming).
 
-`git.branchNaming` is a machine-readable contract. It must stay in JSON settings,
-not markdown.
-
-Supported placeholders:
-
-- `{planId}`
-- `{workItemId}`
-- `{attemptId}`
-
-Required placeholders:
-
-- `plan` requires `{planId}`
-- `child` requires `{planId}` and `{workItemId}`
-- `experiment` requires `{planId}`, `{workItemId}`, and `{attemptId}`
-
-The rendered branch names are validated by code. The validator rejects invalid
-git branch names and prefix conflicts such as:
-
-```text
-planner/{planId}
-planner/{planId}/work/{workItemId}
-```
-
-That layout is unsafe because Git cannot store both `planner/my-plan` and
-`planner/my-plan/work/parser` as branch refs.
-
-## Verification Commands
-
-`verificationCommands` is reserved for project verification commands. These will
-be used by planner tools before finishing work items.
+`git.deleteChildBranch` and `git.archiveChildPlans` are reserved settings for
+future cleanup behavior.
 
 ## What Belongs In Markdown
 
@@ -138,6 +155,7 @@ Use markdown for model-facing instruction text:
 - compact prompts
 - documentation style
 - user question templates
+- experiment selection reasoning
 
 ## What Must Stay In JSON
 
@@ -148,8 +166,9 @@ Use JSON settings for values that must be parsed and validated by code:
 - blocked git command patterns
 - dangerous operation guardrails
 - verification command lists
+- future numeric selection/scoring settings
 
-Runtime state does not belong in settings. Active plan ids, expected branch,
-expected commit, pending operations, and branch registry are stored in
-`state.json`.
+## Settings API
+
+See [API Inventory](api.md#settings-layer) for current TypeScript APIs.
 
