@@ -233,6 +233,111 @@ describe("GitMutations", () => {
 		);
 	});
 
+	it("initializes a repo and clears pending operation", async () => {
+		const { writer, mutations } = setup([
+			repo({
+				isRepo: false,
+				repoRoot: null,
+				currentBranch: null,
+				currentCommit: null,
+			}),
+			repo({
+				currentBranch: null,
+				currentCommit: null,
+			}),
+		]);
+
+		const result = await mutations.initializeRepo();
+
+		expect(writer.calls).toEqual(["initRepo"]);
+		expect(result.state).toMatchObject({
+			mode: "idle",
+			pendingOperation: null,
+			git: {
+				expectedBranch: null,
+				expectedCommit: null,
+				lastObservedCommit: null,
+			},
+		});
+	});
+
+	it("accepts current git state as the new expected state", async () => {
+		const { fs, state, mutations } = setup([
+			repo({
+				currentCommit: "def456",
+			}),
+		]);
+		saveActivePlan(fs);
+		state.refresh();
+
+		const result = await mutations.acceptCurrentGitState();
+
+		expect(result.state).toMatchObject({
+			mode: "plan_active",
+			pendingOperation: null,
+			git: {
+				expectedBranch: "planner/plan",
+				expectedCommit: "def456",
+				lastObservedCommit: "def456",
+			},
+		});
+		expect(state.get()).toBe(result.state);
+	});
+
+	it("soft resets to the expected commit", async () => {
+		const { fs, state, writer, mutations } = setup([
+			repo({ currentCommit: "def456" }),
+			repo({
+				currentCommit: "abc123",
+				status: status({ stagedFiles: ["src/a.ts"] }),
+			}),
+		]);
+		saveActivePlan(fs);
+		state.refresh();
+
+		const result = await mutations.softResetToExpected();
+
+		expect(writer.calls).toEqual(["softReset:abc123"]);
+		expect(result.state).toMatchObject({
+			mode: "plan_active",
+			pendingOperation: null,
+			git: {
+				expectedCommit: "abc123",
+			},
+		});
+	});
+
+	it("hard resets to the expected commit only with explicit confirmation", async () => {
+		const { fs, state, writer, mutations } = setup([
+			repo({ currentCommit: "def456" }),
+			repo({ currentCommit: "abc123" }),
+		]);
+		saveActivePlan(fs);
+		state.refresh();
+
+		const result = await mutations.hardResetToExpected({ confirm: true });
+
+		expect(writer.calls).toEqual(["hardReset:abc123"]);
+		expect(result.state).toMatchObject({
+			mode: "plan_active",
+			pendingOperation: null,
+			git: {
+				expectedCommit: "abc123",
+			},
+		});
+	});
+
+	it("rejects hard reset without explicit confirmation", async () => {
+		const { fs, state, writer, mutations } = setup([repo()]);
+		saveActivePlan(fs);
+		state.refresh();
+
+		await expect(
+			mutations.hardResetToExpected({ confirm: false as true }),
+		).rejects.toThrow("Hard reset requires explicit confirmation.");
+		expect(writer.calls).toEqual([]);
+	});
+
 	it("creates a child branch and registers it", async () => {
 		const { fs, state, writer, mutations } = setup([
 			repo(),

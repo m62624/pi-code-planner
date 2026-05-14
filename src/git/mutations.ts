@@ -63,6 +63,10 @@ export interface DeleteBranchInput {
 	force?: boolean;
 }
 
+export interface HardResetToExpectedInput {
+	confirm: true;
+}
+
 export class GitMutationRejected extends Error {
 	constructor(public decision: GitPolicyDecision) {
 		super(decision.message);
@@ -171,6 +175,83 @@ export class GitMutations {
 		this.saveState(withPlan);
 
 		return { before, after, state: withPlan };
+	}
+
+	async initializeRepo(): Promise<GitMutationResult> {
+		const before = await this.deps.readRepoState();
+		const state = this.loadState();
+
+		this.beginOperation(state, before, "init", null);
+		await this.deps.writer.initRepo();
+		const after = await this.deps.readRepoState();
+		const next = this.finishOperation(
+			{
+				...state,
+				mode: state.activePlanId ? "plan_active" : "idle",
+				git: {
+					...state.git,
+					expectedBranch: after.currentBranch,
+					expectedCommit: after.currentCommit,
+					lastObservedCommit: after.currentCommit,
+				},
+			},
+			after,
+		);
+		this.saveState(next);
+
+		return { before, after, state: next };
+	}
+
+	async acceptCurrentGitState(): Promise<GitMutationResult> {
+		const before = await this.deps.readRepoState();
+		const state = this.loadState();
+		const next = this.finishOperation(state, before);
+		this.saveState(next);
+
+		return { before, after: before, state: next };
+	}
+
+	async softResetToExpected(): Promise<GitMutationResult> {
+		const before = await this.deps.readRepoState();
+		const state = this.loadState();
+		if (!state.git.expectedCommit) {
+			throw new Error("Cannot soft reset without expected commit.");
+		}
+
+		this.beginOperation(state, before, "soft_reset", {
+			branch: state.git.expectedBranch,
+			commit: state.git.expectedCommit,
+		});
+		await this.deps.writer.softReset(state.git.expectedCommit);
+		const after = await this.deps.readRepoState();
+		const next = this.finishOperation(state, after);
+		this.saveState(next);
+
+		return { before, after, state: next };
+	}
+
+	async hardResetToExpected(
+		input: HardResetToExpectedInput,
+	): Promise<GitMutationResult> {
+		if (input.confirm !== true) {
+			throw new Error("Hard reset requires explicit confirmation.");
+		}
+		const before = await this.deps.readRepoState();
+		const state = this.loadState();
+		if (!state.git.expectedCommit) {
+			throw new Error("Cannot hard reset without expected commit.");
+		}
+
+		this.beginOperation(state, before, "hard_reset", {
+			branch: state.git.expectedBranch,
+			commit: state.git.expectedCommit,
+		});
+		await this.deps.writer.hardReset(state.git.expectedCommit);
+		const after = await this.deps.readRepoState();
+		const next = this.finishOperation(state, after);
+		this.saveState(next);
+
+		return { before, after, state: next };
 	}
 
 	async createChildBranch(
