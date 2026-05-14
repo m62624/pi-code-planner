@@ -3,7 +3,12 @@ import { writeJsonAtomic } from "../settings/fs";
 import type { SettingsPaths } from "../settings/paths";
 import {
 	DEFAULT_PLANNER_RUNTIME_STATE,
+	type PendingPlannerGitOperation,
+	type PlannerBranchRecord,
+	type PlannerBranchRegistry,
+	type PlannerBranchStatus,
 	type PlannerGitState,
+	type PlannerRuntimeMode,
 	type PlannerRuntimeState,
 } from "./schema";
 
@@ -36,6 +41,33 @@ function readNullableString(
 	return raw;
 }
 
+function readOptionalNullableString(
+	value: Record<string, unknown>,
+	key: string,
+): string | null {
+	if (!Object.hasOwn(value, key)) return null;
+	return readNullableString(value, key);
+}
+
+function readString(value: Record<string, unknown>, key: string): string {
+	if (!Object.hasOwn(value, key) || typeof value[key] !== "string") {
+		throw new Error(`Invalid planner state field: ${key}`);
+	}
+	return value[key];
+}
+
+function readEnum<T extends string>(
+	value: Record<string, unknown>,
+	key: string,
+	allowed: readonly T[],
+): T {
+	const raw = readString(value, key);
+	if (!allowed.includes(raw as T)) {
+		throw new Error(`Invalid planner state field: ${key}`);
+	}
+	return raw as T;
+}
+
 function parseGitState(value: unknown): PlannerGitState {
 	if (!isRecord(value)) {
 		throw new Error("Invalid planner state field: git");
@@ -50,6 +82,148 @@ function parseGitState(value: unknown): PlannerGitState {
 	};
 }
 
+const RUNTIME_MODES = [
+	"idle",
+	"plan_active",
+	"operation_in_progress",
+	"recovery_required",
+] as const;
+
+const GIT_OPERATION_TYPES = [
+	"init",
+	"create_branch",
+	"switch_branch",
+	"commit",
+	"merge",
+	"delete_branch",
+	"soft_reset",
+	"hard_reset",
+] as const;
+
+const BRANCH_KINDS = ["base", "plan", "child", "experiment"] as const;
+
+const BRANCH_STATUSES = [
+	"active",
+	"merged",
+	"abandoned",
+	"selected",
+	"rejected",
+	"deleted",
+] as const;
+
+function inferRuntimeMode(input: Record<string, unknown>): PlannerRuntimeMode {
+	if (Object.hasOwn(input, "mode")) {
+		return readEnum(input, "mode", RUNTIME_MODES);
+	}
+	return input.activePlanId === null ? "idle" : "plan_active";
+}
+
+function parseGitPosition(value: unknown, field: string) {
+	if (!isRecord(value)) {
+		throw new Error(`Invalid planner state field: ${field}`);
+	}
+	return {
+		branch: readNullableString(value, "branch"),
+		commit: readNullableString(value, "commit"),
+	};
+}
+
+function parsePendingOperation(
+	value: unknown,
+): PendingPlannerGitOperation | null {
+	if (value === undefined || value === null) return null;
+	if (!isRecord(value)) {
+		throw new Error("Invalid planner state field: pendingOperation");
+	}
+
+	return {
+		id: readString(value, "id"),
+		type: readEnum(value, "type", GIT_OPERATION_TYPES),
+		startedAt: readString(value, "startedAt"),
+		before: parseGitPosition(value.before, "before"),
+		expectedAfter:
+			value.expectedAfter === null
+				? null
+				: parseGitPosition(value.expectedAfter, "expectedAfter"),
+	};
+}
+
+function parseBranchRecord(value: unknown): PlannerBranchRecord {
+	if (!isRecord(value)) {
+		throw new Error("Invalid planner state branch record");
+	}
+
+	return {
+		name: readString(value, "name"),
+		kind: readEnum(value, "kind", BRANCH_KINDS),
+		planId: readNullableString(value, "planId"),
+		workItemId: readNullableString(value, "workItemId"),
+		createdFromCommit: readNullableString(value, "createdFromCommit"),
+		lastKnownCommit: readNullableString(value, "lastKnownCommit"),
+		status: readEnum(value, "status", BRANCH_STATUSES) as PlannerBranchStatus,
+	};
+}
+
+function defaultBranchRegistryFromGit(
+	git: PlannerGitState,
+): PlannerBranchRegistry {
+	const items: Record<string, PlannerBranchRecord> = {};
+	if (git.baseBranch) {
+		items[git.baseBranch] = {
+			name: git.baseBranch,
+			kind: "base",
+			planId: null,
+			workItemId: null,
+			createdFromCommit: null,
+			lastKnownCommit: git.lastObservedCommit,
+			status: "active",
+		};
+	}
+	if (git.planBranch) {
+		items[git.planBranch] = {
+			name: git.planBranch,
+			kind: "plan",
+			planId: null,
+			workItemId: null,
+			createdFromCommit: git.lastObservedCommit,
+			lastKnownCommit: git.lastObservedCommit,
+			status: "active",
+		};
+	}
+	return {
+		baseBranch: git.baseBranch,
+		planBranch: git.planBranch,
+		items,
+	};
+}
+
+function parseBranchRegistry(
+	value: unknown,
+	git: PlannerGitState,
+): PlannerBranchRegistry {
+	if (value === undefined) return defaultBranchRegistryFromGit(git);
+	if (!isRecord(value)) {
+		throw new Error("Invalid planner state field: branches");
+	}
+	if (!isRecord(value.items)) {
+		throw new Error("Invalid planner state field: branches.items");
+	}
+
+	const items: Record<string, PlannerBranchRecord> = {};
+	for (const [name, branch] of Object.entries(value.items)) {
+		items[name] = parseBranchRecord(branch);
+		if (items[name].name !== name) {
+			throw new Error("Invalid planner state branch record name");
+		}
+	}
+
+	return {
+		baseBranch: readOptionalNullableString(value, "baseBranch"),
+		planBranch: readOptionalNullableString(value, "planBranch"),
+		items,
+	};
+}
+
 export function parsePlannerRuntimeState(input: unknown): PlannerRuntimeState {
 	if (!isRecord(input)) {
 		throw new Error("Invalid planner state: expected object");
@@ -57,12 +231,16 @@ export function parsePlannerRuntimeState(input: unknown): PlannerRuntimeState {
 	if (input.version !== 1) {
 		throw new Error("Invalid planner state version");
 	}
+	const git = parseGitState(input.git);
 
 	return {
 		version: 1,
+		mode: inferRuntimeMode(input),
 		activePlanId: readNullableString(input, "activePlanId"),
 		activeWorkItemId: readNullableString(input, "activeWorkItemId"),
-		git: parseGitState(input.git),
+		git,
+		pendingOperation: parsePendingOperation(input.pendingOperation),
+		branches: parseBranchRegistry(input.branches, git),
 	};
 }
 
