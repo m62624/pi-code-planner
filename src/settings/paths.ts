@@ -13,6 +13,7 @@ export interface SettingsPaths {
 	cwd: string;
 	globalDir: string;
 	globalSettings: string;
+	globalState: string;
 	globalInstructionsDir: string;
 	projectDir: string;
 	projectSettings: string;
@@ -29,6 +30,7 @@ export function createSettingsPaths(input: SettingsPathInput): SettingsPaths {
 		cwd: input.cwd,
 		globalDir,
 		globalSettings: join(globalDir, "settings.json"),
+		globalState: join(globalDir, "state.json"),
 		globalInstructionsDir: join(globalDir, "instructions"),
 		projectDir,
 		projectSettings: join(projectDir, "settings.json"),

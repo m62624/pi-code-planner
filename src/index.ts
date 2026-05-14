@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { initializePlannerRuntimeState } from "./planner-state/store";
 import { createNodeFs } from "./settings/fs";
 import { ensurePlannerFiles } from "./settings/initializer";
 import { loadPlannerSettings } from "./settings/loader";
@@ -17,6 +18,7 @@ export default function register(pi: ExtensionAPI): void {
 		});
 
 		const init = ensurePlannerFiles(paths, fs);
+		const stateInit = initializePlannerRuntimeState(paths, fs);
 		const settings = loadPlannerSettings(paths, fs);
 
 		ctx.ui.setStatus(
@@ -29,6 +31,10 @@ export default function register(pi: ExtensionAPI): void {
 				`pi-planner initialized ${init.created.length} settings files`,
 				"info",
 			);
+		}
+
+		if (stateInit.created) {
+			ctx.ui.notify("pi-planner initialized runtime state", "info");
 		}
 	});
 }
