@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { RuntimeStateManager } from "../planner-state/runtime";
 import {
 	loadPlannerRuntimeState,
 	savePlannerRuntimeState,
@@ -107,17 +108,17 @@ function repo(overrides: Partial<RepoState> = {}): RepoState {
 function setup(repoStates: RepoState[]) {
 	const fs = new MemoryFs();
 	const writer = new MockGitWriter();
+	const state = new RuntimeStateManager({ paths, fs });
 	let index = 0;
 	const mutations = new GitMutations({
-		paths,
-		fs,
+		state,
 		writer,
 		readRepoState: async () =>
 			repoStates[Math.min(index++, repoStates.length - 1)],
 		now: () => "2026-05-14T00:00:00.000Z",
 		createOperationId: () => "op-1",
 	});
-	return { fs, writer, mutations };
+	return { fs, state, writer, mutations };
 }
 
 function saveActivePlan(fs: MemoryFs) {
@@ -206,11 +207,12 @@ describe("GitMutations", () => {
 	});
 
 	it("commits a work item and clears pending operation", async () => {
-		const { fs, writer, mutations } = setup([
+		const { fs, state, writer, mutations } = setup([
 			repo({ status: status({ unstagedFiles: ["src/a.ts"] }) }),
 			repo({ currentCommit: "def456" }),
 		]);
 		saveActivePlan(fs);
+		state.refresh();
 
 		const result = await mutations.commitWorkItem({
 			message: "feat: add parser",
@@ -225,10 +227,14 @@ describe("GitMutations", () => {
 				lastObservedCommit: "def456",
 			},
 		});
+		expect(state.get()).toBe(result.state);
+		expect(loadPlannerRuntimeState(paths, fs).git.expectedCommit).toBe(
+			"def456",
+		);
 	});
 
 	it("creates a child branch and registers it", async () => {
-		const { fs, writer, mutations } = setup([
+		const { fs, state, writer, mutations } = setup([
 			repo(),
 			repo({
 				currentBranch: "planner/plan/work/new-parser",
@@ -236,6 +242,7 @@ describe("GitMutations", () => {
 			}),
 		]);
 		saveActivePlan(fs);
+		state.refresh();
 
 		const result = await mutations.createChildBranch({
 			workItemId: "work-2",
@@ -256,7 +263,7 @@ describe("GitMutations", () => {
 	});
 
 	it("creates an experiment branch and registers it", async () => {
-		const { fs, writer, mutations } = setup([
+		const { fs, state, writer, mutations } = setup([
 			repo(),
 			repo({
 				currentBranch: "planner/plan/work/parser/try-b",
@@ -264,6 +271,7 @@ describe("GitMutations", () => {
 			}),
 		]);
 		saveActivePlan(fs);
+		state.refresh();
 
 		const result = await mutations.createExperimentBranch({
 			workItemId: "work-1",
@@ -283,7 +291,7 @@ describe("GitMutations", () => {
 	});
 
 	it("selects an experiment by switching to child branch and merging it", async () => {
-		const { fs, writer, mutations } = setup([
+		const { fs, state, writer, mutations } = setup([
 			repo({
 				currentBranch: "planner/plan/work/parser/try-a",
 				currentCommit: "abc123",
@@ -302,14 +310,15 @@ describe("GitMutations", () => {
 			}),
 		]);
 		saveActivePlan(fs);
-		const state = loadPlannerRuntimeState(paths, fs);
+		const storedState = loadPlannerRuntimeState(paths, fs);
 		savePlannerRuntimeState(paths, fs, {
-			...state,
+			...storedState,
 			git: {
-				...state.git,
+				...storedState.git,
 				expectedBranch: "planner/plan/work/parser/try-a",
 			},
 		});
+		state.refresh();
 
 		const result = await mutations.selectExperimentBranch({
 			branchName: "planner/plan/work/parser/try-a",
@@ -327,7 +336,7 @@ describe("GitMutations", () => {
 	});
 
 	it("leaves pending operation on disk when a git write fails", async () => {
-		const { fs, writer, mutations } = setup([
+		const { fs, state, writer, mutations } = setup([
 			repo({ status: status({ unstagedFiles: ["src/a.ts"] }) }),
 		]);
 		saveActivePlan(fs);
@@ -337,8 +346,8 @@ describe("GitMutations", () => {
 			mutations.commitWorkItem({ message: "feat: add parser" }),
 		).rejects.toThrow("git failed");
 
-		const state = loadPlannerRuntimeState(paths, fs);
-		expect(state).toMatchObject({
+		const persisted = loadPlannerRuntimeState(paths, fs);
+		expect(persisted).toMatchObject({
 			mode: "operation_in_progress",
 			pendingOperation: {
 				id: "op-1",
@@ -349,6 +358,7 @@ describe("GitMutations", () => {
 				},
 			},
 		});
+		expect(state.get()).toEqual(persisted);
 	});
 
 	it("rejects mutations blocked by policy before writing pending operation", async () => {

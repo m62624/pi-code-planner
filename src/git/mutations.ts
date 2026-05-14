@@ -1,21 +1,15 @@
+import type { RuntimeStateManager } from "../planner-state/runtime";
 import type {
 	PendingPlannerGitOperation,
 	PlannerBranchRecord,
 	PlannerRuntimeState,
 } from "../planner-state/schema";
-import {
-	loadPlannerRuntimeState,
-	savePlannerRuntimeState,
-} from "../planner-state/store";
-import type { PlannerFs } from "../settings/fs";
-import type { SettingsPaths } from "../settings/paths";
 import { checkGitPolicy, type GitPolicyDecision } from "./policy";
 import type { RepoState } from "./state";
 import type { GitWriter, MergeBranchOptions } from "./write";
 
 export interface GitMutationsDeps {
-	paths: Pick<SettingsPaths, "globalDir" | "globalState">;
-	fs: PlannerFs;
+	state: RuntimeStateManager;
 	writer: GitWriter;
 	readRepoState: () => Promise<RepoState>;
 	now?: () => string;
@@ -471,11 +465,11 @@ export class GitMutations {
 	}
 
 	private loadState(): PlannerRuntimeState {
-		return loadPlannerRuntimeState(this.deps.paths, this.deps.fs);
+		return this.deps.state.get();
 	}
 
 	private saveState(state: PlannerRuntimeState): void {
-		savePlannerRuntimeState(this.deps.paths, this.deps.fs, state);
+		this.deps.state.replace(state);
 	}
 
 	private now(): string {
