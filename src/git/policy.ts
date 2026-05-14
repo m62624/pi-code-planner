@@ -1,4 +1,7 @@
-import type { PlannerRuntimeState } from "../planner-state/schema";
+import type {
+	PlannerBranchRecord,
+	PlannerRuntimeState,
+} from "../planner-state/schema";
 import type { RepoState } from "./state";
 
 export type GitPolicyOperation =
@@ -10,13 +13,6 @@ export type GitPolicyOperation =
 	| "merge_branch"
 	| "delete_plan"
 	| "recover_external_change";
-
-export type ManagedBranchKind =
-	| "base"
-	| "plan"
-	| "child"
-	| "experiment"
-	| "unknown";
 
 export type GitPolicyDecisionKind = "allow" | "block" | "recovery_required";
 
@@ -43,7 +39,6 @@ export interface GitPolicyInput {
 	repoState: RepoState;
 	plannerState: PlannerRuntimeState;
 	branchName?: string;
-	branchKind?: ManagedBranchKind;
 	targetBranch?: string;
 }
 
@@ -74,6 +69,13 @@ function hasBlockingDirtyState(repoState: RepoState): boolean {
 		repoState.status.hasUnstagedChanges ||
 		repoState.status.hasUntrackedFiles
 	);
+}
+
+function getManagedBranch(
+	plannerState: PlannerRuntimeState,
+	branchName: string,
+): PlannerBranchRecord | null {
+	return plannerState.branches.items[branchName] ?? null;
 }
 
 function checkExpectedPlanPosition({
@@ -220,21 +222,24 @@ function checkDeleteBranch(input: GitPolicyInput): GitPolicyDecision {
 			"Delete branch requires a branch name.",
 		);
 	}
+	const branch = getManagedBranch(input.plannerState, input.branchName);
 	if (input.branchName === input.repoState.currentBranch) {
 		return block("current_branch", "Cannot delete the current branch.");
 	}
 	if (
 		input.branchName === input.plannerState.git.baseBranch ||
 		input.branchName === input.plannerState.git.planBranch ||
-		input.branchKind === "base" ||
-		input.branchKind === "plan"
+		input.branchName === input.plannerState.branches.baseBranch ||
+		input.branchName === input.plannerState.branches.planBranch ||
+		branch?.kind === "base" ||
+		branch?.kind === "plan"
 	) {
 		return block(
 			"protected_branch",
 			"Base and main plan branches cannot be deleted automatically.",
 		);
 	}
-	if (input.branchKind !== "child" && input.branchKind !== "experiment") {
+	if (!branch || (branch.kind !== "child" && branch.kind !== "experiment")) {
 		return block(
 			"unknown_branch",
 			"Only registered child or experiment branches can be deleted by the planner.",

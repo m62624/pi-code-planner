@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PlannerRuntimeState } from "../planner-state/schema";
-import {
-	checkGitPolicy,
-	type GitPolicyInput,
-	type ManagedBranchKind,
-} from "./policy";
+import { checkGitPolicy, type GitPolicyInput } from "./policy";
 import type { RepoState } from "./state";
 import { emptyGitStatusSummary, type GitStatusSummary } from "./status-parser";
 
@@ -40,6 +36,7 @@ function planner(
 ): PlannerRuntimeState {
 	return {
 		version: 1,
+		mode: "plan_active",
 		activePlanId: "plan-1",
 		activeWorkItemId: null,
 		git: {
@@ -48,6 +45,49 @@ function planner(
 			expectedBranch: "planner/plan",
 			expectedCommit: "abc123",
 			lastObservedCommit: "abc123",
+		},
+		pendingOperation: null,
+		branches: {
+			baseBranch: "main",
+			planBranch: "planner/plan",
+			items: {
+				main: {
+					name: "main",
+					kind: "base",
+					planId: null,
+					workItemId: null,
+					createdFromCommit: null,
+					lastKnownCommit: "abc123",
+					status: "active",
+				},
+				"planner/plan": {
+					name: "planner/plan",
+					kind: "plan",
+					planId: "plan-1",
+					workItemId: null,
+					createdFromCommit: "abc123",
+					lastKnownCommit: "abc123",
+					status: "active",
+				},
+				"planner/plan/work/parser": {
+					name: "planner/plan/work/parser",
+					kind: "child",
+					planId: "plan-1",
+					workItemId: "work-1",
+					createdFromCommit: "abc123",
+					lastKnownCommit: "def456",
+					status: "active",
+				},
+				"planner/plan/work/parser/try-a": {
+					name: "planner/plan/work/parser/try-a",
+					kind: "experiment",
+					planId: "plan-1",
+					workItemId: "work-1",
+					createdFromCommit: "def456",
+					lastKnownCommit: "fed987",
+					status: "rejected",
+				},
+			},
 		},
 		...overrides,
 	};
@@ -250,16 +290,15 @@ describe("checkGitPolicy branch operations", () => {
 });
 
 describe("checkGitPolicy delete branch", () => {
-	function deleteBranch(branchName: string, branchKind: ManagedBranchKind) {
+	function deleteBranch(branchName: string) {
 		return check({
 			operation: "delete_branch",
 			branchName,
-			branchKind,
 		});
 	}
 
 	it("blocks base branch deletion", () => {
-		const result = deleteBranch("main", "base");
+		const result = deleteBranch("main");
 
 		expect(result).toMatchObject({
 			kind: "block",
@@ -268,7 +307,7 @@ describe("checkGitPolicy delete branch", () => {
 	});
 
 	it("blocks plan branch deletion", () => {
-		const result = deleteBranch("planner/plan", "plan");
+		const result = deleteBranch("planner/plan");
 
 		expect(result).toMatchObject({
 			kind: "block",
@@ -277,7 +316,7 @@ describe("checkGitPolicy delete branch", () => {
 	});
 
 	it("blocks unknown branch deletion", () => {
-		const result = deleteBranch("feature/user", "unknown");
+		const result = deleteBranch("feature/user");
 
 		expect(result).toMatchObject({
 			kind: "block",
@@ -286,15 +325,27 @@ describe("checkGitPolicy delete branch", () => {
 	});
 
 	it("allows child branch deletion", () => {
-		const result = deleteBranch("planner/plan/work/parser", "child");
+		const result = deleteBranch("planner/plan/work/parser");
 
 		expect(result.kind).toBe("allow");
 	});
 
 	it("allows experiment branch deletion", () => {
-		const result = deleteBranch("planner/plan/work/parser/try-a", "experiment");
+		const result = deleteBranch("planner/plan/work/parser/try-a");
 
 		expect(result.kind).toBe("allow");
+	});
+
+	it("does not trust branch names without registry records", () => {
+		const result = check({
+			operation: "delete_branch",
+			branchName: "planner/plan/work/unregistered",
+		});
+
+		expect(result).toMatchObject({
+			kind: "block",
+			reason: "unknown_branch",
+		});
 	});
 });
 
