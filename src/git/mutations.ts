@@ -4,6 +4,8 @@ import type {
 	PlannerBranchRecord,
 	PlannerRuntimeState,
 } from "../planner-state/schema";
+import type { BranchNamingSettings } from "../settings/schema";
+import { renderBranchName } from "./branch-naming";
 import { checkGitPolicy, type GitPolicyDecision } from "./policy";
 import type { RepoState } from "./state";
 import type { GitWriter, MergeBranchOptions } from "./write";
@@ -11,6 +13,7 @@ import type { GitWriter, MergeBranchOptions } from "./write";
 export interface GitMutationsDeps {
 	state: RuntimeStateManager;
 	writer: GitWriter;
+	branchNaming: BranchNamingSettings;
 	readRepoState: () => Promise<RepoState>;
 	now?: () => string;
 	createOperationId?: () => string;
@@ -24,25 +27,23 @@ export interface GitMutationResult {
 
 export interface CreatePlanBranchInput {
 	planId: string;
-	branchName: string;
 	startPoint?: string;
 }
 
 export interface CreateChildBranchInput {
 	workItemId: string;
-	branchName: string;
 	startPoint?: string;
 }
 
 export interface CreateExperimentBranchInput {
 	workItemId: string;
-	branchName: string;
+	attemptId: string;
 	startPoint?: string;
 }
 
 export interface SelectExperimentBranchInput {
-	branchName: string;
-	targetBranch: string;
+	workItemId: string;
+	attemptId: string;
 }
 
 export interface CommitWorkItemInput {
@@ -54,12 +55,41 @@ export interface SwitchBranchInput {
 	targetBranch: string;
 }
 
+export interface SwitchToPlanBranchInput {
+	planId?: string;
+}
+
+export interface SwitchToChildBranchInput {
+	workItemId: string;
+}
+
+export interface SwitchToExperimentBranchInput {
+	workItemId: string;
+	attemptId: string;
+}
+
 export interface MergeBranchInput extends MergeBranchOptions {
 	targetBranch: string;
 }
 
+export interface MergeExperimentBranchInput extends MergeBranchOptions {
+	workItemId: string;
+	attemptId: string;
+}
+
 export interface DeleteBranchInput {
 	branchName: string;
+	force?: boolean;
+}
+
+export interface DeleteChildBranchInput {
+	workItemId: string;
+	force?: boolean;
+}
+
+export interface DeleteExperimentBranchInput {
+	workItemId: string;
+	attemptId: string;
 	force?: boolean;
 }
 
@@ -112,6 +142,9 @@ export class GitMutations {
 	): Promise<GitMutationResult> {
 		const before = await this.deps.readRepoState();
 		const state = this.loadState();
+		const branchName = this.branchName("plan", {
+			planId: input.planId,
+		});
 		ensureAllowed(
 			checkGitPolicy({
 				operation: "start_plan",
@@ -121,13 +154,10 @@ export class GitMutations {
 		);
 
 		this.beginOperation(state, before, "create_branch", {
-			branch: input.branchName,
+			branch: branchName,
 			commit: before.currentCommit,
 		});
-		await this.deps.writer.createAndSwitchBranch(
-			input.branchName,
-			input.startPoint,
-		);
+		await this.deps.writer.createAndSwitchBranch(branchName, input.startPoint);
 		const after = await this.deps.readRepoState();
 
 		const next = this.finishOperation(
@@ -138,14 +168,14 @@ export class GitMutations {
 				activeWorkItemId: null,
 				git: {
 					baseBranch: before.currentBranch,
-					planBranch: input.branchName,
+					planBranch: branchName,
 					expectedBranch: after.currentBranch,
 					expectedCommit: after.currentCommit,
 					lastObservedCommit: after.currentCommit,
 				},
 				branches: {
 					baseBranch: before.currentBranch,
-					planBranch: input.branchName,
+					planBranch: branchName,
 					items: {},
 				},
 			},
@@ -164,7 +194,7 @@ export class GitMutations {
 				})
 			: next;
 		const withPlan = upsertBranch(withBase, {
-			name: input.branchName,
+			name: branchName,
 			kind: "plan",
 			planId: input.planId,
 			workItemId: null,
@@ -259,6 +289,13 @@ export class GitMutations {
 	): Promise<GitMutationResult> {
 		const before = await this.deps.readRepoState();
 		const state = this.loadState();
+		if (!state.activePlanId) {
+			throw new Error("Cannot create child branch without active plan id.");
+		}
+		const branchName = this.branchName("child", {
+			planId: state.activePlanId,
+			workItemId: input.workItemId,
+		});
 		ensureAllowed(
 			checkGitPolicy({
 				operation: "start_work_item",
@@ -268,16 +305,13 @@ export class GitMutations {
 		);
 
 		this.beginOperation(state, before, "create_branch", {
-			branch: input.branchName,
+			branch: branchName,
 			commit: before.currentCommit,
 		});
-		await this.deps.writer.createAndSwitchBranch(
-			input.branchName,
-			input.startPoint,
-		);
+		await this.deps.writer.createAndSwitchBranch(branchName, input.startPoint);
 		const after = await this.deps.readRepoState();
 		const next = upsertBranch(this.finishOperation(state, after), {
-			name: input.branchName,
+			name: branchName,
 			kind: "child",
 			planId: state.activePlanId,
 			workItemId: input.workItemId,
@@ -299,6 +333,16 @@ export class GitMutations {
 	): Promise<GitMutationResult> {
 		const before = await this.deps.readRepoState();
 		const state = this.loadState();
+		if (!state.activePlanId) {
+			throw new Error(
+				"Cannot create experiment branch without active plan id.",
+			);
+		}
+		const branchName = this.branchName("experiment", {
+			planId: state.activePlanId,
+			workItemId: input.workItemId,
+			attemptId: input.attemptId,
+		});
 		ensureAllowed(
 			checkGitPolicy({
 				operation: "start_work_item",
@@ -308,16 +352,13 @@ export class GitMutations {
 		);
 
 		this.beginOperation(state, before, "create_branch", {
-			branch: input.branchName,
+			branch: branchName,
 			commit: before.currentCommit,
 		});
-		await this.deps.writer.createAndSwitchBranch(
-			input.branchName,
-			input.startPoint,
-		);
+		await this.deps.writer.createAndSwitchBranch(branchName, input.startPoint);
 		const after = await this.deps.readRepoState();
 		const next = upsertBranch(this.finishOperation(state, after), {
-			name: input.branchName,
+			name: branchName,
 			kind: "experiment",
 			planId: state.activePlanId,
 			workItemId: input.workItemId,
@@ -339,11 +380,23 @@ export class GitMutations {
 	): Promise<GitMutationResult> {
 		const before = await this.deps.readRepoState();
 		const state = this.loadState();
-		const experiment = state.branches.items[input.branchName];
+		if (!state.activePlanId) {
+			throw new Error("Cannot select experiment without active plan id.");
+		}
+		const experimentBranch = this.branchName("experiment", {
+			planId: state.activePlanId,
+			workItemId: input.workItemId,
+			attemptId: input.attemptId,
+		});
+		const targetBranch = this.branchName("child", {
+			planId: state.activePlanId,
+			workItemId: input.workItemId,
+		});
+		const experiment = state.branches.items[experimentBranch];
 		if (!experiment || experiment.kind !== "experiment") {
 			throw new Error("Selected branch is not a registered experiment branch.");
 		}
-		const target = state.branches.items[input.targetBranch];
+		const target = state.branches.items[targetBranch];
 		if (!target || target.kind !== "child") {
 			throw new Error("Experiment target is not a registered child branch.");
 		}
@@ -353,21 +406,21 @@ export class GitMutations {
 				operation: "switch_branch",
 				repoState: before,
 				plannerState: state,
-				targetBranch: input.targetBranch,
+				targetBranch,
 			}),
 		);
 
 		this.beginOperation(state, before, "switch_branch", {
-			branch: input.targetBranch,
+			branch: targetBranch,
 			commit: null,
 		});
-		await this.deps.writer.switchBranch(input.targetBranch);
+		await this.deps.writer.switchBranch(targetBranch);
 		const afterSwitch = await this.deps.readRepoState();
 		const switchedState = this.finishOperation(state, afterSwitch);
 		this.saveState(switchedState);
 
-		const mergeResult = await this.mergeBranch({
-			targetBranch: input.branchName,
+		const mergeResult = await this.mergeBranchByName({
+			targetBranch: experimentBranch,
 			noFastForward: true,
 		});
 		const mergedState = this.loadState();
@@ -377,12 +430,12 @@ export class GitMutations {
 				...mergedState.branches,
 				items: {
 					...mergedState.branches.items,
-					[input.branchName]: {
+					[experimentBranch]: {
 						...experiment,
 						status: "selected" as const,
 						lastKnownCommit: mergeResult.after.currentCommit,
 					},
-					[input.targetBranch]: {
+					[targetBranch]: {
 						...target,
 						status: "active" as const,
 						lastKnownCommit: mergeResult.after.currentCommit,
@@ -422,7 +475,55 @@ export class GitMutations {
 		return { before, after, state: next };
 	}
 
-	async switchBranch(input: SwitchBranchInput): Promise<GitMutationResult> {
+	async switchToPlanBranch(
+		input: SwitchToPlanBranchInput = {},
+	): Promise<GitMutationResult> {
+		const state = this.loadState();
+		const planId = input.planId ?? state.activePlanId;
+		if (!planId) {
+			throw new Error("Cannot switch to plan branch without plan id.");
+		}
+		return this.switchBranchByName({
+			targetBranch: this.branchName("plan", { planId }),
+		});
+	}
+
+	async switchToChildBranch(
+		input: SwitchToChildBranchInput,
+	): Promise<GitMutationResult> {
+		const state = this.loadState();
+		if (!state.activePlanId) {
+			throw new Error("Cannot switch to child branch without active plan id.");
+		}
+		return this.switchBranchByName({
+			targetBranch: this.branchName("child", {
+				planId: state.activePlanId,
+				workItemId: input.workItemId,
+			}),
+		});
+	}
+
+	async switchToExperimentBranch(
+		input: SwitchToExperimentBranchInput,
+	): Promise<GitMutationResult> {
+		const state = this.loadState();
+		if (!state.activePlanId) {
+			throw new Error(
+				"Cannot switch to experiment branch without active plan id.",
+			);
+		}
+		return this.switchBranchByName({
+			targetBranch: this.branchName("experiment", {
+				planId: state.activePlanId,
+				workItemId: input.workItemId,
+				attemptId: input.attemptId,
+			}),
+		});
+	}
+
+	private async switchBranchByName(
+		input: SwitchBranchInput,
+	): Promise<GitMutationResult> {
 		const before = await this.deps.readRepoState();
 		const state = this.loadState();
 		ensureAllowed(
@@ -446,7 +547,27 @@ export class GitMutations {
 		return { before, after, state: next };
 	}
 
-	async mergeBranch(input: MergeBranchInput): Promise<GitMutationResult> {
+	async mergeExperimentBranch(
+		input: MergeExperimentBranchInput,
+	): Promise<GitMutationResult> {
+		const state = this.loadState();
+		if (!state.activePlanId) {
+			throw new Error("Cannot merge experiment branch without active plan id.");
+		}
+		return this.mergeBranchByName({
+			targetBranch: this.branchName("experiment", {
+				planId: state.activePlanId,
+				workItemId: input.workItemId,
+				attemptId: input.attemptId,
+			}),
+			noFastForward: input.noFastForward,
+			message: input.message,
+		});
+	}
+
+	private async mergeBranchByName(
+		input: MergeBranchInput,
+	): Promise<GitMutationResult> {
 		const before = await this.deps.readRepoState();
 		const state = this.loadState();
 		ensureAllowed(
@@ -470,7 +591,44 @@ export class GitMutations {
 		return { before, after, state: next };
 	}
 
-	async deleteBranch(input: DeleteBranchInput): Promise<GitMutationResult> {
+	async deleteChildBranch(
+		input: DeleteChildBranchInput,
+	): Promise<GitMutationResult> {
+		const state = this.loadState();
+		if (!state.activePlanId) {
+			throw new Error("Cannot delete child branch without active plan id.");
+		}
+		return this.deleteBranchByName({
+			branchName: this.branchName("child", {
+				planId: state.activePlanId,
+				workItemId: input.workItemId,
+			}),
+			force: input.force,
+		});
+	}
+
+	async deleteExperimentBranch(
+		input: DeleteExperimentBranchInput,
+	): Promise<GitMutationResult> {
+		const state = this.loadState();
+		if (!state.activePlanId) {
+			throw new Error(
+				"Cannot delete experiment branch without active plan id.",
+			);
+		}
+		return this.deleteBranchByName({
+			branchName: this.branchName("experiment", {
+				planId: state.activePlanId,
+				workItemId: input.workItemId,
+				attemptId: input.attemptId,
+			}),
+			force: input.force,
+		});
+	}
+
+	private async deleteBranchByName(
+		input: DeleteBranchInput,
+	): Promise<GitMutationResult> {
 		const before = await this.deps.readRepoState();
 		const state = this.loadState();
 		ensureAllowed(
@@ -551,6 +709,13 @@ export class GitMutations {
 
 	private saveState(state: PlannerRuntimeState): void {
 		this.deps.state.replace(state);
+	}
+
+	private branchName(
+		kind: "plan" | "child" | "experiment",
+		values: Parameters<typeof renderBranchName>[2],
+	): string {
+		return renderBranchName(this.deps.branchNaming, kind, values);
 	}
 
 	private now(): string {

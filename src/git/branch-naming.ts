@@ -14,6 +14,8 @@ export interface RenderedBranchNames {
 	experiment: string;
 }
 
+export type BranchNamingKind = keyof RenderedBranchNames;
+
 const REQUIRED_PLACEHOLDERS = {
 	plan: ["planId"],
 	child: ["planId", "workItemId"],
@@ -110,6 +112,17 @@ export function renderBranchNames(
 		validateRenderedBranch(name);
 	}
 	assertNoPrefixConflict(rendered);
+	return rendered;
+}
+
+export function renderBranchName(
+	settings: BranchNamingSettings,
+	kind: BranchNamingKind,
+	values: BranchNamingValues,
+): string {
+	validateRequiredPlaceholders(kind, settings[kind]);
+	const rendered = renderTemplate(settings[kind], values);
+	validateRenderedBranch(rendered);
 	return rendered;
 }
 

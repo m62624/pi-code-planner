@@ -4,6 +4,7 @@ import {
 	loadPlannerRuntimeState,
 	savePlannerRuntimeState,
 } from "../planner-state/store";
+import { DEFAULT_SETTINGS } from "../settings/defaults";
 import { createSettingsPaths } from "../settings/paths";
 import { MemoryFs } from "../test/memory-fs";
 import { GitMutationRejected, GitMutations } from "./mutations";
@@ -97,7 +98,7 @@ function repo(overrides: Partial<RepoState> = {}): RepoState {
 		cwd: "/repo",
 		repoRoot: "/repo",
 		isRepo: true,
-		currentBranch: "planner/plan",
+		currentBranch: "planner/plan-1/main",
 		currentCommit: "abc123",
 		isDetachedHead: false,
 		status: status(),
@@ -113,6 +114,7 @@ function setup(repoStates: RepoState[]) {
 	const mutations = new GitMutations({
 		state,
 		writer,
+		branchNaming: DEFAULT_SETTINGS.git.branchNaming,
 		readRepoState: async () =>
 			repoStates[Math.min(index++, repoStates.length - 1)],
 		now: () => "2026-05-14T00:00:00.000Z",
@@ -129,15 +131,15 @@ function saveActivePlan(fs: MemoryFs) {
 		activeWorkItemId: "work-1",
 		git: {
 			baseBranch: "main",
-			planBranch: "planner/plan",
-			expectedBranch: "planner/plan",
+			planBranch: "planner/plan-1/main",
+			expectedBranch: "planner/plan-1/main",
 			expectedCommit: "abc123",
 			lastObservedCommit: "abc123",
 		},
 		pendingOperation: null,
 		branches: {
 			baseBranch: "main",
-			planBranch: "planner/plan",
+			planBranch: "planner/plan-1/main",
 			items: {
 				main: {
 					name: "main",
@@ -148,8 +150,8 @@ function saveActivePlan(fs: MemoryFs) {
 					lastKnownCommit: "abc123",
 					status: "active",
 				},
-				"planner/plan": {
-					name: "planner/plan",
+				"planner/plan-1/main": {
+					name: "planner/plan-1/main",
 					kind: "plan",
 					planId: "plan-1",
 					workItemId: null,
@@ -157,8 +159,8 @@ function saveActivePlan(fs: MemoryFs) {
 					lastKnownCommit: "abc123",
 					status: "active",
 				},
-				"planner/plan/work/parser": {
-					name: "planner/plan/work/parser",
+				"planner/plan-1/work/work-1": {
+					name: "planner/plan-1/work/work-1",
 					kind: "child",
 					planId: "plan-1",
 					workItemId: "work-1",
@@ -166,8 +168,8 @@ function saveActivePlan(fs: MemoryFs) {
 					lastKnownCommit: "abc123",
 					status: "active",
 				},
-				"planner/plan/work/parser/try-a": {
-					name: "planner/plan/work/parser/try-a",
+				"planner/plan-1/experiment/work-1/try-a": {
+					name: "planner/plan-1/experiment/work-1/try-a",
 					kind: "experiment",
 					planId: "plan-1",
 					workItemId: "work-1",
@@ -184,23 +186,24 @@ describe("GitMutations", () => {
 	it("creates a plan branch and persists plan git state", async () => {
 		const { writer, mutations } = setup([
 			repo({ currentBranch: "main", currentCommit: "abc123" }),
-			repo({ currentBranch: "planner/plan", currentCommit: "abc123" }),
+			repo({ currentBranch: "planner/plan-1/main", currentCommit: "abc123" }),
 		]);
 
 		const result = await mutations.createPlanBranch({
 			planId: "plan-1",
-			branchName: "planner/plan",
 			startPoint: "main",
 		});
 
-		expect(writer.calls).toEqual(["createAndSwitchBranch:planner/plan:main"]);
+		expect(writer.calls).toEqual([
+			"createAndSwitchBranch:planner/plan-1/main:main",
+		]);
 		expect(result.state.git).toMatchObject({
 			baseBranch: "main",
-			planBranch: "planner/plan",
-			expectedBranch: "planner/plan",
+			planBranch: "planner/plan-1/main",
+			expectedBranch: "planner/plan-1/main",
 			expectedCommit: "abc123",
 		});
-		expect(result.state.branches.items["planner/plan"]).toMatchObject({
+		expect(result.state.branches.items["planner/plan-1/main"]).toMatchObject({
 			kind: "plan",
 			status: "active",
 		});
@@ -276,7 +279,7 @@ describe("GitMutations", () => {
 			mode: "plan_active",
 			pendingOperation: null,
 			git: {
-				expectedBranch: "planner/plan",
+				expectedBranch: "planner/plan-1/main",
 				expectedCommit: "def456",
 				lastObservedCommit: "def456",
 			},
@@ -342,7 +345,7 @@ describe("GitMutations", () => {
 		const { fs, state, writer, mutations } = setup([
 			repo(),
 			repo({
-				currentBranch: "planner/plan/work/new-parser",
+				currentBranch: "planner/plan-1/work/work-2",
 				currentCommit: "abc123",
 			}),
 		]);
@@ -351,15 +354,14 @@ describe("GitMutations", () => {
 
 		const result = await mutations.createChildBranch({
 			workItemId: "work-2",
-			branchName: "planner/plan/work/new-parser",
 		});
 
 		expect(writer.calls).toEqual([
-			"createAndSwitchBranch:planner/plan/work/new-parser:",
+			"createAndSwitchBranch:planner/plan-1/work/work-2:",
 		]);
 		expect(result.state.activeWorkItemId).toBe("work-2");
 		expect(
-			result.state.branches.items["planner/plan/work/new-parser"],
+			result.state.branches.items["planner/plan-1/work/work-2"],
 		).toMatchObject({
 			kind: "child",
 			workItemId: "work-2",
@@ -371,7 +373,7 @@ describe("GitMutations", () => {
 		const { fs, state, writer, mutations } = setup([
 			repo(),
 			repo({
-				currentBranch: "planner/plan/work/parser/try-b",
+				currentBranch: "planner/plan-1/experiment/work-1/try-b",
 				currentCommit: "abc123",
 			}),
 		]);
@@ -380,14 +382,14 @@ describe("GitMutations", () => {
 
 		const result = await mutations.createExperimentBranch({
 			workItemId: "work-1",
-			branchName: "planner/plan/work/parser/try-b",
+			attemptId: "try-b",
 		});
 
 		expect(writer.calls).toEqual([
-			"createAndSwitchBranch:planner/plan/work/parser/try-b:",
+			"createAndSwitchBranch:planner/plan-1/experiment/work-1/try-b:",
 		]);
 		expect(
-			result.state.branches.items["planner/plan/work/parser/try-b"],
+			result.state.branches.items["planner/plan-1/experiment/work-1/try-b"],
 		).toMatchObject({
 			kind: "experiment",
 			workItemId: "work-1",
@@ -398,19 +400,19 @@ describe("GitMutations", () => {
 	it("selects an experiment by switching to child branch and merging it", async () => {
 		const { fs, state, writer, mutations } = setup([
 			repo({
-				currentBranch: "planner/plan/work/parser/try-a",
+				currentBranch: "planner/plan-1/experiment/work-1/try-a",
 				currentCommit: "abc123",
 			}),
 			repo({
-				currentBranch: "planner/plan/work/parser",
+				currentBranch: "planner/plan-1/work/work-1",
 				currentCommit: "abc123",
 			}),
 			repo({
-				currentBranch: "planner/plan/work/parser",
+				currentBranch: "planner/plan-1/work/work-1",
 				currentCommit: "abc123",
 			}),
 			repo({
-				currentBranch: "planner/plan/work/parser",
+				currentBranch: "planner/plan-1/work/work-1",
 				currentCommit: "def456",
 			}),
 		]);
@@ -420,22 +422,23 @@ describe("GitMutations", () => {
 			...storedState,
 			git: {
 				...storedState.git,
-				expectedBranch: "planner/plan/work/parser/try-a",
+				expectedBranch: "planner/plan-1/experiment/work-1/try-a",
 			},
 		});
 		state.refresh();
 
 		const result = await mutations.selectExperimentBranch({
-			branchName: "planner/plan/work/parser/try-a",
-			targetBranch: "planner/plan/work/parser",
+			workItemId: "work-1",
+			attemptId: "try-a",
 		});
 
 		expect(writer.calls).toEqual([
-			"switchBranch:planner/plan/work/parser",
-			"mergeBranch:planner/plan/work/parser/try-a",
+			"switchBranch:planner/plan-1/work/work-1",
+			"mergeBranch:planner/plan-1/experiment/work-1/try-a",
 		]);
 		expect(
-			result.state.branches.items["planner/plan/work/parser/try-a"].status,
+			result.state.branches.items["planner/plan-1/experiment/work-1/try-a"]
+				.status,
 		).toBe("selected");
 		expect(result.state.git.expectedCommit).toBe("def456");
 	});
@@ -458,7 +461,7 @@ describe("GitMutations", () => {
 				id: "op-1",
 				type: "commit",
 				before: {
-					branch: "planner/plan",
+					branch: "planner/plan-1/main",
 					commit: "abc123",
 				},
 			},
@@ -482,13 +485,11 @@ describe("GitMutations", () => {
 		const { fs, writer, mutations } = setup([repo(), repo()]);
 		saveActivePlan(fs);
 
-		const result = await mutations.deleteBranch({
-			branchName: "planner/plan/work/parser",
-		});
+		const result = await mutations.deleteChildBranch({ workItemId: "work-1" });
 
-		expect(writer.calls).toEqual(["deleteBranch:planner/plan/work/parser"]);
-		expect(result.state.branches.items["planner/plan/work/parser"].status).toBe(
-			"deleted",
-		);
+		expect(writer.calls).toEqual(["deleteBranch:planner/plan-1/work/work-1"]);
+		expect(
+			result.state.branches.items["planner/plan-1/work/work-1"].status,
+		).toBe("deleted");
 	});
 });

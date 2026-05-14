@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { RuntimeStateManager } from "../planner-state/runtime";
+import { DEFAULT_SETTINGS } from "../settings/defaults";
 import { createSettingsPaths } from "../settings/paths";
 import { MemoryFs } from "../test/memory-fs";
 import { GitMutations } from "./mutations";
@@ -53,6 +54,7 @@ function createMutations(repo: string, runner: NodeGitRunner) {
 	const mutations = new GitMutations({
 		state,
 		writer,
+		branchNaming: DEFAULT_SETTINGS.git.branchNaming,
 		readRepoState: () => getRepoState(runner, repo),
 		now: () => "2026-05-14T00:00:00.000Z",
 		createOperationId: () => "op-1",
@@ -84,7 +86,6 @@ describeGit("git integration", () => {
 			const { mutations } = createMutations(repo, runner);
 			await mutations.createPlanBranch({
 				planId: "plan-1",
-				branchName: "planner/plan/main",
 			});
 			writeFileSync(join(repo, "feature.txt"), "feature\n", "utf-8");
 
@@ -93,7 +94,7 @@ describeGit("git integration", () => {
 			});
 			const repoState = await getRepoState(runner, repo);
 
-			expect(repoState.currentBranch).toBe("planner/plan/main");
+			expect(repoState.currentBranch).toBe("planner/plan-1/main");
 			expect(result.state.git.expectedCommit).toBe(repoState.currentCommit);
 			expect(result.state.pendingOperation).toBeNull();
 		} finally {
@@ -108,20 +109,18 @@ describeGit("git integration", () => {
 			const { mutations } = createMutations(repo, runner);
 			await mutations.createPlanBranch({
 				planId: "plan-1",
-				branchName: "planner/plan/main",
 			});
 			await mutations.createChildBranch({
 				workItemId: "work-1",
-				branchName: "planner/plan/work/parser",
 			});
-			await mutations.switchBranch({ targetBranch: "planner/plan/main" });
+			await mutations.switchToPlanBranch();
 
-			const result = await mutations.deleteBranch({
-				branchName: "planner/plan/work/parser",
+			const result = await mutations.deleteChildBranch({
+				workItemId: "work-1",
 			});
 
 			expect(
-				result.state.branches.items["planner/plan/work/parser"].status,
+				result.state.branches.items["planner/plan-1/work/work-1"].status,
 			).toBe("deleted");
 		} finally {
 			rmSync(repo, { recursive: true, force: true });
