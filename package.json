@@ -1,0 +1,32 @@
+{
+	"name": "pi-planner",
+	"version": "0.1.0",
+	"description": "Disk-first planning and git guardrails for Pi local-model workflows",
+	"keywords": [
+		"pi-package"
+	],
+	"type": "module",
+	"main": "src/index.ts",
+	"pi": {
+		"extensions": [
+			"src/index.ts"
+		]
+	},
+	"license": "MIT",
+	"scripts": {
+		"build": "tsc",
+		"check": "biome check .",
+		"format": "biome format --write .",
+		"test": "vitest run",
+		"test:watch": "vitest"
+	},
+	"dependencies": {
+		"@earendil-works/pi-coding-agent": "latest"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.15",
+		"@types/node": "^24.0.0",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.6"
+	}
+}
