@@ -28,6 +28,17 @@ export const DEFAULT_SETTINGS: PlannerSettings = {
 		compactAfterEachIteration: true,
 	},
 	git: {
+		shellToolNames: ["bash"],
+		blockedCommitPatterns: ["\\bgit\\s+commit\\b"],
+		blockedDangerousPatterns: [
+			"\\bgit\\s+reset\\b",
+			"\\bgit\\s+rebase\\b",
+			"\\bgit\\s+merge\\b",
+			"\\bgit\\s+checkout\\b",
+			"\\bgit\\s+switch\\b",
+			"\\bgit\\s+branch\\s+-D\\b",
+			"\\bgit\\s+clean\\b",
+		],
 		deleteChildBranch: true,
 		archiveChildPlans: false,
 	},

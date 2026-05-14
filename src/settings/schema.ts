@@ -19,6 +19,9 @@ export interface RefactorSettings {
 }
 
 export interface GitSettings {
+	shellToolNames: string[];
+	blockedCommitPatterns: string[];
+	blockedDangerousPatterns: string[];
 	deleteChildBranch: boolean;
 	archiveChildPlans: boolean;
 }

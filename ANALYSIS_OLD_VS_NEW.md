@@ -618,3 +618,274 @@ The instruction to the other model should be:
 > 10. **Documentation** — JSDoc for public API and clear generated plan summaries
 >
 > The extension is a control and guardrail system for a local model: it does not implement code instead of the model. It manages state, instructions, git, verification checkpoints, and compaction. All code and internal documentation should be in English. User-facing prompts can follow detected/project language."
+
+---
+
+## PART 7: Git System Spec Draft
+
+Цель git-системы: planner всегда знает, от какой ветки и какого коммита создан план, какой branch/commit ожидается сейчас, и блокирует любые небезопасные действия модели до восстановления понятного состояния.
+
+### 7.1 Plan Creation Preconditions
+
+При создании плана extension сначала проверяет git-состояние проекта.
+
+Если проект не является git repository:
+- extension не делает `git init` сам;
+- extension возвращает модели инструкцию: нужно спросить пользователя, можно ли инициализировать git;
+- модель должна предложить пользователю команду или действие: `git init`, затем initial commit;
+- planner не начинает план, пока нет валидного git repo и стартового commit.
+
+Если git repo есть, но есть uncommitted changes:
+- учитываются и unstaged, и staged changes;
+- planner не создаёт plan branch поверх dirty worktree;
+- extension возвращает модели предупреждение и список возможных действий для пользователя:
+  - закоммитить текущие изменения как baseline;
+  - удалить/откатить изменения;
+  - перенести изменения в отдельную ветку;
+  - вручную привести repo к clean state;
+- planner начинает работу только от clean HEAD commit.
+
+Правило: **каждый план начинается только от чистого git state и конкретного commit hash**.
+
+### 7.2 Plan Git Binding
+
+При успешном создании плана extension сохраняет:
+
+```ts
+PlanGitBinding {
+  planId: string;
+  baseBranch: string;       // ветка, откуда создан plan
+  baseCommit: string;       // commit, откуда создан plan
+  targetBranch: string;     // ветка плана
+  expectedBranch: string;   // где planner ожидает находиться сейчас
+  expectedCommit: string;   // какой HEAD planner ожидает сейчас
+  activeWorkItemBranch: string | null;
+}
+```
+
+После создания:
+- создаётся target branch плана;
+- `expectedBranch = targetBranch`;
+- `expectedCommit = HEAD` на target branch;
+- вся дальнейшая работа сверяется с этим binding.
+
+### 7.3 Work Item Commit Flow
+
+Каждый atomic work item выполняется отдельно.
+
+При `planner.start_step`:
+- extension проверяет repo state;
+- текущая ветка и commit должны совпадать с `expectedBranch/expectedCommit`;
+- worktree должен быть clean;
+- создаётся child branch для work item;
+- `activeWorkItemBranch` сохраняется в state.
+
+При `planner.finish_step`:
+- extension проверяет, что текущая ветка = active child branch;
+- проверяет наличие изменений;
+- создаёт commit через controlled planner flow;
+- сохраняет `childCommit`;
+- переключается на target branch;
+- делает merge child branch в target branch;
+- сохраняет `mergeCommit`;
+- обновляет `expectedBranch = targetBranch`;
+- обновляет `expectedCommit = mergeCommit`;
+- удаляет или архивирует child branch согласно settings;
+- обновляет JSON state и plan.md;
+- запускает compact.
+
+Правило: **commit является сигналом завершения work item**, но модель не должна делать commit напрямую. Commit должен проходить только через planner tool.
+
+### 7.4 Direct Git Commit Blocking
+
+Extension должен слушать `tool_call` hook и анализировать input tool calls.
+
+Если модель пытается выполнить git commit не через planner tool:
+- command блокируется;
+- extension возвращает объяснение: “direct commit forbidden; call planner.finish_step after verification”;
+- состояние плана не обновляется.
+
+Нужно блокировать не только буквальный `git commit`, но и настраиваемые alias/patterns из `settings.json`.
+
+Пример settings:
+
+```json
+{
+  "git": {
+    "blockedCommitPatterns": [
+      "\\bgit\\s+commit\\b",
+      "\\bgc\\b",
+      "\\bgcam\\b"
+    ]
+  }
+}
+```
+
+Важно:
+- блокировать надо только tool calls, которые реально выполняют shell-команды, например `bash`;
+- `edit/write` не должны блокироваться просто потому, что в файле встречается текст `git commit`;
+- для этого в settings можно указать список tool names, которые считаются shell execution tools.
+
+Пример:
+
+```json
+{
+  "git": {
+    "shellToolNames": ["bash"],
+    "blockedCommitPatterns": ["\\bgit\\s+commit\\b"]
+  }
+}
+```
+
+### 7.5 Branch/Commit Mismatch Detection
+
+Перед каждым planner tool, кроме специальных recovery/reset/delete операций, extension проверяет:
+
+- текущий git branch;
+- текущий HEAD commit;
+- dirty/staged state;
+- соответствие `expectedBranch`;
+- соответствие `expectedCommit`.
+
+Если branch не совпадает:
+- planner operation блокируется;
+- модель получает предупреждение;
+- пользователь должен выбрать действие: вернуться на expected branch, переключить plan binding, создать новый plan/fork, или отменить операцию.
+
+Если commit не совпадает:
+- значит появился внешний commit: от пользователя, другого инструмента или случайной команды;
+- planner operation блокируется;
+- модель получает специальное состояние `EXTERNAL_COMMIT_DETECTED`.
+
+Extension должен посчитать:
+- сколько commits добавилось относительно `expectedCommit`;
+- какие commit hashes появились;
+- commit messages;
+- какие файлы изменены;
+- есть ли dirty changes поверх нового commit.
+
+После этого нельзя автоматически продолжать старый stage.
+
+### 7.6 External Commit Recovery
+
+Когда обнаружен внешний commit, extension не должен сам решать, что делать. Он должен заставить модель спросить пользователя.
+
+Варианты, которые модель предлагает пользователю:
+
+1. **Accept external commit**
+   - принять новый commit как часть текущего плана;
+   - обновить `expectedCommit`;
+   - включить специальный stage: `DISCOVERY_AFTER_EXTERNAL_COMMIT`;
+   - модель анализирует diff/commits и обновляет plan state.
+
+2. **Soft reset external commit**
+   - сделать `git reset --soft {expectedCommit}`;
+   - изменения останутся staged;
+   - пользователь/модель решают, включать ли их в work item или вынести отдельно.
+
+3. **Hard reset external commit**
+   - сделать `git reset --hard {expectedCommit}`;
+   - опасная операция, требует явного подтверждения пользователя.
+
+4. **Move external commit to new branch**
+   - создать новую ветку от текущего HEAD;
+   - вернуться на expected branch/commit;
+   - сохранить ссылку на ветку с внешними изменениями.
+
+5. **Switch plan binding**
+   - если пользователь сознательно переключился на другую ветку, можно создать новый plan binding или переключить существующий;
+   - это должно быть явное действие, не автоматическое.
+
+Правило: **после внешнего commit planner не продолжает execution автоматически**.
+
+### 7.7 DISCOVERY_AFTER_EXTERNAL_COMMIT
+
+Если пользователь принимает внешний commit, planner включает специальную recovery/discovery стадию.
+
+Цель:
+- понять, что изменилось вне planner flow;
+- обновить plan state;
+- проверить, не сломались ли текущие work items;
+- пересчитать следующий безопасный шаг.
+
+Эта стадия должна:
+- прочитать новые commits;
+- изучить diff;
+- обновить `plan.md`;
+- обновить affected work items в `steps.json`;
+- только после этого разрешить продолжение обычного workflow.
+
+### 7.8 Dirty State Detection During Workflow
+
+Если во время planner workflow появляются uncommitted changes, extension различает контекст:
+
+- Если active child branch открыт и модель работает над current work item:
+  - dirty changes допустимы до `finish_step`;
+  - `status` может показывать “work item in progress”.
+
+- Если planner ожидает clean target branch:
+  - dirty changes блокируют операции;
+  - модель должна спросить пользователя, что делать.
+
+- Если dirty changes появились на target branch вне active work item:
+  - operation блокируется;
+  - нужно recovery decision.
+
+### 7.9 Exceptions
+
+Git checks не должны блокировать:
+- delete plan;
+- reset planner state;
+- override expected commit;
+- explicit recovery tools;
+- read-only status/list operations, если они только показывают проблему.
+
+Но даже read-only status должен показывать mismatch подробно.
+
+### 7.10 Settings Needed For Git Guardrails
+
+Нужные поля в `settings.json`:
+
+```json
+{
+  "git": {
+    "shellToolNames": ["bash"],
+    "blockedCommitPatterns": ["\\bgit\\s+commit\\b"],
+    "blockedDangerousPatterns": [
+      "\\bgit\\s+reset\\b",
+      "\\bgit\\s+rebase\\b",
+      "\\bgit\\s+merge\\b",
+      "\\bgit\\s+checkout\\b",
+      "\\bgit\\s+switch\\b",
+      "\\bgit\\s+branch\\s+-D\\b",
+      "\\bgit\\s+clean\\b"
+    ],
+    "deleteChildBranch": true,
+    "archiveChildPlans": false
+  }
+}
+```
+
+Dangerous patterns могут быть разрешены только внутри planner-controlled tools, не из обычного model bash call.
+
+### 7.11 First Implementation Boundary
+
+Первый git-модуль должен уметь:
+
+- detect repo root;
+- read current branch;
+- read current commit;
+- read staged/unstaged dirty state;
+- compare current state to expected binding;
+- detect external commits;
+- produce structured mismatch result;
+- analyze shell tool calls for blocked git commit/dangerous git operations.
+
+Пока не надо реализовывать:
+- actual branch creation;
+- actual commit;
+- merge;
+- reset;
+- recovery execution.
+
+Сначала делаем read-only git state + guardrail matcher. Это безопасный фундамент.

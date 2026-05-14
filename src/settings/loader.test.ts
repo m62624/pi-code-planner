@@ -46,6 +46,59 @@ describe("loadPlannerSettings", () => {
 		expect(loaded.sources.projectSettings).toBe(paths.projectSettings);
 	});
 
+	it("loads default git guardrail settings", () => {
+		const fs = new MemoryFs();
+		const paths = createSettingsPaths({
+			agentDir: "/agent",
+			cwd: "/repo",
+			extensionName: "pi-planner",
+		});
+		ensurePlannerFiles(paths, fs);
+
+		const loaded = loadPlannerSettings(paths, fs);
+
+		expect(loaded.settings.git.shellToolNames).toEqual(["bash"]);
+		expect(loaded.settings.git.blockedCommitPatterns).toContain(
+			"\\bgit\\s+commit\\b",
+		);
+		expect(loaded.settings.git.blockedDangerousPatterns).toContain(
+			"\\bgit\\s+reset\\b",
+		);
+		expect(loaded.settings.git.deleteChildBranch).toBe(true);
+	});
+
+	it("project settings override git guardrail arrays and flags", () => {
+		const fs = new MemoryFs();
+		const paths = createSettingsPaths({
+			agentDir: "/agent",
+			cwd: "/repo",
+			extensionName: "pi-planner",
+		});
+		ensurePlannerFiles(paths, fs);
+		fs.setFile(
+			paths.projectSettings,
+			JSON.stringify({
+				git: {
+					shellToolNames: ["bash", "shell"],
+					blockedCommitPatterns: ["\\bgit\\s+commit\\b", "\\bgcam\\b"],
+					archiveChildPlans: true,
+				},
+			}),
+		);
+
+		const loaded = loadPlannerSettings(paths, fs);
+
+		expect(loaded.settings.git.shellToolNames).toEqual(["bash", "shell"]);
+		expect(loaded.settings.git.blockedCommitPatterns).toEqual([
+			"\\bgit\\s+commit\\b",
+			"\\bgcam\\b",
+		]);
+		expect(loaded.settings.git.blockedDangerousPatterns).toContain(
+			"\\bgit\\s+merge\\b",
+		);
+		expect(loaded.settings.git.archiveChildPlans).toBe(true);
+	});
+
 	it("project markdown file wins over global markdown file", () => {
 		const fs = new MemoryFs();
 		const paths = createSettingsPaths({
