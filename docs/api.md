@@ -290,14 +290,38 @@ tool surface for git operations.
 
 ## Storage Helpers
 
-### `src/storage/project-path.ts`
+### `src/storage/ids.ts`
 
 Exports:
 
-- `toProjectDirName(projectPath)`
-- `getProjectPlansDir(basePlansDir, projectPath)`
+- `sanitizeId(value, fallback)`
+- `shortHash(value, length)`
+- `createProjectKey(projectPath)`
+- `createPlanId(title, date)`
+- `createWorkItemId(title)`
+- `createAttemptId(index)`
 
-Reserved helper for future project/plan storage paths.
+Creates filesystem-safe ids for project, plan, work item, and experiment attempt
+storage.
+
+### `src/storage/paths.ts`
+
+Exports:
+
+- `getProjectsRoot(paths)`
+- `getProjectStoragePaths(input)`
+- `getPlanStoragePaths(input)`
+- `getWorkItemStoragePaths(input)`
+- `getAttemptStoragePaths(input)`
+
+Builds canonical storage paths under:
+
+```text
+getAgentDir()/extensions/pi-planner/projects/<projectKey>/
+```
+
+Plans are grouped by project. Project-local `.pi/extensions/pi-planner` remains
+reserved for settings and instruction overrides by default.
 
 ## Test Utilities
 
@@ -308,4 +332,3 @@ Exports:
 - `MemoryFs`
 
 In-memory implementation of `PlannerFs` for tests.
-
