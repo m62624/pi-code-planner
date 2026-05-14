@@ -18,10 +18,17 @@ export interface RefactorSettings {
 	compactAfterEachIteration: boolean;
 }
 
+export interface BranchNamingSettings {
+	plan: string;
+	child: string;
+	experiment: string;
+}
+
 export interface GitSettings {
 	shellToolNames: string[];
 	blockedCommitPatterns: string[];
 	blockedDangerousPatterns: string[];
+	branchNaming: BranchNamingSettings;
 	deleteChildBranch: boolean;
 	archiveChildPlans: boolean;
 }

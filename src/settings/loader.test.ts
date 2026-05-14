@@ -64,6 +64,11 @@ describe("loadPlannerSettings", () => {
 		expect(loaded.settings.git.blockedDangerousPatterns).toContain(
 			"\\bgit\\s+reset\\b",
 		);
+		expect(loaded.settings.git.branchNaming).toEqual({
+			plan: "planner/{planId}/main",
+			child: "planner/{planId}/work/{workItemId}",
+			experiment: "planner/{planId}/experiment/{workItemId}/{attemptId}",
+		});
 		expect(loaded.settings.git.deleteChildBranch).toBe(true);
 	});
 
@@ -81,6 +86,9 @@ describe("loadPlannerSettings", () => {
 				git: {
 					shellToolNames: ["bash", "shell"],
 					blockedCommitPatterns: ["\\bgit\\s+commit\\b", "\\bgcam\\b"],
+					branchNaming: {
+						child: "pi/{planId}/child/{workItemId}",
+					},
 					archiveChildPlans: true,
 				},
 			}),
@@ -96,6 +104,11 @@ describe("loadPlannerSettings", () => {
 		expect(loaded.settings.git.blockedDangerousPatterns).toContain(
 			"\\bgit\\s+merge\\b",
 		);
+		expect(loaded.settings.git.branchNaming).toEqual({
+			plan: "planner/{planId}/main",
+			child: "pi/{planId}/child/{workItemId}",
+			experiment: "planner/{planId}/experiment/{workItemId}/{attemptId}",
+		});
 		expect(loaded.settings.git.archiveChildPlans).toBe(true);
 	});
 

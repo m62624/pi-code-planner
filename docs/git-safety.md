@@ -37,6 +37,24 @@ planner/<plan-id>/work/<work-item-id>
 planner/<plan-id>/experiment/<work-item-id>/<attempt-id>
 ```
 
+The default machine-readable setting is:
+
+```json
+{
+  "git": {
+    "branchNaming": {
+      "plan": "planner/{planId}/main",
+      "child": "planner/{planId}/work/{workItemId}",
+      "experiment": "planner/{planId}/experiment/{workItemId}/{attemptId}"
+    }
+  }
+}
+```
+
+Branch naming templates are settings, not markdown instructions. They are parsed
+and validated by code because they affect git safety. Markdown may tell the model
+not to invent branch names, but it must not define the branch naming contract.
+
 ## Source Markdown Layout
 
 Code for instruction parsing lives in `src/instructions`.

@@ -39,6 +39,11 @@ export const DEFAULT_SETTINGS: PlannerSettings = {
 			"\\bgit\\s+branch\\s+-D\\b",
 			"\\bgit\\s+clean\\b",
 		],
+		branchNaming: {
+			plan: "planner/{planId}/main",
+			child: "planner/{planId}/work/{workItemId}",
+			experiment: "planner/{planId}/experiment/{workItemId}/{attemptId}",
+		},
 		deleteChildBranch: true,
 		archiveChildPlans: false,
 	},

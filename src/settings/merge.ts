@@ -17,6 +17,10 @@ export function mergePlannerSettings(
 		git: {
 			...base.git,
 			...(override.git ?? {}),
+			branchNaming: {
+				...base.git.branchNaming,
+				...(override.git?.branchNaming ?? {}),
+			},
 		},
 		verificationCommands:
 			override.verificationCommands ?? base.verificationCommands,
