@@ -72,6 +72,7 @@ describe("storage paths", () => {
 		});
 
 		expect(paths.attemptDir).toBe(`${paths.experimentsDir}/attempt-2`);
+		expect(paths.attemptRecord).toBe(`${paths.attemptDir}/attempt.json`);
 		expect(paths.attemptPlan).toBe(`${paths.attemptDir}/plan.md`);
 		expect(paths.attemptSummary).toBe(`${paths.attemptDir}/summary.md`);
 		expect(paths.attemptScore).toBe(`${paths.attemptDir}/score.json`);

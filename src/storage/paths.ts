@@ -43,6 +43,7 @@ export interface WorkItemStoragePaths extends PlanStoragePaths {
 export interface AttemptStoragePaths extends WorkItemStoragePaths {
 	attemptId: string;
 	attemptDir: string;
+	attemptRecord: string;
 	attemptPlan: string;
 	attemptPrompt: string;
 	attemptSummary: string;
@@ -121,6 +122,7 @@ export function getAttemptStoragePaths(
 		...workItem,
 		attemptId: input.attemptId,
 		attemptDir,
+		attemptRecord: join(attemptDir, "attempt.json"),
 		attemptPlan: join(attemptDir, "plan.md"),
 		attemptPrompt: join(attemptDir, "prompt.md"),
 		attemptSummary: join(attemptDir, "summary.md"),

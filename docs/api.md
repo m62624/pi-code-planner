@@ -323,6 +323,43 @@ getAgentDir()/extensions/pi-planner/projects/<projectKey>/
 Plans are grouped by project. Project-local `.pi/extensions/pi-planner` remains
 reserved for settings and instruction overrides by default.
 
+### `src/storage/schema.ts`
+
+Exports:
+
+- `ProjectRecord`
+- `PlanRecord`
+- `WorkItemRecord`
+- `ExperimentAttemptRecord`
+- status unions for plan, work item, and attempt records
+
+These are the JSON records persisted by the storage skeleton.
+
+### `src/storage/store.ts`
+
+Exports:
+
+- `PlanStore`
+- `parseProjectRecord(value)`
+- `parsePlanRecord(value)`
+- `parseWorkItemRecord(value)`
+- `parseExperimentAttemptRecord(value)`
+
+`PlanStore` currently supports:
+
+- `ensureProject(projectPath)`
+- `readProject(projectPath)`
+- `createPlan(projectPath, input)`
+- `readPlan(projectPath, planId)`
+- `createWorkItem(projectPath, planId, input)`
+- `readWorkItem(projectPath, planId, workItemId)`
+- `createAttempt(projectPath, planId, workItemId, input)`
+- `readAttempt(projectPath, planId, workItemId, attemptId)`
+
+The store creates JSON records and placeholder markdown/json artifacts under the
+canonical storage paths. Listing APIs are intentionally not present yet because
+the generic `PlannerFs` interface does not expose directory reads.
+
 ## Test Utilities
 
 ### `src/test/memory-fs.ts`
