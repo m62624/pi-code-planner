@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import { PlannerArtifacts } from "../artifacts/planner-artifacts";
 import {
 	type CompactContext,
 	CompactionCoordinator,
 } from "../compaction/coordinator";
 import { RuntimeStateManager } from "../planner-state/runtime";
+import { DEFAULT_SETTINGS } from "../settings/defaults";
 import { createSettingsPaths } from "../settings/paths";
+import type { SettingsLoadResult } from "../settings/schema";
 import { PlanStore } from "../storage/store";
 import { MemoryFs } from "../test/memory-fs";
 import { WorkflowManager } from "../workflow/manager";
@@ -46,6 +49,52 @@ function createHarness() {
 		compact: vi.fn(),
 	};
 	return { compactor, ctx, fs, orchestrator, runtime, store };
+}
+
+function settingsLoadResult(): SettingsLoadResult {
+	return {
+		settings: DEFAULT_SETTINGS,
+		sources: {
+			defaults: "built-in",
+			instructions: {
+				plan: "/agent/extensions/pi-planner/instructions/plan.md",
+				discovery: "/agent/extensions/pi-planner/instructions/discovery.md",
+				work_item: "/agent/extensions/pi-planner/instructions/work_item.md",
+				compact: "/agent/extensions/pi-planner/instructions/compact.md",
+			},
+		},
+	};
+}
+
+function createPromptHarness() {
+	const harness = createHarness();
+	harness.fs.setFile(
+		"/agent/extensions/pi-planner/instructions/plan.md",
+		"Plan instruction",
+	);
+	harness.fs.setFile(
+		"/agent/extensions/pi-planner/instructions/discovery.md",
+		"Discovery instruction",
+	);
+	harness.fs.setFile(
+		"/agent/extensions/pi-planner/instructions/work_item.md",
+		"Work item instruction",
+	);
+	harness.fs.setFile(
+		"/agent/extensions/pi-planner/instructions/compact.md",
+		"Compact instruction",
+	);
+	const orchestrator = new PlannerOrchestrator({
+		projectPath: "/repo",
+		store: harness.store,
+		workflow: new WorkflowManager(harness.store),
+		runtime: harness.runtime,
+		compactor: harness.compactor,
+		fs: harness.fs,
+		settings: settingsLoadResult(),
+		artifacts: new PlannerArtifacts({ paths, fs: harness.fs }),
+	});
+	return { ...harness, orchestrator };
 }
 
 describe("PlannerOrchestrator", () => {
@@ -185,5 +234,40 @@ describe("PlannerOrchestrator", () => {
 
 		expect(result.current.stage).toBe("completed");
 		expect(runtime.get().activeWorkItemId).toBeNull();
+	});
+
+	it("builds plan stage prompts with instruction and artifact paths", () => {
+		const { orchestrator } = createPromptHarness();
+		orchestrator.createPlan({ title: "Plan", planId: "plan-1" });
+		orchestrator.transitionPlan("plan-1", "discovery_full");
+
+		const prompt = orchestrator.buildPlanStagePrompt("plan-1");
+
+		expect(prompt?.prompt).toContain("Discovery instruction");
+		expect(prompt?.prompt).toContain("- planId: plan-1");
+		expect(prompt?.prompt).toContain("/plans/plan-1/plan.md");
+		expect(
+			prompt?.artifactPaths.some((path) =>
+				path.endsWith("/plans/plan-1/plan.md"),
+			),
+		).toBe(true);
+	});
+
+	it("builds work item stage prompts with work item artifacts", () => {
+		const { orchestrator } = createPromptHarness();
+		orchestrator.createPlan({ title: "Plan", planId: "plan-1" });
+		orchestrator.createWorkItem("plan-1", {
+			title: "Parser API",
+			workItemId: "parser-api",
+		});
+
+		const prompt = orchestrator.buildWorkItemStagePrompt(
+			"plan-1",
+			"parser-api",
+		);
+
+		expect(prompt?.prompt).toContain("Work item instruction");
+		expect(prompt?.prompt).toContain("- workItemId: parser-api");
+		expect(prompt?.prompt).toContain("tdd_plan.md");
 	});
 });

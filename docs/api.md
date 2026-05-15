@@ -209,10 +209,17 @@ Current public methods:
 - `completeDiscoveryCompact(planId)`
 - `requestWorkItemCompact(ctx, planId, input)`
 - `completeWorkItemCompact(planId, workItemId)`
+- `buildPlanStagePrompt(planId)`
+- `buildWorkItemStagePrompt(planId, workItemId)`
 
 Compact completion methods require the pending compact resume to be consumed
 first. If `pendingCompact` is still `requested` or `completed`, they throw
 `PlannerOrchestratorBlockedByCompact`.
+
+Prompt builder methods assemble the next model instruction from settings,
+planner state, and artifact references. They return `null` only when the
+orchestrator was constructed without prompt dependencies, which is allowed in
+low-level tests but not expected for the real extension core.
 
 ## Git Read Layer
 
@@ -401,6 +408,26 @@ Registered tool names:
 These tools are the public Pi surface over `PlannerOrchestrator`. They are thin
 wrappers: validate input, call the orchestrator, return structured details, and
 convert workflow/compact-boundary rejections into tool responses.
+
+Successful workflow tool responses return details shaped as:
+
+```ts
+{
+  result: OperationResult;
+  nextPrompt: AssemblePlannerPromptResult | null;
+}
+```
+
+When `nextPrompt` is present, the visible tool text also includes:
+
+```text
+NEXT PLANNER INSTRUCTION
+...
+```
+
+Static Pi `promptGuidelines` explain when the tools should be used, but runtime
+stage instructions are delivered through the tool result so they can include the
+current plan/work item state and artifact paths.
 
 ### `src/tools/planner-git-tools.ts`
 

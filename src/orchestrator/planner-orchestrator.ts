@@ -1,3 +1,4 @@
+import { PlannerArtifacts } from "../artifacts/planner-artifacts";
 import type {
 	CompactContext,
 	CompactionCoordinator,
@@ -6,6 +7,10 @@ import type {
 import type { GitCore } from "../git/core";
 import type { RuntimeStateManager } from "../planner-state/runtime";
 import type { PendingPlannerCompact } from "../planner-state/schema";
+import type { AssemblePlannerPromptResult } from "../prompts/assembler";
+import { artifactReference, assemblePlannerPrompt } from "../prompts/assembler";
+import type { PlannerFs } from "../settings/fs";
+import type { InstructionName, SettingsLoadResult } from "../settings/schema";
 import type { PlanRecord, WorkItemRecord } from "../storage/schema";
 import { type CreateWorkItemInput, PlanStore } from "../storage/store";
 import {
@@ -20,6 +25,9 @@ export interface PlannerOrchestratorOptions {
 	workflow: WorkflowManager;
 	runtime: RuntimeStateManager;
 	compactor: CompactionCoordinator;
+	fs?: PlannerFs;
+	settings?: SettingsLoadResult;
+	artifacts?: PlannerArtifacts;
 }
 
 export interface CreatePlannerPlanInput {
@@ -40,7 +48,7 @@ export interface RequestWorkItemCompactInput
 }
 
 export function createPlannerOrchestrator(
-	core: Pick<GitCore, "paths" | "fs" | "state">,
+	core: Pick<GitCore, "paths" | "fs" | "state" | "settings">,
 	projectPath: string,
 	compactor: CompactionCoordinator,
 ): PlannerOrchestrator {
@@ -54,6 +62,12 @@ export function createPlannerOrchestrator(
 		workflow: new WorkflowManager(store),
 		runtime: core.state,
 		compactor,
+		fs: core.fs,
+		settings: core.settings,
+		artifacts: new PlannerArtifacts({
+			paths: core.paths,
+			fs: core.fs,
+		}),
 	});
 }
 
@@ -155,6 +169,109 @@ export class PlannerOrchestrator {
 		return this.transitionWorkItem(planId, workItemId, "completed");
 	}
 
+	buildPlanStagePrompt(planId: string): AssemblePlannerPromptResult | null {
+		if (!this.options.settings || !this.options.artifacts || !this.options.fs) {
+			return null;
+		}
+
+		const plan = this.options.store.readPlan(this.options.projectPath, planId);
+		const artifacts = [
+			this.options.artifacts.readPlanArtifact(
+				this.options.projectPath,
+				planId,
+				"plan",
+			),
+			this.options.artifacts.readPlanArtifact(
+				this.options.projectPath,
+				planId,
+				"discovery",
+			),
+			this.options.artifacts.readPlanArtifact(
+				this.options.projectPath,
+				planId,
+				"questions",
+			),
+			this.options.artifacts.readPlanArtifact(
+				this.options.projectPath,
+				planId,
+				"decisions",
+			),
+		];
+
+		return assemblePlannerPrompt(this.options.settings, this.options.fs, {
+			instructionName: instructionForPlanStage(plan.stage),
+			state: [
+				{ name: "scope", value: "plan" },
+				{ name: "planId", value: plan.planId },
+				{ name: "title", value: plan.title },
+				{ name: "stage", value: plan.stage },
+				{ name: "status", value: plan.status },
+			],
+			artifacts: artifacts.map((artifact) => artifactReference(artifact)),
+			extraInstructions: [
+				"Use the listed planner artifacts as the source of truth.",
+				"Do not skip planner workflow tools when moving to another stage.",
+			],
+		});
+	}
+
+	buildWorkItemStagePrompt(
+		planId: string,
+		workItemId: string,
+	): AssemblePlannerPromptResult | null {
+		if (!this.options.settings || !this.options.artifacts || !this.options.fs) {
+			return null;
+		}
+
+		const workItem = this.options.store.readWorkItem(
+			this.options.projectPath,
+			planId,
+			workItemId,
+		);
+		const artifacts = [
+			this.options.artifacts.readPlanArtifact(
+				this.options.projectPath,
+				planId,
+				"plan",
+			),
+			this.options.artifacts.readWorkItemArtifact(
+				this.options.projectPath,
+				planId,
+				workItemId,
+				"tdd_plan",
+			),
+			this.options.artifacts.readWorkItemArtifact(
+				this.options.projectPath,
+				planId,
+				workItemId,
+				"tests_summary",
+			),
+			this.options.artifacts.readWorkItemArtifact(
+				this.options.projectPath,
+				planId,
+				workItemId,
+				"refactor_notes",
+			),
+		];
+
+		return assemblePlannerPrompt(this.options.settings, this.options.fs, {
+			instructionName: instructionForWorkItemStage(workItem.stage),
+			state: [
+				{ name: "scope", value: "work_item" },
+				{ name: "planId", value: planId },
+				{ name: "workItemId", value: workItem.workItemId },
+				{ name: "title", value: workItem.title },
+				{ name: "stage", value: workItem.stage },
+				{ name: "status", value: workItem.status },
+			],
+			artifacts: artifacts.map((artifact) => artifactReference(artifact)),
+			extraInstructions: [
+				"Use the listed planner artifacts as the source of truth.",
+				"Keep the current work item isolated from unrelated work.",
+			],
+		});
+	}
+
 	private activatePlan(planId: string): void {
 		this.options.runtime.update((state) => ({
 			...state,
@@ -198,6 +315,23 @@ export class PlannerOrchestrator {
 			throw new PlannerOrchestratorBlockedByCompact(pending);
 		}
 	}
+}
+
+function instructionForPlanStage(stage: PlanStage): InstructionName {
+	if (stage === "discovery_full") return "discovery";
+	if (stage === "discovery_compact_required") return "compact";
+	if (stage === "plan_finalize" || stage === "plan_completed") {
+		return "documentation";
+	}
+	return "plan";
+}
+
+function instructionForWorkItemStage(stage: WorkItemStage): InstructionName {
+	if (stage === "refactor") return "refactor";
+	if (stage === "verification") return "api_check";
+	if (stage === "work_item_compact_required") return "compact";
+	if (stage === "completed") return "documentation";
+	return "work_item";
 }
 
 export class PlannerOrchestratorBlockedByCompact extends Error {

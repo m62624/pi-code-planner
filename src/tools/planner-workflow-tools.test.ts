@@ -15,6 +15,22 @@ function context(): ExtensionContext {
 	} as unknown as ExtensionContext;
 }
 
+const nextPlanPrompt = {
+	prompt: "Plan next instruction",
+	instruction: "Plan next instruction",
+	artifactPaths: [
+		"/agent/extensions/pi-planner/projects/repo/plans/plan-1/plan.md",
+	],
+};
+
+const nextWorkItemPrompt = {
+	prompt: "Work item next instruction",
+	instruction: "Work item next instruction",
+	artifactPaths: [
+		"/agent/extensions/pi-planner/projects/repo/plans/plan-1/work-items/parser-api/tdd_plan.md",
+	],
+};
+
 function toolByName(name: string, orchestrator: PlannerOrchestrator) {
 	const tool = createPlannerWorkflowTools(() => orchestrator).find(
 		(candidate) => candidate.name === name,
@@ -44,7 +60,11 @@ describe("createPlannerWorkflowTools", () => {
 			planId: "plan-1",
 			stage: "plan_draft",
 		});
-		const orchestrator = { createPlan } as unknown as PlannerOrchestrator;
+		const buildPlanStagePrompt = vi.fn().mockReturnValue(nextPlanPrompt);
+		const orchestrator = {
+			createPlan,
+			buildPlanStagePrompt,
+		} as unknown as PlannerOrchestrator;
 		const tool = toolByName("planner_create_plan", orchestrator);
 
 		const result = await tool.execute(
@@ -61,17 +81,25 @@ describe("createPlannerWorkflowTools", () => {
 		});
 		expect(result.content[0]).toMatchObject({
 			type: "text",
-			text: "Planner plan created.",
 		});
-		expect(result.details).toMatchObject({ planId: "plan-1" });
+		expect(result.content[0].text).toContain("Planner plan created.");
+		expect(result.content[0].text).toContain("NEXT PLANNER INSTRUCTION");
+		expect(result.content[0].text).toContain("Plan next instruction");
+		expect(buildPlanStagePrompt).toHaveBeenCalledWith("plan-1");
+		expect(result.details).toMatchObject({
+			result: { planId: "plan-1" },
+			nextPrompt: nextPlanPrompt,
+		});
 	});
 
 	it("transitions a plan through the orchestrator", async () => {
 		const transitionPlan = vi.fn().mockReturnValue({
 			current: { planId: "plan-1", stage: "discovery_full" },
 		});
+		const buildPlanStagePrompt = vi.fn().mockReturnValue(nextPlanPrompt);
 		const orchestrator = {
 			transitionPlan,
+			buildPlanStagePrompt,
 		} as unknown as PlannerOrchestrator;
 		const tool = toolByName("planner_transition_plan", orchestrator);
 
@@ -84,9 +112,11 @@ describe("createPlannerWorkflowTools", () => {
 		);
 
 		expect(transitionPlan).toHaveBeenCalledWith("plan-1", "discovery_full");
-		expect(result.content[0]).toMatchObject({
-			type: "text",
-			text: "Planner plan transitioned.",
+		expect(buildPlanStagePrompt).toHaveBeenCalledWith("plan-1");
+		expect(result.content[0].text).toContain("Planner plan transitioned.");
+		expect(result.details).toMatchObject({
+			result: { current: { planId: "plan-1" } },
+			nextPrompt: nextPlanPrompt,
 		});
 	});
 
@@ -95,8 +125,12 @@ describe("createPlannerWorkflowTools", () => {
 			workItemId: "parser-api",
 			stage: "pending",
 		});
+		const buildWorkItemStagePrompt = vi
+			.fn()
+			.mockReturnValue(nextWorkItemPrompt);
 		const orchestrator = {
 			createWorkItem,
+			buildWorkItemStagePrompt,
 		} as unknown as PlannerOrchestrator;
 		const tool = toolByName("planner_create_work_item", orchestrator);
 
@@ -116,19 +150,31 @@ describe("createPlannerWorkflowTools", () => {
 			title: "Parser API",
 			workItemId: "parser-api",
 		});
-		expect(result.details).toMatchObject({ workItemId: "parser-api" });
+		expect(buildWorkItemStagePrompt).toHaveBeenCalledWith(
+			"plan-1",
+			"parser-api",
+		);
+		expect(result.content[0].text).toContain("Work item next instruction");
+		expect(result.details).toMatchObject({
+			result: { workItemId: "parser-api" },
+			nextPrompt: nextWorkItemPrompt,
+		});
 	});
 
 	it("transitions a work item through the orchestrator", async () => {
 		const transitionWorkItem = vi.fn().mockReturnValue({
 			current: { workItemId: "parser-api", stage: "ready" },
 		});
+		const buildWorkItemStagePrompt = vi
+			.fn()
+			.mockReturnValue(nextWorkItemPrompt);
 		const orchestrator = {
 			transitionWorkItem,
+			buildWorkItemStagePrompt,
 		} as unknown as PlannerOrchestrator;
 		const tool = toolByName("planner_transition_work_item", orchestrator);
 
-		await tool.execute(
+		const result = await tool.execute(
 			"call-1",
 			{ planId: "plan-1", workItemId: "parser-api", stage: "ready" },
 			undefined,
@@ -141,6 +187,14 @@ describe("createPlannerWorkflowTools", () => {
 			"parser-api",
 			"ready",
 		);
+		expect(buildWorkItemStagePrompt).toHaveBeenCalledWith(
+			"plan-1",
+			"parser-api",
+		);
+		expect(result.details).toMatchObject({
+			result: { current: { workItemId: "parser-api" } },
+			nextPrompt: nextWorkItemPrompt,
+		});
 	});
 
 	it("requests discovery compaction through the orchestrator", async () => {
@@ -148,8 +202,10 @@ describe("createPlannerWorkflowTools", () => {
 			kind: "started",
 			pending: { id: "compact-1" },
 		});
+		const buildPlanStagePrompt = vi.fn().mockReturnValue(nextPlanPrompt);
 		const orchestrator = {
 			requestDiscoveryCompact,
+			buildPlanStagePrompt,
 		} as unknown as PlannerOrchestrator;
 		const ctx = context();
 		const tool = toolByName("planner_request_discovery_compact", orchestrator);
@@ -172,9 +228,13 @@ describe("createPlannerWorkflowTools", () => {
 			attachToNextTurn: undefined,
 			autoResume: undefined,
 		});
-		expect(result.content[0]).toMatchObject({
-			type: "text",
-			text: "Planner discovery compaction requested.",
+		expect(buildPlanStagePrompt).toHaveBeenCalledWith("plan-1");
+		expect(result.content[0].text).toContain(
+			"Planner discovery compaction requested.",
+		);
+		expect(result.details).toMatchObject({
+			result: { kind: "started" },
+			nextPrompt: nextPlanPrompt,
 		});
 	});
 
@@ -182,12 +242,14 @@ describe("createPlannerWorkflowTools", () => {
 		const completeDiscoveryCompact = vi.fn().mockReturnValue({
 			current: { planId: "plan-1", stage: "post_discovery_questions" },
 		});
+		const buildPlanStagePrompt = vi.fn().mockReturnValue(nextPlanPrompt);
 		const orchestrator = {
 			completeDiscoveryCompact,
+			buildPlanStagePrompt,
 		} as unknown as PlannerOrchestrator;
 		const tool = toolByName("planner_complete_discovery_compact", orchestrator);
 
-		await tool.execute(
+		const result = await tool.execute(
 			"call-1",
 			{ planId: "plan-1" },
 			undefined,
@@ -196,6 +258,11 @@ describe("createPlannerWorkflowTools", () => {
 		);
 
 		expect(completeDiscoveryCompact).toHaveBeenCalledWith("plan-1");
+		expect(buildPlanStagePrompt).toHaveBeenCalledWith("plan-1");
+		expect(result.details).toMatchObject({
+			result: { current: { planId: "plan-1" } },
+			nextPrompt: nextPlanPrompt,
+		});
 	});
 
 	it("requests work item compaction through the orchestrator", async () => {
@@ -203,13 +270,17 @@ describe("createPlannerWorkflowTools", () => {
 			kind: "started",
 			pending: { id: "compact-1" },
 		});
+		const buildWorkItemStagePrompt = vi
+			.fn()
+			.mockReturnValue(nextWorkItemPrompt);
 		const orchestrator = {
 			requestWorkItemCompact,
+			buildWorkItemStagePrompt,
 		} as unknown as PlannerOrchestrator;
 		const ctx = context();
 		const tool = toolByName("planner_request_work_item_compact", orchestrator);
 
-		await tool.execute(
+		const result = await tool.execute(
 			"call-1",
 			{
 				planId: "plan-1",
@@ -228,18 +299,30 @@ describe("createPlannerWorkflowTools", () => {
 			customInstructions: "compact work item",
 			resumePrompt: "resume work item",
 		});
+		expect(buildWorkItemStagePrompt).toHaveBeenCalledWith(
+			"plan-1",
+			"parser-api",
+		);
+		expect(result.details).toMatchObject({
+			result: { kind: "started" },
+			nextPrompt: nextWorkItemPrompt,
+		});
 	});
 
 	it("completes work item compaction through the orchestrator", async () => {
 		const completeWorkItemCompact = vi.fn().mockReturnValue({
 			current: { workItemId: "parser-api", stage: "completed" },
 		});
+		const buildWorkItemStagePrompt = vi
+			.fn()
+			.mockReturnValue(nextWorkItemPrompt);
 		const orchestrator = {
 			completeWorkItemCompact,
+			buildWorkItemStagePrompt,
 		} as unknown as PlannerOrchestrator;
 		const tool = toolByName("planner_complete_work_item_compact", orchestrator);
 
-		await tool.execute(
+		const result = await tool.execute(
 			"call-1",
 			{ planId: "plan-1", workItemId: "parser-api" },
 			undefined,
@@ -251,6 +334,14 @@ describe("createPlannerWorkflowTools", () => {
 			"plan-1",
 			"parser-api",
 		);
+		expect(buildWorkItemStagePrompt).toHaveBeenCalledWith(
+			"plan-1",
+			"parser-api",
+		);
+		expect(result.details).toMatchObject({
+			result: { current: { workItemId: "parser-api" } },
+			nextPrompt: nextWorkItemPrompt,
+		});
 	});
 
 	it("returns transition rejections as tool failures", async () => {

@@ -347,6 +347,12 @@ Planner resume after compaction is delivered carefully:
 The extension must not send the resume prompt directly from the compact callback,
 because that can race Pi's internal compaction queue flush.
 
+Workflow tools also return a fresh runtime instruction after successful stage
+changes. The instruction is included in structured `details.nextPrompt` and in a
+visible `NEXT PLANNER INSTRUCTION` block in the tool result text. This keeps Pi's
+static tool hints small while letting the extension inject the exact next
+planner instruction for the active plan or work item.
+
 ## Git Rules
 
 - Child branch must be clean and committed before any experiment branch is
