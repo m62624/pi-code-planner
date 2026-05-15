@@ -1,3 +1,7 @@
+# idle
+
+No planner workflow is active. Do not perform planner-controlled work until a plan is created.
+
 # plan_draft
 
 Clarify the user's goal and convert it into a planner-controlled task. Do not edit project code.

@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -74,6 +75,33 @@ function context(cwd: string): ExtensionContext {
 			setStatus: vi.fn(),
 		},
 	} as unknown as ExtensionContext;
+}
+
+function hasGit(): boolean {
+	try {
+		execFileSync("git", ["--version"], { stdio: "ignore" });
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function createCleanGitProject(root: string): string {
+	const project = join(root, "project");
+	execFileSync("git", ["init", project], { stdio: "ignore" });
+	execFileSync("git", ["config", "user.email", "pi-planner@example.test"], {
+		cwd: project,
+	});
+	execFileSync("git", ["config", "user.name", "Pi Planner Test"], {
+		cwd: project,
+	});
+	writeFileSync(join(project, "README.md"), "initial\n", "utf-8");
+	execFileSync("git", ["add", "--all"], { cwd: project });
+	execFileSync("git", ["commit", "-m", "initial commit"], {
+		cwd: project,
+		stdio: "ignore",
+	});
+	return project;
 }
 
 describe("extension entrypoint", () => {
@@ -219,4 +247,130 @@ describe("extension entrypoint", () => {
 			systemPrompt: "base prompt\n\nresume from planner memory",
 		});
 	});
+
+	it.runIf(hasGit())(
+		"connects plan stages, next step, discovery compact, resume, and completion",
+		async () => {
+			const { handlers, tools } = createRegisteredExtension();
+			const project = createCleanGitProject(tempRoot);
+			const ctx = context(project);
+			const createPlan = toolByName(tools, "planner_create_plan");
+			const startPlan = toolByName(tools, "planner_start_plan");
+			const transitionPlan = toolByName(tools, "planner_transition_plan");
+			const nextStep = toolByName(tools, "planner_next_step");
+			const requestCompact = toolByName(
+				tools,
+				"planner_request_discovery_compact",
+			);
+			const completeCompact = toolByName(
+				tools,
+				"planner_complete_discovery_compact",
+			);
+
+			await createPlan.execute(
+				"call-1",
+				{ title: "Parser plan", planId: "plan-1" },
+				undefined,
+				undefined,
+				ctx,
+			);
+			await startPlan.execute(
+				"call-2",
+				{ planId: "plan-1" },
+				undefined,
+				undefined,
+				ctx,
+			);
+			await transitionPlan.execute(
+				"call-3",
+				{ planId: "plan-1", stage: "discovery_full" },
+				undefined,
+				undefined,
+				ctx,
+			);
+			await transitionPlan.execute(
+				"call-4",
+				{ planId: "plan-1", stage: "discovery_compact_required" },
+				undefined,
+				undefined,
+				ctx,
+			);
+
+			const compactStep = await nextStep.execute(
+				"call-5",
+				{},
+				undefined,
+				undefined,
+				ctx,
+			);
+			expect(compactStep.details).toMatchObject({
+				status: "blocked",
+				kind: "compact_required",
+				requiredTool: "planner_request_discovery_compact",
+				instructionName: "compact",
+				sectionName: "discovery_compact_required",
+			});
+
+			const compactResult = await requestCompact.execute(
+				"call-6",
+				{
+					planId: "plan-1",
+					customInstructions: "compact discovery",
+					resumePrompt: "resume discovery",
+				},
+				undefined,
+				undefined,
+				ctx,
+			);
+			expect(compactResult.details).toMatchObject({
+				result: {
+					kind: "started",
+					pending: {
+						reason: "discovery",
+						activePlanId: "plan-1",
+					},
+				},
+			});
+
+			const compactOptions = vi.mocked(ctx.compact).mock.calls[0][0];
+			compactOptions.onComplete?.();
+			const [beforeAgentStart] = handlers.get("before_agent_start") ?? [];
+			const resume = await beforeAgentStart(
+				{ systemPrompt: "base prompt" },
+				ctx,
+			);
+			expect(resume).toEqual({
+				systemPrompt: "base prompt\n\nresume discovery",
+			});
+
+			const completeResult = await completeCompact.execute(
+				"call-7",
+				{ planId: "plan-1" },
+				undefined,
+				undefined,
+				ctx,
+			);
+			expect(completeResult.details).toMatchObject({
+				result: {
+					current: {
+						stage: "post_discovery_questions",
+					},
+				},
+			});
+
+			const afterCompactStep = await nextStep.execute(
+				"call-8",
+				{},
+				undefined,
+				undefined,
+				ctx,
+			);
+			expect(afterCompactStep.details).toMatchObject({
+				status: "ready",
+				kind: "plan_stage",
+				instructionName: "plan",
+				sectionName: "post_discovery_questions",
+			});
+		},
+	);
 });
