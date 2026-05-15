@@ -37,6 +37,30 @@ export interface PendingPlannerGitOperation {
 	expectedAfter: PlannerGitPosition | null;
 }
 
+export type PlannerCompactReason =
+	| "discovery"
+	| "work_item"
+	| "refactor"
+	| "manual";
+
+export type PlannerCompactStatus = "requested" | "completed" | "failed";
+
+export interface PendingPlannerCompact {
+	id: string;
+	reason: PlannerCompactReason;
+	status: PlannerCompactStatus;
+	requestedAt: string;
+	completedAt: string | null;
+	failedAt: string | null;
+	error: string | null;
+	activePlanId: string | null;
+	activeWorkItemId: string | null;
+	customInstructions: string;
+	resumePrompt: string;
+	attachToNextTurn: boolean;
+	autoResume: boolean;
+}
+
 export interface PlannerBranchRecord {
 	name: string;
 	kind: PlannerBranchKind;
@@ -68,6 +92,7 @@ export interface PlannerRuntimeState {
 	activeWorkItemId: string | null;
 	git: PlannerGitState;
 	pendingOperation: PendingPlannerGitOperation | null;
+	pendingCompact: PendingPlannerCompact | null;
 	branches: PlannerBranchRegistry;
 }
 
@@ -84,6 +109,7 @@ export const DEFAULT_PLANNER_RUNTIME_STATE: PlannerRuntimeState = {
 		lastObservedCommit: null,
 	},
 	pendingOperation: null,
+	pendingCompact: null,
 	branches: {
 		baseBranch: null,
 		planBranch: null,

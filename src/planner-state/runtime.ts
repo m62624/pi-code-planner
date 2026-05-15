@@ -79,6 +79,7 @@ export class RuntimeStateManager {
 			activePlanId: null,
 			activeWorkItemId: null,
 			pendingOperation: null,
+			pendingCompact: null,
 		}));
 	}
 }

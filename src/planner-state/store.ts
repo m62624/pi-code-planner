@@ -3,10 +3,13 @@ import { writeJsonAtomic } from "../settings/fs";
 import type { SettingsPaths } from "../settings/paths";
 import {
 	DEFAULT_PLANNER_RUNTIME_STATE,
+	type PendingPlannerCompact,
 	type PendingPlannerGitOperation,
 	type PlannerBranchRecord,
 	type PlannerBranchRegistry,
 	type PlannerBranchStatus,
+	type PlannerCompactReason,
+	type PlannerCompactStatus,
 	type PlannerGitState,
 	type PlannerRuntimeMode,
 	type PlannerRuntimeState,
@@ -56,6 +59,13 @@ function readString(value: Record<string, unknown>, key: string): string {
 	return value[key];
 }
 
+function readBoolean(value: Record<string, unknown>, key: string): boolean {
+	if (!Object.hasOwn(value, key) || typeof value[key] !== "boolean") {
+		throw new Error(`Invalid planner state field: ${key}`);
+	}
+	return value[key];
+}
+
 function readEnum<T extends string>(
 	value: Record<string, unknown>,
 	key: string,
@@ -99,6 +109,15 @@ const GIT_OPERATION_TYPES = [
 	"soft_reset",
 	"hard_reset",
 ] as const;
+
+const COMPACT_REASONS = [
+	"discovery",
+	"work_item",
+	"refactor",
+	"manual",
+] as const;
+
+const COMPACT_STATUSES = ["requested", "completed", "failed"] as const;
 
 const BRANCH_KINDS = ["base", "plan", "child", "experiment"] as const;
 
@@ -145,6 +164,29 @@ function parsePendingOperation(
 			value.expectedAfter === null
 				? null
 				: parseGitPosition(value.expectedAfter, "expectedAfter"),
+	};
+}
+
+function parsePendingCompact(value: unknown): PendingPlannerCompact | null {
+	if (value === undefined || value === null) return null;
+	if (!isRecord(value)) {
+		throw new Error("Invalid planner state field: pendingCompact");
+	}
+
+	return {
+		id: readString(value, "id"),
+		reason: readEnum(value, "reason", COMPACT_REASONS) as PlannerCompactReason,
+		status: readEnum(value, "status", COMPACT_STATUSES) as PlannerCompactStatus,
+		requestedAt: readString(value, "requestedAt"),
+		completedAt: readNullableString(value, "completedAt"),
+		failedAt: readNullableString(value, "failedAt"),
+		error: readNullableString(value, "error"),
+		activePlanId: readNullableString(value, "activePlanId"),
+		activeWorkItemId: readNullableString(value, "activeWorkItemId"),
+		customInstructions: readString(value, "customInstructions"),
+		resumePrompt: readString(value, "resumePrompt"),
+		attachToNextTurn: readBoolean(value, "attachToNextTurn"),
+		autoResume: readBoolean(value, "autoResume"),
 	};
 }
 
@@ -240,6 +282,7 @@ export function parsePlannerRuntimeState(input: unknown): PlannerRuntimeState {
 		activeWorkItemId: readNullableString(input, "activeWorkItemId"),
 		git,
 		pendingOperation: parsePendingOperation(input.pendingOperation),
+		pendingCompact: parsePendingCompact(input.pendingCompact),
 		branches: parseBranchRegistry(input.branches, git),
 	};
 }

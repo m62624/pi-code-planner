@@ -124,6 +124,30 @@ Exports parse/load/save/update/initialize helpers for `state.json`.
 Exports `RuntimeStateManager`, the cache + persistence wrapper used by git
 mutations and future workflow managers.
 
+## Compaction Layer
+
+### `src/compaction/coordinator.ts`
+
+Exports:
+
+- `CompactionCoordinator`
+- `CompactContext`
+- `ResumeMessenger`
+- `RequestCompactInput`
+
+Coordinates planner-controlled Pi compaction. It persists `pendingCompact`
+before calling `ctx.compact()`, marks completion/failure from callbacks, and
+keeps resume delivery separate from the compact callback.
+
+Resume delivery rules:
+
+- `consumeResumeInstructionForNextTurn()` returns the pending resume prompt for
+  `before_agent_start` and clears `pendingCompact`.
+- `sendAutoResumeIfIdle({ ctx, messenger })` sends the resume prompt as a
+  delayed fallback only when Pi is idle and has no visible pending messages.
+- The coordinator does not send directly from `onComplete`, so user input typed
+  during compaction is not displaced by the planner resume.
+
 ## Git Read Layer
 
 ### `src/git/runner.ts`
@@ -276,6 +300,20 @@ Composition layer that wires settings, runtime state, git runner, git writer,
 mutations, preflight, and repo reads.
 
 ## Pi Tools
+
+### `src/tools/planner-compaction-tools.ts`
+
+Exports:
+
+- `createPlannerCompactionTools(getCompactor)`
+
+Registered tool names:
+
+- `planner_request_compact`
+
+This is the public Pi tool surface for planner-controlled compaction. It calls
+`CompactionCoordinator.requestCompact(...)` and never exposes raw `ctx.compact`
+to higher workflow layers.
 
 ### `src/tools/planner-git-tools.ts`
 

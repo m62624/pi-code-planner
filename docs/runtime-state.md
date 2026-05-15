@@ -2,7 +2,8 @@
 
 Runtime state is stored separately from settings. Settings describe user
 preferences. Runtime state describes the active planner session, expected git
-position, pending operation, and managed branch registry.
+position, pending operation, pending compaction resume, and managed branch
+registry.
 
 ## Location
 
@@ -46,6 +47,7 @@ interface PlannerRuntimeState {
   activeWorkItemId: string | null;
   git: PlannerGitState;
   pendingOperation: PendingPlannerGitOperation | null;
+  pendingCompact: PendingPlannerCompact | null;
   branches: PlannerBranchRegistry;
 }
 ```
@@ -89,6 +91,36 @@ interface PendingPlannerGitOperation {
 Mutations write `pendingOperation` before executing git, then clear it after
 rereading repository state and saving the new expected branch/commit. If the
 process dies mid-operation, recovery can detect the pending operation.
+
+## Pending Compact
+
+```ts
+interface PendingPlannerCompact {
+  id: string;
+  reason: "discovery" | "work_item" | "refactor" | "manual";
+  status: "requested" | "completed" | "failed";
+  requestedAt: string;
+  completedAt: string | null;
+  failedAt: string | null;
+  error: string | null;
+  activePlanId: string | null;
+  activeWorkItemId: string | null;
+  customInstructions: string;
+  resumePrompt: string;
+  attachToNextTurn: boolean;
+  autoResume: boolean;
+}
+```
+
+`pendingCompact` protects the handoff around Pi compaction. `ctx.compact()` is
+not awaitable from extension code, and user input typed during compaction lives
+in Pi's UI compaction queue before it reaches the normal session queue.
+
+The planner therefore does not send its resume prompt directly from the compact
+callback. It first persists a completed `pendingCompact`. The next real turn can
+consume `resumePrompt` as an added planner instruction. If no user turn appears,
+a delayed auto-resume may send the prompt only when Pi is idle and no normal
+pending messages are visible.
 
 ## Branch Registry
 
@@ -141,7 +173,8 @@ Source: `src/planner-state/runtime.ts`
   - Returns true when a plan or operation is active.
 
 - `sleep()`
-  - Returns runtime to idle and clears active ids/pending operation.
+  - Returns runtime to idle and clears active ids, pending operation, and pending
+    compact.
 
 ## Store API
 
@@ -154,4 +187,3 @@ Source: `src/planner-state/store.ts`
 - `initializePlannerRuntimeState(paths, fs)`
 
 The store validates persisted JSON before returning it.
-

@@ -38,6 +38,7 @@ describe("planner runtime state store", () => {
 				lastObservedCommit: null,
 			},
 			pendingOperation: null,
+			pendingCompact: null,
 			branches: {
 				baseBranch: null,
 				planBranch: null,

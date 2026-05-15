@@ -336,6 +336,17 @@ The compact instruction must preserve:
 
 After compact completes, the work item can enter `completed`.
 
+Planner resume after compaction is delivered carefully:
+
+- completion first persists `pendingCompact.status = "completed"`;
+- if the user queued a prompt during compaction, the resume prompt is attached to
+  that next turn as planner instruction;
+- if there is no queued user turn, a delayed auto-resume may send the planner
+  resume prompt after Pi is idle.
+
+The extension must not send the resume prompt directly from the compact callback,
+because that can race Pi's internal compaction queue flush.
+
 ## Git Rules
 
 - Child branch must be clean and committed before any experiment branch is
