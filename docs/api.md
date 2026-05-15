@@ -148,6 +148,38 @@ Resume delivery rules:
 - The coordinator does not send directly from `onComplete`, so user input typed
   during compaction is not displaced by the planner resume.
 
+## Orchestration Layer
+
+### `src/orchestrator/planner-orchestrator.ts`
+
+Exports:
+
+- `PlannerOrchestrator`
+- `PlannerOrchestratorBlockedByCompact`
+- `createPlannerOrchestrator(core, projectPath, compactor)`
+
+This is the first internal facade for future workflow tools. It coordinates:
+
+- `PlanStore` for persisted project/plan/work item records
+- `WorkflowManager` for legal stage transitions
+- `RuntimeStateManager` for active plan/work item ids
+- `CompactionCoordinator` for compact boundary handoff
+
+Current public methods:
+
+- `createPlan(input)`
+- `transitionPlan(planId, to)`
+- `createWorkItem(planId, input)`
+- `transitionWorkItem(planId, workItemId, to)`
+- `requestDiscoveryCompact(ctx, planId, input)`
+- `completeDiscoveryCompact(planId)`
+- `requestWorkItemCompact(ctx, planId, input)`
+- `completeWorkItemCompact(planId, workItemId)`
+
+Compact completion methods require the pending compact resume to be consumed
+first. If `pendingCompact` is still `requested` or `completed`, they throw
+`PlannerOrchestratorBlockedByCompact`.
+
 ## Git Read Layer
 
 ### `src/git/runner.ts`
