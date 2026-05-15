@@ -58,6 +58,11 @@ describe("PlannerCycleManager", () => {
 				requiredTools: [],
 				instructions: [],
 			},
+			tournament: {
+				required: false,
+				defaultAttemptIds: [],
+				requiredTools: [],
+			},
 			instructionName: "discovery",
 			sectionName: "discovery_full",
 			prompt,
@@ -187,6 +192,64 @@ describe("PlannerCycleManager", () => {
 					expect.stringContaining("listed dirty files"),
 					expect.stringContaining("planner_memory_clear_dirty"),
 					expect.stringContaining("work_item_compact_required"),
+				]),
+			},
+		});
+	});
+
+	it("normalizes experiment stages into tournament guidance", async () => {
+		const manager = new PlannerCycleManager({
+			runtime: runtime(
+				decision({
+					status: "work_item_stage",
+					action: "continue_work_item_stage",
+					blocking: false,
+					planStage: "plan_active",
+					workItemStage: "experiments_running",
+				}),
+			),
+		});
+
+		const step = await manager.getNextStep();
+
+		expect(step).toMatchObject({
+			status: "ready",
+			kind: "work_item_stage",
+			instructionName: "work_item",
+			sectionName: "experiments_running",
+			tournament: {
+				required: true,
+				stage: "experiments_running",
+				defaultAttemptIds: ["attempt-1", "attempt-2", "attempt-3"],
+				requiredTools: [
+					"planner_start_experiment",
+					"planner_select_experiment",
+					"planner_delete_experiment_branch",
+					"planner_transition_work_item",
+				],
+				requiredArtifacts: [
+					"plan.md",
+					"prompt.md",
+					"summary.md",
+					"score.json",
+					"verification.json",
+					"changed_files.json",
+				],
+				scoringScale: {
+					min: 0,
+					max: 10,
+				},
+				selectionCriteria: expect.arrayContaining([
+					expect.objectContaining({ name: "correctness", weight: 1 }),
+					expect.objectContaining({
+						name: "integration_risk",
+						direction: "lower_is_better",
+					}),
+				]),
+				instructions: expect.arrayContaining([
+					expect.stringContaining("planner_start_experiment"),
+					expect.stringContaining("select exactly one winner"),
+					expect.stringContaining("Do not refactor experiment branches"),
 				]),
 			},
 		});

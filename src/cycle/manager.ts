@@ -122,6 +122,96 @@ function memoryRefreshPayload(input: {
 	};
 }
 
+function tournamentPayload(
+	stage: PlannerNextStep["decision"]["workItemStage"],
+): PlannerNextStep["tournament"] {
+	const tournamentStages = [
+		"tdd_tests_commit",
+		"experiments_running",
+		"candidate_selection",
+		"candidate_merged",
+	] as const;
+	const required = tournamentStages.some((candidate) => candidate === stage);
+	const normalizedStage = required
+		? (stage as PlannerNextStep["tournament"]["stage"])
+		: null;
+	return {
+		required,
+		stage: normalizedStage,
+		defaultAttemptIds: required ? ["attempt-1", "attempt-2", "attempt-3"] : [],
+		requiredTools: required
+			? [
+					"planner_start_experiment",
+					"planner_select_experiment",
+					"planner_delete_experiment_branch",
+					"planner_transition_work_item",
+				]
+			: [],
+		requiredArtifacts: required
+			? [
+					"plan.md",
+					"prompt.md",
+					"summary.md",
+					"score.json",
+					"verification.json",
+					"changed_files.json",
+				]
+			: [],
+		scoringScale: {
+			min: 0,
+			max: 10,
+		},
+		selectionCriteria: required
+			? [
+					{
+						name: "correctness",
+						weight: 1,
+						direction: "higher_is_better",
+					},
+					{
+						name: "project_style_fit",
+						weight: 0.8,
+						direction: "higher_is_better",
+					},
+					{
+						name: "simplicity",
+						weight: 0.8,
+						direction: "higher_is_better",
+					},
+					{
+						name: "maintainability",
+						weight: 0.7,
+						direction: "higher_is_better",
+					},
+					{
+						name: "performance",
+						weight: 0.4,
+						direction: "higher_is_better",
+					},
+					{
+						name: "diff_size",
+						weight: 0.3,
+						direction: "lower_is_better",
+					},
+					{
+						name: "integration_risk",
+						weight: 0.8,
+						direction: "lower_is_better",
+					},
+				]
+			: [],
+		instructions: required
+			? [
+					"Keep tests on the child branch. Experiment branches are implementation attempts only.",
+					"For each attempt id, call planner_start_experiment, implement a distinct strategy, verify it, commit the attempt, and write all required attempt artifacts.",
+					"Do not refactor experiment branches. Refactor only after one candidate is selected and merged into the child branch.",
+					"During candidate_selection, score every attempt on the 0-10 scale using the provided criteria and select exactly one winner with planner_select_experiment.",
+					"Rejected experiment branches may be deleted only after their summaries, scores, verification, and changed files are recorded.",
+				]
+			: [],
+	};
+}
+
 function kindFromDecision(
 	status: PlannerNextStep["decision"]["status"],
 ): PlannerNextStepKind {
@@ -203,6 +293,7 @@ export class PlannerCycleManager {
 			artifactPaths,
 			dirtyFiles,
 			memoryRefresh: memoryRefreshPayload({ kind, dirtyFiles }),
+			tournament: tournamentPayload(decision.workItemStage),
 			compact: {
 				required: kind === "compact_required",
 				reason: decision.compactReason,

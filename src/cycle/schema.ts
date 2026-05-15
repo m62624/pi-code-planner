@@ -26,6 +26,9 @@ export type PlannerRequiredTool =
 	| "planner_hard_reset_to_expected"
 	| "planner_transition_plan"
 	| "planner_transition_work_item"
+	| "planner_start_experiment"
+	| "planner_select_experiment"
+	| "planner_delete_experiment_branch"
 	| null;
 
 export interface PlannerNextStep {
@@ -54,6 +57,40 @@ export interface PlannerNextStep {
 			| "planner_memory_clear_dirty"
 			| "planner_transition_work_item"
 		>;
+		instructions: string[];
+	};
+	tournament: {
+		required: boolean;
+		stage:
+			| "tdd_tests_commit"
+			| "experiments_running"
+			| "candidate_selection"
+			| "candidate_merged"
+			| null;
+		defaultAttemptIds: string[];
+		requiredTools: Array<
+			| "planner_start_experiment"
+			| "planner_select_experiment"
+			| "planner_delete_experiment_branch"
+			| "planner_transition_work_item"
+		>;
+		requiredArtifacts: Array<
+			| "plan.md"
+			| "prompt.md"
+			| "summary.md"
+			| "score.json"
+			| "verification.json"
+			| "changed_files.json"
+		>;
+		scoringScale: {
+			min: 0;
+			max: 10;
+		};
+		selectionCriteria: Array<{
+			name: string;
+			weight: number;
+			direction: "higher_is_better" | "lower_is_better";
+		}>;
 		instructions: string[];
 	};
 	compact: {
