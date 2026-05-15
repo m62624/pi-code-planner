@@ -161,6 +161,47 @@ describe("extension entrypoint", () => {
 		});
 	});
 
+	it("keeps work item creation in plan context", async () => {
+		const { tools } = createRegisteredExtension();
+		const ctx = context(join(tempRoot, "project"));
+		const createPlan = toolByName(tools, "planner_create_plan");
+		const createWorkItem = toolByName(tools, "planner_create_work_item");
+
+		await createPlan.execute(
+			"call-1",
+			{ title: "Parser plan", planId: "plan-1" },
+			undefined,
+			undefined,
+			ctx,
+		);
+		const result = await createWorkItem.execute(
+			"call-2",
+			{
+				planId: "plan-1",
+				title: "Parser API",
+				workItemId: "parser-api",
+			},
+			undefined,
+			undefined,
+			ctx,
+		);
+
+		expect(result.content[0].text).toContain("Planner work item created.");
+		expect(result.content[0].text).toContain("- scope: plan");
+		expect(result.content[0].text).not.toContain("- scope: work_item");
+		expect(result.details).toMatchObject({
+			result: {
+				workItemId: "parser-api",
+				stage: "pending",
+			},
+			nextPrompt: {
+				artifactPaths: expect.arrayContaining([
+					expect.stringContaining("/plans/plan-1/plan.md"),
+				]),
+			},
+		});
+	});
+
 	it("connects runtime status to active planner recovery checks", async () => {
 		const { tools } = createRegisteredExtension();
 		const ctx = context(join(tempRoot, "project"));

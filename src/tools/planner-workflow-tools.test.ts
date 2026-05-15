@@ -125,12 +125,10 @@ describe("createPlannerWorkflowTools", () => {
 			workItemId: "parser-api",
 			stage: "pending",
 		});
-		const buildWorkItemStagePrompt = vi
-			.fn()
-			.mockReturnValue(nextWorkItemPrompt);
+		const buildPlanStagePrompt = vi.fn().mockReturnValue(nextPlanPrompt);
 		const orchestrator = {
 			createWorkItem,
-			buildWorkItemStagePrompt,
+			buildPlanStagePrompt,
 		} as unknown as PlannerOrchestrator;
 		const tool = toolByName("planner_create_work_item", orchestrator);
 
@@ -150,14 +148,11 @@ describe("createPlannerWorkflowTools", () => {
 			title: "Parser API",
 			workItemId: "parser-api",
 		});
-		expect(buildWorkItemStagePrompt).toHaveBeenCalledWith(
-			"plan-1",
-			"parser-api",
-		);
-		expect(result.content[0].text).toContain("Work item next instruction");
+		expect(buildPlanStagePrompt).toHaveBeenCalledWith("plan-1");
+		expect(result.content[0].text).toContain("Plan next instruction");
 		expect(result.details).toMatchObject({
 			result: { workItemId: "parser-api" },
-			nextPrompt: nextWorkItemPrompt,
+			nextPrompt: nextPlanPrompt,
 		});
 	});
 

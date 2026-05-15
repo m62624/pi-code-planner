@@ -172,6 +172,7 @@ const completeWorkItemCompactSchema = Type.Object({
 
 const WORKFLOW_PROMPT_GUIDELINES = [
 	"Use planner_create_plan before planner discovery work.",
+	"Use planner_next_step before starting implementation or branch work; if it returns requiredTool, call that tool first.",
 	"Use planner_transition_plan and planner_transition_work_item only for legal planner stage transitions.",
 	"Use planner_request_discovery_compact and planner_request_work_item_compact only at compact boundary stages.",
 	"After planner workflow tools return NEXT PLANNER INSTRUCTION, follow that instruction before moving to unrelated work.",
@@ -267,10 +268,7 @@ export function createPlannerWorkflowTools(
 						});
 						return {
 							result,
-							nextPrompt: orchestrator.buildWorkItemStagePrompt(
-								params.planId,
-								result.workItemId,
-							),
+							nextPrompt: orchestrator.buildPlanStagePrompt(params.planId),
 						};
 					}, "Planner work item created."),
 				),
