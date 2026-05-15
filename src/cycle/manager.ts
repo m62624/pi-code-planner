@@ -88,6 +88,40 @@ function compactPayload(input: {
 	};
 }
 
+function memoryRefreshPayload(input: {
+	kind: PlannerNextStepKind;
+	dirtyFiles: string[];
+}): PlannerNextStep["memoryRefresh"] {
+	const required = input.kind === "memory_refresh";
+	return {
+		required,
+		dirtyFiles: input.dirtyFiles,
+		requiredTools: required
+			? [
+					"planner_memory_get_dirty",
+					"planner_memory_upsert_files",
+					"planner_memory_upsert_symbols",
+					"planner_memory_upsert_relations",
+					"planner_memory_verify_file",
+					"planner_memory_verify_symbol",
+					"planner_memory_clear_dirty",
+					"planner_transition_work_item",
+				]
+			: [],
+		instructions: required
+			? [
+					"Enter or continue the signature_refresh stage for the active work item.",
+					"Call planner_memory_get_dirty and refresh only the listed dirty files.",
+					"Read each dirty file enough to update file, symbol, and relation memory accurately.",
+					"Use planner_memory_upsert_files, planner_memory_upsert_symbols, and planner_memory_upsert_relations for changed entries.",
+					"Verify refreshed entries with planner_memory_verify_file and planner_memory_verify_symbol when applicable.",
+					"Only after memory is accurate, call planner_memory_clear_dirty for refreshed files.",
+					"Then call planner_transition_work_item to move from signature_refresh to work_item_compact_required.",
+				]
+			: [],
+	};
+}
+
 function kindFromDecision(
 	status: PlannerNextStep["decision"]["status"],
 ): PlannerNextStepKind {
@@ -154,6 +188,7 @@ export class PlannerCycleManager {
 		const prompt = inspection.nextPrompt;
 		const instruction = instructionFromDecision(decision);
 		const artifactPaths = prompt?.artifactPaths ?? [];
+		const dirtyFiles = decision.dirtyFiles;
 
 		return {
 			status,
@@ -166,7 +201,8 @@ export class PlannerCycleManager {
 			sectionName: instruction?.sectionName ?? null,
 			prompt,
 			artifactPaths,
-			dirtyFiles: decision.dirtyFiles,
+			dirtyFiles,
+			memoryRefresh: memoryRefreshPayload({ kind, dirtyFiles }),
 			compact: {
 				required: kind === "compact_required",
 				reason: decision.compactReason,

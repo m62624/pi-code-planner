@@ -41,6 +41,21 @@ export interface PlannerNextStep {
 	prompt: AssemblePlannerPromptResult | null;
 	artifactPaths: string[];
 	dirtyFiles: string[];
+	memoryRefresh: {
+		required: boolean;
+		dirtyFiles: string[];
+		requiredTools: Array<
+			| "planner_memory_get_dirty"
+			| "planner_memory_upsert_files"
+			| "planner_memory_upsert_symbols"
+			| "planner_memory_upsert_relations"
+			| "planner_memory_verify_file"
+			| "planner_memory_verify_symbol"
+			| "planner_memory_clear_dirty"
+			| "planner_transition_work_item"
+		>;
+		instructions: string[];
+	};
 	compact: {
 		required: boolean;
 		reason: "discovery" | "work_item" | null;

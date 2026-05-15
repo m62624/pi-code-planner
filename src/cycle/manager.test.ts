@@ -53,6 +53,11 @@ describe("PlannerCycleManager", () => {
 			kind: "plan_stage",
 			blocking: false,
 			requiredTool: null,
+			memoryRefresh: {
+				required: false,
+				requiredTools: [],
+				instructions: [],
+			},
 			instructionName: "discovery",
 			sectionName: "discovery_full",
 			prompt,
@@ -164,6 +169,26 @@ describe("PlannerCycleManager", () => {
 			instructionName: "api_check",
 			sectionName: "verification",
 			dirtyFiles: ["src/app.ts"],
+			memoryRefresh: {
+				required: true,
+				dirtyFiles: ["src/app.ts"],
+				requiredTools: [
+					"planner_memory_get_dirty",
+					"planner_memory_upsert_files",
+					"planner_memory_upsert_symbols",
+					"planner_memory_upsert_relations",
+					"planner_memory_verify_file",
+					"planner_memory_verify_symbol",
+					"planner_memory_clear_dirty",
+					"planner_transition_work_item",
+				],
+				instructions: expect.arrayContaining([
+					expect.stringContaining("signature_refresh"),
+					expect.stringContaining("listed dirty files"),
+					expect.stringContaining("planner_memory_clear_dirty"),
+					expect.stringContaining("work_item_compact_required"),
+				]),
+			},
 		});
 	});
 
