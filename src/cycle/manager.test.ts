@@ -54,6 +54,7 @@ describe("PlannerCycleManager", () => {
 			blocking: false,
 			requiredTool: null,
 			instructionName: "discovery",
+			sectionName: "discovery_full",
 			prompt,
 			artifactPaths: ["/plans/plan-1/plan.md"],
 		});
@@ -80,6 +81,7 @@ describe("PlannerCycleManager", () => {
 			blocking: true,
 			requiredTool: "planner_request_discovery_compact",
 			instructionName: "compact",
+			sectionName: "discovery_compact_required",
 			compact: {
 				required: true,
 				reason: "discovery",
@@ -110,6 +112,7 @@ describe("PlannerCycleManager", () => {
 			kind: "compact_required",
 			requiredTool: "planner_request_work_item_compact",
 			instructionName: "compact",
+			sectionName: "work_item_compact_required",
 			compact: {
 				required: true,
 				reason: "work_item",
@@ -140,6 +143,7 @@ describe("PlannerCycleManager", () => {
 			kind: "memory_refresh",
 			requiredTool: "planner_memory_get_dirty",
 			instructionName: "api_check",
+			sectionName: "verification",
 			dirtyFiles: ["src/app.ts"],
 		});
 	});

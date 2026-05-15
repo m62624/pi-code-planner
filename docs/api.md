@@ -38,10 +38,19 @@ Exports setting types:
 
 Exports:
 
-- `DEFAULT_INSTRUCTION_CONTENT`
 - `DEFAULT_SETTINGS`
 
-Built-in defaults are copied into user-editable files by the initializer.
+Built-in JSON settings copied into user-editable files by the initializer.
+
+### `src/settings/default-instructions.ts`
+
+Exports:
+
+- `readDefaultInstructionContent(name)`
+
+Reads bundled markdown templates from `src/instructions/defaults/*.md`. The
+initializer copies these files into the user's global extension instruction
+directory on first run.
 
 ### `src/settings/paths.ts`
 

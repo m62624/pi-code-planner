@@ -10,9 +10,13 @@ import type { PendingPlannerCompact } from "../planner-state/schema";
 import type { AssemblePlannerPromptResult } from "../prompts/assembler";
 import { artifactReference, assemblePlannerPrompt } from "../prompts/assembler";
 import type { PlannerFs } from "../settings/fs";
-import type { InstructionName, SettingsLoadResult } from "../settings/schema";
+import type { SettingsLoadResult } from "../settings/schema";
 import type { PlanRecord, WorkItemRecord } from "../storage/schema";
 import { type CreateWorkItemInput, PlanStore } from "../storage/store";
+import {
+	instructionForPlanStage,
+	instructionForWorkItemStage,
+} from "../workflow/instructions";
 import {
 	WorkflowManager,
 	type WorkflowTransitionResult,
@@ -187,6 +191,7 @@ export class PlannerOrchestrator {
 		}
 
 		const plan = this.options.store.readPlan(this.options.projectPath, planId);
+		const instruction = instructionForPlanStage(plan.stage);
 		const artifacts = [
 			this.options.artifacts.readPlanArtifact(
 				this.options.projectPath,
@@ -211,7 +216,7 @@ export class PlannerOrchestrator {
 		];
 
 		return assemblePlannerPrompt(this.options.settings, this.options.fs, {
-			instructionName: instructionForPlanStage(plan.stage),
+			...instruction,
 			state: [
 				{ name: "scope", value: "plan" },
 				{ name: "planId", value: plan.planId },
@@ -240,6 +245,7 @@ export class PlannerOrchestrator {
 			planId,
 			workItemId,
 		);
+		const instruction = instructionForWorkItemStage(workItem.stage);
 		const artifacts = [
 			this.options.artifacts.readPlanArtifact(
 				this.options.projectPath,
@@ -267,7 +273,7 @@ export class PlannerOrchestrator {
 		];
 
 		return assemblePlannerPrompt(this.options.settings, this.options.fs, {
-			instructionName: instructionForWorkItemStage(workItem.stage),
+			...instruction,
 			state: [
 				{ name: "scope", value: "work_item" },
 				{ name: "planId", value: planId },
@@ -327,23 +333,6 @@ export class PlannerOrchestrator {
 			throw new PlannerOrchestratorBlockedByCompact(pending);
 		}
 	}
-}
-
-function instructionForPlanStage(stage: PlanStage): InstructionName {
-	if (stage === "discovery_full") return "discovery";
-	if (stage === "discovery_compact_required") return "compact";
-	if (stage === "plan_finalize" || stage === "plan_completed") {
-		return "documentation";
-	}
-	return "plan";
-}
-
-function instructionForWorkItemStage(stage: WorkItemStage): InstructionName {
-	if (stage === "refactor") return "refactor";
-	if (stage === "verification") return "api_check";
-	if (stage === "work_item_compact_required") return "compact";
-	if (stage === "completed") return "documentation";
-	return "work_item";
 }
 
 export class PlannerOrchestratorBlockedByCompact extends Error {

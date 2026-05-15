@@ -1,5 +1,8 @@
 import type { ArtifactReadResult } from "../artifacts/planner-artifacts";
-import { getMarkdownSection } from "../instructions/section-parser";
+import {
+	getMarkdownSection,
+	parseMarkdownSections,
+} from "../instructions/section-parser";
 import type { PlannerFs } from "../settings/fs";
 import { getInstructionContent } from "../settings/loader";
 import type { InstructionName, SettingsLoadResult } from "../settings/schema";
@@ -51,6 +54,9 @@ function readInstruction(
 	if (!request.sectionName) return content.trim();
 
 	const section = getMarkdownSection(content, request.sectionName);
+	if (!section && parseMarkdownSections(content).length === 0) {
+		return content.trim();
+	}
 	if (!section) {
 		throw new Error(
 			`Instruction section not found: ${request.instructionName}:${request.sectionName}`,

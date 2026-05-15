@@ -1,17 +1,6 @@
 import { EXTENSION_NAME } from "../constants";
 import type { PlannerSettings } from "./schema";
 
-export const DEFAULT_INSTRUCTION_CONTENT = {
-	discovery: "",
-	plan: "",
-	work_item: "",
-	refactor: "",
-	api_check: "",
-	documentation: "",
-	compact: "",
-	commit_style: "",
-} as const;
-
 export const DEFAULT_SETTINGS: PlannerSettings = {
 	version: 1,
 	instructions: {

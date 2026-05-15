@@ -4,7 +4,7 @@ import { ensurePlannerFiles } from "./initializer";
 import { createSettingsPaths } from "./paths";
 
 describe("ensurePlannerFiles", () => {
-	it("creates global settings and empty instruction files", () => {
+	it("creates global settings and bundled instruction files", () => {
 		const fs = new MemoryFs();
 		const paths = createSettingsPaths({
 			agentDir: "/home/user/.pi/agent",
@@ -18,10 +18,15 @@ describe("ensurePlannerFiles", () => {
 			"/home/user/.pi/agent/extensions/pi-planner/settings.json",
 		);
 		expect(fs.exists(`${paths.globalInstructionsDir}/discovery.md`)).toBe(true);
-		expect(fs.readFile(`${paths.globalInstructionsDir}/discovery.md`)).toBe("");
+		expect(
+			fs.readFile(`${paths.globalInstructionsDir}/discovery.md`),
+		).toContain("# discovery_full");
 		expect(fs.exists(`${paths.globalInstructionsDir}/commit_style.md`)).toBe(
 			true,
 		);
+		expect(
+			fs.readFile(`${paths.globalInstructionsDir}/commit_style.md`),
+		).toContain("# work_item");
 	});
 
 	it("does not overwrite existing files", () => {

@@ -86,6 +86,22 @@ describe("assemblePlannerPrompt", () => {
 		).toThrow("Instruction section not found: discovery:discovery");
 	});
 
+	it("falls back to whole plain instruction files without headings", () => {
+		const fs = new MemoryFs();
+		fs.setFile("/instructions/discovery.md", "Legacy plain instruction.");
+
+		const result = assemblePlannerPrompt(
+			loadResult("/instructions/discovery.md"),
+			fs,
+			{
+				instructionName: "discovery",
+				sectionName: "discovery_full",
+			},
+		);
+
+		expect(result.instruction).toBe("Legacy plain instruction.");
+	});
+
 	it("can embed artifact content", () => {
 		const fs = new MemoryFs();
 		fs.setFile("/instructions/discovery.md", "Read artifact.");

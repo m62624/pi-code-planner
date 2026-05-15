@@ -1,6 +1,9 @@
 import type { PlannerRuntimeController } from "../runtime/planner-runtime-controller";
-import type { InstructionName } from "../settings/schema";
-import type { PlanStage, WorkItemStage } from "../workflow/schema";
+import {
+	instructionForPlanStage,
+	instructionForWorkItemStage,
+	type StageInstructionRef,
+} from "../workflow/instructions";
 import type {
 	PlannerNextStep,
 	PlannerNextStepKind,
@@ -12,35 +15,14 @@ export interface PlannerCycleManagerOptions {
 	runtime: PlannerRuntimeController;
 }
 
-function instructionForPlanStage(
-	stage: PlanStage | null,
-): InstructionName | null {
-	if (!stage) return null;
-	if (stage === "discovery_full") return "discovery";
-	if (stage === "discovery_compact_required") return "compact";
-	if (stage === "plan_finalize" || stage === "plan_completed") {
-		return "documentation";
-	}
-	return "plan";
-}
-
-function instructionForWorkItemStage(
-	stage: WorkItemStage | null,
-): InstructionName | null {
-	if (!stage) return null;
-	if (stage === "refactor") return "refactor";
-	if (stage === "verification") return "api_check";
-	if (stage === "work_item_compact_required") return "compact";
-	if (stage === "completed") return "documentation";
-	return "work_item";
-}
-
 function instructionFromDecision(
 	decision: PlannerNextStep["decision"],
-): InstructionName | null {
+): StageInstructionRef | null {
 	return (
-		instructionForWorkItemStage(decision.workItemStage) ??
-		instructionForPlanStage(decision.planStage)
+		(decision.workItemStage
+			? instructionForWorkItemStage(decision.workItemStage)
+			: null) ??
+		(decision.planStage ? instructionForPlanStage(decision.planStage) : null)
 	);
 }
 
@@ -128,6 +110,7 @@ export class PlannerCycleManager {
 		const compactTool = compactRequestTool(decision.compactReason);
 		const status = statusFromKind(kind, decision.blocking);
 		const prompt = inspection.nextPrompt;
+		const instruction = instructionFromDecision(decision);
 
 		return {
 			status,
@@ -136,8 +119,8 @@ export class PlannerCycleManager {
 			message: decision.message,
 			decision,
 			requiredTool: requiredToolFromKind({ kind, compactTool }),
-			instructionName: instructionFromDecision(decision),
-			sectionName: null,
+			instructionName: instruction?.instructionName ?? null,
+			sectionName: instruction?.sectionName ?? null,
 			prompt,
 			artifactPaths: prompt?.artifactPaths ?? [],
 			dirtyFiles: decision.dirtyFiles,

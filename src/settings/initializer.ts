@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import { DEFAULT_INSTRUCTION_CONTENT, DEFAULT_SETTINGS } from "./defaults";
+import { readDefaultInstructionContent } from "./default-instructions";
+import { DEFAULT_SETTINGS } from "./defaults";
 import type { PlannerFs } from "./fs";
 import { writeJsonAtomic } from "./fs";
 import type { SettingsPaths } from "./paths";
@@ -31,7 +32,7 @@ export function ensurePlannerFiles(
 	for (const name of INSTRUCTION_NAMES) {
 		const path = join(paths.globalInstructionsDir, instructionFileName(name));
 		if (!fs.exists(path)) {
-			fs.writeFile(path, DEFAULT_INSTRUCTION_CONTENT[name]);
+			fs.writeFile(path, readDefaultInstructionContent(name));
 			created.push(path);
 		} else {
 			existing.push(path);

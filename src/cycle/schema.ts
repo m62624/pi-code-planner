@@ -36,6 +36,7 @@ export interface PlannerNextStep {
 	decision: PlannerDecision;
 	requiredTool: PlannerRequiredTool;
 	instructionName: InstructionName | null;
+	/** Markdown section selected for the current stage, when known. */
 	sectionName: string | null;
 	prompt: AssemblePlannerPromptResult | null;
 	artifactPaths: string[];
