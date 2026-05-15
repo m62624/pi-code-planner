@@ -369,3 +369,31 @@ Exports:
 - `MemoryFs`
 
 In-memory implementation of `PlannerFs` for tests.
+
+## Workflow
+
+### `src/workflow/schema.ts`
+
+Exports:
+
+- `PLAN_STAGES`
+- `PlanStage`
+- `WORK_ITEM_STAGES`
+- `WorkItemStage`
+- `ATTEMPT_STAGES`
+- `AttemptStage`
+- `WorkflowTransitionDecision`
+
+These stages model the target planner lifecycle from [Workflow](workflow.md).
+
+### `src/workflow/transitions.ts`
+
+Exports:
+
+- `canTransitionPlan(from, to)`
+- `canTransitionWorkItem(from, to)`
+- `canTransitionAttempt(from, to)`
+
+These pure validators decide whether a requested stage transition is allowed.
+They do not mutate storage. Future workflow managers/tools should call these
+before updating `plan.json`, `work_item.json`, or `attempt.json`.
