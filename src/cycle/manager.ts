@@ -46,6 +46,48 @@ function compactResumePurpose(
 	return null;
 }
 
+function compactPayload(input: {
+	reason: PlannerNextStep["compact"]["reason"];
+	prompt: PlannerNextStep["prompt"];
+	artifactPaths: string[];
+	planId: string | null;
+	workItemId: string | null;
+}): PlannerNextStep["compact"]["payload"] {
+	if (!input.reason) return null;
+
+	const artifactLines =
+		input.artifactPaths.length > 0
+			? input.artifactPaths.map((path) => `- ${path}`).join("\n")
+			: "- none";
+	const compactInstruction =
+		input.prompt?.prompt ??
+		`Compact the active planner ${input.reason} boundary. Preserve current planner state, decisions, risks, and next action.`;
+	const scopeLines = [
+		`- reason: ${input.reason}`,
+		`- planId: ${input.planId ?? "null"}`,
+		`- workItemId: ${input.workItemId ?? "null"}`,
+	].join("\n");
+	const resumePurpose = compactResumePurpose(input.reason);
+
+	return {
+		customInstructions: [
+			compactInstruction,
+			"## Compact Scope",
+			scopeLines,
+			"## Planner Artifacts",
+			artifactLines,
+		].join("\n\n"),
+		resumePrompt: [
+			"Resume the planner workflow after compact.",
+			resumePurpose,
+			"",
+			"Before continuing, call planner_next_step and follow its requiredTool or NEXT PLANNER INSTRUCTION.",
+		]
+			.filter((line): line is string => line !== null)
+			.join("\n"),
+	};
+}
+
 function kindFromDecision(
 	status: PlannerNextStep["decision"]["status"],
 ): PlannerNextStepKind {
@@ -111,6 +153,7 @@ export class PlannerCycleManager {
 		const status = statusFromKind(kind, decision.blocking);
 		const prompt = inspection.nextPrompt;
 		const instruction = instructionFromDecision(decision);
+		const artifactPaths = prompt?.artifactPaths ?? [];
 
 		return {
 			status,
@@ -122,13 +165,26 @@ export class PlannerCycleManager {
 			instructionName: instruction?.instructionName ?? null,
 			sectionName: instruction?.sectionName ?? null,
 			prompt,
-			artifactPaths: prompt?.artifactPaths ?? [],
+			artifactPaths,
 			dirtyFiles: decision.dirtyFiles,
 			compact: {
 				required: kind === "compact_required",
 				reason: decision.compactReason,
 				requestTool: compactTool,
 				resumePurpose: compactResumePurpose(decision.compactReason),
+				payload: compactPayload({
+					reason: decision.compactReason,
+					prompt,
+					artifactPaths,
+					planId:
+						inspection.plan?.planId ??
+						decision.recovery.currentBranch?.planId ??
+						null,
+					workItemId:
+						inspection.workItem?.workItemId ??
+						decision.recovery.currentBranch?.workItemId ??
+						null,
+				}),
 			},
 			inspection,
 		};

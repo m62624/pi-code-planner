@@ -61,6 +61,11 @@ describe("PlannerCycleManager", () => {
 	});
 
 	it("normalizes discovery compact boundary", async () => {
+		const prompt = {
+			prompt: "Discovery compact instruction.",
+			instruction: "Discovery compact instruction.",
+			artifactPaths: ["/plans/plan-1/discovery.md"],
+		};
 		const manager = new PlannerCycleManager({
 			runtime: runtime(
 				decision({
@@ -70,6 +75,7 @@ describe("PlannerCycleManager", () => {
 					compactReason: "discovery",
 					planStage: "discovery_compact_required",
 				}),
+				prompt,
 			),
 		});
 
@@ -86,8 +92,17 @@ describe("PlannerCycleManager", () => {
 				required: true,
 				reason: "discovery",
 				requestTool: "planner_request_discovery_compact",
+				payload: {
+					customInstructions: expect.stringContaining(
+						"Discovery compact instruction.",
+					),
+					resumePrompt: expect.stringContaining("planner_next_step"),
+				},
 			},
 		});
+		expect(step.compact.payload?.customInstructions).toContain(
+			"/plans/plan-1/discovery.md",
+		);
 		expect(step.compact.resumePurpose).toContain("post-discovery questions");
 	});
 
@@ -117,6 +132,10 @@ describe("PlannerCycleManager", () => {
 				required: true,
 				reason: "work_item",
 				requestTool: "planner_request_work_item_compact",
+				payload: {
+					customInstructions: expect.stringContaining("work_item"),
+					resumePrompt: expect.stringContaining("completed work item"),
+				},
 			},
 		});
 		expect(step.compact.resumePurpose).toContain("completed work item");

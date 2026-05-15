@@ -49,6 +49,10 @@ export interface PlannerNextStep {
 			| "planner_request_work_item_compact"
 			| null;
 		resumePurpose: string | null;
+		payload: {
+			customInstructions: string;
+			resumePrompt: string;
+		} | null;
 	};
 	inspection: PlannerRuntimeInspection;
 }
