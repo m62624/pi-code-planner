@@ -107,3 +107,30 @@ memory in batches:
 Long files must be read to completion before their `FileEntry` becomes
 `indexed`. Partial reads leave the file `pending`.
 
+## Public Tools
+
+The model must use planner memory tools instead of editing memory files directly.
+The current public API is:
+
+- `planner_memory_status`
+- `planner_memory_upsert_files`
+- `planner_memory_upsert_symbols`
+- `planner_memory_upsert_relations`
+- `planner_memory_search_symbols`
+- `planner_memory_get_symbols_by_file`
+- `planner_memory_get_symbol_context`
+- `planner_memory_get_relations`
+- `planner_memory_delete_symbol`
+- `planner_memory_delete_relation`
+- `planner_memory_mark_dirty`
+- `planner_memory_get_dirty`
+- `planner_memory_clear_dirty`
+- `planner_memory_verify_symbol`
+- `planner_memory_verify_file`
+
+Discovery should use upsert tools to build file, symbol, and relation indexes.
+Later stages should prefer search/context tools and only update dirty files.
+
+Automatic dirty tracking from Pi edit/write events is intentionally a separate
+integration layer. Until that exists, `planner_memory_mark_dirty` is the safe
+manual API.

@@ -550,6 +550,34 @@ whether planner is idle, ready, blocked by compact, or blocked by recovery. When
 the controller has a next prompt, the tool text includes the same
 `NEXT PLANNER INSTRUCTION` block used by workflow tools.
 
+### `src/tools/planner-memory-tools.ts`
+
+Exports:
+
+- `createPlannerMemoryTools(getStore)`
+
+Registered tool names:
+
+- `planner_memory_status`
+- `planner_memory_upsert_files`
+- `planner_memory_upsert_symbols`
+- `planner_memory_upsert_relations`
+- `planner_memory_search_symbols`
+- `planner_memory_get_symbols_by_file`
+- `planner_memory_get_symbol_context`
+- `planner_memory_get_relations`
+- `planner_memory_delete_symbol`
+- `planner_memory_delete_relation`
+- `planner_memory_mark_dirty`
+- `planner_memory_get_dirty`
+- `planner_memory_clear_dirty`
+- `planner_memory_verify_symbol`
+- `planner_memory_verify_file`
+
+This is the safe public CRUD API over `ProjectMemoryStore`. The model should use
+these tools during discovery and signature refresh instead of editing memory
+JSONL files directly.
+
 ### `src/tools/planner-git-tools.ts`
 
 Exports:

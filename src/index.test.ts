@@ -98,6 +98,7 @@ describe("extension entrypoint", () => {
 				"planner_create_plan",
 				"planner_transition_work_item",
 				"planner_runtime_status",
+				"planner_memory_status",
 			]),
 		);
 	});
