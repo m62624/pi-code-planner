@@ -354,10 +354,21 @@ static tool hints small while letting the extension inject the exact next
 planner instruction for the active plan or work item.
 
 The model can call `planner_runtime_status` when state is unclear. That tool is
-read-only: it checks runtime state, git recovery state, active records, and the
-next prompt. If it reports `compact_pending`, `memory_refresh_required`, or
-`recovery_required`, normal implementation work must stop until the matching
-compact, signature refresh, or recovery path is handled.
+read-only: it checks runtime state, git recovery state, dirty memory, active
+records, and the planner decision. If it reports `compact_required`,
+`compact_pending`, `memory_refresh_required`, or `recovery_required`, normal
+implementation work must stop until the matching compact, signature refresh, or
+recovery path is handled.
+
+Compact has two distinct prompt surfaces:
+
+- the compact instruction itself, passed to Pi compaction
+- the post-compact resume instruction, delivered after compaction so the model
+  reloads the active plan/work-item artifacts and compressed memory before
+  continuing
+
+The decision engine only decides that a compact boundary is required. The
+compaction layer owns the exact compact/resume prompt text.
 
 ## Git Rules
 

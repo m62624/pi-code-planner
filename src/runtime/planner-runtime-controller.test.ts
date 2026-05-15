@@ -185,6 +185,26 @@ describe("PlannerRuntimeController", () => {
 		});
 	});
 
+	it("reports compact required at the discovery compact boundary", async () => {
+		const { controller, orchestrator } = createHarness();
+		orchestrator.createPlan({ title: "Plan", planId: "plan-1" });
+		orchestrator.transitionPlan("plan-1", "discovery_full");
+		orchestrator.transitionPlan("plan-1", "discovery_compact_required");
+
+		const inspection = await controller.inspect();
+
+		expect(inspection).toMatchObject({
+			status: "compact_required",
+			message: "Discovery compact is required before planner can continue.",
+			decision: {
+				action: "request_discovery_compact",
+				compactReason: "discovery",
+				blocking: true,
+			},
+		});
+		expect(inspection.nextPrompt?.prompt).toContain("Compact instruction");
+	});
+
 	it("requires memory refresh when active planner memory has dirty files", async () => {
 		const { controller, memory, orchestrator } = createHarness();
 		orchestrator.createPlan({ title: "Plan", planId: "plan-1" });

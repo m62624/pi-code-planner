@@ -59,6 +59,7 @@ Implemented:
 - persisted project memory store
 - memory tools
 - git-status based dirty memory tracking
+- read-only planner decision engine
 - draft workflow document
 
 Not implemented yet:

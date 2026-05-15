@@ -265,6 +265,30 @@ instructions. This is the foundation for future workflow tool responses.
 
 ## Runtime State Layer
 
+### `src/decision/engine.ts`
+
+Exports:
+
+- `PlannerDecisionStatus`
+- `PlannerDecisionAction`
+- `PlannerDecision`
+- `decidePlannerNextAction(input)`
+
+Pure read-only decision engine for the active planner lifecycle. It combines
+runtime state, git recovery analysis, dirty memory, and active plan/work item
+records, then returns the single next allowed action class.
+
+Decision priority is:
+
+1. idle runtime
+2. pending compact resume
+3. git/runtime recovery
+4. dirty memory refresh, except while already in `signature_refresh`
+5. compact boundary request
+6. current plan/work-item stage
+
+The engine does not mutate files, git, runtime state, or storage records.
+
 ### `src/planner-state/schema.ts`
 
 Exports runtime state types and `DEFAULT_PLANNER_RUNTIME_STATE`.
@@ -292,6 +316,7 @@ combines:
 - persisted runtime state
 - current git recovery analysis
 - current memory dirty state
+- planner decision
 - active plan/work item records
 - next prompt assembly from `PlannerOrchestrator`
 
@@ -300,12 +325,13 @@ The controller returns one of:
 - `idle`
 - `ready`
 - `compact_pending`
+- `compact_required`
 - `memory_refresh_required`
 - `recovery_required`
 
-It does not mutate git or workflow records. Future cycle managers should use it
-as the common entrypoint before deciding whether discovery, TODO, TDD,
-selection, refactor, verification, or recovery may proceed.
+It does not mutate git or workflow records. Cycle managers should use the
+embedded decision as the common entrypoint before deciding whether discovery,
+TODO, TDD, selection, refactor, verification, compact, or recovery may proceed.
 
 ## Compaction Layer
 
