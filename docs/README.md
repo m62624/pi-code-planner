@@ -17,6 +17,11 @@ history.
   - Git position tracking.
   - Branch registry and pending operation recovery.
 
+- [Project Memory](memory.md)
+  - Sharded JSONL memory storage.
+  - File, symbol, relation, dirty, and verification model.
+  - Discovery batch contract and compact boundary requirements.
+
 - [Git Safety](git-safety.md)
   - Git read/write boundaries.
   - Branch naming safety.
@@ -51,16 +56,16 @@ Implemented:
 - `GitCore` composition layer
 - minimal Pi git tools
 - tool-call guard analysis for direct git commands
+- persisted project memory store
 - draft workflow document
 
 Not implemented yet:
 
-- persisted project memory
-- plan/work item storage
+- memory tools
+- discovery batch manager
+- automatic edit/write dirty-file event integration
 - stub marker registry
 - signature index generation
-- workflow state machine
-- compact orchestration
 - full planner tools above git tools
 
 ## Design Rule

@@ -130,6 +130,83 @@ Supported artifact groups:
 - attempt: `plan.md`, `prompt.md`, `summary.md`, `score.json`,
   `verification.json`, `changed_files.json`
 
+## Memory Layer
+
+### `src/memory/schema.ts`
+
+Exports language-neutral memory record types:
+
+- `MemoryManifest`
+- `FileEntry`
+- `SymbolEntry`
+- `SymbolRelation`
+- `DirtyMemoryState`
+- `MemoryIndexes`
+
+Symbols use file paths plus `anchors.searchText` instead of line-number anchors.
+The source of truth remains the project file; memory is a cached interpretation
+with verification status and confidence.
+
+### `src/memory/paths.ts`
+
+Exports:
+
+- `getProjectMemoryPaths(input)`
+- `shardNameForFilePath(filePath)`
+- `getSymbolShardPath(paths, filePath)`
+- `getRelationShardPath(paths, filePath)`
+
+Builds sharded memory paths under:
+
+```text
+getAgentDir()/extensions/pi-planner/projects/<projectKey>/memory/
+```
+
+### `src/memory/jsonl.ts`
+
+Exports small JSONL helpers:
+
+- `readJsonl(fs, path)`
+- `writeJsonl(fs, path, entries)`
+- `appendJsonl(fs, path, entries)`
+- `upsertJsonlByKey(fs, path, entries, keyOf)`
+
+### `src/memory/store.ts`
+
+Exports:
+
+- `ProjectMemoryStore`
+- `SymbolSearchQuery`
+- `SymbolContext`
+- `VerifySymbolResult`
+
+Current public methods:
+
+- `initialize()`
+- `loadManifest()`
+- `upsertFiles(entries)`
+- `readFiles()`
+- `upsertSymbols(entries)`
+- `searchSymbols(query)`
+- `getSymbolsByFile(filePath)`
+- `getSymbol(id)`
+- `deleteSymbol(symbolId, reason)`
+- `upsertRelations(entries)`
+- `getRelations(symbolId)`
+- `deleteRelation(relationId, reason)`
+- `getSymbolContext(symbolId)`
+- `markFilesDirty(filePaths, reason)`
+- `clearDirtyFiles(filePaths)`
+- `getDirtyFiles()`
+- `verifySymbol(symbolId)`
+- `verifyFile(filePath)`
+- `readAllSymbols()`
+- `readAllRelations()`
+
+The first implementation is sharded JSONL with small JSON indexes. Public cycle
+layers should depend on this store API, not on the storage format, so SQLite or
+another embedded backend can replace it later if project size demands it.
+
 ## Prompt Layer
 
 ### `src/prompts/assembler.ts`
