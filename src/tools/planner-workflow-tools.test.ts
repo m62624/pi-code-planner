@@ -240,6 +240,61 @@ describe("createPlannerWorkflowTools", () => {
 		});
 	});
 
+	it("allows transition out of signature refresh when dirty policy is disabled", async () => {
+		const transitionWorkItem = vi.fn().mockReturnValue({
+			current: {
+				workItemId: "parser-api",
+				stage: "work_item_compact_required",
+			},
+		});
+		const buildWorkItemStagePrompt = vi
+			.fn()
+			.mockReturnValue(nextWorkItemPrompt);
+		const orchestrator = {
+			transitionWorkItem,
+			buildWorkItemStagePrompt,
+		} as unknown as PlannerOrchestrator;
+		const tool = createPlannerWorkflowTools(
+			() => orchestrator,
+			() => ({
+				files: {
+					"src/config.ts": {
+						filePath: "src/config.ts",
+						reason: "edit result",
+						markedAt: "2026-05-15T00:00:00.000Z",
+					},
+				},
+			}),
+			() => ({
+				blockCompact: true,
+				blockWorkItemCommit: true,
+				blockSignatureRefreshExit: false,
+			}),
+		).find((candidate) => candidate.name === "planner_transition_work_item");
+		if (!tool) throw new Error("Missing tool.");
+
+		const result = await tool.execute(
+			"call-1",
+			{
+				planId: "plan-1",
+				workItemId: "parser-api",
+				stage: "work_item_compact_required",
+			},
+			undefined,
+			undefined,
+			context(),
+		);
+
+		expect(transitionWorkItem).toHaveBeenCalledWith(
+			"plan-1",
+			"parser-api",
+			"work_item_compact_required",
+		);
+		expect(result.details).toMatchObject({
+			result: { current: { workItemId: "parser-api" } },
+		});
+	});
+
 	it("requests discovery compaction through the orchestrator", async () => {
 		const requestDiscoveryCompact = vi.fn().mockReturnValue({
 			kind: "started",
@@ -319,6 +374,55 @@ describe("createPlannerWorkflowTools", () => {
 			memoryPolicy: {
 				kind: "block",
 			},
+		});
+	});
+
+	it("allows discovery compaction when dirty compact policy is disabled", async () => {
+		const requestDiscoveryCompact = vi.fn().mockReturnValue({
+			kind: "started",
+			pending: { id: "compact-1" },
+		});
+		const buildPlanStagePrompt = vi.fn().mockReturnValue(nextPlanPrompt);
+		const orchestrator = {
+			requestDiscoveryCompact,
+			buildPlanStagePrompt,
+		} as unknown as PlannerOrchestrator;
+		const tool = createPlannerWorkflowTools(
+			() => orchestrator,
+			() => ({
+				files: {
+					"src/config.ts": {
+						filePath: "src/config.ts",
+						reason: "edit result",
+						markedAt: "2026-05-15T00:00:00.000Z",
+					},
+				},
+			}),
+			() => ({
+				blockCompact: false,
+				blockWorkItemCommit: true,
+				blockSignatureRefreshExit: true,
+			}),
+		).find(
+			(candidate) => candidate.name === "planner_request_discovery_compact",
+		);
+		if (!tool) throw new Error("Missing tool.");
+
+		const result = await tool.execute(
+			"call-1",
+			{
+				planId: "plan-1",
+				customInstructions: "compact discovery",
+				resumePrompt: "resume discovery",
+			},
+			undefined,
+			undefined,
+			context(),
+		);
+
+		expect(requestDiscoveryCompact).toHaveBeenCalledTimes(1);
+		expect(result.details).toMatchObject({
+			result: { kind: "started" },
 		});
 	});
 
