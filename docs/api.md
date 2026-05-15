@@ -347,6 +347,27 @@ This is the public Pi tool surface for planner-controlled compaction. It calls
 `CompactionCoordinator.requestCompact(...)` and never exposes raw `ctx.compact`
 to higher workflow layers.
 
+### `src/tools/planner-workflow-tools.ts`
+
+Exports:
+
+- `createPlannerWorkflowTools(getOrchestrator)`
+
+Registered tool names:
+
+- `planner_create_plan`
+- `planner_transition_plan`
+- `planner_create_work_item`
+- `planner_transition_work_item`
+- `planner_request_discovery_compact`
+- `planner_complete_discovery_compact`
+- `planner_request_work_item_compact`
+- `planner_complete_work_item_compact`
+
+These tools are the public Pi surface over `PlannerOrchestrator`. They are thin
+wrappers: validate input, call the orchestrator, return structured details, and
+convert workflow/compact-boundary rejections into tool responses.
+
 ### `src/tools/planner-git-tools.ts`
 
 Exports:

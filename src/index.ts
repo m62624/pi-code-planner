@@ -6,14 +6,20 @@ import {
 	checkPlannerToolCall,
 	checkPlannerUserBash,
 } from "./git/tool-call-events";
+import {
+	createPlannerOrchestrator,
+	type PlannerOrchestrator,
+} from "./orchestrator/planner-orchestrator";
 import { createPlannerCompactionTools } from "./tools/planner-compaction-tools";
 import { createPlannerGitTools } from "./tools/planner-git-tools";
+import { createPlannerWorkflowTools } from "./tools/planner-workflow-tools";
 
 const EXTENSION_NAME = "pi-planner";
 
 export default function register(pi: ExtensionAPI): void {
 	const cores = new Map<string, GitCore>();
 	const compactors = new Map<string, CompactionCoordinator>();
+	const orchestrators = new Map<string, PlannerOrchestrator>();
 
 	function getCore(cwd: string): GitCore {
 		const cached = cores.get(cwd);
@@ -39,10 +45,26 @@ export default function register(pi: ExtensionAPI): void {
 		return compactor;
 	}
 
+	function getOrchestrator(cwd: string): PlannerOrchestrator {
+		const cached = orchestrators.get(cwd);
+		if (cached) return cached;
+
+		const orchestrator = createPlannerOrchestrator(
+			getCore(cwd),
+			cwd,
+			getCompactor(cwd),
+		);
+		orchestrators.set(cwd, orchestrator);
+		return orchestrator;
+	}
+
 	for (const tool of createPlannerGitTools(getCore)) {
 		pi.registerTool(tool);
 	}
 	for (const tool of createPlannerCompactionTools(getCompactor)) {
+		pi.registerTool(tool);
+	}
+	for (const tool of createPlannerWorkflowTools(getOrchestrator)) {
 		pi.registerTool(tool);
 	}
 
