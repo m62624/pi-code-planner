@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { CompactionCoordinator } from "./compaction/coordinator";
 import { EXTENSION_NAME } from "./constants";
+import { PlannerCycleManager } from "./cycle/manager";
 import { createGitCore, type GitCore } from "./git/core";
 import {
 	checkPlannerToolCall,
@@ -15,6 +16,7 @@ import {
 } from "./orchestrator/planner-orchestrator";
 import { PlannerRuntimeController } from "./runtime/planner-runtime-controller";
 import { createPlannerCompactionTools } from "./tools/planner-compaction-tools";
+import { createPlannerCycleTools } from "./tools/planner-cycle-tools";
 import { createPlannerGitTools } from "./tools/planner-git-tools";
 import { createPlannerMemoryTools } from "./tools/planner-memory-tools";
 import { createPlannerRuntimeTools } from "./tools/planner-runtime-tools";
@@ -25,6 +27,7 @@ export default function register(pi: ExtensionAPI): void {
 	const compactors = new Map<string, CompactionCoordinator>();
 	const orchestrators = new Map<string, PlannerOrchestrator>();
 	const runtimeControllers = new Map<string, PlannerRuntimeController>();
+	const cycleManagers = new Map<string, PlannerCycleManager>();
 	const memoryCores = new Map<string, MemoryCore>();
 
 	function getCore(cwd: string): GitCore {
@@ -78,6 +81,17 @@ export default function register(pi: ExtensionAPI): void {
 		return controller;
 	}
 
+	function getCycleManager(cwd: string): PlannerCycleManager {
+		const cached = cycleManagers.get(cwd);
+		if (cached) return cached;
+
+		const manager = new PlannerCycleManager({
+			runtime: getRuntimeController(cwd),
+		});
+		cycleManagers.set(cwd, manager);
+		return manager;
+	}
+
 	function getMemoryCore(cwd: string): MemoryCore {
 		const cached = memoryCores.get(cwd);
 		if (cached) return cached;
@@ -128,6 +142,9 @@ export default function register(pi: ExtensionAPI): void {
 		pi.registerTool(tool);
 	}
 	for (const tool of createPlannerRuntimeTools(getRuntimeController)) {
+		pi.registerTool(tool);
+	}
+	for (const tool of createPlannerCycleTools(getCycleManager)) {
 		pi.registerTool(tool);
 	}
 	for (const tool of createPlannerMemoryTools(

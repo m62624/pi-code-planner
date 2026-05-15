@@ -60,6 +60,7 @@ Implemented:
 - memory tools
 - git-status based dirty memory tracking
 - read-only planner decision engine
+- read-only cycle next-step manager and tool
 - draft workflow document
 
 Not implemented yet:
@@ -67,7 +68,7 @@ Not implemented yet:
 - discovery batch manager
 - stub marker registry
 - signature index generation
-- full planner tools above git tools
+- mutating cycle runner above read-only next-step tools
 
 ## Design Rule
 

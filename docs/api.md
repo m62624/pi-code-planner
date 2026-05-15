@@ -289,6 +289,37 @@ Decision priority is:
 
 The engine does not mutate files, git, runtime state, or storage records.
 
+## Cycle Layer
+
+### `src/cycle/schema.ts`
+
+Exports:
+
+- `PlannerNextStepStatus`
+- `PlannerNextStepKind`
+- `PlannerRequiredTool`
+- `PlannerNextStep`
+
+Defines the normalized next-step contract returned to higher layers and the
+model-facing `planner_next_step` tool.
+
+### `src/cycle/manager.ts`
+
+Exports:
+
+- `PlannerCycleManager`
+
+Read-only manager over `PlannerRuntimeController`. It converts runtime
+inspection plus `PlannerDecision` into one normalized next step:
+
+- status/kind/blocking
+- required planner tool, if any
+- instruction name and prompt, if available
+- dirty files
+- compact reason and post-compact resume purpose
+
+It does not execute git, workflow, memory, or compact mutations.
+
 ### `src/planner-state/schema.ts`
 
 Exports runtime state types and `DEFAULT_PLANNER_RUNTIME_STATE`.
@@ -620,6 +651,21 @@ This tool exposes the read-only runtime controller to the model. It reports
 whether planner is idle, ready, blocked by compact, or blocked by recovery. When
 the controller has a next prompt, the tool text includes the same
 `NEXT PLANNER INSTRUCTION` block used by workflow tools.
+
+### `src/tools/planner-cycle-tools.ts`
+
+Exports:
+
+- `createPlannerCycleTools(getCycleManager)`
+
+Registered tool names:
+
+- `planner_next_step`
+
+This is the preferred read-only model entrypoint before choosing the next
+planner action. It returns the normalized cycle step, including `requiredTool`
+when the model must handle recovery, compaction, or memory refresh before normal
+implementation work.
 
 ### `src/tools/planner-memory-tools.ts`
 

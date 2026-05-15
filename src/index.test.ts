@@ -98,6 +98,7 @@ describe("extension entrypoint", () => {
 				"planner_create_plan",
 				"planner_transition_work_item",
 				"planner_runtime_status",
+				"planner_next_step",
 				"planner_memory_status",
 			]),
 		);
@@ -159,6 +160,35 @@ describe("extension entrypoint", () => {
 			recovery: {
 				status: "init_required",
 			},
+		});
+	});
+
+	it("connects planner next step to the real cycle manager", async () => {
+		const { tools } = createRegisteredExtension();
+		const ctx = context(join(tempRoot, "project"));
+		const createPlan = toolByName(tools, "planner_create_plan");
+		const nextStep = toolByName(tools, "planner_next_step");
+
+		await createPlan.execute(
+			"call-1",
+			{ title: "Parser plan", planId: "plan-1" },
+			undefined,
+			undefined,
+			ctx,
+		);
+		const result = await nextStep.execute(
+			"call-2",
+			{},
+			undefined,
+			undefined,
+			ctx,
+		);
+
+		expect(result.content[0].text).toBe("Git repository is missing.");
+		expect(result.details).toMatchObject({
+			status: "blocked",
+			kind: "recovery",
+			requiredTool: "planner_runtime_status",
 		});
 	});
 

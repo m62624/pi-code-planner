@@ -353,12 +353,17 @@ visible `NEXT PLANNER INSTRUCTION` block in the tool result text. This keeps Pi'
 static tool hints small while letting the extension inject the exact next
 planner instruction for the active plan or work item.
 
-The model can call `planner_runtime_status` when state is unclear. That tool is
-read-only: it checks runtime state, git recovery state, dirty memory, active
-records, and the planner decision. If it reports `compact_required`,
-`compact_pending`, `memory_refresh_required`, or `recovery_required`, normal
-implementation work must stop until the matching compact, signature refresh, or
-recovery path is handled.
+The model should call `planner_next_step` before choosing the next planner
+action. That tool is read-only: it wraps runtime state, git recovery state,
+dirty memory, active records, and the planner decision into one normalized
+contract. If it returns `requiredTool`, the model must call that tool or handle
+the recovery path before normal implementation work.
+
+`planner_runtime_status` remains the lower-level inspection tool. If runtime
+status reports `compact_required`, `compact_pending`,
+`memory_refresh_required`, or `recovery_required`, normal implementation work
+must stop until the matching compact, signature refresh, or recovery path is
+handled.
 
 Compact has two distinct prompt surfaces:
 
