@@ -345,7 +345,11 @@ Exports:
 - `ExperimentAttemptRecord`
 - status unions for plan, work item, and attempt records
 
-These are the JSON records persisted by the storage skeleton.
+These are the JSON records persisted by the storage skeleton. Plan, work item,
+and attempt records store both `stage` and `status`:
+
+- `stage` is the precise workflow position.
+- `status` is the coarse UI/storage status derived by the workflow layer.
 
 ### `src/storage/store.ts`
 
@@ -363,14 +367,20 @@ Exports:
 - `readProject(projectPath)`
 - `createPlan(projectPath, input)`
 - `readPlan(projectPath, planId)`
+- `updatePlan(projectPath, planId, input)`
 - `createWorkItem(projectPath, planId, input)`
 - `readWorkItem(projectPath, planId, workItemId)`
+- `updateWorkItem(projectPath, planId, workItemId, input)`
 - `createAttempt(projectPath, planId, workItemId, input)`
 - `readAttempt(projectPath, planId, workItemId, attemptId)`
+- `updateAttempt(projectPath, planId, workItemId, attemptId, input)`
 
 The store creates JSON records and placeholder markdown/json artifacts under the
 canonical storage paths. Listing APIs are intentionally not present yet because
 the generic `PlannerFs` interface does not expose directory reads.
+
+Storage update methods are low-level persistence helpers. Public workflow tools
+should prefer `WorkflowManager` so stage and status stay synchronized.
 
 ## Test Utilities
 
@@ -413,3 +423,37 @@ before updating `plan.json`, `work_item.json`, or `attempt.json`.
 Work item transitions include explicit `work_item_commit`, `signature_refresh`,
 and `work_item_compact_required` stages so a completed item cannot skip the
 planner-controlled commit, memory refresh, and compact boundary.
+
+### `src/workflow/status.ts`
+
+Exports:
+
+- `derivePlanStatus(stage)`
+- `deriveWorkItemStatus(stage)`
+- `deriveAttemptStatus(stage)`
+
+Maps precise workflow stages to coarse storage/UI statuses. This keeps
+`plan.json`, `work_item.json`, and `attempt.json` readable without losing exact
+stage information.
+
+### `src/workflow/manager.ts`
+
+Exports:
+
+- `WorkflowManager`
+- `WorkflowTransitionRejected`
+- `WorkflowTransitionResult`
+
+`WorkflowManager` is the first mutation layer for planner lifecycle state. It
+loads the previous storage record, validates the transition with
+`src/workflow/transitions.ts`, derives the matching coarse status, writes the
+updated record through `PlanStore`, and returns `{ previous, current, decision }`.
+
+Public layer/tools should use:
+
+- `transitionPlan(projectPath, planId, to)`
+- `transitionWorkItem(projectPath, planId, workItemId, to)`
+- `transitionAttempt(projectPath, planId, workItemId, attemptId, to)`
+
+Invalid transitions throw `WorkflowTransitionRejected` and leave storage
+unchanged.

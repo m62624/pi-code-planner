@@ -3,6 +3,14 @@ import type { PlannerFs } from "../settings/fs";
 import { writeJsonAtomic } from "../settings/fs";
 import type { SettingsPaths } from "../settings/paths";
 import {
+	ATTEMPT_STAGES,
+	type AttemptStage,
+	PLAN_STAGES,
+	type PlanStage,
+	WORK_ITEM_STAGES,
+	type WorkItemStage,
+} from "../workflow/schema";
+import {
 	createAttemptId,
 	createPlanId,
 	createProjectKey,
@@ -33,20 +41,35 @@ export interface PlannerStorageOptions {
 export interface CreatePlanInput {
 	title: string;
 	planId?: string;
+	stage?: PlanStage;
 	status?: PlanStatus;
 }
 
 export interface CreateWorkItemInput {
 	title: string;
 	workItemId?: string;
+	stage?: WorkItemStage;
 	status?: WorkItemStatus;
 }
 
 export interface CreateAttemptInput {
 	attemptId?: string;
 	attemptIndex?: number;
+	stage?: AttemptStage;
 	status?: ExperimentAttemptStatus;
 }
+
+export type UpdatePlanInput = Partial<
+	Pick<PlanRecord, "title" | "stage" | "status">
+>;
+
+export type UpdateWorkItemInput = Partial<
+	Pick<WorkItemRecord, "title" | "stage" | "status">
+>;
+
+export type UpdateAttemptInput = Partial<
+	Pick<ExperimentAttemptRecord, "stage" | "status">
+>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -89,6 +112,7 @@ const PLAN_STATUSES = [
 
 const WORK_ITEM_STATUSES = [
 	"pending",
+	"ready",
 	"active",
 	"review",
 	"completed",
@@ -133,6 +157,7 @@ export function parsePlanRecord(value: unknown): PlanRecord {
 		projectKey: readString(value, "projectKey"),
 		planId: readString(value, "planId"),
 		title: readString(value, "title"),
+		stage: readEnum(value, "stage", PLAN_STAGES),
 		status: readEnum(value, "status", PLAN_STATUSES),
 		createdAt: readString(value, "createdAt"),
 		updatedAt: readString(value, "updatedAt"),
@@ -146,6 +171,7 @@ export function parseWorkItemRecord(value: unknown): WorkItemRecord {
 		planId: readString(value, "planId"),
 		workItemId: readString(value, "workItemId"),
 		title: readString(value, "title"),
+		stage: readEnum(value, "stage", WORK_ITEM_STAGES),
 		status: readEnum(value, "status", WORK_ITEM_STATUSES),
 		createdAt: readString(value, "createdAt"),
 		updatedAt: readString(value, "updatedAt"),
@@ -161,6 +187,7 @@ export function parseExperimentAttemptRecord(
 		planId: readString(value, "planId"),
 		workItemId: readString(value, "workItemId"),
 		attemptId: readString(value, "attemptId"),
+		stage: readEnum(value, "stage", ATTEMPT_STAGES),
 		status: readEnum(value, "status", ATTEMPT_STATUSES),
 		createdAt: readString(value, "createdAt"),
 		updatedAt: readString(value, "updatedAt"),
@@ -176,6 +203,13 @@ function writeIfMissing(fs: PlannerFs, path: string, content = ""): void {
 function writeNewJson(fs: PlannerFs, path: string, value: unknown): void {
 	if (fs.exists(path)) {
 		throw new Error(`Storage record already exists: ${path}`);
+	}
+	writeJsonAtomic(fs, path, value);
+}
+
+function writeExistingJson(fs: PlannerFs, path: string, value: unknown): void {
+	if (!fs.exists(path)) {
+		throw new Error(`Storage record not found: ${path}`);
 	}
 	writeJsonAtomic(fs, path, value);
 }
@@ -233,6 +267,7 @@ export class PlanStore {
 			projectKey: project.projectKey,
 			planId,
 			title: input.title,
+			stage: input.stage ?? "plan_draft",
 			status: input.status ?? "draft",
 			createdAt: now,
 			updatedAt: now,
@@ -256,6 +291,26 @@ export class PlanStore {
 		return parsePlanRecord(parseJsonRecord(this.options.fs, paths.planRecord));
 	}
 
+	updatePlan(
+		projectPath: string,
+		planId: string,
+		input: UpdatePlanInput,
+	): PlanRecord {
+		const previous = this.readPlan(projectPath, planId);
+		const paths = getPlanStoragePaths({
+			paths: this.options.paths,
+			projectPath,
+			planId,
+		});
+		const next: PlanRecord = {
+			...previous,
+			...input,
+			updatedAt: this.now(),
+		};
+		writeExistingJson(this.options.fs, paths.planRecord, next);
+		return next;
+	}
+
 	createWorkItem(
 		projectPath: string,
 		planId: string,
@@ -275,6 +330,7 @@ export class PlanStore {
 			planId,
 			workItemId,
 			title: input.title,
+			stage: input.stage ?? "pending",
 			status: input.status ?? "pending",
 			createdAt: now,
 			updatedAt: now,
@@ -304,6 +360,28 @@ export class PlanStore {
 		);
 	}
 
+	updateWorkItem(
+		projectPath: string,
+		planId: string,
+		workItemId: string,
+		input: UpdateWorkItemInput,
+	): WorkItemRecord {
+		const previous = this.readWorkItem(projectPath, planId, workItemId);
+		const paths = getWorkItemStoragePaths({
+			paths: this.options.paths,
+			projectPath,
+			planId,
+			workItemId,
+		});
+		const next: WorkItemRecord = {
+			...previous,
+			...input,
+			updatedAt: this.now(),
+		};
+		writeExistingJson(this.options.fs, paths.workItemRecord, next);
+		return next;
+	}
+
 	createAttempt(
 		projectPath: string,
 		planId: string,
@@ -326,6 +404,7 @@ export class PlanStore {
 			planId,
 			workItemId,
 			attemptId,
+			stage: input.stage ?? "created",
 			status: input.status ?? "created",
 			createdAt: now,
 			updatedAt: now,
@@ -358,6 +437,35 @@ export class PlanStore {
 		return parseExperimentAttemptRecord(
 			parseJsonRecord(this.options.fs, paths.attemptRecord),
 		);
+	}
+
+	updateAttempt(
+		projectPath: string,
+		planId: string,
+		workItemId: string,
+		attemptId: string,
+		input: UpdateAttemptInput,
+	): ExperimentAttemptRecord {
+		const previous = this.readAttempt(
+			projectPath,
+			planId,
+			workItemId,
+			attemptId,
+		);
+		const paths = getAttemptStoragePaths({
+			paths: this.options.paths,
+			projectPath,
+			planId,
+			workItemId,
+			attemptId,
+		});
+		const next: ExperimentAttemptRecord = {
+			...previous,
+			...input,
+			updatedAt: this.now(),
+		};
+		writeExistingJson(this.options.fs, paths.attemptRecord, next);
+		return next;
 	}
 
 	private now(): string {

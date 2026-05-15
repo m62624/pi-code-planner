@@ -1,3 +1,9 @@
+import type {
+	AttemptStage,
+	PlanStage,
+	WorkItemStage,
+} from "../workflow/schema";
+
 export type PlanStatus =
 	| "draft"
 	| "active"
@@ -8,6 +14,7 @@ export type PlanStatus =
 
 export type WorkItemStatus =
 	| "pending"
+	| "ready"
 	| "active"
 	| "review"
 	| "completed"
@@ -37,6 +44,7 @@ export interface PlanRecord {
 	projectKey: string;
 	planId: string;
 	title: string;
+	stage: PlanStage;
 	status: PlanStatus;
 	createdAt: string;
 	updatedAt: string;
@@ -47,6 +55,7 @@ export interface WorkItemRecord {
 	planId: string;
 	workItemId: string;
 	title: string;
+	stage: WorkItemStage;
 	status: WorkItemStatus;
 	createdAt: string;
 	updatedAt: string;
@@ -57,6 +66,7 @@ export interface ExperimentAttemptRecord {
 	planId: string;
 	workItemId: string;
 	attemptId: string;
+	stage: AttemptStage;
 	status: ExperimentAttemptStatus;
 	createdAt: string;
 	updatedAt: string;

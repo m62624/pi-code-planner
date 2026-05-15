@@ -72,6 +72,7 @@ describe("PlanStore", () => {
 			version: 1,
 			planId: "auth-refactor",
 			title: "Auth Refactor",
+			stage: "plan_draft",
 			status: "draft",
 		});
 		expect(fs.exists(paths.planRecord)).toBe(true);
@@ -100,6 +101,24 @@ describe("PlanStore", () => {
 		).toThrow(/already exists/);
 	});
 
+	it("updates a plan record", () => {
+		const { store } = createStore();
+		store.createPlan("/repo", { title: "Plan", planId: "plan-1" });
+
+		const updated = store.updatePlan("/repo", "plan-1", {
+			stage: "discovery_full",
+			status: "draft",
+		});
+
+		expect(updated).toMatchObject({
+			planId: "plan-1",
+			stage: "discovery_full",
+			status: "draft",
+			updatedAt: "2026-05-15T00:00:00.000Z",
+		});
+		expect(store.readPlan("/repo", "plan-1")).toEqual(updated);
+	});
+
 	it("creates a work item record and placeholders", () => {
 		const { fs, store } = createStore();
 		store.createPlan("/repo", { title: "Plan", planId: "plan-1" });
@@ -118,6 +137,7 @@ describe("PlanStore", () => {
 			version: 1,
 			planId: "plan-1",
 			workItemId: "parser-api",
+			stage: "pending",
 			status: "pending",
 		});
 		expect(fs.exists(paths.workItemRecord)).toBe(true);
@@ -136,6 +156,29 @@ describe("PlanStore", () => {
 		expect(() =>
 			store.createWorkItem("/repo", "missing", { title: "Parser API" }),
 		).toThrow(/File not found/);
+	});
+
+	it("updates a work item record", () => {
+		const { store } = createStore();
+		store.createPlan("/repo", { title: "Plan", planId: "plan-1" });
+		store.createWorkItem("/repo", "plan-1", {
+			title: "Parser API",
+			workItemId: "parser-api",
+		});
+
+		const updated = store.updateWorkItem("/repo", "plan-1", "parser-api", {
+			stage: "ready",
+			status: "ready",
+		});
+
+		expect(updated).toMatchObject({
+			workItemId: "parser-api",
+			stage: "ready",
+			status: "ready",
+		});
+		expect(store.readWorkItem("/repo", "plan-1", "parser-api")).toEqual(
+			updated,
+		);
 	});
 
 	it("creates an experiment attempt record and artifacts", () => {
@@ -162,6 +205,7 @@ describe("PlanStore", () => {
 			planId: "plan-1",
 			workItemId: "parser-api",
 			attemptId: "attempt-2",
+			stage: "created",
 			status: "created",
 		});
 		expect(fs.exists(paths.attemptRecord)).toBe(true);
@@ -186,5 +230,37 @@ describe("PlanStore", () => {
 		fs.writeFile(paths.planRecord, JSON.stringify({ version: 2 }));
 
 		expect(() => store.readPlan("/repo", "bad")).toThrow(/version/);
+	});
+
+	it("updates an experiment attempt record", () => {
+		const { store } = createStore();
+		store.createPlan("/repo", { title: "Plan", planId: "plan-1" });
+		store.createWorkItem("/repo", "plan-1", {
+			title: "Parser API",
+			workItemId: "parser-api",
+		});
+		store.createAttempt("/repo", "plan-1", "parser-api", {
+			attemptId: "attempt-1",
+		});
+
+		const updated = store.updateAttempt(
+			"/repo",
+			"plan-1",
+			"parser-api",
+			"attempt-1",
+			{
+				stage: "active",
+				status: "active",
+			},
+		);
+
+		expect(updated).toMatchObject({
+			attemptId: "attempt-1",
+			stage: "active",
+			status: "active",
+		});
+		expect(
+			store.readAttempt("/repo", "plan-1", "parser-api", "attempt-1"),
+		).toEqual(updated);
 	});
 });
