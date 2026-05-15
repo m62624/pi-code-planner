@@ -7,11 +7,15 @@ import { type Static, Type } from "typebox";
 import type { CompactionCoordinator } from "../compaction/coordinator";
 import { checkMemoryPolicy } from "../memory/policy";
 import type { DirtyMemoryState } from "../memory/schema";
+import type { MemoryDirtyPolicySettings } from "../settings/schema";
 
 export type CompactionCoordinatorResolver = (
 	cwd: string,
 ) => CompactionCoordinator;
 export type DirtyMemoryResolver = (cwd: string) => DirtyMemoryState;
+export type MemoryDirtyPolicyResolver = (
+	cwd: string,
+) => MemoryDirtyPolicySettings;
 
 function ok<T>(message: string, details: T): AgentToolResult<T> {
 	return {
@@ -31,9 +35,13 @@ function requestCompact(
 	ctx: ExtensionContext,
 	getCompactor: CompactionCoordinatorResolver,
 	getDirtyMemory: DirtyMemoryResolver | undefined,
+	getMemoryDirtyPolicy: MemoryDirtyPolicyResolver | undefined,
 	params: Static<typeof requestCompactSchema>,
 ): AgentToolResult<unknown> {
-	if (getDirtyMemory) {
+	if (
+		getDirtyMemory &&
+		(getMemoryDirtyPolicy?.(ctx.cwd).blockCompact ?? true)
+	) {
 		const memoryPolicy = checkMemoryPolicy({
 			operation: "request_compact",
 			dirty: getDirtyMemory(ctx.cwd),
@@ -86,6 +94,7 @@ const requestCompactSchema = Type.Object({
 export function createPlannerCompactionTools(
 	getCompactor: CompactionCoordinatorResolver,
 	getDirtyMemory?: DirtyMemoryResolver,
+	getMemoryDirtyPolicy?: MemoryDirtyPolicyResolver,
 ): ToolDefinition[] {
 	return [
 		{
@@ -106,7 +115,13 @@ export function createPlannerCompactionTools(
 				ctx,
 			) =>
 				Promise.resolve(
-					requestCompact(ctx, getCompactor, getDirtyMemory, params),
+					requestCompact(
+						ctx,
+						getCompactor,
+						getDirtyMemory,
+						getMemoryDirtyPolicy,
+						params,
+					),
 				),
 		},
 	];

@@ -22,6 +22,14 @@ export function mergePlannerSettings(
 				...(override.git?.branchNaming ?? {}),
 			},
 		},
+		memory: {
+			...base.memory,
+			...(override.memory ?? {}),
+			dirtyPolicy: {
+				...base.memory.dirtyPolicy,
+				...(override.memory?.dirtyPolicy ?? {}),
+			},
+		},
 		verificationCommands:
 			override.verificationCommands ?? base.verificationCommands,
 	};

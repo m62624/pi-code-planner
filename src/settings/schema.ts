@@ -33,11 +33,22 @@ export interface GitSettings {
 	archiveChildPlans: boolean;
 }
 
+export interface MemoryDirtyPolicySettings {
+	blockCompact: boolean;
+	blockWorkItemCommit: boolean;
+	blockSignatureRefreshExit: boolean;
+}
+
+export interface MemorySettings {
+	dirtyPolicy: MemoryDirtyPolicySettings;
+}
+
 export interface PlannerSettings {
 	version: 1;
 	instructions: InstructionPathMap;
 	refactor: RefactorSettings;
 	git: GitSettings;
+	memory: MemorySettings;
 	verificationCommands: string[];
 }
 
@@ -55,5 +66,8 @@ export type PartialPlannerSettings = Partial<{
 	instructions: Partial<InstructionPathMap>;
 	refactor: Partial<RefactorSettings>;
 	git: Partial<GitSettings>;
+	memory: Partial<{
+		dirtyPolicy: Partial<MemoryDirtyPolicySettings>;
+	}>;
 	verificationCommands: string[];
 }>;

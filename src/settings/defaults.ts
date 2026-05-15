@@ -47,5 +47,12 @@ export const DEFAULT_SETTINGS: PlannerSettings = {
 		deleteChildBranch: true,
 		archiveChildPlans: false,
 	},
+	memory: {
+		dirtyPolicy: {
+			blockCompact: true,
+			blockWorkItemCommit: true,
+			blockSignatureRefreshExit: true,
+		},
+	},
 	verificationCommands: [],
 };

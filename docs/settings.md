@@ -76,6 +76,13 @@ must not be edited as settings.
     "deleteChildBranch": true,
     "archiveChildPlans": false
   },
+  "memory": {
+    "dirtyPolicy": {
+      "blockCompact": true,
+      "blockWorkItemCommit": true,
+      "blockSignatureRefreshExit": true
+    }
+  },
   "verificationCommands": []
 }
 ```
@@ -88,6 +95,7 @@ must not be edited as settings.
 | `instructions` | Names of model-facing markdown files. | See [Instructions](#instructions). |
 | `refactor` | Basic refactor-loop defaults. | See [Refactor](#refactor). |
 | `git` | Git safety and branch configuration. | See [Git Safety](git-safety.md). |
+| `memory` | Project memory safety configuration. | See [Memory](#memory). |
 | `verificationCommands` | Project checks to run before finishing work. | Reserved for future planner workflow. |
 
 ## Instructions
@@ -144,6 +152,35 @@ code. See [Git Safety](git-safety.md#branch-naming).
 `git.deleteChildBranch` and `git.archiveChildPlans` are reserved settings for
 future cleanup behavior.
 
+## Memory
+
+`memory.dirtyPolicy` controls which public operations are blocked while project
+memory has dirty files.
+
+Defaults:
+
+```json
+{
+  "memory": {
+    "dirtyPolicy": {
+      "blockCompact": true,
+      "blockWorkItemCommit": true,
+      "blockSignatureRefreshExit": true
+    }
+  }
+}
+```
+
+Fields:
+
+- `blockCompact`: blocks compact tools until dirty memory is refreshed.
+- `blockWorkItemCommit`: blocks `planner_finish_work_item` while memory is dirty.
+- `blockSignatureRefreshExit`: blocks moving from `signature_refresh` to
+  `work_item_compact_required` while memory is dirty.
+
+These flags are enabled by default because compact boundaries are where the local
+model must resume from accurate compressed memory.
+
 ## What Belongs In Markdown
 
 Use markdown for model-facing instruction text:
@@ -165,10 +202,10 @@ Use JSON settings for values that must be parsed and validated by code:
 - shell tool names
 - blocked git command patterns
 - dangerous operation guardrails
+- memory dirty policy flags
 - verification command lists
 - future numeric selection/scoring settings
 
 ## Settings API
 
 See [API Inventory](api.md#settings-layer) for current TypeScript APIs.
-

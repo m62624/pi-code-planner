@@ -10,11 +10,15 @@ import {
 	PlannerOrchestratorBlockedByCompact,
 } from "../orchestrator/planner-orchestrator";
 import type { AssemblePlannerPromptResult } from "../prompts/assembler";
+import type { MemoryDirtyPolicySettings } from "../settings/schema";
 import { WorkflowTransitionRejected } from "../workflow/manager";
 import { PLAN_STAGES, WORK_ITEM_STAGES } from "../workflow/schema";
 
 export type PlannerOrchestratorResolver = (cwd: string) => PlannerOrchestrator;
 export type DirtyMemoryResolver = (cwd: string) => DirtyMemoryState;
+export type MemoryDirtyPolicyResolver = (
+	cwd: string,
+) => MemoryDirtyPolicySettings;
 
 function ok<T>(message: string, details: T): AgentToolResult<T> {
 	return {
@@ -75,9 +79,20 @@ function runWorkflow<T>(
 function memoryPolicyFailure(
 	cwd: string,
 	getDirtyMemory: DirtyMemoryResolver | undefined,
+	getMemoryDirtyPolicy: MemoryDirtyPolicyResolver | undefined,
 	operation: "request_compact" | "transition_from_signature_refresh",
 ): AgentToolResult<unknown> | null {
 	if (!getDirtyMemory) return null;
+	const settings = getMemoryDirtyPolicy?.(cwd);
+	if (operation === "request_compact" && settings?.blockCompact === false) {
+		return null;
+	}
+	if (
+		operation === "transition_from_signature_refresh" &&
+		settings?.blockSignatureRefreshExit === false
+	) {
+		return null;
+	}
 	const memoryPolicy = checkMemoryPolicy({
 		operation,
 		dirty: getDirtyMemory(cwd),
@@ -162,6 +177,7 @@ const WORKFLOW_PROMPT_GUIDELINES = [
 export function createPlannerWorkflowTools(
 	getOrchestrator: PlannerOrchestratorResolver,
 	getDirtyMemory?: DirtyMemoryResolver,
+	getMemoryDirtyPolicy?: MemoryDirtyPolicyResolver,
 ): ToolDefinition[] {
 	return [
 		{
@@ -276,6 +292,7 @@ export function createPlannerWorkflowTools(
 					const failure = memoryPolicyFailure(
 						ctx.cwd,
 						getDirtyMemory,
+						getMemoryDirtyPolicy,
 						"transition_from_signature_refresh",
 					);
 					if (failure) return Promise.resolve(failure);
@@ -318,6 +335,7 @@ export function createPlannerWorkflowTools(
 				const failure = memoryPolicyFailure(
 					ctx.cwd,
 					getDirtyMemory,
+					getMemoryDirtyPolicy,
 					"request_compact",
 				);
 				if (failure) return Promise.resolve(failure);
@@ -390,6 +408,7 @@ export function createPlannerWorkflowTools(
 				const failure = memoryPolicyFailure(
 					ctx.cwd,
 					getDirtyMemory,
+					getMemoryDirtyPolicy,
 					"request_compact",
 				);
 				if (failure) return Promise.resolve(failure);

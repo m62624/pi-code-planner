@@ -9,9 +9,13 @@ import { GitMutationRejected } from "../git/mutations";
 import type { GitPreflightOperation } from "../git/preflight";
 import { checkMemoryPolicy } from "../memory/policy";
 import type { DirtyMemoryState } from "../memory/schema";
+import type { MemoryDirtyPolicySettings } from "../settings/schema";
 
 export type GitCoreResolver = (cwd: string) => GitCore;
 export type DirtyMemoryResolver = (cwd: string) => DirtyMemoryState;
+export type MemoryDirtyPolicyResolver = (
+	cwd: string,
+) => MemoryDirtyPolicySettings;
 
 function ok<T>(message: string, details: T): AgentToolResult<T> {
 	return {
@@ -31,6 +35,7 @@ async function withPreflight<TDetails>(
 	ctx: ExtensionContext,
 	getCore: GitCoreResolver,
 	getDirtyMemory: DirtyMemoryResolver | undefined,
+	getMemoryDirtyPolicy: MemoryDirtyPolicyResolver | undefined,
 	operation: GitPreflightOperation,
 	run: (core: GitCore) => Promise<AgentToolResult<TDetails>>,
 ): Promise<AgentToolResult<TDetails | unknown>> {
@@ -40,7 +45,11 @@ async function withPreflight<TDetails>(
 		return fail(preflight.message, { preflight });
 	}
 
-	if (operation === "finish_work_item" && getDirtyMemory) {
+	if (
+		operation === "finish_work_item" &&
+		getDirtyMemory &&
+		(getMemoryDirtyPolicy?.(ctx.cwd).blockWorkItemCommit ?? true)
+	) {
 		const memoryPolicy = checkMemoryPolicy({
 			operation: "finish_work_item",
 			dirty: getDirtyMemory(ctx.cwd),
@@ -117,6 +126,7 @@ const hardResetSchema = Type.Object({
 export function createPlannerGitTools(
 	getCore: GitCoreResolver,
 	getDirtyMemory?: DirtyMemoryResolver,
+	getMemoryDirtyPolicy?: MemoryDirtyPolicyResolver,
 ): ToolDefinition[] {
 	return [
 		tool({
@@ -130,6 +140,7 @@ export function createPlannerGitTools(
 					ctx,
 					getCore,
 					getDirtyMemory,
+					getMemoryDirtyPolicy,
 					"initialize_repo",
 					async (core) => {
 						const mutation = await core.mutations.initializeRepo();
@@ -154,6 +165,7 @@ export function createPlannerGitTools(
 					ctx,
 					getCore,
 					getDirtyMemory,
+					getMemoryDirtyPolicy,
 					"start_plan",
 					async (core) => {
 						const mutation = await core.mutations.createPlanBranch(params);
@@ -178,6 +190,7 @@ export function createPlannerGitTools(
 					ctx,
 					getCore,
 					getDirtyMemory,
+					getMemoryDirtyPolicy,
 					"start_work_item",
 					async (core) => {
 						const mutation = await core.mutations.createChildBranch(params);
@@ -202,6 +215,7 @@ export function createPlannerGitTools(
 					ctx,
 					getCore,
 					getDirtyMemory,
+					getMemoryDirtyPolicy,
 					"start_work_item",
 					async (core) => {
 						const mutation =
@@ -227,6 +241,7 @@ export function createPlannerGitTools(
 					ctx,
 					getCore,
 					getDirtyMemory,
+					getMemoryDirtyPolicy,
 					"merge_branch",
 					async (core) => {
 						const mutation =
@@ -252,6 +267,7 @@ export function createPlannerGitTools(
 					ctx,
 					getCore,
 					getDirtyMemory,
+					getMemoryDirtyPolicy,
 					"finish_work_item",
 					async (core) => {
 						const mutation = await core.mutations.commitWorkItem(params);
@@ -275,6 +291,7 @@ export function createPlannerGitTools(
 					ctx,
 					getCore,
 					getDirtyMemory,
+					getMemoryDirtyPolicy,
 					"delete_branch",
 					async (core) => {
 						const mutation = await core.mutations.deleteChildBranch(params);
@@ -299,6 +316,7 @@ export function createPlannerGitTools(
 					ctx,
 					getCore,
 					getDirtyMemory,
+					getMemoryDirtyPolicy,
 					"delete_branch",
 					async (core) => {
 						const mutation =
@@ -318,6 +336,7 @@ export function createPlannerGitTools(
 					ctx,
 					getCore,
 					getDirtyMemory,
+					getMemoryDirtyPolicy,
 					"recovery",
 					async (core) => {
 						const mutation = await core.mutations.acceptCurrentGitState();
@@ -335,6 +354,7 @@ export function createPlannerGitTools(
 					ctx,
 					getCore,
 					getDirtyMemory,
+					getMemoryDirtyPolicy,
 					"recovery",
 					async (core) => {
 						const mutation = await core.mutations.softResetToExpected();
@@ -358,6 +378,7 @@ export function createPlannerGitTools(
 					ctx,
 					getCore,
 					getDirtyMemory,
+					getMemoryDirtyPolicy,
 					"recovery",
 					async (core) => {
 						if (params.confirm !== true) {

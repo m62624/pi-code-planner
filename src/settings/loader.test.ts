@@ -72,6 +72,52 @@ describe("loadPlannerSettings", () => {
 		expect(loaded.settings.git.deleteChildBranch).toBe(true);
 	});
 
+	it("loads default memory dirty policy settings", () => {
+		const fs = new MemoryFs();
+		const paths = createSettingsPaths({
+			agentDir: "/agent",
+			cwd: "/repo",
+			extensionName: "pi-planner",
+		});
+		ensurePlannerFiles(paths, fs);
+
+		const loaded = loadPlannerSettings(paths, fs);
+
+		expect(loaded.settings.memory.dirtyPolicy).toEqual({
+			blockCompact: true,
+			blockWorkItemCommit: true,
+			blockSignatureRefreshExit: true,
+		});
+	});
+
+	it("project settings override memory dirty policy flags", () => {
+		const fs = new MemoryFs();
+		const paths = createSettingsPaths({
+			agentDir: "/agent",
+			cwd: "/repo",
+			extensionName: "pi-planner",
+		});
+		ensurePlannerFiles(paths, fs);
+		fs.setFile(
+			paths.projectSettings,
+			JSON.stringify({
+				memory: {
+					dirtyPolicy: {
+						blockCompact: false,
+					},
+				},
+			}),
+		);
+
+		const loaded = loadPlannerSettings(paths, fs);
+
+		expect(loaded.settings.memory.dirtyPolicy).toEqual({
+			blockCompact: false,
+			blockWorkItemCommit: true,
+			blockSignatureRefreshExit: true,
+		});
+	});
+
 	it("project settings override git guardrail arrays and flags", () => {
 		const fs = new MemoryFs();
 		const paths = createSettingsPaths({

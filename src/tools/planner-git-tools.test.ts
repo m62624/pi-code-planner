@@ -178,4 +178,55 @@ describe("createPlannerGitTools", () => {
 			},
 		});
 	});
+
+	it("allows finishing a work item with dirty memory when policy is disabled", async () => {
+		const mutationResult = {
+			before: repoState(),
+			after: repoState(),
+			state: { mode: "idle" },
+		};
+		const commitWorkItem = vi.fn().mockResolvedValue(mutationResult);
+		const core = {
+			preflight: {
+				check: vi.fn().mockResolvedValue(
+					preflight({
+						operation: "finish_work_item",
+						allowed: true,
+						kind: "allow",
+						message: "Work item can be committed.",
+					}),
+				),
+			},
+			mutations: { commitWorkItem },
+		} as unknown as GitCore;
+		const dirty = () => ({
+			files: {
+				"src/config.ts": {
+					filePath: "src/config.ts",
+					reason: "edit result",
+					markedAt: "2026-05-15T00:00:00.000Z",
+				},
+			},
+		});
+		const tool = createPlannerGitTools(
+			() => core,
+			dirty,
+			() => ({
+				blockCompact: true,
+				blockWorkItemCommit: false,
+				blockSignatureRefreshExit: true,
+			}),
+		).find((candidate) => candidate.name === "planner_finish_work_item");
+
+		const result = await tool?.execute(
+			"call-1",
+			{ message: "feat: update config", stageAll: true },
+			undefined,
+			undefined,
+			context(),
+		);
+
+		expect(commitWorkItem).toHaveBeenCalledTimes(1);
+		expect(result?.details).toBe(mutationResult);
+	});
 });

@@ -122,4 +122,45 @@ describe("createPlannerCompactionTools", () => {
 			},
 		});
 	});
+
+	it("allows compaction with dirty memory when policy is disabled", async () => {
+		const requestCompact = vi.fn().mockReturnValue({
+			kind: "started",
+			pending: { id: "compact-1", status: "requested" },
+		});
+		const compactor = { requestCompact } as unknown as CompactionCoordinator;
+		const dirty = () => ({
+			files: {
+				"src/config.ts": {
+					filePath: "src/config.ts",
+					reason: "edit result",
+					markedAt: "2026-05-15T00:00:00.000Z",
+				},
+			},
+		});
+		const tool = createPlannerCompactionTools(
+			() => compactor,
+			dirty,
+			() => ({
+				blockCompact: false,
+				blockWorkItemCommit: true,
+				blockSignatureRefreshExit: true,
+			}),
+		)[0];
+
+		const result = await tool.execute(
+			"call-1",
+			{
+				reason: "manual",
+				customInstructions: "compact",
+				resumePrompt: "resume",
+			},
+			undefined,
+			undefined,
+			context(),
+		);
+
+		expect(requestCompact).toHaveBeenCalledTimes(1);
+		expect(result.details).toMatchObject({ kind: "started" });
+	});
 });
