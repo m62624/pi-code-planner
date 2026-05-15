@@ -373,4 +373,226 @@ describe("extension entrypoint", () => {
 			});
 		},
 	);
+
+	it.runIf(hasGit())(
+		"connects work item branch, commit, signature refresh, compact, and completion",
+		async () => {
+			const { handlers, tools } = createRegisteredExtension();
+			const project = createCleanGitProject(tempRoot);
+			const ctx = context(project);
+			const createPlan = toolByName(tools, "planner_create_plan");
+			const startPlan = toolByName(tools, "planner_start_plan");
+			const transitionPlan = toolByName(tools, "planner_transition_plan");
+			const createWorkItem = toolByName(tools, "planner_create_work_item");
+			const transitionWorkItem = toolByName(
+				tools,
+				"planner_transition_work_item",
+			);
+			const startWorkItem = toolByName(tools, "planner_start_work_item");
+			const finishWorkItem = toolByName(tools, "planner_finish_work_item");
+			const upsertFiles = toolByName(tools, "planner_memory_upsert_files");
+			const clearDirty = toolByName(tools, "planner_memory_clear_dirty");
+			const nextStep = toolByName(tools, "planner_next_step");
+			const requestCompact = toolByName(
+				tools,
+				"planner_request_work_item_compact",
+			);
+			const completeCompact = toolByName(
+				tools,
+				"planner_complete_work_item_compact",
+			);
+
+			await createPlan.execute(
+				"call-1",
+				{ title: "Parser plan", planId: "plan-1" },
+				undefined,
+				undefined,
+				ctx,
+			);
+			await startPlan.execute(
+				"call-2",
+				{ planId: "plan-1" },
+				undefined,
+				undefined,
+				ctx,
+			);
+			await transitionPlan.execute(
+				"call-3",
+				{ planId: "plan-1", stage: "plan_active" },
+				undefined,
+				undefined,
+				ctx,
+			);
+			await createWorkItem.execute(
+				"call-4",
+				{
+					planId: "plan-1",
+					title: "Feature file",
+					workItemId: "feature-file",
+				},
+				undefined,
+				undefined,
+				ctx,
+			);
+			await startWorkItem.execute(
+				"call-5",
+				{ workItemId: "feature-file" },
+				undefined,
+				undefined,
+				ctx,
+			);
+
+			for (const stage of [
+				"ready",
+				"active",
+				"tdd_prepare",
+				"tdd_write_tests",
+				"tdd_tests_commit",
+				"experiments_running",
+				"candidate_selection",
+				"candidate_merged",
+				"verification",
+				"work_item_commit",
+			] as const) {
+				await transitionWorkItem.execute(
+					`stage-${stage}`,
+					{
+						planId: "plan-1",
+						workItemId: "feature-file",
+						stage,
+					},
+					undefined,
+					undefined,
+					ctx,
+				);
+			}
+
+			writeFileSync(join(project, "feature.txt"), "feature\n", "utf-8");
+			const commitResult = await finishWorkItem.execute(
+				"call-6",
+				{ message: "feat: add feature file", stageAll: true },
+				undefined,
+				undefined,
+				ctx,
+			);
+			expect(commitResult.content[0].text).toBe("Planner work item committed.");
+
+			const refreshStep = await nextStep.execute(
+				"call-7",
+				{},
+				undefined,
+				undefined,
+				ctx,
+			);
+			expect(refreshStep.details).toMatchObject({
+				status: "blocked",
+				kind: "memory_refresh",
+				requiredTool: "planner_memory_get_dirty",
+				dirtyFiles: ["feature.txt"],
+			});
+
+			await transitionWorkItem.execute(
+				"call-8",
+				{
+					planId: "plan-1",
+					workItemId: "feature-file",
+					stage: "signature_refresh",
+				},
+				undefined,
+				undefined,
+				ctx,
+			);
+			await upsertFiles.execute(
+				"call-9",
+				{
+					entries: [
+						{
+							filePath: "feature.txt",
+							kind: "source",
+							language: "text",
+							hash: null,
+							sizeBytes: null,
+							indexedAt: "2026-05-16T00:00:00.000Z",
+							indexStatus: "indexed",
+							summary: "Feature file added by the work item.",
+						},
+					],
+				},
+				undefined,
+				undefined,
+				ctx,
+			);
+			await clearDirty.execute(
+				"call-10",
+				{ filePaths: ["feature.txt"] },
+				undefined,
+				undefined,
+				ctx,
+			);
+			await transitionWorkItem.execute(
+				"call-11",
+				{
+					planId: "plan-1",
+					workItemId: "feature-file",
+					stage: "work_item_compact_required",
+				},
+				undefined,
+				undefined,
+				ctx,
+			);
+
+			const compactStep = await nextStep.execute(
+				"call-12",
+				{},
+				undefined,
+				undefined,
+				ctx,
+			);
+			expect(compactStep.details).toMatchObject({
+				status: "blocked",
+				kind: "compact_required",
+				requiredTool: "planner_request_work_item_compact",
+				instructionName: "compact",
+				sectionName: "work_item_compact_required",
+			});
+
+			await requestCompact.execute(
+				"call-13",
+				{
+					planId: "plan-1",
+					workItemId: "feature-file",
+					customInstructions: "compact work item",
+					resumePrompt: "resume work item",
+				},
+				undefined,
+				undefined,
+				ctx,
+			);
+			const compactOptions = vi.mocked(ctx.compact).mock.calls[0][0];
+			compactOptions.onComplete?.();
+			const [beforeAgentStart] = handlers.get("before_agent_start") ?? [];
+			const resume = await beforeAgentStart(
+				{ systemPrompt: "base prompt" },
+				ctx,
+			);
+			expect(resume).toEqual({
+				systemPrompt: "base prompt\n\nresume work item",
+			});
+
+			const completeResult = await completeCompact.execute(
+				"call-14",
+				{ planId: "plan-1", workItemId: "feature-file" },
+				undefined,
+				undefined,
+				ctx,
+			);
+			expect(completeResult.details).toMatchObject({
+				result: {
+					current: {
+						stage: "completed",
+					},
+				},
+			});
+		},
+	);
 });

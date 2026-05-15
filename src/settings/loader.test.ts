@@ -90,7 +90,7 @@ describe("loadPlannerSettings", () => {
 		]);
 		expect(loaded.settings.memory.dirtyPolicy).toEqual({
 			blockCompact: true,
-			blockWorkItemCommit: true,
+			blockWorkItemCommit: false,
 			blockSignatureRefreshExit: true,
 		});
 	});
@@ -120,7 +120,7 @@ describe("loadPlannerSettings", () => {
 
 		expect(loaded.settings.memory.dirtyPolicy).toEqual({
 			blockCompact: false,
-			blockWorkItemCommit: true,
+			blockWorkItemCommit: false,
 			blockSignatureRefreshExit: true,
 		});
 		expect(loaded.settings.memory.autoDirtyTracking).toBe(false);

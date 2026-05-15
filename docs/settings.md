@@ -84,7 +84,7 @@ must not be edited as settings.
     ],
     "dirtyPolicy": {
       "blockCompact": true,
-      "blockWorkItemCommit": true,
+      "blockWorkItemCommit": false,
       "blockSignatureRefreshExit": true
     }
   },
@@ -184,7 +184,7 @@ Defaults:
     ],
     "dirtyPolicy": {
       "blockCompact": true,
-      "blockWorkItemCommit": true,
+      "blockWorkItemCommit": false,
       "blockSignatureRefreshExit": true
     }
   }
@@ -200,11 +200,13 @@ Fields:
   project build artifacts.
 - `blockCompact`: blocks compact tools until dirty memory is refreshed.
 - `blockWorkItemCommit`: blocks `planner_finish_work_item` while memory is dirty.
+  Disabled by default because git-status dirty tracking must allow the commit
+  checkpoint before `signature_refresh` updates compressed memory.
 - `blockSignatureRefreshExit`: blocks moving from `signature_refresh` to
   `work_item_compact_required` while memory is dirty.
 
-These flags are enabled by default because compact boundaries are where the local
-model must resume from accurate compressed memory.
+Compact and signature-refresh exit blocking are enabled by default because those
+boundaries require accurate compressed memory.
 
 ## What Belongs In Markdown
 

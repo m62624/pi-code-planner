@@ -42,7 +42,7 @@ export const DEFAULT_SETTINGS: PlannerSettings = {
 		dirtyPathIgnorePrefixes: [".git/", `.pi/extensions/${EXTENSION_NAME}/`],
 		dirtyPolicy: {
 			blockCompact: true,
-			blockWorkItemCommit: true,
+			blockWorkItemCommit: false,
 			blockSignatureRefreshExit: true,
 		},
 	},
