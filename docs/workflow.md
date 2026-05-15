@@ -355,9 +355,9 @@ planner instruction for the active plan or work item.
 
 The model can call `planner_runtime_status` when state is unclear. That tool is
 read-only: it checks runtime state, git recovery state, active records, and the
-next prompt. If it reports `compact_pending` or `recovery_required`, normal
-implementation work must stop until the matching compact or recovery path is
-handled.
+next prompt. If it reports `compact_pending`, `memory_refresh_required`, or
+`recovery_required`, normal implementation work must stop until the matching
+compact, signature refresh, or recovery path is handled.
 
 ## Git Rules
 

@@ -3,6 +3,7 @@ import { PlannerArtifacts } from "../artifacts/planner-artifacts";
 import { CompactionCoordinator } from "../compaction/coordinator";
 import type { RepoState } from "../git/state";
 import { emptyGitStatusSummary } from "../git/status-parser";
+import { createMemoryCore } from "../memory/core";
 import {
 	PlannerOrchestrator,
 	type PlannerOrchestratorOptions,
@@ -86,13 +87,15 @@ function createHarness(repo: RepoState = repoState()) {
 		artifacts: new PlannerArtifacts({ paths, fs }),
 	};
 	const orchestrator = new PlannerOrchestrator(options);
+	const memory = createMemoryCore({ paths, fs, projectPath: "/repo" });
 	const readRepoState = vi.fn().mockResolvedValue(repo);
 	const controller = new PlannerRuntimeController(
 		{ state: runtime, readRepoState },
 		orchestrator,
+		memory,
 	);
 
-	return { controller, fs, orchestrator, readRepoState, runtime };
+	return { controller, fs, memory, orchestrator, readRepoState, runtime };
 }
 
 describe("PlannerRuntimeController", () => {
@@ -107,6 +110,7 @@ describe("PlannerRuntimeController", () => {
 			plan: null,
 			workItem: null,
 			nextPrompt: null,
+			memory: { hasDirtyFiles: false },
 			recovery: { status: "inactive" },
 		});
 	});
@@ -125,6 +129,7 @@ describe("PlannerRuntimeController", () => {
 		});
 		expect(inspection.nextPrompt?.prompt).toContain("Discovery instruction");
 		expect(inspection.nextPrompt?.prompt).toContain("- planId: plan-1");
+		expect(inspection.memory.hasDirtyFiles).toBe(false);
 	});
 
 	it("returns the active work item prompt when a work item is active", async () => {
@@ -176,6 +181,31 @@ describe("PlannerRuntimeController", () => {
 			status: "compact_pending",
 			message: "Planner compact is pending: compact-1.",
 			nextPrompt: null,
+		});
+	});
+
+	it("requires memory refresh when active planner memory has dirty files", async () => {
+		const { controller, memory, orchestrator } = createHarness();
+		orchestrator.createPlan({ title: "Plan", planId: "plan-1" });
+		memory.store.markFilesDirty(["src/config.ts"], "edit result");
+
+		const inspection = await controller.inspect();
+
+		expect(inspection).toMatchObject({
+			status: "memory_refresh_required",
+			message:
+				"Project memory has dirty files; run signature_refresh before commit or compact.",
+			nextPrompt: null,
+			memory: {
+				hasDirtyFiles: true,
+				dirty: {
+					files: {
+						"src/config.ts": {
+							reason: "edit result",
+						},
+					},
+				},
+			},
 		});
 	});
 

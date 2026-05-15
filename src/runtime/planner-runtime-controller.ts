@@ -1,6 +1,8 @@
 import type { GitRecoveryAnalysis } from "../git/recovery";
 import { analyzeGitRecovery } from "../git/recovery";
 import type { RepoState } from "../git/state";
+import type { MemoryCore } from "../memory/core";
+import type { DirtyMemoryState } from "../memory/schema";
 import type { PlannerOrchestrator } from "../orchestrator/planner-orchestrator";
 import type { RuntimeStateManager } from "../planner-state/runtime";
 import type { PlannerRuntimeState } from "../planner-state/schema";
@@ -11,6 +13,7 @@ export type PlannerRuntimeStatus =
 	| "idle"
 	| "ready"
 	| "compact_pending"
+	| "memory_refresh_required"
 	| "recovery_required";
 
 export interface PlannerRuntimeControllerCore {
@@ -24,6 +27,10 @@ export interface PlannerRuntimeInspection {
 	state: PlannerRuntimeState;
 	repo: RepoState;
 	recovery: GitRecoveryAnalysis;
+	memory: {
+		dirty: DirtyMemoryState;
+		hasDirtyFiles: boolean;
+	};
 	plan: PlanRecord | null;
 	workItem: WorkItemRecord | null;
 	nextPrompt: AssemblePlannerPromptResult | null;
@@ -33,12 +40,14 @@ export class PlannerRuntimeController {
 	constructor(
 		private core: PlannerRuntimeControllerCore,
 		private orchestrator: PlannerOrchestrator,
+		private memory?: MemoryCore,
 	) {}
 
 	async inspect(): Promise<PlannerRuntimeInspection> {
 		const state = this.core.state.get();
 		const repo = await this.core.readRepoState();
 		const recovery = analyzeGitRecovery(state, repo);
+		const memory = this.memorySnapshot();
 
 		if (recovery.status === "inactive") {
 			return this.result({
@@ -47,6 +56,7 @@ export class PlannerRuntimeController {
 				state,
 				repo,
 				recovery,
+				memory,
 			});
 		}
 
@@ -61,6 +71,7 @@ export class PlannerRuntimeController {
 				state,
 				repo,
 				recovery,
+				memory,
 			});
 		}
 
@@ -71,16 +82,30 @@ export class PlannerRuntimeController {
 				state,
 				repo,
 				recovery,
+				memory,
 			});
 		}
 
-		return this.activeResult(state, repo, recovery);
+		if (memory.hasDirtyFiles) {
+			return this.result({
+				status: "memory_refresh_required",
+				message:
+					"Project memory has dirty files; run signature_refresh before commit or compact.",
+				state,
+				repo,
+				recovery,
+				memory,
+			});
+		}
+
+		return this.activeResult(state, repo, recovery, memory);
 	}
 
 	private activeResult(
 		state: PlannerRuntimeState,
 		repo: RepoState,
 		recovery: GitRecoveryAnalysis,
+		memory: PlannerRuntimeInspection["memory"],
 	): PlannerRuntimeInspection {
 		if (!state.activePlanId) {
 			return this.result({
@@ -89,6 +114,7 @@ export class PlannerRuntimeController {
 				state,
 				repo,
 				recovery,
+				memory,
 			});
 		}
 
@@ -105,6 +131,7 @@ export class PlannerRuntimeController {
 					state,
 					repo,
 					recovery,
+					memory,
 					plan,
 					workItem,
 					nextPrompt: this.orchestrator.buildWorkItemStagePrompt(
@@ -120,6 +147,7 @@ export class PlannerRuntimeController {
 				state,
 				repo,
 				recovery,
+				memory,
 				plan,
 				nextPrompt: this.orchestrator.buildPlanStagePrompt(state.activePlanId),
 			});
@@ -133,8 +161,17 @@ export class PlannerRuntimeController {
 				state,
 				repo,
 				recovery,
+				memory,
 			});
 		}
+	}
+
+	private memorySnapshot(): PlannerRuntimeInspection["memory"] {
+		const dirty = this.memory?.store.getDirtyFiles() ?? { files: {} };
+		return {
+			dirty,
+			hasDirtyFiles: Object.keys(dirty.files).length > 0,
+		};
 	}
 
 	private result(

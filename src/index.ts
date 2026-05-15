@@ -6,7 +6,7 @@ import {
 	checkPlannerToolCall,
 	checkPlannerUserBash,
 } from "./git/tool-call-events";
-import { ProjectMemoryStore } from "./memory/store";
+import { createMemoryCore, type MemoryCore } from "./memory/core";
 import {
 	createPlannerOrchestrator,
 	type PlannerOrchestrator,
@@ -25,7 +25,7 @@ export default function register(pi: ExtensionAPI): void {
 	const compactors = new Map<string, CompactionCoordinator>();
 	const orchestrators = new Map<string, PlannerOrchestrator>();
 	const runtimeControllers = new Map<string, PlannerRuntimeController>();
-	const memoryStores = new Map<string, ProjectMemoryStore>();
+	const memoryCores = new Map<string, MemoryCore>();
 
 	function getCore(cwd: string): GitCore {
 		const cached = cores.get(cwd);
@@ -71,23 +71,24 @@ export default function register(pi: ExtensionAPI): void {
 		const controller = new PlannerRuntimeController(
 			getCore(cwd),
 			getOrchestrator(cwd),
+			getMemoryCore(cwd),
 		);
 		runtimeControllers.set(cwd, controller);
 		return controller;
 	}
 
-	function getMemoryStore(cwd: string): ProjectMemoryStore {
-		const cached = memoryStores.get(cwd);
+	function getMemoryCore(cwd: string): MemoryCore {
+		const cached = memoryCores.get(cwd);
 		if (cached) return cached;
 
 		const core = getCore(cwd);
-		const store = new ProjectMemoryStore({
+		const memory = createMemoryCore({
 			paths: core.paths,
 			fs: core.fs,
 			projectPath: cwd,
 		});
-		memoryStores.set(cwd, store);
-		return store;
+		memoryCores.set(cwd, memory);
+		return memory;
 	}
 
 	for (const tool of createPlannerGitTools(getCore)) {
@@ -102,7 +103,9 @@ export default function register(pi: ExtensionAPI): void {
 	for (const tool of createPlannerRuntimeTools(getRuntimeController)) {
 		pi.registerTool(tool);
 	}
-	for (const tool of createPlannerMemoryTools(getMemoryStore)) {
+	for (const tool of createPlannerMemoryTools(
+		(cwd) => getMemoryCore(cwd).store,
+	)) {
 		pi.registerTool(tool);
 	}
 

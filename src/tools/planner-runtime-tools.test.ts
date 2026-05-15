@@ -56,8 +56,20 @@ describe("createPlannerRuntimeTools", () => {
 
 	it("does not append a next prompt when runtime is blocked", async () => {
 		const inspect = vi.fn().mockResolvedValue({
-			status: "recovery_required",
-			message: "Git repository is missing.",
+			status: "memory_refresh_required",
+			message: "Project memory has dirty files.",
+			memory: {
+				hasDirtyFiles: true,
+				dirty: {
+					files: {
+						"src/config.ts": {
+							filePath: "src/config.ts",
+							reason: "edit result",
+							markedAt: "2026-05-15T00:00:00.000Z",
+						},
+					},
+				},
+			},
 			nextPrompt: null,
 		});
 		const controller = { inspect } as unknown as PlannerRuntimeController;
@@ -71,9 +83,12 @@ describe("createPlannerRuntimeTools", () => {
 			context(),
 		);
 
-		expect(result.content[0].text).toBe("Git repository is missing.");
+		expect(result.content[0].text).toBe("Project memory has dirty files.");
 		expect(result.details).toMatchObject({
-			status: "recovery_required",
+			status: "memory_refresh_required",
+			memory: {
+				hasDirtyFiles: true,
+			},
 			nextPrompt: null,
 		});
 	});

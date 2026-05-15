@@ -207,6 +207,29 @@ The first implementation is sharded JSONL with small JSON indexes. Public cycle
 layers should depend on this store API, not on the storage format, so SQLite or
 another embedded backend can replace it later if project size demands it.
 
+### `src/memory/core.ts`
+
+Exports:
+
+- `MemoryCore`
+- `createMemoryCore(options)`
+
+Composition layer for project memory. It initializes and exposes
+`ProjectMemoryStore` so entrypoint, tools, runtime, and future cycle managers
+share the same memory object for a `cwd`.
+
+### `src/memory/policy.ts`
+
+Exports:
+
+- `MemoryPolicyOperation`
+- `MemoryPolicyDecision`
+- `checkMemoryPolicy(input)`
+
+Pure policy checker for operations that must not proceed while project memory is
+dirty. Current protected operation names are `request_compact`,
+`finish_work_item`, and `transition_from_signature_refresh`.
+
 ## Prompt Layer
 
 ### `src/prompts/assembler.ts`
@@ -248,6 +271,7 @@ combines:
 
 - persisted runtime state
 - current git recovery analysis
+- current memory dirty state
 - active plan/work item records
 - next prompt assembly from `PlannerOrchestrator`
 
@@ -256,6 +280,7 @@ The controller returns one of:
 - `idle`
 - `ready`
 - `compact_pending`
+- `memory_refresh_required`
 - `recovery_required`
 
 It does not mutate git or workflow records. Future cycle managers should use it
