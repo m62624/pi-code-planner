@@ -109,6 +109,40 @@ Exports:
 Reads a configured instruction file and returns one section, optionally appending
 a `details` section.
 
+## Artifact Layer
+
+### `src/artifacts/planner-artifacts.ts`
+
+Exports:
+
+- `PlannerArtifacts`
+- artifact name unions for plan, work item, and attempt artifacts
+- `ArtifactReadResult`
+
+This layer reads, writes, and appends planner-owned markdown/json artifacts under
+the canonical storage paths. It does not decide workflow stages and does not
+generate prompts.
+
+Supported artifact groups:
+
+- plan: `plan.md`, `discovery.md`, `questions.md`, `decisions.md`
+- work item: `tdd_plan.md`, `tests_summary.md`, `refactor_notes.md`
+- attempt: `plan.md`, `prompt.md`, `summary.md`, `score.json`,
+  `verification.json`, `changed_files.json`
+
+## Prompt Layer
+
+### `src/prompts/assembler.ts`
+
+Exports:
+
+- `assemblePlannerPrompt(loadResult, fs, request)`
+- `artifactReference(artifact, options)`
+
+Builds a deterministic prompt from a configured markdown instruction, current
+state entries, artifact paths, optional artifact content, and extra
+instructions. This is the foundation for future workflow tool responses.
+
 ## Runtime State Layer
 
 ### `src/planner-state/schema.ts`
