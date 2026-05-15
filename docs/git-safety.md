@@ -188,8 +188,18 @@ It blocks commands matching:
 - `git.blockedCommitPatterns`
 - `git.blockedDangerousPatterns`
 
-The guard is analysis-only today. Full event-hook integration still needs to be
-connected to Pi `tool_call`/`user_bash` events.
+The guard is connected to Pi events:
+
+- `tool_call`
+  - returns `{ block: true, reason }` for model tool calls that attempt direct
+    managed git writes through shell tools.
+
+- `user_bash`
+  - Pi does not expose a block flag for this event.
+  - The extension returns a handled failing `BashResult` with exit code `1`.
+
+Read-only git commands such as `git status --short` are allowed. Non-shell tools
+that contain git text in their content are ignored.
 
 ## Branch Naming
 
@@ -274,4 +284,3 @@ try {
 ```
 
 Integration tests must not run destructive git commands in the project checkout.
-

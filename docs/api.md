@@ -202,6 +202,18 @@ Exports:
 
 Analyzes shell tool calls and blocks direct git commands while a plan is active.
 
+### `src/git/tool-call-events.ts`
+
+Exports:
+
+- `checkPlannerToolCall(core, event)`
+- `checkPlannerUserBash(core, event)`
+
+Adapts `analyzeGitToolCall` to Pi extension event results:
+
+- `tool_call` returns `{ block: true, reason }`
+- `user_bash` returns a handled failing `BashResult`
+
 ## Git Write Layer
 
 ### `src/git/write.ts`

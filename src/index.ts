@@ -1,6 +1,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { createGitCore, type GitCore } from "./git/core";
+import {
+	checkPlannerToolCall,
+	checkPlannerUserBash,
+} from "./git/tool-call-events";
 import { createPlannerGitTools } from "./tools/planner-git-tools";
 
 const EXTENSION_NAME = "pi-planner";
@@ -33,5 +37,13 @@ export default function register(pi: ExtensionAPI): void {
 			EXTENSION_NAME,
 			`planner ${core.settings.settings.refactor.maxIterations}r ${preflight.recovery.status}`,
 		);
+	});
+
+	pi.on("tool_call", async (event, ctx) => {
+		return checkPlannerToolCall(getCore(ctx.cwd), event);
+	});
+
+	pi.on("user_bash", async (event) => {
+		return checkPlannerUserBash(getCore(event.cwd), event);
 	});
 }
