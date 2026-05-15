@@ -1,3 +1,4 @@
+import { EXTENSION_NAME } from "../constants";
 import type { PlannerSettings } from "./schema";
 
 export const DEFAULT_INSTRUCTION_CONTENT = {
@@ -49,14 +50,7 @@ export const DEFAULT_SETTINGS: PlannerSettings = {
 	},
 	memory: {
 		autoDirtyTracking: true,
-		dirtyPathIgnorePrefixes: [
-			".git/",
-			".pi/extensions/pi-planner/",
-			"node_modules/",
-			"dist/",
-			"coverage/",
-			".turbo/",
-		],
+		dirtyPathIgnorePrefixes: [".git/", `.pi/extensions/${EXTENSION_NAME}/`],
 		dirtyPolicy: {
 			blockCompact: true,
 			blockWorkItemCommit: true,

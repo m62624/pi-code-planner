@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { CompactionCoordinator } from "./compaction/coordinator";
+import { EXTENSION_NAME } from "./constants";
 import { createGitCore, type GitCore } from "./git/core";
 import {
 	checkPlannerToolCall,
@@ -18,8 +19,6 @@ import { createPlannerGitTools } from "./tools/planner-git-tools";
 import { createPlannerMemoryTools } from "./tools/planner-memory-tools";
 import { createPlannerRuntimeTools } from "./tools/planner-runtime-tools";
 import { createPlannerWorkflowTools } from "./tools/planner-workflow-tools";
-
-const EXTENSION_NAME = "pi-planner";
 
 export default function register(pi: ExtensionAPI): void {
 	const cores = new Map<string, GitCore>();

@@ -80,11 +80,7 @@ must not be edited as settings.
     "autoDirtyTracking": true,
     "dirtyPathIgnorePrefixes": [
       ".git/",
-      ".pi/extensions/pi-planner/",
-      "node_modules/",
-      "dist/",
-      "coverage/",
-      ".turbo/"
+      ".pi/extensions/pi-planner/"
     ],
     "dirtyPolicy": {
       "blockCompact": true,
@@ -169,8 +165,9 @@ shell commands, formatters, or unknown edit tools still invalidate compressed
 memory before commit/compact boundaries.
 
 `memory.dirtyPathIgnorePrefixes` lists repo-relative prefixes ignored by the
-automatic dirty tracker. Use it for generated output or planner-owned metadata
-that should not require `signature_refresh`.
+automatic dirty tracker. Defaults only exclude git internals and the
+project-local planner settings directory. Project-specific generated output
+should be ignored through `.gitignore`, so the planner stays language-neutral.
 
 `memory.dirtyPolicy` controls which public operations are blocked while project
 memory has dirty files.
@@ -183,11 +180,7 @@ Defaults:
     "autoDirtyTracking": true,
     "dirtyPathIgnorePrefixes": [
       ".git/",
-      ".pi/extensions/pi-planner/",
-      "node_modules/",
-      "dist/",
-      "coverage/",
-      ".turbo/"
+      ".pi/extensions/pi-planner/"
     ],
     "dirtyPolicy": {
       "blockCompact": true,
@@ -203,7 +196,8 @@ Fields:
 - `autoDirtyTracking`: when true, runtime status and protected public tools sync
   dirty memory from `git status` while a plan is active.
 - `dirtyPathIgnorePrefixes`: repo-relative prefixes filtered out of automatic
-  dirty tracking.
+  dirty tracking. Keep this for extension-owned metadata; use `.gitignore` for
+  project build artifacts.
 - `blockCompact`: blocks compact tools until dirty memory is refreshed.
 - `blockWorkItemCommit`: blocks `planner_finish_work_item` while memory is dirty.
 - `blockSignatureRefreshExit`: blocks moving from `signature_refresh` to

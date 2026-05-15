@@ -137,11 +137,9 @@ describe("syncDirtyMemoryFromRepo", () => {
 				status: status({
 					unstagedFiles: [
 						"src/app.ts",
-						"dist/app.js",
 						".pi/extensions/pi-planner/state.json",
 						"/tmp/outside.ts",
 					],
-					untrackedFiles: ["coverage/coverage.json"],
 				}),
 			}),
 			settings: DEFAULT_SETTINGS.memory,
@@ -150,6 +148,26 @@ describe("syncDirtyMemoryFromRepo", () => {
 		expect(result.synced).toBe(true);
 		expect(result.changedFiles).toEqual(["src/app.ts"]);
 		expect(Object.keys(result.dirty.files)).toEqual(["src/app.ts"]);
+	});
+
+	it("does not ignore project-specific build output unless git status hides it", () => {
+		const { store } = createStore();
+
+		const result = syncDirtyMemoryFromRepo({
+			plannerState: runtime({ mode: "plan_active", activePlanId: "plan-1" }),
+			memory: store,
+			repo: repo({
+				status: status({
+					untrackedFiles: ["dist/app.js", "coverage/coverage.json"],
+				}),
+			}),
+			settings: DEFAULT_SETTINGS.memory,
+		});
+
+		expect(result.changedFiles).toEqual([
+			"coverage/coverage.json",
+			"dist/app.js",
+		]);
 	});
 
 	it("does not sync outside a git repository", () => {
