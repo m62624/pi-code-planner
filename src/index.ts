@@ -91,13 +91,22 @@ export default function register(pi: ExtensionAPI): void {
 		return memory;
 	}
 
-	for (const tool of createPlannerGitTools(getCore)) {
+	const getDirtyMemory = (cwd: string) =>
+		getMemoryCore(cwd).store.getDirtyFiles();
+
+	for (const tool of createPlannerGitTools(getCore, getDirtyMemory)) {
 		pi.registerTool(tool);
 	}
-	for (const tool of createPlannerCompactionTools(getCompactor)) {
+	for (const tool of createPlannerCompactionTools(
+		getCompactor,
+		getDirtyMemory,
+	)) {
 		pi.registerTool(tool);
 	}
-	for (const tool of createPlannerWorkflowTools(getOrchestrator)) {
+	for (const tool of createPlannerWorkflowTools(
+		getOrchestrator,
+		getDirtyMemory,
+	)) {
 		pi.registerTool(tool);
 	}
 	for (const tool of createPlannerRuntimeTools(getRuntimeController)) {

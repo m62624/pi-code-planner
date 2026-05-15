@@ -197,6 +197,49 @@ describe("createPlannerWorkflowTools", () => {
 		});
 	});
 
+	it("blocks transition out of signature refresh when project memory is dirty", async () => {
+		const transitionWorkItem = vi.fn();
+		const orchestrator = {
+			transitionWorkItem,
+		} as unknown as PlannerOrchestrator;
+		const tool = createPlannerWorkflowTools(
+			() => orchestrator,
+			() => ({
+				files: {
+					"src/config.ts": {
+						filePath: "src/config.ts",
+						reason: "edit result",
+						markedAt: "2026-05-15T00:00:00.000Z",
+					},
+				},
+			}),
+		).find((candidate) => candidate.name === "planner_transition_work_item");
+		if (!tool) throw new Error("Missing tool.");
+
+		const result = await tool.execute(
+			"call-1",
+			{
+				planId: "plan-1",
+				workItemId: "parser-api",
+				stage: "work_item_compact_required",
+			},
+			undefined,
+			undefined,
+			context(),
+		);
+
+		expect(transitionWorkItem).not.toHaveBeenCalled();
+		expect(result.content[0].text).toBe(
+			"Project memory has 1 dirty file(s); run signature_refresh before transition_from_signature_refresh.",
+		);
+		expect(result.details).toMatchObject({
+			memoryPolicy: {
+				kind: "block",
+				dirtyFiles: ["src/config.ts"],
+			},
+		});
+	});
+
 	it("requests discovery compaction through the orchestrator", async () => {
 		const requestDiscoveryCompact = vi.fn().mockReturnValue({
 			kind: "started",
@@ -235,6 +278,47 @@ describe("createPlannerWorkflowTools", () => {
 		expect(result.details).toMatchObject({
 			result: { kind: "started" },
 			nextPrompt: nextPlanPrompt,
+		});
+	});
+
+	it("blocks discovery compaction when project memory is dirty", async () => {
+		const requestDiscoveryCompact = vi.fn();
+		const orchestrator = {
+			requestDiscoveryCompact,
+		} as unknown as PlannerOrchestrator;
+		const tool = createPlannerWorkflowTools(
+			() => orchestrator,
+			() => ({
+				files: {
+					"src/config.ts": {
+						filePath: "src/config.ts",
+						reason: "edit result",
+						markedAt: "2026-05-15T00:00:00.000Z",
+					},
+				},
+			}),
+		).find(
+			(candidate) => candidate.name === "planner_request_discovery_compact",
+		);
+		if (!tool) throw new Error("Missing tool.");
+
+		const result = await tool.execute(
+			"call-1",
+			{
+				planId: "plan-1",
+				customInstructions: "compact discovery",
+				resumePrompt: "resume discovery",
+			},
+			undefined,
+			undefined,
+			context(),
+		);
+
+		expect(requestDiscoveryCompact).not.toHaveBeenCalled();
+		expect(result.details).toMatchObject({
+			memoryPolicy: {
+				kind: "block",
+			},
 		});
 	});
 

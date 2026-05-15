@@ -3,6 +3,8 @@ import type {
 	ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
+import { checkMemoryPolicy } from "../memory/policy";
+import type { DirtyMemoryState } from "../memory/schema";
 import {
 	type PlannerOrchestrator,
 	PlannerOrchestratorBlockedByCompact,
@@ -12,6 +14,7 @@ import { WorkflowTransitionRejected } from "../workflow/manager";
 import { PLAN_STAGES, WORK_ITEM_STAGES } from "../workflow/schema";
 
 export type PlannerOrchestratorResolver = (cwd: string) => PlannerOrchestrator;
+export type DirtyMemoryResolver = (cwd: string) => DirtyMemoryState;
 
 function ok<T>(message: string, details: T): AgentToolResult<T> {
 	return {
@@ -67,6 +70,20 @@ function runWorkflow<T>(
 		}
 		throw error;
 	}
+}
+
+function memoryPolicyFailure(
+	cwd: string,
+	getDirtyMemory: DirtyMemoryResolver | undefined,
+	operation: "request_compact" | "transition_from_signature_refresh",
+): AgentToolResult<unknown> | null {
+	if (!getDirtyMemory) return null;
+	const memoryPolicy = checkMemoryPolicy({
+		operation,
+		dirty: getDirtyMemory(cwd),
+	});
+	if (memoryPolicy.kind === "allow") return null;
+	return fail(memoryPolicy.message, { memoryPolicy });
 }
 
 function stringUnionSchema(values: readonly string[]) {
@@ -144,6 +161,7 @@ const WORKFLOW_PROMPT_GUIDELINES = [
 
 export function createPlannerWorkflowTools(
 	getOrchestrator: PlannerOrchestratorResolver,
+	getDirtyMemory?: DirtyMemoryResolver,
 ): ToolDefinition[] {
 	return [
 		{
@@ -253,8 +271,16 @@ export function createPlannerWorkflowTools(
 				_signal,
 				_onUpdate,
 				ctx,
-			) =>
-				Promise.resolve(
+			) => {
+				if (params.stage === "work_item_compact_required") {
+					const failure = memoryPolicyFailure(
+						ctx.cwd,
+						getDirtyMemory,
+						"transition_from_signature_refresh",
+					);
+					if (failure) return Promise.resolve(failure);
+				}
+				return Promise.resolve(
 					runWorkflow(() => {
 						const orchestrator = getOrchestrator(ctx.cwd);
 						const result = orchestrator.transitionWorkItem(
@@ -270,7 +296,8 @@ export function createPlannerWorkflowTools(
 							),
 						};
 					}, "Planner work item transitioned."),
-				),
+				);
+			},
 		},
 		{
 			name: "planner_request_discovery_compact",
@@ -287,8 +314,14 @@ export function createPlannerWorkflowTools(
 				_signal,
 				_onUpdate,
 				ctx,
-			) =>
-				Promise.resolve(
+			) => {
+				const failure = memoryPolicyFailure(
+					ctx.cwd,
+					getDirtyMemory,
+					"request_compact",
+				);
+				if (failure) return Promise.resolve(failure);
+				return Promise.resolve(
 					runWorkflow(() => {
 						const orchestrator = getOrchestrator(ctx.cwd);
 						const result = orchestrator.requestDiscoveryCompact(
@@ -306,7 +339,8 @@ export function createPlannerWorkflowTools(
 							nextPrompt: orchestrator.buildPlanStagePrompt(params.planId),
 						};
 					}, "Planner discovery compaction requested."),
-				),
+				);
+			},
 		},
 		{
 			name: "planner_complete_discovery_compact",
@@ -352,8 +386,14 @@ export function createPlannerWorkflowTools(
 				_signal,
 				_onUpdate,
 				ctx,
-			) =>
-				Promise.resolve(
+			) => {
+				const failure = memoryPolicyFailure(
+					ctx.cwd,
+					getDirtyMemory,
+					"request_compact",
+				);
+				if (failure) return Promise.resolve(failure);
+				return Promise.resolve(
 					runWorkflow(() => {
 						const orchestrator = getOrchestrator(ctx.cwd);
 						const result = orchestrator.requestWorkItemCompact(
@@ -369,7 +409,8 @@ export function createPlannerWorkflowTools(
 							),
 						};
 					}, "Planner work item compaction requested."),
-				),
+				);
+			},
 		},
 		{
 			name: "planner_complete_work_item_compact",

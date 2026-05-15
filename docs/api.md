@@ -230,6 +230,9 @@ Pure policy checker for operations that must not proceed while project memory is
 dirty. Current protected operation names are `request_compact`,
 `finish_work_item`, and `transition_from_signature_refresh`.
 
+The policy is currently enforced by public compact/workflow/git tools when a
+memory resolver is supplied by the entrypoint.
+
 ## Prompt Layer
 
 ### `src/prompts/assembler.ts`

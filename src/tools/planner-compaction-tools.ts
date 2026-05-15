@@ -5,12 +5,22 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import type { CompactionCoordinator } from "../compaction/coordinator";
+import { checkMemoryPolicy } from "../memory/policy";
+import type { DirtyMemoryState } from "../memory/schema";
 
 export type CompactionCoordinatorResolver = (
 	cwd: string,
 ) => CompactionCoordinator;
+export type DirtyMemoryResolver = (cwd: string) => DirtyMemoryState;
 
 function ok<T>(message: string, details: T): AgentToolResult<T> {
+	return {
+		content: [{ type: "text", text: message }],
+		details,
+	};
+}
+
+function fail<T>(message: string, details: T): AgentToolResult<T> {
 	return {
 		content: [{ type: "text", text: message }],
 		details,
@@ -20,8 +30,19 @@ function ok<T>(message: string, details: T): AgentToolResult<T> {
 function requestCompact(
 	ctx: ExtensionContext,
 	getCompactor: CompactionCoordinatorResolver,
+	getDirtyMemory: DirtyMemoryResolver | undefined,
 	params: Static<typeof requestCompactSchema>,
 ): AgentToolResult<unknown> {
+	if (getDirtyMemory) {
+		const memoryPolicy = checkMemoryPolicy({
+			operation: "request_compact",
+			dirty: getDirtyMemory(ctx.cwd),
+		});
+		if (memoryPolicy.kind === "block") {
+			return fail(memoryPolicy.message, { memoryPolicy });
+		}
+	}
+
 	const result = getCompactor(ctx.cwd).requestCompact(ctx, params);
 	if (result.kind === "already_pending") {
 		return ok("Planner compaction is already pending.", result);
@@ -64,6 +85,7 @@ const requestCompactSchema = Type.Object({
 
 export function createPlannerCompactionTools(
 	getCompactor: CompactionCoordinatorResolver,
+	getDirtyMemory?: DirtyMemoryResolver,
 ): ToolDefinition[] {
 	return [
 		{
@@ -82,7 +104,10 @@ export function createPlannerCompactionTools(
 				_signal,
 				_onUpdate,
 				ctx,
-			) => Promise.resolve(requestCompact(ctx, getCompactor, params)),
+			) =>
+				Promise.resolve(
+					requestCompact(ctx, getCompactor, getDirtyMemory, params),
+				),
 		},
 	];
 }

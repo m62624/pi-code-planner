@@ -134,3 +134,18 @@ Later stages should prefer search/context tools and only update dirty files.
 Automatic dirty tracking from Pi edit/write events is intentionally a separate
 integration layer. Until that exists, `planner_memory_mark_dirty` is the safe
 manual API.
+
+## Blocking Policy
+
+Dirty memory currently blocks protected public tools:
+
+- `planner_request_compact`
+- `planner_request_discovery_compact`
+- `planner_request_work_item_compact`
+- `planner_finish_work_item`
+- `planner_transition_work_item` when moving to `work_item_compact_required`
+
+The intent is that an atomic work item cannot commit or compact until
+`signature_refresh` updates memory and clears dirty files. Policy is wired
+through tool factories as an optional dependency, so later settings can control
+which operations enforce it.

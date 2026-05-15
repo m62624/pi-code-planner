@@ -7,8 +7,11 @@ import { type Static, type TSchema, Type } from "typebox";
 import type { GitCore } from "../git/core";
 import { GitMutationRejected } from "../git/mutations";
 import type { GitPreflightOperation } from "../git/preflight";
+import { checkMemoryPolicy } from "../memory/policy";
+import type { DirtyMemoryState } from "../memory/schema";
 
 export type GitCoreResolver = (cwd: string) => GitCore;
+export type DirtyMemoryResolver = (cwd: string) => DirtyMemoryState;
 
 function ok<T>(message: string, details: T): AgentToolResult<T> {
 	return {
@@ -27,6 +30,7 @@ function fail<T>(message: string, details: T): AgentToolResult<T> {
 async function withPreflight<TDetails>(
 	ctx: ExtensionContext,
 	getCore: GitCoreResolver,
+	getDirtyMemory: DirtyMemoryResolver | undefined,
 	operation: GitPreflightOperation,
 	run: (core: GitCore) => Promise<AgentToolResult<TDetails>>,
 ): Promise<AgentToolResult<TDetails | unknown>> {
@@ -34,6 +38,16 @@ async function withPreflight<TDetails>(
 	const preflight = await core.preflight.check(operation);
 	if (!preflight.allowed) {
 		return fail(preflight.message, { preflight });
+	}
+
+	if (operation === "finish_work_item" && getDirtyMemory) {
+		const memoryPolicy = checkMemoryPolicy({
+			operation: "finish_work_item",
+			dirty: getDirtyMemory(ctx.cwd),
+		});
+		if (memoryPolicy.kind === "block") {
+			return fail(memoryPolicy.message, { memoryPolicy });
+		}
 	}
 
 	try {
@@ -102,6 +116,7 @@ const hardResetSchema = Type.Object({
 
 export function createPlannerGitTools(
 	getCore: GitCoreResolver,
+	getDirtyMemory?: DirtyMemoryResolver,
 ): ToolDefinition[] {
 	return [
 		tool({
@@ -111,10 +126,16 @@ export function createPlannerGitTools(
 				"Initialize git for the current project when planner requires it.",
 			parameters: emptySchema,
 			execute: (_id, _params, _signal, _onUpdate, ctx) =>
-				withPreflight(ctx, getCore, "initialize_repo", async (core) => {
-					const mutation = await core.mutations.initializeRepo();
-					return ok("Git repository initialized.", mutation);
-				}),
+				withPreflight(
+					ctx,
+					getCore,
+					getDirtyMemory,
+					"initialize_repo",
+					async (core) => {
+						const mutation = await core.mutations.initializeRepo();
+						return ok("Git repository initialized.", mutation);
+					},
+				),
 		}),
 		tool({
 			name: "planner_start_plan",
@@ -129,10 +150,16 @@ export function createPlannerGitTools(
 				_onUpdate,
 				ctx,
 			) =>
-				withPreflight(ctx, getCore, "start_plan", async (core) => {
-					const mutation = await core.mutations.createPlanBranch(params);
-					return ok("Planner plan branch created.", mutation);
-				}),
+				withPreflight(
+					ctx,
+					getCore,
+					getDirtyMemory,
+					"start_plan",
+					async (core) => {
+						const mutation = await core.mutations.createPlanBranch(params);
+						return ok("Planner plan branch created.", mutation);
+					},
+				),
 		}),
 		tool({
 			name: "planner_start_work_item",
@@ -147,10 +174,16 @@ export function createPlannerGitTools(
 				_onUpdate,
 				ctx,
 			) =>
-				withPreflight(ctx, getCore, "start_work_item", async (core) => {
-					const mutation = await core.mutations.createChildBranch(params);
-					return ok("Planner work item branch created.", mutation);
-				}),
+				withPreflight(
+					ctx,
+					getCore,
+					getDirtyMemory,
+					"start_work_item",
+					async (core) => {
+						const mutation = await core.mutations.createChildBranch(params);
+						return ok("Planner work item branch created.", mutation);
+					},
+				),
 		}),
 		tool({
 			name: "planner_start_experiment",
@@ -165,10 +198,17 @@ export function createPlannerGitTools(
 				_onUpdate,
 				ctx,
 			) =>
-				withPreflight(ctx, getCore, "start_work_item", async (core) => {
-					const mutation = await core.mutations.createExperimentBranch(params);
-					return ok("Planner experiment branch created.", mutation);
-				}),
+				withPreflight(
+					ctx,
+					getCore,
+					getDirtyMemory,
+					"start_work_item",
+					async (core) => {
+						const mutation =
+							await core.mutations.createExperimentBranch(params);
+						return ok("Planner experiment branch created.", mutation);
+					},
+				),
 		}),
 		tool({
 			name: "planner_select_experiment",
@@ -183,10 +223,17 @@ export function createPlannerGitTools(
 				_onUpdate,
 				ctx,
 			) =>
-				withPreflight(ctx, getCore, "merge_branch", async (core) => {
-					const mutation = await core.mutations.selectExperimentBranch(params);
-					return ok("Planner experiment selected.", mutation);
-				}),
+				withPreflight(
+					ctx,
+					getCore,
+					getDirtyMemory,
+					"merge_branch",
+					async (core) => {
+						const mutation =
+							await core.mutations.selectExperimentBranch(params);
+						return ok("Planner experiment selected.", mutation);
+					},
+				),
 		}),
 		tool({
 			name: "planner_finish_work_item",
@@ -201,10 +248,16 @@ export function createPlannerGitTools(
 				_onUpdate,
 				ctx,
 			) =>
-				withPreflight(ctx, getCore, "finish_work_item", async (core) => {
-					const mutation = await core.mutations.commitWorkItem(params);
-					return ok("Planner work item committed.", mutation);
-				}),
+				withPreflight(
+					ctx,
+					getCore,
+					getDirtyMemory,
+					"finish_work_item",
+					async (core) => {
+						const mutation = await core.mutations.commitWorkItem(params);
+						return ok("Planner work item committed.", mutation);
+					},
+				),
 		}),
 		tool({
 			name: "planner_delete_child_branch",
@@ -218,10 +271,16 @@ export function createPlannerGitTools(
 				_onUpdate,
 				ctx,
 			) =>
-				withPreflight(ctx, getCore, "delete_branch", async (core) => {
-					const mutation = await core.mutations.deleteChildBranch(params);
-					return ok("Planner child branch deleted.", mutation);
-				}),
+				withPreflight(
+					ctx,
+					getCore,
+					getDirtyMemory,
+					"delete_branch",
+					async (core) => {
+						const mutation = await core.mutations.deleteChildBranch(params);
+						return ok("Planner child branch deleted.", mutation);
+					},
+				),
 		}),
 		tool({
 			name: "planner_delete_experiment_branch",
@@ -236,10 +295,17 @@ export function createPlannerGitTools(
 				_onUpdate,
 				ctx,
 			) =>
-				withPreflight(ctx, getCore, "delete_branch", async (core) => {
-					const mutation = await core.mutations.deleteExperimentBranch(params);
-					return ok("Planner experiment branch deleted.", mutation);
-				}),
+				withPreflight(
+					ctx,
+					getCore,
+					getDirtyMemory,
+					"delete_branch",
+					async (core) => {
+						const mutation =
+							await core.mutations.deleteExperimentBranch(params);
+						return ok("Planner experiment branch deleted.", mutation);
+					},
+				),
 		}),
 		tool({
 			name: "planner_accept_current_git_state",
@@ -248,10 +314,16 @@ export function createPlannerGitTools(
 				"Accept the current git branch and commit as the planner expected state.",
 			parameters: emptySchema,
 			execute: (_id, _params, _signal, _onUpdate, ctx) =>
-				withPreflight(ctx, getCore, "recovery", async (core) => {
-					const mutation = await core.mutations.acceptCurrentGitState();
-					return ok("Planner accepted current git state.", mutation);
-				}),
+				withPreflight(
+					ctx,
+					getCore,
+					getDirtyMemory,
+					"recovery",
+					async (core) => {
+						const mutation = await core.mutations.acceptCurrentGitState();
+						return ok("Planner accepted current git state.", mutation);
+					},
+				),
 		}),
 		tool({
 			name: "planner_soft_reset_to_expected",
@@ -259,10 +331,16 @@ export function createPlannerGitTools(
 			description: "Soft reset to the commit stored as planner expected state.",
 			parameters: emptySchema,
 			execute: (_id, _params, _signal, _onUpdate, ctx) =>
-				withPreflight(ctx, getCore, "recovery", async (core) => {
-					const mutation = await core.mutations.softResetToExpected();
-					return ok("Planner soft reset completed.", mutation);
-				}),
+				withPreflight(
+					ctx,
+					getCore,
+					getDirtyMemory,
+					"recovery",
+					async (core) => {
+						const mutation = await core.mutations.softResetToExpected();
+						return ok("Planner soft reset completed.", mutation);
+					},
+				),
 		}),
 		tool({
 			name: "planner_hard_reset_to_expected",
@@ -276,15 +354,21 @@ export function createPlannerGitTools(
 				_onUpdate,
 				ctx,
 			) =>
-				withPreflight(ctx, getCore, "recovery", async (core) => {
-					if (params.confirm !== true) {
-						throw new Error("Hard reset requires confirm=true.");
-					}
-					const mutation = await core.mutations.hardResetToExpected({
-						confirm: true,
-					});
-					return ok("Planner hard reset completed.", mutation);
-				}),
+				withPreflight(
+					ctx,
+					getCore,
+					getDirtyMemory,
+					"recovery",
+					async (core) => {
+						if (params.confirm !== true) {
+							throw new Error("Hard reset requires confirm=true.");
+						}
+						const mutation = await core.mutations.hardResetToExpected({
+							confirm: true,
+						});
+						return ok("Planner hard reset completed.", mutation);
+					},
+				),
 		}),
 	];
 }
