@@ -10,8 +10,10 @@ import {
 	createPlannerOrchestrator,
 	type PlannerOrchestrator,
 } from "./orchestrator/planner-orchestrator";
+import { PlannerRuntimeController } from "./runtime/planner-runtime-controller";
 import { createPlannerCompactionTools } from "./tools/planner-compaction-tools";
 import { createPlannerGitTools } from "./tools/planner-git-tools";
+import { createPlannerRuntimeTools } from "./tools/planner-runtime-tools";
 import { createPlannerWorkflowTools } from "./tools/planner-workflow-tools";
 
 const EXTENSION_NAME = "pi-planner";
@@ -20,6 +22,7 @@ export default function register(pi: ExtensionAPI): void {
 	const cores = new Map<string, GitCore>();
 	const compactors = new Map<string, CompactionCoordinator>();
 	const orchestrators = new Map<string, PlannerOrchestrator>();
+	const runtimeControllers = new Map<string, PlannerRuntimeController>();
 
 	function getCore(cwd: string): GitCore {
 		const cached = cores.get(cwd);
@@ -58,6 +61,18 @@ export default function register(pi: ExtensionAPI): void {
 		return orchestrator;
 	}
 
+	function getRuntimeController(cwd: string): PlannerRuntimeController {
+		const cached = runtimeControllers.get(cwd);
+		if (cached) return cached;
+
+		const controller = new PlannerRuntimeController(
+			getCore(cwd),
+			getOrchestrator(cwd),
+		);
+		runtimeControllers.set(cwd, controller);
+		return controller;
+	}
+
 	for (const tool of createPlannerGitTools(getCore)) {
 		pi.registerTool(tool);
 	}
@@ -65,6 +80,9 @@ export default function register(pi: ExtensionAPI): void {
 		pi.registerTool(tool);
 	}
 	for (const tool of createPlannerWorkflowTools(getOrchestrator)) {
+		pi.registerTool(tool);
+	}
+	for (const tool of createPlannerRuntimeTools(getRuntimeController)) {
 		pi.registerTool(tool);
 	}
 

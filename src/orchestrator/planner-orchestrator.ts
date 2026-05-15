@@ -104,6 +104,18 @@ export class PlannerOrchestrator {
 		);
 	}
 
+	readPlan(planId: string): PlanRecord {
+		return this.options.store.readPlan(this.options.projectPath, planId);
+	}
+
+	readWorkItem(planId: string, workItemId: string): WorkItemRecord {
+		return this.options.store.readWorkItem(
+			this.options.projectPath,
+			planId,
+			workItemId,
+		);
+	}
+
 	transitionWorkItem(
 		planId: string,
 		workItemId: string,

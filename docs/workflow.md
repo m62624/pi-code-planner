@@ -353,6 +353,12 @@ visible `NEXT PLANNER INSTRUCTION` block in the tool result text. This keeps Pi'
 static tool hints small while letting the extension inject the exact next
 planner instruction for the active plan or work item.
 
+The model can call `planner_runtime_status` when state is unclear. That tool is
+read-only: it checks runtime state, git recovery state, active records, and the
+next prompt. If it reports `compact_pending` or `recovery_required`, normal
+implementation work must stop until the matching compact or recovery path is
+handled.
+
 ## Git Rules
 
 - Child branch must be clean and committed before any experiment branch is

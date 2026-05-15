@@ -97,6 +97,7 @@ describe("extension entrypoint", () => {
 				"planner_request_compact",
 				"planner_create_plan",
 				"planner_transition_work_item",
+				"planner_runtime_status",
 			]),
 		);
 	});
@@ -126,6 +127,36 @@ describe("extension entrypoint", () => {
 				artifactPaths: expect.arrayContaining([
 					expect.stringContaining("/plans/plan-1/plan.md"),
 				]),
+			},
+		});
+	});
+
+	it("connects runtime status to active planner recovery checks", async () => {
+		const { tools } = createRegisteredExtension();
+		const ctx = context(join(tempRoot, "project"));
+		const createPlan = toolByName(tools, "planner_create_plan");
+		const runtimeStatus = toolByName(tools, "planner_runtime_status");
+
+		await createPlan.execute(
+			"call-1",
+			{ title: "Parser plan", planId: "plan-1" },
+			undefined,
+			undefined,
+			ctx,
+		);
+		const result = await runtimeStatus.execute(
+			"call-2",
+			{},
+			undefined,
+			undefined,
+			ctx,
+		);
+
+		expect(result.content[0].text).toBe("Git repository is missing.");
+		expect(result.details).toMatchObject({
+			status: "recovery_required",
+			recovery: {
+				status: "init_required",
 			},
 		});
 	});

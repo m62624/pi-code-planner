@@ -158,6 +158,33 @@ Exports parse/load/save/update/initialize helpers for `state.json`.
 Exports `RuntimeStateManager`, the cache + persistence wrapper used by git
 mutations and future workflow managers.
 
+### `src/runtime/planner-runtime-controller.ts`
+
+Exports:
+
+- `PlannerRuntimeController`
+- `PlannerRuntimeInspection`
+- `PlannerRuntimeStatus`
+
+This is the first read-only runtime facade over active planner state. It
+combines:
+
+- persisted runtime state
+- current git recovery analysis
+- active plan/work item records
+- next prompt assembly from `PlannerOrchestrator`
+
+The controller returns one of:
+
+- `idle`
+- `ready`
+- `compact_pending`
+- `recovery_required`
+
+It does not mutate git or workflow records. Future cycle managers should use it
+as the common entrypoint before deciding whether discovery, TODO, TDD,
+selection, refactor, verification, or recovery may proceed.
+
 ## Compaction Layer
 
 ### `src/compaction/coordinator.ts`
@@ -202,8 +229,10 @@ This is the first internal facade for future workflow tools. It coordinates:
 Current public methods:
 
 - `createPlan(input)`
+- `readPlan(planId)`
 - `transitionPlan(planId, to)`
 - `createWorkItem(planId, input)`
+- `readWorkItem(planId, workItemId)`
 - `transitionWorkItem(planId, workItemId, to)`
 - `requestDiscoveryCompact(ctx, planId, input)`
 - `completeDiscoveryCompact(planId)`
@@ -428,6 +457,21 @@ NEXT PLANNER INSTRUCTION
 Static Pi `promptGuidelines` explain when the tools should be used, but runtime
 stage instructions are delivered through the tool result so they can include the
 current plan/work item state and artifact paths.
+
+### `src/tools/planner-runtime-tools.ts`
+
+Exports:
+
+- `createPlannerRuntimeTools(getController)`
+
+Registered tool names:
+
+- `planner_runtime_status`
+
+This tool exposes the read-only runtime controller to the model. It reports
+whether planner is idle, ready, blocked by compact, or blocked by recovery. When
+the controller has a next prompt, the tool text includes the same
+`NEXT PLANNER INSTRUCTION` block used by workflow tools.
 
 ### `src/tools/planner-git-tools.ts`
 
