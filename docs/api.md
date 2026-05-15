@@ -409,3 +409,7 @@ Exports:
 These pure validators decide whether a requested stage transition is allowed.
 They do not mutate storage. Future workflow managers/tools should call these
 before updating `plan.json`, `work_item.json`, or `attempt.json`.
+
+Work item transitions include explicit `work_item_commit`, `signature_refresh`,
+and `work_item_compact_required` stages so a completed item cannot skip the
+planner-controlled commit, memory refresh, and compact boundary.

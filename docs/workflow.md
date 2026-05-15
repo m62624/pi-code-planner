@@ -76,14 +76,17 @@ controlled by the extension.
     - Changed files/symbols are reindexed.
     - Project memory is updated without full rediscovery unless required.
 
-13. `work_item_compact_required`
+13. `signature_refresh`
+    - Changed files/symbols are reindexed after an atomic committed work item.
+
+14. `work_item_compact_required`
     - The extension requires compaction after an atomic committed work item.
 
-14. `plan_finalize`
+15. `plan_finalize`
     - All required work items are complete.
     - The user decides whether to merge/archive/cancel the plan.
 
-15. `recovery_required`
+16. `recovery_required`
     - Runtime state and git state diverged, or a crash left a pending operation.
     - Normal transitions are blocked until recovery is resolved.
 
@@ -310,13 +313,28 @@ The extension creates the final work item commit on the child branch. It updates
 - stub registry
 - verification artifacts
 
-### 13. Refresh Memory And Compact
+### 13. Refresh Memory
 
 Changed symbols/files are reindexed. The signature index and project memory are
 updated incrementally.
 
-The extension then requires compaction. After compact, the model must continue
-from memory/index artifacts instead of rereading the full project.
+The model must continue from memory/index artifacts instead of rereading the full
+project.
+
+### 14. Require Work Item Compact
+
+After memory refresh, the work item enters `work_item_compact_required`. Normal
+work on the next item is blocked until compaction happens.
+
+The compact instruction must preserve:
+
+- current plan id
+- completed work item id
+- summary of the committed change
+- next expected stage
+- instruction to continue from memory/index artifacts
+
+After compact completes, the work item can enter `completed`.
 
 ## Git Rules
 
@@ -330,4 +348,3 @@ from memory/index artifacts instead of rereading the full project.
 - Rejected experiment branches can be deleted after summaries/scores are saved.
 - Planner git tools are the only allowed way to commit, switch, merge, reset, or
   delete planner-managed branches while a plan is active.
-

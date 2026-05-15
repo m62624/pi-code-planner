@@ -68,4 +68,3 @@ Not implemented yet:
 Markdown tells the model how to think. JSON/state tells the extension what it
 can validate and enforce. Git operations must go through planner-controlled
 layers while a plan is active.
-

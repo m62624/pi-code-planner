@@ -124,7 +124,10 @@ describe("work item workflow transitions", () => {
 		["candidate_selection", "candidate_merged"],
 		["candidate_merged", "refactor"],
 		["refactor", "verification"],
-		["verification", "completed"],
+		["verification", "work_item_commit"],
+		["work_item_commit", "signature_refresh"],
+		["signature_refresh", "work_item_compact_required"],
+		["work_item_compact_required", "completed"],
 	] as const)("allows happy path %s -> %s", (from, to) => {
 		expect(canTransitionWorkItem(from, to).allowed).toBe(true);
 	});
@@ -155,6 +158,18 @@ describe("work item workflow transitions", () => {
 		expect(
 			canTransitionWorkItem("verification", "experiments_running").allowed,
 		).toBe(true);
+	});
+
+	it("blocks direct completion before commit and compact stages", () => {
+		expect(canTransitionWorkItem("verification", "completed").allowed).toBe(
+			false,
+		);
+		expect(canTransitionWorkItem("work_item_commit", "completed").allowed).toBe(
+			false,
+		);
+		expect(
+			canTransitionWorkItem("signature_refresh", "completed").allowed,
+		).toBe(false);
 	});
 
 	it("blocks implementation experiments before test commit", () => {
@@ -193,6 +208,9 @@ describe("work item workflow transitions", () => {
 			"candidate_selection",
 			"refactor",
 			"verification",
+			"work_item_commit",
+			"signature_refresh",
+			"work_item_compact_required",
 		] as const) {
 			expect(canTransitionWorkItem("blocked", target).allowed).toBe(true);
 		}
