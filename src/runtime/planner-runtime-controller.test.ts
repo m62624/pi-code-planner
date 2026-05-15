@@ -93,6 +93,7 @@ function createHarness(repo: RepoState = repoState()) {
 		{ state: runtime, readRepoState },
 		orchestrator,
 		memory,
+		DEFAULT_SETTINGS.memory,
 	);
 
 	return { controller, fs, memory, orchestrator, readRepoState, runtime };
@@ -224,6 +225,16 @@ describe("PlannerRuntimeController", () => {
 		expect(inspection).toMatchObject({
 			status: "recovery_required",
 			nextPrompt: null,
+			memory: {
+				hasDirtyFiles: true,
+				dirty: {
+					files: {
+						"src/app.ts": {
+							reason: "git status changed",
+						},
+					},
+				},
+			},
 			recovery: {
 				status: "dirty_worktree",
 			},

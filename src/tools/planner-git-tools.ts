@@ -12,7 +12,9 @@ import type { DirtyMemoryState } from "../memory/schema";
 import type { MemoryDirtyPolicySettings } from "../settings/schema";
 
 export type GitCoreResolver = (cwd: string) => GitCore;
-export type DirtyMemoryResolver = (cwd: string) => DirtyMemoryState;
+export type DirtyMemoryResolver = (
+	cwd: string,
+) => DirtyMemoryState | Promise<DirtyMemoryState>;
 export type MemoryDirtyPolicyResolver = (
 	cwd: string,
 ) => MemoryDirtyPolicySettings;
@@ -40,6 +42,7 @@ async function withPreflight<TDetails>(
 	run: (core: GitCore) => Promise<AgentToolResult<TDetails>>,
 ): Promise<AgentToolResult<TDetails | unknown>> {
 	const core = getCore(ctx.cwd);
+	const dirty = getDirtyMemory ? await getDirtyMemory(ctx.cwd) : null;
 	const preflight = await core.preflight.check(operation);
 	if (!preflight.allowed) {
 		return fail(preflight.message, { preflight });
@@ -47,12 +50,12 @@ async function withPreflight<TDetails>(
 
 	if (
 		operation === "finish_work_item" &&
-		getDirtyMemory &&
+		dirty &&
 		(getMemoryDirtyPolicy?.(ctx.cwd).blockWorkItemCommit ?? true)
 	) {
 		const memoryPolicy = checkMemoryPolicy({
 			operation: "finish_work_item",
-			dirty: getDirtyMemory(ctx.cwd),
+			dirty,
 		});
 		if (memoryPolicy.kind === "block") {
 			return fail(memoryPolicy.message, { memoryPolicy });

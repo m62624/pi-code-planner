@@ -12,7 +12,9 @@ import type { MemoryDirtyPolicySettings } from "../settings/schema";
 export type CompactionCoordinatorResolver = (
 	cwd: string,
 ) => CompactionCoordinator;
-export type DirtyMemoryResolver = (cwd: string) => DirtyMemoryState;
+export type DirtyMemoryResolver = (
+	cwd: string,
+) => DirtyMemoryState | Promise<DirtyMemoryState>;
 export type MemoryDirtyPolicyResolver = (
 	cwd: string,
 ) => MemoryDirtyPolicySettings;
@@ -31,20 +33,18 @@ function fail<T>(message: string, details: T): AgentToolResult<T> {
 	};
 }
 
-function requestCompact(
+async function requestCompact(
 	ctx: ExtensionContext,
 	getCompactor: CompactionCoordinatorResolver,
 	getDirtyMemory: DirtyMemoryResolver | undefined,
 	getMemoryDirtyPolicy: MemoryDirtyPolicyResolver | undefined,
 	params: Static<typeof requestCompactSchema>,
-): AgentToolResult<unknown> {
-	if (
-		getDirtyMemory &&
-		(getMemoryDirtyPolicy?.(ctx.cwd).blockCompact ?? true)
-	) {
+): Promise<AgentToolResult<unknown>> {
+	const dirty = getDirtyMemory ? await getDirtyMemory(ctx.cwd) : null;
+	if (dirty && (getMemoryDirtyPolicy?.(ctx.cwd).blockCompact ?? true)) {
 		const memoryPolicy = checkMemoryPolicy({
 			operation: "request_compact",
-			dirty: getDirtyMemory(ctx.cwd),
+			dirty,
 		});
 		if (memoryPolicy.kind === "block") {
 			return fail(memoryPolicy.message, { memoryPolicy });
@@ -114,14 +114,12 @@ export function createPlannerCompactionTools(
 				_onUpdate,
 				ctx,
 			) =>
-				Promise.resolve(
-					requestCompact(
-						ctx,
-						getCompactor,
-						getDirtyMemory,
-						getMemoryDirtyPolicy,
-						params,
-					),
+				requestCompact(
+					ctx,
+					getCompactor,
+					getDirtyMemory,
+					getMemoryDirtyPolicy,
+					params,
 				),
 		},
 	];

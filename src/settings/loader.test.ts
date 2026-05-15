@@ -83,6 +83,8 @@ describe("loadPlannerSettings", () => {
 
 		const loaded = loadPlannerSettings(paths, fs);
 
+		expect(loaded.settings.memory.autoDirtyTracking).toBe(true);
+		expect(loaded.settings.memory.dirtyPathIgnorePrefixes).toContain("dist/");
 		expect(loaded.settings.memory.dirtyPolicy).toEqual({
 			blockCompact: true,
 			blockWorkItemCommit: true,
@@ -102,6 +104,8 @@ describe("loadPlannerSettings", () => {
 			paths.projectSettings,
 			JSON.stringify({
 				memory: {
+					autoDirtyTracking: false,
+					dirtyPathIgnorePrefixes: ["generated/"],
 					dirtyPolicy: {
 						blockCompact: false,
 					},
@@ -116,6 +120,10 @@ describe("loadPlannerSettings", () => {
 			blockWorkItemCommit: true,
 			blockSignatureRefreshExit: true,
 		});
+		expect(loaded.settings.memory.autoDirtyTracking).toBe(false);
+		expect(loaded.settings.memory.dirtyPathIgnorePrefixes).toEqual([
+			"generated/",
+		]);
 	});
 
 	it("project settings override git guardrail arrays and flags", () => {

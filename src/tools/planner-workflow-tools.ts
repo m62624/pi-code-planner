@@ -15,7 +15,9 @@ import { WorkflowTransitionRejected } from "../workflow/manager";
 import { PLAN_STAGES, WORK_ITEM_STAGES } from "../workflow/schema";
 
 export type PlannerOrchestratorResolver = (cwd: string) => PlannerOrchestrator;
-export type DirtyMemoryResolver = (cwd: string) => DirtyMemoryState;
+export type DirtyMemoryResolver = (
+	cwd: string,
+) => DirtyMemoryState | Promise<DirtyMemoryState>;
 export type MemoryDirtyPolicyResolver = (
 	cwd: string,
 ) => MemoryDirtyPolicySettings;
@@ -76,13 +78,14 @@ function runWorkflow<T>(
 	}
 }
 
-function memoryPolicyFailure(
+async function memoryPolicyFailure(
 	cwd: string,
 	getDirtyMemory: DirtyMemoryResolver | undefined,
 	getMemoryDirtyPolicy: MemoryDirtyPolicyResolver | undefined,
 	operation: "request_compact" | "transition_from_signature_refresh",
-): AgentToolResult<unknown> | null {
+): Promise<AgentToolResult<unknown> | null> {
 	if (!getDirtyMemory) return null;
+	const dirty = await getDirtyMemory(cwd);
 	const settings = getMemoryDirtyPolicy?.(cwd);
 	if (operation === "request_compact" && settings?.blockCompact === false) {
 		return null;
@@ -95,7 +98,7 @@ function memoryPolicyFailure(
 	}
 	const memoryPolicy = checkMemoryPolicy({
 		operation,
-		dirty: getDirtyMemory(cwd),
+		dirty,
 	});
 	if (memoryPolicy.kind === "allow") return null;
 	return fail(memoryPolicy.message, { memoryPolicy });
@@ -281,7 +284,7 @@ export function createPlannerWorkflowTools(
 			parameters: transitionWorkItemSchema,
 			executionMode: "sequential",
 			renderShell: "default",
-			execute: (
+			execute: async (
 				_id,
 				params: Static<typeof transitionWorkItemSchema>,
 				_signal,
@@ -289,31 +292,29 @@ export function createPlannerWorkflowTools(
 				ctx,
 			) => {
 				if (params.stage === "work_item_compact_required") {
-					const failure = memoryPolicyFailure(
+					const failure = await memoryPolicyFailure(
 						ctx.cwd,
 						getDirtyMemory,
 						getMemoryDirtyPolicy,
 						"transition_from_signature_refresh",
 					);
-					if (failure) return Promise.resolve(failure);
+					if (failure) return failure;
 				}
-				return Promise.resolve(
-					runWorkflow(() => {
-						const orchestrator = getOrchestrator(ctx.cwd);
-						const result = orchestrator.transitionWorkItem(
+				return runWorkflow(() => {
+					const orchestrator = getOrchestrator(ctx.cwd);
+					const result = orchestrator.transitionWorkItem(
+						params.planId,
+						params.workItemId,
+						params.stage,
+					);
+					return {
+						result,
+						nextPrompt: orchestrator.buildWorkItemStagePrompt(
 							params.planId,
-							params.workItemId,
-							params.stage,
-						);
-						return {
-							result,
-							nextPrompt: orchestrator.buildWorkItemStagePrompt(
-								params.planId,
-								result.current.workItemId,
-							),
-						};
-					}, "Planner work item transitioned."),
-				);
+							result.current.workItemId,
+						),
+					};
+				}, "Planner work item transitioned.");
 			},
 		},
 		{
@@ -325,39 +326,37 @@ export function createPlannerWorkflowTools(
 			parameters: requestDiscoveryCompactSchema,
 			executionMode: "sequential",
 			renderShell: "default",
-			execute: (
+			execute: async (
 				_id,
 				params: Static<typeof requestDiscoveryCompactSchema>,
 				_signal,
 				_onUpdate,
 				ctx,
 			) => {
-				const failure = memoryPolicyFailure(
+				const failure = await memoryPolicyFailure(
 					ctx.cwd,
 					getDirtyMemory,
 					getMemoryDirtyPolicy,
 					"request_compact",
 				);
-				if (failure) return Promise.resolve(failure);
-				return Promise.resolve(
-					runWorkflow(() => {
-						const orchestrator = getOrchestrator(ctx.cwd);
-						const result = orchestrator.requestDiscoveryCompact(
-							ctx,
-							params.planId,
-							{
-								customInstructions: params.customInstructions,
-								resumePrompt: params.resumePrompt,
-								attachToNextTurn: params.attachToNextTurn,
-								autoResume: params.autoResume,
-							},
-						);
-						return {
-							result,
-							nextPrompt: orchestrator.buildPlanStagePrompt(params.planId),
-						};
-					}, "Planner discovery compaction requested."),
-				);
+				if (failure) return failure;
+				return runWorkflow(() => {
+					const orchestrator = getOrchestrator(ctx.cwd);
+					const result = orchestrator.requestDiscoveryCompact(
+						ctx,
+						params.planId,
+						{
+							customInstructions: params.customInstructions,
+							resumePrompt: params.resumePrompt,
+							attachToNextTurn: params.attachToNextTurn,
+							autoResume: params.autoResume,
+						},
+					);
+					return {
+						result,
+						nextPrompt: orchestrator.buildPlanStagePrompt(params.planId),
+					};
+				}, "Planner discovery compaction requested.");
 			},
 		},
 		{
@@ -398,37 +397,35 @@ export function createPlannerWorkflowTools(
 			parameters: requestWorkItemCompactSchema,
 			executionMode: "sequential",
 			renderShell: "default",
-			execute: (
+			execute: async (
 				_id,
 				params: Static<typeof requestWorkItemCompactSchema>,
 				_signal,
 				_onUpdate,
 				ctx,
 			) => {
-				const failure = memoryPolicyFailure(
+				const failure = await memoryPolicyFailure(
 					ctx.cwd,
 					getDirtyMemory,
 					getMemoryDirtyPolicy,
 					"request_compact",
 				);
-				if (failure) return Promise.resolve(failure);
-				return Promise.resolve(
-					runWorkflow(() => {
-						const orchestrator = getOrchestrator(ctx.cwd);
-						const result = orchestrator.requestWorkItemCompact(
-							ctx,
+				if (failure) return failure;
+				return runWorkflow(() => {
+					const orchestrator = getOrchestrator(ctx.cwd);
+					const result = orchestrator.requestWorkItemCompact(
+						ctx,
+						params.planId,
+						params,
+					);
+					return {
+						result,
+						nextPrompt: orchestrator.buildWorkItemStagePrompt(
 							params.planId,
-							params,
-						);
-						return {
-							result,
-							nextPrompt: orchestrator.buildWorkItemStagePrompt(
-								params.planId,
-								params.workItemId,
-							),
-						};
-					}, "Planner work item compaction requested."),
-				);
+							params.workItemId,
+						),
+					};
+				}, "Planner work item compaction requested.");
 			},
 		},
 		{

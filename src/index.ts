@@ -7,6 +7,7 @@ import {
 	checkPlannerUserBash,
 } from "./git/tool-call-events";
 import { createMemoryCore, type MemoryCore } from "./memory/core";
+import { syncDirtyMemoryFromRepo } from "./memory/dirty-sync";
 import {
 	createPlannerOrchestrator,
 	type PlannerOrchestrator,
@@ -72,6 +73,7 @@ export default function register(pi: ExtensionAPI): void {
 			getCore(cwd),
 			getOrchestrator(cwd),
 			getMemoryCore(cwd),
+			getCore(cwd).settings.settings.memory,
 		);
 		runtimeControllers.set(cwd, controller);
 		return controller;
@@ -91,8 +93,17 @@ export default function register(pi: ExtensionAPI): void {
 		return memory;
 	}
 
-	const getDirtyMemory = (cwd: string) =>
-		getMemoryCore(cwd).store.getDirtyFiles();
+	const getDirtyMemory = async (cwd: string) => {
+		const core = getCore(cwd);
+		const memory = getMemoryCore(cwd);
+		const repo = await core.readRepoState();
+		return syncDirtyMemoryFromRepo({
+			plannerState: core.state.get(),
+			memory: memory.store,
+			repo,
+			settings: core.settings.settings.memory,
+		}).dirty;
+	};
 	const getMemoryDirtyPolicy = (cwd: string) =>
 		getCore(cwd).settings.settings.memory.dirtyPolicy;
 

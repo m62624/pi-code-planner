@@ -233,6 +233,23 @@ dirty. Current protected operation names are `request_compact`,
 The policy is currently enforced by public compact/workflow/git tools when a
 memory resolver is supplied by the entrypoint.
 
+### `src/memory/dirty-sync.ts`
+
+Exports:
+
+- `SyncDirtyMemoryFromRepoInput`
+- `SyncDirtyMemoryFromRepoResult`
+- `syncDirtyMemoryFromRepo(input)`
+
+Synchronizes project memory dirty files from `RepoState.status` while a planner
+session is active. It collects staged, unstaged, untracked, conflicted, and
+renamed paths, filters ignored prefixes from `memory.dirtyPathIgnorePrefixes`,
+and calls `ProjectMemoryStore.markFilesDirty(...)`.
+
+This module is intentionally syntactic. It does not parse source code or update
+symbols. Semantic repair belongs to the later `signature_refresh` workflow
+stage.
+
 ## Prompt Layer
 
 ### `src/prompts/assembler.ts`

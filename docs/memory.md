@@ -81,14 +81,18 @@ unknown languages in one core representation.
 
 ## Dirty Files
 
-After any model edit/write result, the extension should mark changed files dirty.
+When a plan is active, the extension syncs dirty memory from `git status`.
+Staged, unstaged, untracked, conflicted, and renamed paths are marked dirty
+unless ignored by settings. This catches edits made through Pi tools, shell
+commands, formatters, or external editors.
+
 Dirty marking does not reindex immediately. It blocks later commit/compact
 boundaries until `signature_refresh` updates affected memory entries.
 
 The intended rule is:
 
-- edit/write happens
-- changed files are marked dirty
+- code changes happen
+- changed files are marked dirty from git status
 - work continues inside the current atomic stage
 - before commit/compact, dirty memory must be refreshed or explicitly resolved
 
@@ -131,9 +135,12 @@ The current public API is:
 Discovery should use upsert tools to build file, symbol, and relation indexes.
 Later stages should prefer search/context tools and only update dirty files.
 
-Automatic dirty tracking from Pi edit/write events is intentionally a separate
-integration layer. Until that exists, `planner_memory_mark_dirty` is the safe
-manual API.
+Automatic dirty tracking is git-status based, not edit-tool based. The extension
+does not try to semantically update symbols during this sync; it only records
+which files are stale. `signature_refresh` is the model-facing stage that reads
+dirty files, updates file/symbol/relation memory, verifies entries, and clears
+dirty flags. `planner_memory_mark_dirty` remains the safe manual API for unusual
+cases.
 
 ## Blocking Policy
 

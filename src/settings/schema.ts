@@ -41,6 +41,8 @@ export interface MemoryDirtyPolicySettings {
 
 export interface MemorySettings {
 	dirtyPolicy: MemoryDirtyPolicySettings;
+	autoDirtyTracking: boolean;
+	dirtyPathIgnorePrefixes: string[];
 }
 
 export interface PlannerSettings {
@@ -68,6 +70,8 @@ export type PartialPlannerSettings = Partial<{
 	git: Partial<GitSettings>;
 	memory: Partial<{
 		dirtyPolicy: Partial<MemoryDirtyPolicySettings>;
+		autoDirtyTracking: boolean;
+		dirtyPathIgnorePrefixes: string[];
 	}>;
 	verificationCommands: string[];
 }>;

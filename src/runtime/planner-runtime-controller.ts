@@ -2,11 +2,13 @@ import type { GitRecoveryAnalysis } from "../git/recovery";
 import { analyzeGitRecovery } from "../git/recovery";
 import type { RepoState } from "../git/state";
 import type { MemoryCore } from "../memory/core";
+import { syncDirtyMemoryFromRepo } from "../memory/dirty-sync";
 import type { DirtyMemoryState } from "../memory/schema";
 import type { PlannerOrchestrator } from "../orchestrator/planner-orchestrator";
 import type { RuntimeStateManager } from "../planner-state/runtime";
 import type { PlannerRuntimeState } from "../planner-state/schema";
 import type { AssemblePlannerPromptResult } from "../prompts/assembler";
+import type { MemorySettings } from "../settings/schema";
 import type { PlanRecord, WorkItemRecord } from "../storage/schema";
 
 export type PlannerRuntimeStatus =
@@ -41,13 +43,14 @@ export class PlannerRuntimeController {
 		private core: PlannerRuntimeControllerCore,
 		private orchestrator: PlannerOrchestrator,
 		private memory?: MemoryCore,
+		private memorySettings?: MemorySettings,
 	) {}
 
 	async inspect(): Promise<PlannerRuntimeInspection> {
 		const state = this.core.state.get();
 		const repo = await this.core.readRepoState();
 		const recovery = analyzeGitRecovery(state, repo);
-		const memory = this.memorySnapshot();
+		const memory = this.memorySnapshot(state, repo);
 
 		if (recovery.status === "inactive") {
 			return this.result({
@@ -166,8 +169,19 @@ export class PlannerRuntimeController {
 		}
 	}
 
-	private memorySnapshot(): PlannerRuntimeInspection["memory"] {
-		const dirty = this.memory?.store.getDirtyFiles() ?? { files: {} };
+	private memorySnapshot(
+		state: PlannerRuntimeState,
+		repo: RepoState,
+	): PlannerRuntimeInspection["memory"] {
+		const dirty =
+			this.memory && this.memorySettings
+				? syncDirtyMemoryFromRepo({
+						plannerState: state,
+						memory: this.memory.store,
+						repo,
+						settings: this.memorySettings,
+					}).dirty
+				: (this.memory?.store.getDirtyFiles() ?? { files: {} });
 		return {
 			dirty,
 			hasDirtyFiles: Object.keys(dirty.files).length > 0,

@@ -57,13 +57,13 @@ Implemented:
 - minimal Pi git tools
 - tool-call guard analysis for direct git commands
 - persisted project memory store
+- memory tools
+- git-status based dirty memory tracking
 - draft workflow document
 
 Not implemented yet:
 
-- memory tools
 - discovery batch manager
-- automatic edit/write dirty-file event integration
 - stub marker registry
 - signature index generation
 - full planner tools above git tools

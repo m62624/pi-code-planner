@@ -48,6 +48,15 @@ export const DEFAULT_SETTINGS: PlannerSettings = {
 		archiveChildPlans: false,
 	},
 	memory: {
+		autoDirtyTracking: true,
+		dirtyPathIgnorePrefixes: [
+			".git/",
+			".pi/extensions/pi-planner/",
+			"node_modules/",
+			"dist/",
+			"coverage/",
+			".turbo/",
+		],
 		dirtyPolicy: {
 			blockCompact: true,
 			blockWorkItemCommit: true,
