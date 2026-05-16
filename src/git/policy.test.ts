@@ -266,12 +266,12 @@ describe("checkGitPolicy branch operations", () => {
 		});
 	});
 
-	it("allows switch without explicit target when mutation provides it", () => {
+	it("requires a target branch before switching", () => {
 		const result = check({ operation: "switch_branch" });
 
 		expect(result).toMatchObject({
-			kind: "allow",
-			reason: "allowed",
+			kind: "block",
+			reason: "missing_target_branch",
 		});
 	});
 

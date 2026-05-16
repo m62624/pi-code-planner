@@ -1,3 +1,6 @@
+import type {
+	PlannerRuntimeState,
+} from "../planner-state/schema";
 import type { RuntimeStateManager } from "../planner-state/runtime";
 import {
 	checkGitPolicy,
@@ -85,6 +88,21 @@ function blockForRecovery(
 	);
 }
 
+function resolveTargetBranch(plannerState: PlannerRuntimeState): string | null {
+	if (!plannerState.activeWorkItemId) {
+		return null;
+	}
+	for (const branch of Object.values(plannerState.branches.items)) {
+		if (
+			branch.kind === "child" &&
+			branch.workItemId === plannerState.activeWorkItemId
+		) {
+			return branch.name;
+		}
+	}
+	return null;
+}
+
 export function createGitPreflightService(
 	deps: GitPreflightServiceDeps,
 ): GitPreflightService {
@@ -141,6 +159,11 @@ export function createGitPreflightService(
 				return blockForRecovery(operation, repoState, recovery);
 			}
 
+			const targetBranch =
+				operation === "merge_branch" || operation === "switch_branch"
+					? resolveTargetBranch(plannerState)
+					: undefined;
+
 			const policyOperation: GitPolicyOperation = operation;
 
 			return fromPolicy(
@@ -151,6 +174,7 @@ export function createGitPreflightService(
 					operation: policyOperation,
 					repoState,
 					plannerState,
+					targetBranch,
 				}),
 			);
 		},

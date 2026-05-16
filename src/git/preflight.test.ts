@@ -171,4 +171,96 @@ describe("createGitPreflightService", () => {
 			recovery: { status: "external_commit_change" },
 		});
 	});
+
+	it("resolves target branch from state for merge_branch", async () => {
+		const stateValue = activeState({
+			activeWorkItemId: "work-1",
+			git: {
+				baseBranch: "main",
+				planBranch: "planner/plan-1/main",
+				expectedBranch: "planner/plan-1/work/work-1",
+				expectedCommit: "abc123",
+				lastObservedCommit: "abc123",
+			},
+			branches: {
+				baseBranch: "main",
+				planBranch: "planner/plan-1/main",
+				items: {
+					"planner/plan-1/main": {
+						name: "planner/plan-1/main",
+						kind: "plan",
+						planId: "plan-1",
+						workItemId: null,
+						createdFromCommit: "abc123",
+						lastKnownCommit: "abc123",
+						status: "active",
+					},
+					"planner/plan-1/work/work-1": {
+						name: "planner/plan-1/work/work-1",
+						kind: "child",
+						planId: "plan-1",
+						workItemId: "work-1",
+						createdFromCommit: "abc123",
+						lastKnownCommit: "abc123",
+						status: "active",
+					},
+				},
+			},
+		});
+		const fs = new MemoryFs();
+		savePlannerRuntimeState(paths, fs, stateValue);
+		const state = new RuntimeStateManager({ paths, fs });
+		state.load();
+		const preflight = createGitPreflightService({
+			state,
+			readRepoState: async () =>
+				repo({ currentBranch: "planner/plan-1/work/work-1" }),
+		});
+
+		const decision = await preflight.check("merge_branch");
+
+		expect(decision.allowed).toBe(true);
+		expect(decision.policy?.reason).toBe("allowed");
+	});
+
+	it("blocks merge_branch when no child branch is registered", async () => {
+		const stateValue = activeState({
+			activeWorkItemId: "work-1",
+			git: {
+				baseBranch: "main",
+				planBranch: "planner/plan-1/main",
+				expectedBranch: "planner/plan-1/main",
+				expectedCommit: "abc123",
+				lastObservedCommit: "abc123",
+			},
+			branches: {
+				baseBranch: "main",
+				planBranch: "planner/plan-1/main",
+				items: {
+					"planner/plan-1/main": {
+						name: "planner/plan-1/main",
+						kind: "plan",
+						planId: "plan-1",
+						workItemId: null,
+						createdFromCommit: "abc123",
+						lastKnownCommit: "abc123",
+						status: "active",
+					},
+				},
+			},
+		});
+		const fs = new MemoryFs();
+		savePlannerRuntimeState(paths, fs, stateValue);
+		const state = new RuntimeStateManager({ paths, fs });
+		state.load();
+		const preflight = createGitPreflightService({
+			state,
+			readRepoState: async () => repo(),
+		});
+
+		const decision = await preflight.check("merge_branch");
+
+		expect(decision.allowed).toBe(false);
+		expect(decision.policy?.reason).toBe("missing_target_branch");
+	});
 });
