@@ -235,6 +235,29 @@ describe("ProjectMemoryStore", () => {
 		expect(store.loadManifest().counts.dirtyFiles).toBe(0);
 	});
 
+	it("clears dirty directory entries when refreshed files are cleared", () => {
+		const { store } = createStore();
+		store.markFilesDirty(["src/tui/"], "git status sync");
+
+		store.clearDirtyFiles(["src/tui/footer.ts", "src/tui/history-store.ts"]);
+
+		expect(store.getDirtyFiles().files).toEqual({});
+		expect(store.loadManifest().counts.dirtyFiles).toBe(0);
+	});
+
+	it("clears dirty files inside a cleared directory", () => {
+		const { store } = createStore();
+		store.markFilesDirty(
+			["src/tui/footer.ts", "src/tui/history-store.ts"],
+			"git status sync",
+		);
+
+		store.clearDirtyFiles(["src/tui/"]);
+
+		expect(store.getDirtyFiles().files).toEqual({});
+		expect(store.loadManifest().counts.dirtyFiles).toBe(0);
+	});
+
 	it("verifies symbols by searching source files instead of line numbers", () => {
 		const { fs, store } = createStore();
 		fs.setFile(

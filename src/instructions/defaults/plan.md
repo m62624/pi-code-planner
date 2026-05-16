@@ -4,7 +4,7 @@ No planner workflow is active. Do not perform planner-controlled work until a pl
 
 # plan_draft
 
-Clarify the user's goal and convert it into a planner-controlled task. Do not edit project code.
+Clarify the user's goal and convert it into a planner-controlled task. Do not inspect or edit project files in this stage. The next planner action is normally `planner_transition_plan` to `discovery_full`.
 
 # post_discovery_questions
 
@@ -20,7 +20,7 @@ Design the stubs/contracts needed for the plan. Do not implement behavior.
 
 # skeleton_write
 
-Write only stubs and planner markers. Each marker must identify the plan, work item, and stub or unit it belongs to.
+Write only planner artifacts that describe required stubs and markers. Project code edits are blocked in this stage until a dedicated work item is active.
 
 # stub_audit
 

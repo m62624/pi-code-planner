@@ -435,7 +435,20 @@ export class ProjectMemoryStore {
 		this.initialize();
 		const dirty = this.loadDirty();
 		for (const filePath of filePaths) {
-			delete dirty.files[normalize(filePath)];
+			const normalized = normalize(filePath);
+			delete dirty.files[normalized];
+			const normalizedPrefix = normalized.endsWith("/")
+				? normalized
+				: `${normalized}/`;
+			for (const dirtyPath of Object.keys(dirty.files)) {
+				const prefix = dirtyPath.endsWith("/") ? dirtyPath : `${dirtyPath}/`;
+				if (
+					normalized.startsWith(prefix) ||
+					dirtyPath.startsWith(normalizedPrefix)
+				) {
+					delete dirty.files[dirtyPath];
+				}
+			}
 		}
 		this.saveDirty(dirty);
 		this.refreshManifest();

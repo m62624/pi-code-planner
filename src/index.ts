@@ -15,6 +15,7 @@ import {
 	type PlannerOrchestrator,
 } from "./orchestrator/planner-orchestrator";
 import { PlannerRuntimeController } from "./runtime/planner-runtime-controller";
+import { checkPlannerStageToolCall } from "./runtime/stage-tool-guard";
 import { createPlannerCompactionTools } from "./tools/planner-compaction-tools";
 import { createPlannerCycleTools } from "./tools/planner-cycle-tools";
 import { createPlannerGitTools } from "./tools/planner-git-tools";
@@ -164,7 +165,17 @@ export default function register(pi: ExtensionAPI): void {
 	});
 
 	pi.on("tool_call", async (event, ctx) => {
-		return checkPlannerToolCall(getCore(ctx.cwd), event);
+		const core = getCore(ctx.cwd);
+		const gitGuard = checkPlannerToolCall(core, event);
+		if (gitGuard) return gitGuard;
+
+		const inspection = await getRuntimeController(ctx.cwd).inspect();
+		return checkPlannerStageToolCall({
+			inspection,
+			toolName: event.toolName,
+			input: event.input as Record<string, unknown>,
+			artifactsRoot: core.paths.globalDir,
+		});
 	});
 
 	pi.on("before_agent_start", async (event, ctx) => {

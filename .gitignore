@@ -22,7 +22,7 @@ Cargo.lock
 *.tar.gz
 *.tgz
 *.zip
+pi-session-*.html
 
 .DS_Store
 Thumbs.db
-
