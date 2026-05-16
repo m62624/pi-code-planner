@@ -179,12 +179,6 @@ function checkFinishWorkItem(input: GitPolicyInput): GitPolicyDecision {
 function checkSwitchBranch(input: GitPolicyInput): GitPolicyDecision {
 	const expectedPosition = checkExpectedPlanPosition(input);
 	if (expectedPosition) return expectedPosition;
-	if (!input.targetBranch) {
-		return block(
-			"missing_target_branch",
-			"Switch branch requires a target branch.",
-		);
-	}
 	if (input.repoState.status.hasConflicts) {
 		return block("conflicts", "Cannot switch branches with git conflicts.");
 	}
@@ -200,9 +194,6 @@ function checkSwitchBranch(input: GitPolicyInput): GitPolicyDecision {
 function checkMergeBranch(input: GitPolicyInput): GitPolicyDecision {
 	const expectedPosition = checkExpectedPlanPosition(input);
 	if (expectedPosition) return expectedPosition;
-	if (!input.targetBranch) {
-		return block("missing_target_branch", "Merge requires a target branch.");
-	}
 	if (input.repoState.status.hasConflicts) {
 		return block("conflicts", "Cannot merge while git conflicts exist.");
 	}

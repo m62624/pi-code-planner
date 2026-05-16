@@ -66,7 +66,8 @@ Next stage: `candidate_selection`.
 Goal: choose exactly one winning implementation attempt.
 Allowed: compare attempt artifacts, scores, diff size, correctness, project style fit, maintainability, performance, and integration risk.
 Required tools: `planner_select_experiment` for the winning attempt after scoring all attempts.
-Forbidden: selecting without recorded scores, selecting multiple winners, doing new implementation work.
+Merge flow: `planner_select_experiment` automatically merges the winning experiment branch into the work item's child branch and deletes all experiment branches for that work item. Do not specify a target branch — the planner derives it from the work item context. Do not try to merge manually with shell git.
+Forbidden: selecting without recorded scores, selecting multiple winners, doing new implementation work, manual git merge.
 Exit condition: one candidate is selected and every rejected attempt has a reason.
 Next stage: `candidate_merged`.
 
@@ -75,7 +76,8 @@ Next stage: `candidate_merged`.
 Goal: continue only with the selected implementation on the child branch.
 Allowed: verify selected candidate state, inspect selected diff, prepare refactor notes.
 Required tools: `planner_transition_work_item` to `refactor` or `verification`.
-Forbidden: refactoring rejected branches, resurrecting rejected candidates, changing tests to fit the implementation.
+Note: the merge from experiment branch into the child branch is already done by `planner_select_experiment`. Rejected experiment branches have been deleted. The child branch now contains the winning implementation.
+Forbidden: refactoring rejected branches, resurrecting rejected candidates, changing tests to fit the implementation, manual git merge.
 Exit condition: selected implementation is present on the child branch and rejected branches are no longer active.
 Next stage: `refactor` or `verification`.
 
