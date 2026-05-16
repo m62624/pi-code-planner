@@ -23,7 +23,7 @@ describe("planner runtime state store", () => {
 
 		expect(result.created).toBe(true);
 		expect(result.path).toBe(
-			"/home/user/.pi/agent/extensions/pi-planner/state.json",
+			"/home/user/.pi/agent/extensions/pi-planner/projects/repo/state.json",
 		);
 		expect(result.state).toEqual({
 			version: 1,
@@ -45,7 +45,7 @@ describe("planner runtime state store", () => {
 				items: {},
 			},
 		});
-		expect(fs.exists(paths.globalState)).toBe(true);
+		expect(fs.exists(paths.projectState)).toBe(true);
 	});
 
 	it("does not overwrite existing state", () => {
@@ -102,7 +102,7 @@ describe("planner runtime state store", () => {
 		const state = loadPlannerRuntimeState(paths, fs);
 
 		expect(state.activePlanId).toBeNull();
-		expect(fs.exists(paths.globalState)).toBe(true);
+		expect(fs.exists(paths.projectState)).toBe(true);
 	});
 
 	it("saves state atomically", () => {
@@ -128,7 +128,7 @@ describe("planner runtime state store", () => {
 			},
 		});
 
-		expect(fs.listFiles()).toEqual([paths.globalState]);
+		expect(fs.listFiles()).toEqual([paths.projectState]);
 		expect(loadPlannerRuntimeState(paths, fs).git.expectedCommit).toBe(
 			"def456",
 		);
@@ -254,7 +254,7 @@ describe("planner runtime state store", () => {
 	it("loads old minimal state by filling new persistence fields", () => {
 		const fs = new MemoryFs();
 		fs.setFile(
-			paths.globalState,
+			paths.projectState,
 			JSON.stringify({
 				version: 1,
 				activePlanId: "plan-1",
@@ -282,7 +282,7 @@ describe("planner runtime state store", () => {
 
 	it("rejects malformed state instead of overwriting it", () => {
 		const fs = new MemoryFs();
-		fs.setFile(paths.globalState, JSON.stringify({ version: 1, git: {} }));
+		fs.setFile(paths.projectState, JSON.stringify({ version: 1, git: {} }));
 
 		expect(() => loadPlannerRuntimeState(paths, fs)).toThrow(
 			"Invalid planner state field: baseBranch",

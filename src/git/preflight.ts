@@ -1,7 +1,5 @@
-import type {
-	PlannerRuntimeState,
-} from "../planner-state/schema";
 import type { RuntimeStateManager } from "../planner-state/runtime";
+import type { PlannerRuntimeState } from "../planner-state/schema";
 import {
 	checkGitPolicy,
 	type GitPolicyDecision,

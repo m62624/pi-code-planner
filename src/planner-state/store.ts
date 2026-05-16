@@ -288,49 +288,51 @@ export function parsePlannerRuntimeState(input: unknown): PlannerRuntimeState {
 }
 
 export function loadPlannerRuntimeState(
-	paths: Pick<SettingsPaths, "globalDir" | "globalState">,
+	paths: Pick<SettingsPaths, "projectDir" | "projectState">,
 	fs: PlannerFs,
 ): PlannerRuntimeState {
-	if (!fs.exists(paths.globalState)) {
+	if (!fs.exists(paths.projectState)) {
 		return initializePlannerRuntimeState(paths, fs).state;
 	}
 
-	return parsePlannerRuntimeState(JSON.parse(fs.readFile(paths.globalState)));
+	return parsePlannerRuntimeState(JSON.parse(fs.readFile(paths.projectState)));
 }
 
 export function savePlannerRuntimeState(
-	paths: Pick<SettingsPaths, "globalDir" | "globalState">,
+	paths: Pick<SettingsPaths, "projectDir" | "projectState">,
 	fs: PlannerFs,
 	state: PlannerRuntimeState,
 ): void {
-	writeJsonAtomic(fs, paths.globalState, parsePlannerRuntimeState(state));
+	writeJsonAtomic(fs, paths.projectState, parsePlannerRuntimeState(state));
 }
 
 export function initializePlannerRuntimeState(
-	paths: Pick<SettingsPaths, "globalDir" | "globalState">,
+	paths: Pick<SettingsPaths, "projectDir" | "projectState">,
 	fs: PlannerFs,
 ): PlannerStateInitResult {
-	fs.mkdirp(paths.globalDir);
+	fs.mkdirp(paths.projectState.replace("/state.json", ""));
 
-	if (fs.exists(paths.globalState)) {
+	if (fs.exists(paths.projectState)) {
 		return {
 			created: false,
-			path: paths.globalState,
-			state: loadPlannerRuntimeState(paths, fs),
+			path: paths.projectState,
+			state: parsePlannerRuntimeState(
+				JSON.parse(fs.readFile(paths.projectState)),
+			),
 		};
 	}
 
 	const state = cloneDefaultState();
-	writeJsonAtomic(fs, paths.globalState, state);
+	writeJsonAtomic(fs, paths.projectState, state);
 	return {
 		created: true,
-		path: paths.globalState,
+		path: paths.projectState,
 		state,
 	};
 }
 
 export function updatePlannerRuntimeState(
-	paths: Pick<SettingsPaths, "globalDir" | "globalState">,
+	paths: Pick<SettingsPaths, "projectDir" | "projectState">,
 	fs: PlannerFs,
 	update: (state: PlannerRuntimeState) => PlannerRuntimeState,
 ): PlannerRuntimeState {

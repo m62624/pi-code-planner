@@ -8,7 +8,7 @@ import {
 } from "./store";
 
 export interface RuntimeStateManagerOptions {
-	paths: Pick<SettingsPaths, "globalDir" | "globalState">;
+	paths: Pick<SettingsPaths, "projectDir" | "projectState">;
 	fs: PlannerFs;
 }
 

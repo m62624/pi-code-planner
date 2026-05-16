@@ -41,7 +41,7 @@ describe("RuntimeStateManager", () => {
 
 		expect(result.created).toBe(true);
 		expect(manager.get()).toBe(result.state);
-		expect(fs.exists(paths.globalState)).toBe(true);
+		expect(fs.exists(paths.projectState)).toBe(true);
 	});
 
 	it("loads state lazily when get is called without initialize", () => {
@@ -51,7 +51,7 @@ describe("RuntimeStateManager", () => {
 		const state = manager.get();
 
 		expect(state.mode).toBe("idle");
-		expect(fs.exists(paths.globalState)).toBe(true);
+		expect(fs.exists(paths.projectState)).toBe(true);
 	});
 
 	it("updates disk first and then the RAM cache", () => {
@@ -66,7 +66,7 @@ describe("RuntimeStateManager", () => {
 		}));
 
 		expect(manager.get()).toBe(state);
-		expect(JSON.parse(fs.readFile(paths.globalState)).activePlanId).toBe(
+		expect(JSON.parse(fs.readFile(paths.projectState)).activePlanId).toBe(
 			"plan-1",
 		);
 	});
@@ -93,7 +93,7 @@ describe("RuntimeStateManager", () => {
 		const manager = new RuntimeStateManager({ paths, fs });
 		manager.initialize();
 		const external = activeState();
-		fs.setFile(paths.globalState, JSON.stringify(external));
+		fs.setFile(paths.projectState, JSON.stringify(external));
 
 		const refreshed = manager.refresh();
 

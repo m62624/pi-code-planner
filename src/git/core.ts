@@ -45,7 +45,10 @@ export function createGitCore(options: GitCoreOptions): GitCore {
 	const settings = loadPlannerSettings(paths, fs);
 	validateBranchNamingSettings(settings.settings.git.branchNaming);
 
-	const state = new RuntimeStateManager({ paths, fs });
+	const state = new RuntimeStateManager({
+		paths: { projectDir: paths.projectDir, projectState: paths.projectState },
+		fs,
+	});
 	state.initialize();
 
 	const runner = options.runner ?? new NodeGitRunner();

@@ -27,7 +27,7 @@ describe("createGitCore", () => {
 		});
 
 		expect(fs.exists(paths.globalSettings)).toBe(true);
-		expect(fs.exists(paths.globalState)).toBe(true);
+		expect(fs.exists(paths.projectState)).toBe(true);
 		expect(core.settings.settings.git.branchNaming.plan).toBe(
 			"planner/{planId}/main",
 		);

@@ -18,11 +18,13 @@ export interface SettingsPaths {
 	projectDir: string;
 	projectSettings: string;
 	projectInstructionsDir: string;
+	projectState: string;
 }
 
 export function createSettingsPaths(input: SettingsPathInput): SettingsPaths {
 	const globalDir = join(input.agentDir, "extensions", input.extensionName);
 	const projectDir = join(input.cwd, ".pi", "extensions", input.extensionName);
+	const projectStateDir = join(globalDir, "projects", input.cwd);
 
 	return {
 		extensionName: input.extensionName,
@@ -35,6 +37,7 @@ export function createSettingsPaths(input: SettingsPathInput): SettingsPaths {
 		projectDir,
 		projectSettings: join(projectDir, "settings.json"),
 		projectInstructionsDir: join(projectDir, "instructions"),
+		projectState: join(projectStateDir, "state.json"),
 	};
 }
 
