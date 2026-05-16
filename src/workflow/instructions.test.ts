@@ -48,6 +48,8 @@ describe("stage instruction mapping", () => {
 		const content = readDefaultInstructionContent("work_item");
 
 		expect(content).toContain("TDD is mandatory");
+		expect(content).toContain("git diff --stat HEAD");
+		expect(content).toContain("start only after `tdd_plan.md` exists");
 		expect(content).toContain("production implementation starts before");
 		expect(content).toContain("mock test or contract test");
 		expect(content).toContain(

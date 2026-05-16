@@ -251,7 +251,8 @@ function guardWorkItemStage(
 
 	if (stage === "tdd_prepare") {
 		if (isPlannerTool(toolName)) return undefined;
-		if (isReadOnlyProjectTool(toolName)) return undefined;
+		if (isReadOnlyProjectTool(toolName) || toolName === "bash")
+			return undefined;
 		if (isWriteTool(toolName) && isPlannerArtifactPath(input)) return undefined;
 		return block(
 			"tdd_prepare allows the TDD plan artifact and read-only inspection only. Move to tdd_write_tests before writing tests.",

@@ -28,19 +28,19 @@ Next stage: `tdd_prepare`.
 # tdd_prepare
 
 Goal: write the TDD plan artifact before touching tests or production code.
-Allowed: write `tdd_plan.md`, read focused source/test files, define expected behavior, inputs, outputs, edge cases, failure modes, and verification commands.
-Required tools: write/edit only planner artifacts; then `planner_transition_work_item` to `tdd_write_tests`.
-Forbidden: production code edits, test code edits, experiment branches, implementation shortcuts.
-Exit condition: the TDD plan states the first failing test or mock/contract test to create.
+Allowed: run read-only inspection such as `git diff --stat HEAD`, read focused source/test files, and write only the planner `tdd_plan.md` artifact.
+Required order: first inspect current status/diff if needed; then write or update `tdd_plan.md`; then call `planner_transition_work_item` to `tdd_write_tests`.
+Forbidden: production code edits, test code edits, experiment branches, implementation shortcuts, and skipping directly to a commit or experiment stage.
+Exit condition: the TDD plan states the first failing test or mock/contract test to create, expected behavior, inputs, outputs, edge cases, failure modes, and verification commands.
 Next stage: `tdd_write_tests`.
 
 # tdd_write_tests
 
 Goal: create the failing test before any production implementation.
 Allowed: write or update test files only. Run focused tests to prove the new test fails for the expected reason.
-Required tools: write/edit test files, bash/read for focused verification, then `planner_transition_work_item` to `tdd_tests_commit`.
-Forbidden: production code edits. If behavior depends on unavailable external state or unsafe APIs, create a mock test or contract test instead of skipping tests.
-Exit condition: at least one focused test exists and fails because the intended behavior is missing, not because the test is broken.
+Required order: start only after `tdd_plan.md` exists; write the focused test, mock test, or contract test first; run the focused test command; then `planner_transition_work_item` to `tdd_tests_commit`.
+Forbidden: production code edits, moving to `tdd_tests_commit` before a test artifact exists, or claiming tests are unnecessary without explicit user/planner evidence. If behavior depends on unavailable external state or unsafe APIs, create a mock test or contract test instead of skipping tests.
+Exit condition: at least one focused test exists and fails because the intended behavior is missing, or a mock/contract test exists that captures the intended behavior when a real failing test cannot run.
 Next stage: `tdd_tests_commit`.
 
 # tdd_tests_commit

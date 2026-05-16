@@ -189,6 +189,16 @@ describe("checkPlannerStageToolCall", () => {
 		).toMatchObject({ block: true });
 	});
 
+	it("allows shell inspection while preparing the TDD plan", () => {
+		expect(
+			guard({
+				inspection: workItemStage("tdd_prepare"),
+				toolName: "bash",
+				input: { command: "git diff --stat HEAD" },
+			}),
+		).toBeUndefined();
+	});
+
 	it("allows only test file writes in tdd_write_tests", () => {
 		expect(
 			guard({
