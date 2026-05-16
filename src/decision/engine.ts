@@ -59,6 +59,34 @@ function isTerminalPlan(plan: PlanRecord | null | undefined): boolean {
 	);
 }
 
+function allowsDirtyWorktree(
+	workItem: WorkItemRecord | null | undefined,
+): boolean {
+	return (
+		workItem?.stage === "active" ||
+		workItem?.stage === "tdd_prepare" ||
+		workItem?.stage === "tdd_write_tests" ||
+		workItem?.stage === "tdd_tests_commit" ||
+		workItem?.stage === "experiments_running" ||
+		workItem?.stage === "candidate_selection" ||
+		workItem?.stage === "candidate_merged" ||
+		workItem?.stage === "refactor" ||
+		workItem?.stage === "verification" ||
+		workItem?.stage === "work_item_commit"
+	);
+}
+
+function blocksDirtyMemory(
+	workItem: WorkItemRecord | null | undefined,
+): boolean {
+	return (
+		!workItem ||
+		workItem.stage === "work_item_commit" ||
+		workItem.stage === "work_item_compact_required" ||
+		workItem.stage === "completed"
+	);
+}
+
 function decision(
 	input: PlannerDecisionInput,
 	status: PlannerDecisionStatus,
@@ -107,7 +135,13 @@ export function decidePlannerNextAction(
 		);
 	}
 
-	if (recovery.requiresRecovery) {
+	if (
+		recovery.requiresRecovery &&
+		!(
+			recovery.status === "dirty_worktree" &&
+			allowsDirtyWorktree(input.workItem)
+		)
+	) {
 		return decision(
 			nextInput,
 			"recovery_required",
@@ -118,7 +152,11 @@ export function decidePlannerNextAction(
 	}
 
 	const dirty = dirtyFiles(input.memory);
-	if (dirty.length > 0 && input.workItem?.stage !== "signature_refresh") {
+	if (
+		dirty.length > 0 &&
+		input.workItem?.stage !== "signature_refresh" &&
+		blocksDirtyMemory(input.workItem)
+	) {
 		return decision(
 			nextInput,
 			"memory_refresh_required",

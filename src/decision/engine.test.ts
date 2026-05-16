@@ -158,7 +158,7 @@ describe("decidePlannerNextAction", () => {
 				},
 			},
 			plan: plan("plan_active"),
-			workItem: workItem("verification"),
+			workItem: workItem("work_item_commit"),
 		});
 
 		expect(result).toMatchObject({
@@ -166,6 +166,53 @@ describe("decidePlannerNextAction", () => {
 			action: "refresh_memory",
 			blocking: true,
 			dirtyFiles: ["src/app.ts"],
+		});
+	});
+
+	it("allows dirty memory while implementation is still in progress", () => {
+		const result = decidePlannerNextAction({
+			state: activeState(),
+			repo: repo(),
+			memory: {
+				files: {
+					"src/app.ts": {
+						filePath: "src/app.ts",
+						reason: "git status changed",
+						markedAt: "",
+					},
+				},
+			},
+			plan: plan("plan_active"),
+			workItem: workItem("tdd_write_tests"),
+		});
+
+		expect(result).toMatchObject({
+			status: "work_item_stage",
+			action: "continue_work_item_stage",
+			blocking: false,
+			dirtyFiles: ["src/app.ts"],
+		});
+	});
+
+	it("allows dirty worktree during implementation stages", () => {
+		const dirty = emptyGitStatusSummary();
+		dirty.unstagedFiles.push("src/app.ts");
+		dirty.hasUnstagedChanges = true;
+		dirty.isDirty = true;
+
+		const result = decidePlannerNextAction({
+			state: activeState(),
+			repo: repo({ status: dirty }),
+			memory: { files: {} },
+			plan: plan("plan_active"),
+			workItem: workItem("verification"),
+		});
+
+		expect(result).toMatchObject({
+			status: "work_item_stage",
+			action: "continue_work_item_stage",
+			blocking: false,
+			recovery: { status: "dirty_worktree" },
 		});
 	});
 

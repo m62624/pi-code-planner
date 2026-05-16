@@ -4,19 +4,19 @@ The work item exists but is not ready. Do not implement it yet.
 
 # ready
 
-Prepare to start exactly one atomic work item. Confirm scope, expected files, tests, and dependencies.
+Prepare to start exactly one atomic work item. Confirm scope, expected files, tests, and dependencies. If the work item branch is not active, call `planner_start_work_item`. Then transition this work item to `active`. Do not edit project files in this stage.
 
 # active
 
-Load only the context needed for the active work item. Do not drift into unrelated files or tasks.
+Load only the context needed for the active work item. Do not drift into unrelated files or tasks. Then transition to `tdd_prepare`. Do not edit project files in this stage.
 
 # tdd_prepare
 
-Write the TDD plan for this work item. Describe behavior, inputs, outputs, edge cases, failure modes, and verification commands. Do not implement production code.
+Write the TDD plan artifact for this work item. Describe behavior, inputs, outputs, edge cases, failure modes, and verification commands. If real behavior cannot be checked yet, define a mock/failing test that captures the expected contract. Do not edit production code.
 
 # tdd_write_tests
 
-Write or update tests first. Production implementation is still forbidden.
+Write or update tests first. Production implementation is still forbidden. If the target behavior depends on unavailable external state or an API you cannot call safely, create a mock test or contract test that fails for the current implementation.
 
 # tdd_tests_commit
 

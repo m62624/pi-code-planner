@@ -106,6 +106,20 @@ function isWriteTool(toolName: string): boolean {
 	return toolName === "write" || toolName === "edit";
 }
 
+function isTestPath(path: string): boolean {
+	const normalized = path.replace(/\\/g, "/").toLowerCase();
+	return (
+		normalized.includes(".test.") ||
+		normalized.includes(".spec.") ||
+		normalized.includes("/__tests__/") ||
+		normalized.endsWith("_test.go") ||
+		normalized.endsWith("_test.rs") ||
+		normalized.endsWith("_test.py") ||
+		normalized.includes("/test/") ||
+		normalized.includes("/tests/")
+	);
+}
+
 function toolPath(input: Record<string, unknown>): string | null {
 	const path = input.path;
 	return typeof path === "string" ? path : null;
@@ -121,6 +135,11 @@ function isInside(parent: string, child: string): boolean {
 function isPlannerArtifactPath(input: StageToolGuardInput): boolean {
 	const path = toolPath(input.input);
 	return path ? isInside(input.artifactsRoot, path) : false;
+}
+
+function isTestFileWrite(input: StageToolGuardInput): boolean {
+	const path = toolPath(input.input);
+	return path ? isTestPath(path) : false;
 }
 
 function allowPlannerTool(
@@ -218,6 +237,35 @@ function guardWorkItemStage(
 		if (isReadOnlyProjectTool(toolName)) return undefined;
 		return block(
 			`Work item stage ${stage} is not an implementation stage. Use planner workflow tools before editing project files.`,
+		);
+	}
+
+	if (stage === "active") {
+		if (isPlannerTool(toolName)) return undefined;
+		if (isReadOnlyProjectTool(toolName)) return undefined;
+		if (isWriteTool(toolName) && isPlannerArtifactPath(input)) return undefined;
+		return block(
+			"Work item active stage is for loading focused context and moving to tdd_prepare. Write tests before production code.",
+		);
+	}
+
+	if (stage === "tdd_prepare") {
+		if (isPlannerTool(toolName)) return undefined;
+		if (isReadOnlyProjectTool(toolName)) return undefined;
+		if (isWriteTool(toolName) && isPlannerArtifactPath(input)) return undefined;
+		return block(
+			"tdd_prepare allows the TDD plan artifact and read-only inspection only. Move to tdd_write_tests before writing tests.",
+		);
+	}
+
+	if (stage === "tdd_write_tests") {
+		if (isPlannerTool(toolName)) return undefined;
+		if (isReadOnlyProjectTool(toolName) || toolName === "bash")
+			return undefined;
+		if (isWriteTool(toolName) && isTestFileWrite(input)) return undefined;
+		if (isWriteTool(toolName) && isPlannerArtifactPath(input)) return undefined;
+		return block(
+			"tdd_write_tests allows test files only. Production code edits are blocked until tests are written and committed.",
 		);
 	}
 

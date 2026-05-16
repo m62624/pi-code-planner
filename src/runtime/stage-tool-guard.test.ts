@@ -171,6 +171,42 @@ describe("checkPlannerStageToolCall", () => {
 		expect(result).toMatchObject({ block: true });
 	});
 
+	it("blocks production edits before the TDD stages allow them", () => {
+		expect(
+			guard({
+				inspection: workItemStage("active"),
+				toolName: "edit",
+				input: { path: "/repo/src/config.ts" },
+			}),
+		).toMatchObject({ block: true });
+
+		expect(
+			guard({
+				inspection: workItemStage("tdd_prepare"),
+				toolName: "write",
+				input: { path: "/repo/src/config.ts" },
+			}),
+		).toMatchObject({ block: true });
+	});
+
+	it("allows only test file writes in tdd_write_tests", () => {
+		expect(
+			guard({
+				inspection: workItemStage("tdd_write_tests"),
+				toolName: "edit",
+				input: { path: "/repo/src/config.test.ts" },
+			}),
+		).toBeUndefined();
+
+		expect(
+			guard({
+				inspection: workItemStage("tdd_write_tests"),
+				toolName: "edit",
+				input: { path: "/repo/src/config.ts" },
+			}),
+		).toMatchObject({ block: true });
+	});
+
 	it("limits dirty memory recovery to memory refresh tools and reads", () => {
 		const dirty = inspection({
 			status: "memory_refresh_required",
