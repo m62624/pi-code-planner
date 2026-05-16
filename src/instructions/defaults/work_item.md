@@ -83,9 +83,9 @@ Next stage: `refactor` or `verification`.
 
 Goal: create the final planner-controlled work item commit.
 Allowed: run final focused verification, inspect status, prepare a concise commit message.
-Required tools: `planner_finish_work_item` with `stageAll: true` unless a narrower staged set is intentionally needed.
+Required tools: `planner_finish_work_item` with `stageAll: true` and `finalizeWorkItem: true` unless a narrower staged set is intentionally needed.
 Forbidden: direct shell git commit, commit before tests pass, commit while memory refresh is required.
-Exit condition: planner commit succeeds and state records the new commit.
+Exit condition: planner commit succeeds, the child branch is merged into the plan branch, planner-owned child branch is deleted, and state records the new plan commit.
 Next stage: `signature_refresh`.
 
 # signature_refresh

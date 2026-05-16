@@ -49,6 +49,7 @@ export interface SelectExperimentBranchInput {
 export interface CommitWorkItemInput {
 	message: string;
 	stageAll?: boolean;
+	finalizeWorkItem?: boolean;
 }
 
 export interface SwitchBranchInput {
@@ -130,6 +131,20 @@ function upsertBranch(
 			},
 		},
 	};
+}
+
+function managedExperimentBranchesForWorkItem(
+	state: PlannerRuntimeState,
+	planId: string,
+	workItemId: string,
+): PlannerBranchRecord[] {
+	return Object.values(state.branches.items).filter(
+		(branch) =>
+			branch.kind === "experiment" &&
+			branch.planId === planId &&
+			branch.workItemId === workItemId &&
+			branch.status !== "deleted",
+	);
 }
 
 export class GitMutations {
@@ -445,10 +460,23 @@ export class GitMutations {
 		};
 		this.saveState(selectedState);
 
+		let cleanupState = selectedState;
+		for (const branch of managedExperimentBranchesForWorkItem(
+			selectedState,
+			state.activePlanId,
+			input.workItemId,
+		)) {
+			const deleted = await this.deleteBranchByName({
+				branchName: branch.name,
+				force: true,
+			});
+			cleanupState = deleted.state;
+		}
+
 		return {
 			before,
 			after: mergeResult.after,
-			state: selectedState,
+			state: cleanupState,
 		};
 	}
 
@@ -472,7 +500,56 @@ export class GitMutations {
 		const next = this.finishOperation(state, after);
 		this.saveState(next);
 
-		return { before, after, state: next };
+		if (!input.finalizeWorkItem) {
+			return { before, after, state: next };
+		}
+
+		const activePlanId = next.activePlanId;
+		const activeWorkItemId = next.activeWorkItemId;
+		if (!activePlanId || !activeWorkItemId) {
+			throw new Error(
+				"Cannot finalize work item without active plan and item.",
+			);
+		}
+		const childBranch = this.branchName("child", {
+			planId: activePlanId,
+			workItemId: activeWorkItemId,
+		});
+		const planBranch = this.branchName("plan", {
+			planId: activePlanId,
+		});
+
+		await this.switchBranchByName({ targetBranch: planBranch });
+		const mergeResult = await this.mergeBranchByName({
+			targetBranch: childBranch,
+			noFastForward: true,
+		});
+		const mergedState = this.loadState();
+		this.saveState({
+			...mergedState,
+			branches: {
+				...mergedState.branches,
+				items: {
+					...mergedState.branches.items,
+					[childBranch]: {
+						...mergedState.branches.items[childBranch],
+						status: "merged",
+						lastKnownCommit: mergeResult.after.currentCommit,
+					},
+					[planBranch]: {
+						...mergedState.branches.items[planBranch],
+						status: "active",
+						lastKnownCommit: mergeResult.after.currentCommit,
+					},
+				},
+			},
+		});
+		const deleted = await this.deleteBranchByName({
+			branchName: childBranch,
+			force: true,
+		});
+
+		return { before, after: deleted.after, state: deleted.state };
 	}
 
 	async switchToPlanBranch(

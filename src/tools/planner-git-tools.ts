@@ -110,6 +110,12 @@ const commitSchema = Type.Object({
 	stageAll: Type.Optional(
 		Type.Boolean({ description: "Stage all changes first." }),
 	),
+	finalizeWorkItem: Type.Optional(
+		Type.Boolean({
+			description:
+				"After committing, merge the managed child branch into the plan branch and delete the child branch.",
+		}),
+	),
 });
 const deleteChildSchema = Type.Object({
 	workItemId: Type.String({ description: "Stable work item id." }),
@@ -231,7 +237,7 @@ export function createPlannerGitTools(
 			name: "planner_select_experiment",
 			label: "planner select experiment",
 			description:
-				"Merge a selected managed experiment branch into its child branch.",
+				"Merge a selected managed experiment branch into its child branch and delete planner-owned experiment branches for that work item.",
 			parameters: experimentSchema,
 			execute: (
 				_id,

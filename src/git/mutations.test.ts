@@ -177,6 +177,15 @@ function saveActivePlan(fs: MemoryFs) {
 					lastKnownCommit: "abc123",
 					status: "active",
 				},
+				"planner/plan-1/experiment/work-1/try-b": {
+					name: "planner/plan-1/experiment/work-1/try-b",
+					kind: "experiment",
+					planId: "plan-1",
+					workItemId: "work-1",
+					createdFromCommit: "abc123",
+					lastKnownCommit: "abc123",
+					status: "active",
+				},
 			},
 		},
 	});
@@ -234,6 +243,74 @@ describe("GitMutations", () => {
 		expect(loadPlannerRuntimeState(paths, fs).git.expectedCommit).toBe(
 			"def456",
 		);
+	});
+
+	it("finalizes a work item by merging child into plan and deleting child", async () => {
+		const { fs, state, writer, mutations } = setup([
+			repo({
+				currentBranch: "planner/plan-1/work/work-1",
+				currentCommit: "abc123",
+				status: status({ unstagedFiles: ["src/a.ts"] }),
+			}),
+			repo({
+				currentBranch: "planner/plan-1/work/work-1",
+				currentCommit: "child456",
+			}),
+			repo({
+				currentBranch: "planner/plan-1/work/work-1",
+				currentCommit: "child456",
+			}),
+			repo({
+				currentBranch: "planner/plan-1/main",
+				currentCommit: "abc123",
+			}),
+			repo({
+				currentBranch: "planner/plan-1/main",
+				currentCommit: "abc123",
+			}),
+			repo({
+				currentBranch: "planner/plan-1/main",
+				currentCommit: "plan789",
+			}),
+			repo({
+				currentBranch: "planner/plan-1/main",
+				currentCommit: "plan789",
+			}),
+			repo({
+				currentBranch: "planner/plan-1/main",
+				currentCommit: "plan789",
+			}),
+		]);
+		saveActivePlan(fs);
+		const storedState = loadPlannerRuntimeState(paths, fs);
+		savePlannerRuntimeState(paths, fs, {
+			...storedState,
+			git: {
+				...storedState.git,
+				expectedBranch: "planner/plan-1/work/work-1",
+			},
+		});
+		state.refresh();
+
+		const result = await mutations.commitWorkItem({
+			message: "feat: finish work item",
+			finalizeWorkItem: true,
+		});
+
+		expect(writer.calls).toEqual([
+			"stageAll",
+			"commit:feat: finish work item",
+			"switchBranch:planner/plan-1/main",
+			"mergeBranch:planner/plan-1/work/work-1",
+			"deleteBranch:planner/plan-1/work/work-1",
+		]);
+		expect(
+			result.state.branches.items["planner/plan-1/work/work-1"].status,
+		).toBe("deleted");
+		expect(result.state.git).toMatchObject({
+			expectedBranch: "planner/plan-1/main",
+			expectedCommit: "plan789",
+		});
 	});
 
 	it("initializes a repo and clears pending operation", async () => {
@@ -397,7 +474,7 @@ describe("GitMutations", () => {
 		});
 	});
 
-	it("selects an experiment by switching to child branch and merging it", async () => {
+	it("selects an experiment and deletes all experiment branches for the work item", async () => {
 		const { fs, state, writer, mutations } = setup([
 			repo({
 				currentBranch: "planner/plan-1/experiment/work-1/try-a",
@@ -410,6 +487,22 @@ describe("GitMutations", () => {
 			repo({
 				currentBranch: "planner/plan-1/work/work-1",
 				currentCommit: "abc123",
+			}),
+			repo({
+				currentBranch: "planner/plan-1/work/work-1",
+				currentCommit: "def456",
+			}),
+			repo({
+				currentBranch: "planner/plan-1/work/work-1",
+				currentCommit: "def456",
+			}),
+			repo({
+				currentBranch: "planner/plan-1/work/work-1",
+				currentCommit: "def456",
+			}),
+			repo({
+				currentBranch: "planner/plan-1/work/work-1",
+				currentCommit: "def456",
 			}),
 			repo({
 				currentBranch: "planner/plan-1/work/work-1",
@@ -435,11 +528,17 @@ describe("GitMutations", () => {
 		expect(writer.calls).toEqual([
 			"switchBranch:planner/plan-1/work/work-1",
 			"mergeBranch:planner/plan-1/experiment/work-1/try-a",
+			"deleteBranch:planner/plan-1/experiment/work-1/try-a",
+			"deleteBranch:planner/plan-1/experiment/work-1/try-b",
 		]);
 		expect(
 			result.state.branches.items["planner/plan-1/experiment/work-1/try-a"]
 				.status,
-		).toBe("selected");
+		).toBe("deleted");
+		expect(
+			result.state.branches.items["planner/plan-1/experiment/work-1/try-b"]
+				.status,
+		).toBe("deleted");
 		expect(result.state.git.expectedCommit).toBe("def456");
 	});
 
