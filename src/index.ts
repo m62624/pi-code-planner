@@ -1,4 +1,8 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type {
+	ExtensionAPI,
+	ExtensionContext,
+	ToolDefinition,
+} from "@earendil-works/pi-coding-agent";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { CompactionCoordinator } from "./compaction/coordinator";
 import { EXTENSION_NAME } from "./constants";
@@ -14,6 +18,7 @@ import {
 	createPlannerOrchestrator,
 	type PlannerOrchestrator,
 } from "./orchestrator/planner-orchestrator";
+import type { PlannerRuntimeInspection } from "./runtime/planner-runtime-controller";
 import { PlannerRuntimeController } from "./runtime/planner-runtime-controller";
 import { checkPlannerStageToolCall } from "./runtime/stage-tool-guard";
 import { createPlannerCompactionTools } from "./tools/planner-compaction-tools";
@@ -22,6 +27,23 @@ import { createPlannerGitTools } from "./tools/planner-git-tools";
 import { createPlannerMemoryTools } from "./tools/planner-memory-tools";
 import { createPlannerRuntimeTools } from "./tools/planner-runtime-tools";
 import { createPlannerWorkflowTools } from "./tools/planner-workflow-tools";
+
+function formatPlannerStatus(inspection: PlannerRuntimeInspection): string {
+	if (inspection.status === "idle") return "idle";
+	if (inspection.status === "recovery_required") {
+		return `blocked:${inspection.recovery.status}`;
+	}
+	if (inspection.status === "memory_refresh_required") {
+		return `memory:${Object.keys(inspection.memory.dirty.files).length}`;
+	}
+	if (inspection.status === "compact_pending") return "compact:pending";
+	if (inspection.status === "compact_required") {
+		return `compact:${inspection.decision.compactReason ?? "required"}`;
+	}
+	if (inspection.workItem) return `item:${inspection.workItem.stage}`;
+	if (inspection.plan) return `plan:${inspection.plan.stage}`;
+	return inspection.status;
+}
 
 export default function register(pi: ExtensionAPI): void {
 	const cores = new Map<string, GitCore>();
@@ -121,47 +143,62 @@ export default function register(pi: ExtensionAPI): void {
 	const getMemoryDirtyPolicy = (cwd: string) =>
 		getCore(cwd).settings.settings.memory.dirtyPolicy;
 
+	async function updatePlannerStatus(ctx: ExtensionContext): Promise<void> {
+		const inspection = await getRuntimeController(ctx.cwd).inspect();
+		ctx.ui.setStatus(
+			EXTENSION_NAME,
+			`planner ${formatPlannerStatus(inspection)}`,
+		);
+	}
+
+	function registerPlannerTool(tool: ToolDefinition): void {
+		pi.registerTool({
+			...tool,
+			execute: async (toolCallId, params, signal, onUpdate, ctx) => {
+				try {
+					return await tool.execute(toolCallId, params, signal, onUpdate, ctx);
+				} finally {
+					await updatePlannerStatus(ctx);
+				}
+			},
+		});
+	}
+
 	for (const tool of createPlannerGitTools(
 		getCore,
 		getDirtyMemory,
 		getMemoryDirtyPolicy,
 	)) {
-		pi.registerTool(tool);
+		registerPlannerTool(tool);
 	}
 	for (const tool of createPlannerCompactionTools(
 		getCompactor,
 		getDirtyMemory,
 		getMemoryDirtyPolicy,
 	)) {
-		pi.registerTool(tool);
+		registerPlannerTool(tool);
 	}
 	for (const tool of createPlannerWorkflowTools(
 		getOrchestrator,
 		getDirtyMemory,
 		getMemoryDirtyPolicy,
 	)) {
-		pi.registerTool(tool);
+		registerPlannerTool(tool);
 	}
 	for (const tool of createPlannerRuntimeTools(getRuntimeController)) {
-		pi.registerTool(tool);
+		registerPlannerTool(tool);
 	}
 	for (const tool of createPlannerCycleTools(getCycleManager)) {
-		pi.registerTool(tool);
+		registerPlannerTool(tool);
 	}
 	for (const tool of createPlannerMemoryTools(
 		(cwd) => getMemoryCore(cwd).store,
 	)) {
-		pi.registerTool(tool);
+		registerPlannerTool(tool);
 	}
 
 	pi.on("session_start", async (_event, ctx) => {
-		const core = getCore(ctx.cwd);
-		const preflight = await core.preflight.check("start_plan");
-
-		ctx.ui.setStatus(
-			EXTENSION_NAME,
-			`planner ${core.settings.settings.refactor.maxIterations}r ${preflight.recovery.status}`,
-		);
+		await updatePlannerStatus(ctx);
 	});
 
 	pi.on("tool_call", async (event, ctx) => {
@@ -170,12 +207,16 @@ export default function register(pi: ExtensionAPI): void {
 		if (gitGuard) return gitGuard;
 
 		const inspection = await getRuntimeController(ctx.cwd).inspect();
-		return checkPlannerStageToolCall({
+		const stageGuard = checkPlannerStageToolCall({
 			inspection,
 			toolName: event.toolName,
 			input: event.input as Record<string, unknown>,
 			artifactsRoot: core.paths.globalDir,
 		});
+		if (stageGuard) {
+			await updatePlannerStatus(ctx);
+			return stageGuard;
+		}
 	});
 
 	pi.on("before_agent_start", async (event, ctx) => {

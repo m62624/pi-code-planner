@@ -132,6 +132,17 @@ describe("extension entrypoint", () => {
 		);
 	});
 
+	it("sets a focused planner status on session start", async () => {
+		const { handlers } = createRegisteredExtension();
+		const ctx = context(join(tempRoot, "project"));
+
+		const [sessionStart] = handlers.get("session_start") ?? [];
+		await sessionStart({}, ctx);
+
+		expect(ctx.ui.setStatus).toHaveBeenCalledWith("pi-planner", "planner idle");
+		expect(vi.mocked(ctx.ui.setStatus).mock.calls[0][1]).not.toContain("3r");
+	});
+
 	it("connects workflow tools to the real orchestrator and prompt assembly", async () => {
 		const { tools } = createRegisteredExtension();
 		const ctx = context(join(tempRoot, "project"));
@@ -159,6 +170,25 @@ describe("extension entrypoint", () => {
 				]),
 			},
 		});
+	});
+
+	it("refreshes planner status after planner tool execution", async () => {
+		const { tools } = createRegisteredExtension();
+		const ctx = context(join(tempRoot, "project"));
+		const createPlan = toolByName(tools, "planner_create_plan");
+
+		await createPlan.execute(
+			"call-1",
+			{ title: "Parser plan", planId: "plan-1" },
+			undefined,
+			undefined,
+			ctx,
+		);
+
+		expect(ctx.ui.setStatus).toHaveBeenLastCalledWith(
+			"pi-planner",
+			"planner blocked:init_required",
+		);
 	});
 
 	it("keeps work item creation in plan context", async () => {
