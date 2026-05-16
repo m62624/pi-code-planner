@@ -35,4 +35,32 @@ describe("stage instruction mapping", () => {
 			).not.toBeNull();
 		}
 	});
+
+	it("keeps discovery memory requirements explicit", () => {
+		const content = readDefaultInstructionContent("discovery");
+
+		expect(content).toContain("planner_memory_upsert_symbols");
+		expect(content).toContain("planner_memory_upsert_relations");
+		expect(content).toContain("important exported/internal symbols indexed");
+	});
+
+	it("keeps work item execution test-first", () => {
+		const content = readDefaultInstructionContent("work_item");
+
+		expect(content).toContain("TDD is mandatory");
+		expect(content).toContain("production implementation starts before");
+		expect(content).toContain("mock test or contract test");
+		expect(content).toContain(
+			"changing the test contract inside experiment branches",
+		);
+	});
+
+	it("keeps plan stages as a guided playbook", () => {
+		const content = readDefaultInstructionContent("plan");
+
+		expect(content).toContain("Goal:");
+		expect(content).toContain("Required tools:");
+		expect(content).toContain("Next stage:");
+		expect(content).toContain("tests first, production code second");
+	});
 });

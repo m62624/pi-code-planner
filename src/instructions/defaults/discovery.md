@@ -1,6 +1,11 @@
 # discovery_full
 
-Read the project broadly enough to build compressed project memory. Identify structure, dependencies, conventions, public APIs, tests, risks, and open questions. Do not implement production code.
+Goal: build reliable compressed project memory before planning implementation.
+Allowed: read project files broadly enough to understand structure, dependencies, conventions, public APIs, tests, risks, and open questions.
+Required tools: read/search tools plus `planner_memory_upsert_files`, `planner_memory_upsert_symbols`, and `planner_memory_upsert_relations`.
+Forbidden: project edits, test edits, production implementation, work item creation before discovery compact.
+Exit condition: discovery artifacts and memory are complete enough that later stages can use memory instead of rereading the whole project.
+Next stage: `discovery_compact_required`.
 
 Required output:
 - update discovery and plan artifacts
@@ -22,3 +27,4 @@ Rules:
 - Use `hash: null` only when a file hash is unavailable; do not invent empty hashes.
 - If a file is too long, read it in complete chunks before calling it indexed.
 - If a requirement is unclear, write the exact question and the blocker.
+- After discovery is complete, transition to `discovery_compact_required` and request discovery compact before todo planning.
