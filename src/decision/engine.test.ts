@@ -216,6 +216,27 @@ describe("decidePlannerNextAction", () => {
 		});
 	});
 
+	it("allows dirty worktree during plan stages without work item", () => {
+		const dirty = emptyGitStatusSummary();
+		dirty.unstagedFiles.push("src/app.ts");
+		dirty.hasUnstagedChanges = true;
+		dirty.isDirty = true;
+
+		const result = decidePlannerNextAction({
+			state: activeState(),
+			repo: repo({ status: dirty }),
+			memory: { files: {} },
+			plan: plan("discovery_full"),
+		});
+
+		expect(result).toMatchObject({
+			status: "plan_stage",
+			action: "continue_plan_stage",
+			blocking: false,
+			recovery: { status: "dirty_worktree" },
+		});
+	});
+
 	it("allows signature refresh to clear dirty memory", () => {
 		const result = decidePlannerNextAction({
 			state: activeState(),

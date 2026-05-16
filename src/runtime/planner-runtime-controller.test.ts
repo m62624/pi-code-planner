@@ -230,7 +230,7 @@ describe("PlannerRuntimeController", () => {
 		});
 	});
 
-	it("reports recovery when git state diverges", async () => {
+	it("allows dirty worktree during plan stage but requires memory refresh", async () => {
 		const dirty = emptyGitStatusSummary();
 		dirty.unstagedFiles.push("src/app.ts");
 		const { controller, orchestrator } = createHarness(
@@ -243,7 +243,7 @@ describe("PlannerRuntimeController", () => {
 		const inspection = await controller.inspect();
 
 		expect(inspection).toMatchObject({
-			status: "recovery_required",
+			status: "memory_refresh_required",
 			nextPrompt: null,
 			memory: {
 				hasDirtyFiles: true,

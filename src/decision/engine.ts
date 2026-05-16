@@ -61,19 +61,26 @@ function isTerminalPlan(plan: PlanRecord | null | undefined): boolean {
 
 function allowsDirtyWorktree(
 	workItem: WorkItemRecord | null | undefined,
+	plan: PlanRecord | null | undefined,
 ): boolean {
-	return (
-		workItem?.stage === "active" ||
-		workItem?.stage === "tdd_prepare" ||
-		workItem?.stage === "tdd_write_tests" ||
-		workItem?.stage === "tdd_tests_commit" ||
-		workItem?.stage === "experiments_running" ||
-		workItem?.stage === "candidate_selection" ||
-		workItem?.stage === "candidate_merged" ||
-		workItem?.stage === "refactor" ||
-		workItem?.stage === "verification" ||
-		workItem?.stage === "work_item_commit"
-	);
+	if (workItem) {
+		return (
+			workItem.stage === "active" ||
+			workItem.stage === "tdd_prepare" ||
+			workItem.stage === "tdd_write_tests" ||
+			workItem.stage === "tdd_tests_commit" ||
+			workItem.stage === "experiments_running" ||
+			workItem.stage === "candidate_selection" ||
+			workItem.stage === "candidate_merged" ||
+			workItem.stage === "refactor" ||
+			workItem.stage === "verification" ||
+			workItem.stage === "work_item_commit"
+		);
+	}
+	if (plan) {
+		return true;
+	}
+	return false;
 }
 
 function blocksDirtyMemory(
@@ -139,7 +146,7 @@ export function decidePlannerNextAction(
 		recovery.requiresRecovery &&
 		!(
 			recovery.status === "dirty_worktree" &&
-			allowsDirtyWorktree(input.workItem)
+			allowsDirtyWorktree(input.workItem, input.plan)
 		)
 	) {
 		return decision(
