@@ -105,7 +105,7 @@ async function memoryPolicyFailure(
 }
 
 function stringUnionSchema(values: readonly string[]) {
-	return Type.Union(values.map((value) => Type.Literal(value)));
+	return { type: "string", enum: [...values] } as const;
 }
 
 const createPlanSchema = Type.Object({

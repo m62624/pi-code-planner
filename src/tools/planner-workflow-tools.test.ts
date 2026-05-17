@@ -55,6 +55,27 @@ describe("createPlannerWorkflowTools", () => {
 		]);
 	});
 
+	it("uses enum schema (not anyOf/const) for stage parameters", () => {
+		const tools = createPlannerWorkflowTools(() => ({}) as PlannerOrchestrator);
+		const transitionTool = tools.find(
+			(t) => t.name === "planner_transition_plan",
+		);
+		if (!transitionTool) throw new Error("Missing tool");
+
+		const schema = transitionTool.parameters as Record<string, unknown>;
+		const stageSchema = (schema.properties as Record<string, unknown>).stage;
+
+		// Must be a simple enum, NOT anyOf with const values
+		expect(stageSchema).not.toHaveProperty("anyOf");
+		expect(stageSchema).toHaveProperty("type", "string");
+		expect(stageSchema).toHaveProperty("enum");
+		const enumValues = (stageSchema as Record<string, unknown>)
+			.enum as string[];
+		expect(Array.isArray(enumValues)).toBe(true);
+		expect(enumValues).toContain("plan_draft");
+		expect(enumValues).toContain("discovery_full");
+	});
+
 	it("creates a plan through the orchestrator", async () => {
 		const createPlan = vi.fn().mockReturnValue({
 			planId: "plan-1",
