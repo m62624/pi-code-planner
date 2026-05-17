@@ -23,7 +23,7 @@ describe("planner runtime state store", () => {
 
 		expect(result.created).toBe(true);
 		expect(result.path).toBe(
-			"/home/user/.pi/agent/extensions/pi-planner/projects/repo/state.json",
+			"/home/user/.pi/agent/extensions/pi-planner/projects/repo-816fc349/state.json",
 		);
 		expect(result.state).toEqual({
 			version: 1,

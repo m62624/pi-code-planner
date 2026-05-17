@@ -1,4 +1,5 @@
 import { isAbsolute, join, resolve } from "node:path";
+import { createProjectKey } from "../storage/ids";
 import type { InstructionName } from "./schema";
 
 export interface SettingsPathInput {
@@ -24,7 +25,11 @@ export interface SettingsPaths {
 export function createSettingsPaths(input: SettingsPathInput): SettingsPaths {
 	const globalDir = join(input.agentDir, "extensions", input.extensionName);
 	const projectDir = join(input.cwd, ".pi", "extensions", input.extensionName);
-	const projectStateDir = join(globalDir, "projects", input.cwd);
+	const projectStateDir = join(
+		globalDir,
+		"projects",
+		createProjectKey(input.cwd),
+	);
 
 	return {
 		extensionName: input.extensionName,
