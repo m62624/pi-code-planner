@@ -297,11 +297,13 @@ export function checkPlannerStageToolCall(
 	}
 
 	if (inspection.status === "memory_refresh_required") {
-		if (MEMORY_REFRESH_TOOLS.has(toolName) || isReadOnlyProjectTool(toolName)) {
+		if (MEMORY_REFRESH_TOOLS.has(toolName)) return undefined;
+		if (toolName === "bash") {
 			return undefined;
 		}
+		if (isReadOnlyProjectTool(toolName)) return undefined;
 		return block(
-			"Project memory is dirty. Use planner_memory_get_dirty and memory refresh tools before continuing.",
+			"Project memory is dirty. Focus on memory refresh: read dirty files, upsert files/symbols/relations, then clear dirty. Bash is allowed for git status and test verification.",
 		);
 	}
 

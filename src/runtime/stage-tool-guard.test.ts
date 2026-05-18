@@ -217,7 +217,7 @@ describe("checkPlannerStageToolCall", () => {
 		).toMatchObject({ block: true });
 	});
 
-	it("limits dirty memory recovery to memory refresh tools and reads", () => {
+	it("allows bash and memory tools at dirty memory", () => {
 		const dirty = inspection({
 			status: "memory_refresh_required",
 			memory: {
@@ -237,7 +237,9 @@ describe("checkPlannerStageToolCall", () => {
 		expect(
 			guard({ inspection: dirty, toolName: "planner_memory_get_dirty" }),
 		).toBeUndefined();
-		expect(guard({ inspection: dirty, toolName: "bash" })).toMatchObject({
+		expect(guard({ inspection: dirty, toolName: "bash" })).toBeUndefined();
+		expect(guard({ inspection: dirty, toolName: "read" })).toBeUndefined();
+		expect(guard({ inspection: dirty, toolName: "edit" })).toMatchObject({
 			block: true,
 		});
 	});
