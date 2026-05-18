@@ -172,6 +172,7 @@ export default function register(pi: ExtensionAPI): void {
 		getCore,
 		getDirtyMemory,
 		getMemoryDirtyPolicy,
+		getOrchestrator,
 	)) {
 		registerPlannerTool(tool);
 	}

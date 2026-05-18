@@ -236,6 +236,38 @@ describe("PlannerOrchestrator", () => {
 		expect(runtime.get().activeWorkItemId).toBeNull();
 	});
 
+	it("autoCompletes a work item from work_item_commit stage", () => {
+		const { orchestrator, runtime } = createHarness();
+		orchestrator.createPlan({ title: "Plan", planId: "plan-1" });
+		orchestrator.createWorkItem("plan-1", {
+			title: "Parser API",
+			workItemId: "parser-api",
+		});
+		orchestrator.transitionWorkItem("plan-1", "parser-api", "ready");
+		orchestrator.transitionWorkItem("plan-1", "parser-api", "active");
+		orchestrator.transitionWorkItem("plan-1", "parser-api", "tdd_prepare");
+		orchestrator.transitionWorkItem("plan-1", "parser-api", "tdd_write_tests");
+		orchestrator.transitionWorkItem("plan-1", "parser-api", "tdd_tests_commit");
+		orchestrator.transitionWorkItem(
+			"plan-1",
+			"parser-api",
+			"experiments_running",
+		);
+		orchestrator.transitionWorkItem(
+			"plan-1",
+			"parser-api",
+			"candidate_selection",
+		);
+		orchestrator.transitionWorkItem("plan-1", "parser-api", "candidate_merged");
+		orchestrator.transitionWorkItem("plan-1", "parser-api", "verification");
+		orchestrator.transitionWorkItem("plan-1", "parser-api", "work_item_commit");
+
+		const result = orchestrator.autoCompleteWorkItem("plan-1", "parser-api");
+
+		expect(result.current.stage).toBe("completed");
+		expect(runtime.get().activeWorkItemId).toBeNull();
+	});
+
 	it("builds plan stage prompts with instruction and artifact paths", () => {
 		const { orchestrator } = createPromptHarness();
 		orchestrator.createPlan({ title: "Plan", planId: "plan-1" });

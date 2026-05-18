@@ -59,7 +59,7 @@ const WORK_ITEM_TRANSITIONS: Record<WorkItemStage, readonly WorkItemStage[]> = {
 		"experiments_running",
 		"blocked",
 	],
-	work_item_commit: ["signature_refresh", "blocked", "failed"],
+	work_item_commit: ["signature_refresh", "completed", "blocked", "failed"],
 	signature_refresh: ["work_item_compact_required", "blocked", "failed"],
 	work_item_compact_required: ["completed", "blocked"],
 	completed: [],

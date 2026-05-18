@@ -9,6 +9,7 @@ import { GitMutationRejected } from "../git/mutations";
 import type { GitPreflightOperation } from "../git/preflight";
 import { checkMemoryPolicy } from "../memory/policy";
 import type { DirtyMemoryState } from "../memory/schema";
+import type { PlannerOrchestrator } from "../orchestrator/planner-orchestrator";
 import type { MemoryDirtyPolicySettings } from "../settings/schema";
 
 export type GitCoreResolver = (cwd: string) => GitCore;
@@ -18,6 +19,7 @@ export type DirtyMemoryResolver = (
 export type MemoryDirtyPolicyResolver = (
 	cwd: string,
 ) => MemoryDirtyPolicySettings;
+export type OrchestratorResolver = (cwd: string) => PlannerOrchestrator;
 
 function ok<T>(message: string, details: T): AgentToolResult<T> {
 	return {
@@ -136,6 +138,7 @@ export function createPlannerGitTools(
 	getCore: GitCoreResolver,
 	getDirtyMemory?: DirtyMemoryResolver,
 	getMemoryDirtyPolicy?: MemoryDirtyPolicyResolver,
+	getOrchestrator?: OrchestratorResolver,
 ): ToolDefinition[] {
 	return [
 		tool({
@@ -280,6 +283,19 @@ export function createPlannerGitTools(
 					"finish_work_item",
 					async (core) => {
 						const mutation = await core.mutations.commitWorkItem(params);
+
+						if (
+							params.finalizeWorkItem &&
+							getOrchestrator &&
+							mutation.state.activePlanId &&
+							mutation.state.activeWorkItemId
+						) {
+							getOrchestrator(ctx.cwd).autoCompleteWorkItem(
+								mutation.state.activePlanId,
+								mutation.state.activeWorkItemId,
+							);
+						}
+
 						return ok("Planner work item committed.", mutation);
 					},
 				),

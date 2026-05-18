@@ -164,9 +164,6 @@ describe("work item workflow transitions", () => {
 		expect(canTransitionWorkItem("verification", "completed").allowed).toBe(
 			false,
 		);
-		expect(canTransitionWorkItem("work_item_commit", "completed").allowed).toBe(
-			false,
-		);
 		expect(
 			canTransitionWorkItem("signature_refresh", "completed").allowed,
 		).toBe(false);

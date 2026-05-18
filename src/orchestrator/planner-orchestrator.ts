@@ -185,6 +185,13 @@ export class PlannerOrchestrator {
 		return this.transitionWorkItem(planId, workItemId, "completed");
 	}
 
+	autoCompleteWorkItem(
+		planId: string,
+		workItemId: string,
+	): WorkflowTransitionResult<WorkItemRecord, WorkItemStage> {
+		return this.transitionWorkItem(planId, workItemId, "completed");
+	}
+
 	buildPlanStagePrompt(planId: string): AssemblePlannerPromptResult | null {
 		if (!this.options.settings || !this.options.artifacts || !this.options.fs) {
 			return null;

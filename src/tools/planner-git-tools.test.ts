@@ -229,4 +229,58 @@ describe("createPlannerGitTools", () => {
 		expect(commitWorkItem).toHaveBeenCalledTimes(1);
 		expect(result?.details).toBe(mutationResult);
 	});
+
+	it("calls autoCompleteWorkItem when finalizeWorkItem is true", async () => {
+		const mutationResult = {
+			before: repoState(),
+			after: repoState(),
+			state: {
+				mode: "plan_active",
+				activePlanId: "plan-1",
+				activeWorkItemId: "wi-1",
+			},
+		};
+		const commitWorkItem = vi.fn().mockResolvedValue(mutationResult);
+		const autoCompleteWorkItem = vi.fn();
+		const core = {
+			preflight: {
+				check: vi.fn().mockResolvedValue(
+					preflight({
+						operation: "finish_work_item",
+						allowed: true,
+						kind: "allow",
+						message: "Work item can be committed.",
+					}),
+				),
+			},
+			mutations: { commitWorkItem },
+		} as unknown as GitCore;
+		const tool = createPlannerGitTools(
+			() => core,
+			() => ({ files: {} }),
+			() => ({
+				blockCompact: true,
+				blockWorkItemCommit: false,
+				blockSignatureRefreshExit: true,
+			}),
+			() =>
+				({
+					autoCompleteWorkItem,
+				}) as Partial<
+					import("../orchestrator/planner-orchestrator").PlannerOrchestrator
+				>,
+		).find((candidate) => candidate.name === "planner_finish_work_item");
+
+		const result = await tool?.execute(
+			"call-1",
+			{ message: "feat: complete work item", finalizeWorkItem: true },
+			undefined,
+			undefined,
+			context(),
+		);
+
+		expect(commitWorkItem).toHaveBeenCalledTimes(1);
+		expect(autoCompleteWorkItem).toHaveBeenCalledWith("plan-1", "wi-1");
+		expect(result?.details).toBe(mutationResult);
+	});
 });
