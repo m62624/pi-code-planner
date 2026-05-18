@@ -21,6 +21,7 @@ import {
 import type { PlannerRuntimeInspection } from "./runtime/planner-runtime-controller";
 import { PlannerRuntimeController } from "./runtime/planner-runtime-controller";
 import { checkPlannerStageToolCall } from "./runtime/stage-tool-guard";
+import { createNodeSkillFs, ensureSkillFile } from "./skills/skill-init";
 import { createPlannerCompactionTools } from "./tools/planner-compaction-tools";
 import { createPlannerCycleTools } from "./tools/planner-cycle-tools";
 import { createPlannerGitTools } from "./tools/planner-git-tools";
@@ -46,6 +47,9 @@ function formatPlannerStatus(inspection: PlannerRuntimeInspection): string {
 }
 
 export default function register(pi: ExtensionAPI): void {
+	const agentDir = getAgentDir();
+	ensureSkillFile(agentDir, createNodeSkillFs());
+
 	const cores = new Map<string, GitCore>();
 	const compactors = new Map<string, CompactionCoordinator>();
 	const orchestrators = new Map<string, PlannerOrchestrator>();

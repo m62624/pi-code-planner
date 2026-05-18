@@ -86,9 +86,11 @@ function blockForRecovery(
 	);
 }
 
-function resolveTargetBranch(plannerState: PlannerRuntimeState): string | null {
+function resolveTargetBranch(
+	plannerState: PlannerRuntimeState,
+): string | undefined {
 	if (!plannerState.activeWorkItemId) {
-		return null;
+		return undefined;
 	}
 	for (const branch of Object.values(plannerState.branches.items)) {
 		if (
@@ -98,7 +100,7 @@ function resolveTargetBranch(plannerState: PlannerRuntimeState): string | null {
 			return branch.name;
 		}
 	}
-	return null;
+	return undefined;
 }
 
 export function createGitPreflightService(
