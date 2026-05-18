@@ -1,6 +1,6 @@
 ---
 name: pi-planner
-description: "Structured planning workflow for pi-coding-agent. When the user asks to create a plan, use planner_create_plan immediately without asking questions. The extension will provide the next instruction."
+description: "Structured planning workflow for pi-coding-agent. If the user asks to create a plan, use planner_create_plan immediately without asking questions or reading the project. The extension will provide the next instruction."
 ---
 
 # pi-planner

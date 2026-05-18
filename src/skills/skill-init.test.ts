@@ -27,16 +27,27 @@ describe("ensureSkillFile", () => {
 		expect(fs.readFile(SKILL_PATH)).toBe(customContent);
 	});
 
-	it("does not overwrite existing skill file", () => {
+	it("does not overwrite when content is identical", () => {
 		const fs = new MemoryFs();
-		const originalContent = "# Original";
-		const newContent = "# New";
+		const content = "# Original";
 
-		fs.setFile(SKILL_PATH, originalContent);
+		fs.setFile(SKILL_PATH, content);
+
+		ensureSkillFile(AGENT_DIR, fs, content);
+
+		expect(fs.readFile(SKILL_PATH)).toBe(content);
+	});
+
+	it("replaces when content differs", () => {
+		const fs = new MemoryFs();
+		const oldContent = "# Old version";
+		const newContent = "# New version";
+
+		fs.setFile(SKILL_PATH, oldContent);
 
 		ensureSkillFile(AGENT_DIR, fs, newContent);
 
-		expect(fs.readFile(SKILL_PATH)).toBe(originalContent);
+		expect(fs.readFile(SKILL_PATH)).toBe(newContent);
 	});
 
 	it("creates parent directories", () => {
