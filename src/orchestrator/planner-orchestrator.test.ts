@@ -302,4 +302,35 @@ describe("PlannerOrchestrator", () => {
 		expect(prompt?.prompt).toContain("- workItemId: parser-api");
 		expect(prompt?.prompt).toContain("tdd_plan.md");
 	});
+
+	it("force-completes work item when transition is blocked by state machine", () => {
+		const { orchestrator, runtime } = createHarness();
+		orchestrator.createPlan({ title: "Plan", planId: "plan-1" });
+		orchestrator.createWorkItem("plan-1", {
+			title: "Parser API",
+			workItemId: "parser-api",
+		});
+
+		// Put work item in experiments_running (no direct path to completed)
+		orchestrator.transitionWorkItem("plan-1", "parser-api", "ready");
+		orchestrator.transitionWorkItem("plan-1", "parser-api", "active");
+		orchestrator.transitionWorkItem("plan-1", "parser-api", "tdd_prepare");
+		orchestrator.transitionWorkItem("plan-1", "parser-api", "tdd_write_tests");
+		orchestrator.transitionWorkItem("plan-1", "parser-api", "tdd_tests_commit");
+		orchestrator.transitionWorkItem(
+			"plan-1",
+			"parser-api",
+			"experiments_running",
+		);
+
+		// autoCompleteWorkItem should force-completion even though
+		// experiments_running → completed is not a valid transition
+		const result = orchestrator.autoCompleteWorkItem("plan-1", "parser-api");
+
+		expect(result.current.stage).toBe("completed");
+		expect(result.decision.from).toBe("experiments_running");
+		expect(result.decision.to).toBe("completed");
+		expect(result.decision.reason).toContain("Force-completed");
+		expect(runtime.get().activeWorkItemId).toBeNull();
+	});
 });

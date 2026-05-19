@@ -19,9 +19,11 @@ import {
 } from "../workflow/instructions";
 import {
 	WorkflowManager,
+	WorkflowTransitionRejected,
 	type WorkflowTransitionResult,
 } from "../workflow/manager";
 import type { PlanStage, WorkItemStage } from "../workflow/schema";
+import { deriveWorkItemStatus } from "../workflow/status";
 
 export interface PlannerOrchestratorOptions {
 	projectPath: string;
@@ -189,7 +191,38 @@ export class PlannerOrchestrator {
 		planId: string,
 		workItemId: string,
 	): WorkflowTransitionResult<WorkItemRecord, WorkItemStage> {
-		return this.transitionWorkItem(planId, workItemId, "completed");
+		const previous = this.options.store.readWorkItem(
+			this.options.projectPath,
+			planId,
+			workItemId,
+		);
+		try {
+			return this.transitionWorkItem(planId, workItemId, "completed");
+		} catch (err) {
+			if (err instanceof WorkflowTransitionRejected) {
+				const current = this.options.store.updateWorkItem(
+					this.options.projectPath,
+					planId,
+					workItemId,
+					{
+						stage: "completed",
+						status: deriveWorkItemStatus("completed"),
+					},
+				);
+				this.updateRuntimeForWorkItem(current);
+				return {
+					previous,
+					current,
+					decision: {
+						allowed: true,
+						from: previous.stage,
+						to: "completed",
+						reason: `Force-completed after merge (transition from ${previous.stage} to completed was blocked).`,
+					},
+				};
+			}
+			throw err;
+		}
 	}
 
 	buildPlanStagePrompt(planId: string): AssemblePlannerPromptResult | null {

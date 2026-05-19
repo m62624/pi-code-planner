@@ -591,4 +591,35 @@ describe("GitMutations", () => {
 			result.state.branches.items["planner/plan-1/work/work-1"].status,
 		).toBe("deleted");
 	});
+
+	it("auto-commits uncommitted changes on experiment branch before switching", async () => {
+		const { fs, state, writer, mutations } = setup([
+			repo({
+				status: status({
+					unstagedFiles: ["src/types.ts"],
+					isDirty: true,
+				}),
+			}),
+			repo({
+				status: emptyGitStatusSummary(),
+				currentCommit: "def456",
+			}),
+		]);
+		saveActivePlan(fs);
+		state.refresh();
+
+		await mutations.selectExperimentBranch({
+			workItemId: "work-1",
+			attemptId: "try-a",
+		});
+
+		expect(writer.calls).toEqual([
+			"stageAll",
+			"commit:planner: auto-commit experiment changes for try-a",
+			"switchBranch:planner/plan-1/work/work-1",
+			"mergeBranch:planner/plan-1/experiment/work-1/try-a",
+			"deleteBranch:planner/plan-1/experiment/work-1/try-a",
+			"deleteBranch:planner/plan-1/experiment/work-1/try-b",
+		]);
+	});
 });

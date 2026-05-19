@@ -398,6 +398,7 @@ export class GitMutations {
 		if (!state.activePlanId) {
 			throw new Error("Cannot select experiment without active plan id.");
 		}
+		const activePlanId = state.activePlanId;
 		const experimentBranch = this.branchName("experiment", {
 			planId: state.activePlanId,
 			workItemId: input.workItemId,
@@ -414,6 +415,33 @@ export class GitMutations {
 		const target = state.branches.items[targetBranch];
 		if (!target || target.kind !== "child") {
 			throw new Error("Experiment target is not a registered child branch.");
+		}
+
+		// Commit uncommitted changes on the experiment branch before switching.
+		// The agent may have edited files via the edit tool without committing.
+		if (before.status.isDirty) {
+			await this.deps.writer.stageAll();
+			await this.deps.writer.commit(
+				`planner: auto-commit experiment changes for ${input.attemptId}`,
+			);
+			const postCommit = await this.deps.readRepoState();
+			const updatedState = {
+				...state,
+				branches: {
+					...state.branches,
+					items: {
+						...state.branches.items,
+						[experimentBranch]: {
+							...state.branches.items[experimentBranch],
+							lastKnownCommit: postCommit.currentCommit,
+						},
+					},
+				},
+			};
+			this.saveState(updatedState);
+			// Re-read repo state after commit so policy check sees clean worktree
+			const cleanedState = await this.deps.readRepoState();
+			before.status = cleanedState.status;
 		}
 
 		ensureAllowed(
@@ -463,7 +491,7 @@ export class GitMutations {
 		let cleanupState = selectedState;
 		for (const branch of managedExperimentBranchesForWorkItem(
 			selectedState,
-			state.activePlanId,
+			activePlanId,
 			input.workItemId,
 		)) {
 			const deleted = await this.deleteBranchByName({
