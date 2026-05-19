@@ -303,7 +303,7 @@ export function checkPlannerStageToolCall(
 		}
 		if (isReadOnlyProjectTool(toolName)) return undefined;
 		return block(
-			"Project memory is dirty. Focus on memory refresh: read dirty files, upsert files/symbols/relations, then clear dirty. Bash is allowed for git status and test verification.",
+			"Project memory is dirty. Refresh it before continuing: 1) Call planner_memory_get_dirty to see which files changed. 2) For each dirty file, call read to get the current content. 3) Call planner_memory_upsert_files with the updated file entries. 4) Call planner_memory_upsert_symbols for all exported functions, types, and classes in those files. 5) Call planner_memory_upsert_relations for calls, implements, and other relationships. 6) Call planner_memory_clear_dirty with the updated file paths. Bash is allowed for git status and test verification.",
 		);
 	}
 
