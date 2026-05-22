@@ -433,6 +433,106 @@ plan branch -> output branch
 
 Модель всегда должна вызывать status/next-step tool, если не уверена что делать дальше. Tool читает `state.json`, проверяет git/worktree и возвращает единственный допустимый следующий шаг. Модель не должна сама перескакивать stage или выполнять raw git.
 
+### `planner_status`
+
+`planner_status` — главный tool навигации. Он всегда разрешён, если plan активен.
+
+Tool читает:
+- `project.json`
+- `state.json`
+- активный `plan.json`
+- git/worktree состояние через внутренний git слой
+- memory dirty/checkpoint состояние
+
+Tool возвращает:
+- текущие `stage`, `step`, `stepStatus`, `nextStep`
+- активные `planId`, `taskId`, `experimentId`
+- разрешённые категории действий для текущего step
+- заблокированные категории действий и причину
+- список markdown artifacts, которые модель должна прочитать
+- ссылку на active worktree
+- флаг `requiresCompact`
+- флаг `requiresUserDecision`
+
+`planner_status` не заменяет stage/task instructions. Он только сообщает, где находится модель и что ей разрешено делать. Подробная инструкция берётся из markdown artifacts.
+
+### Markdown instructions
+
+Для каждого stage/task/experiment создаются markdown artifacts. Они собираются из:
+- системного шаблона расширения
+- пользовательских настроек проекта
+- конкретного `task.md`, `tdd.md`, `verify.md`, `summary.md`
+- memory context: `project_patterns.md`, `files/index.jsonl`, `symbols/index.jsonl`, `relations/index.jsonl`
+
+После compact модель должна заново прочитать markdown artifacts, которые указал `planner_status`. Markdown объясняет, как именно выполнять step, например:
+- как запускать проверки проекта
+- какие test commands использовать: `cargo test`, `npm test`, `pytest`, `go test`
+- какие mocks/fixtures допустимы
+- какие project conventions соблюдать
+
+`planner_status` возвращает ссылки на нужные markdown files, но не вставляет длинный prompt внутрь tool result.
+
+### Категории действий
+
+Разрешения задаются не по каждому shell command, а по категориям:
+
+- `read_project` — читать project files
+- `write_artifacts` — писать planner artifacts: `plan.md`, `task.md`, `tdd.md`, summaries
+- `write_memory` — обновлять memory files через planner memory tools
+- `write_tests` — писать tests, fixtures, mocks и необходимое подключение тестов
+- `write_production` — менять production behavior
+- `run_checks` — запускать команды проверки из markdown/settings
+- `planner_git` — выполнять git операции только через planner tools
+- `raw_git` — всегда запрещён при active plan
+
+Extension не должен пытаться определять корректность изменений через pattern matching путей. В реальном проекте любой файл может быть легитимно изменён ради теста, harness, fixture или интеграции.
+
+Граница безопасности другая: перед `finish_task`, checkpoint или merge extension даёт модели обязательную проверку controlled diff/last commit. Модель должна подтвердить:
+- какие файлы были изменены
+- зачем каждый файл относится к текущему task
+- нет ли случайных изменений вне scope
+- не был ли изменён production behavior раньше разрешённого step
+
+Если модель не может объяснить изменение файла, step остаётся в retry/review, а не переходит дальше.
+
+### Retry
+
+Если step завершился неудачно, extension не перескакивает на следующий step. Он оставляет текущий `stage/step`, обновляет `stepStatus=failed` или `blocked`, и `planner_status` возвращает инструкцию retry текущего step.
+
+Retry не создаёт новый global stage. Он остаётся внутри текущего task/experiment scope.
+
+Если во время task модель обнаружила, что для завершения нужны дополнительные мелкие действия, они не становятся новыми global steps. Они записываются в task artifact как local checklist/subtasks и выполняются внутри текущего step, пока не меняют внешний контракт stage machine.
+
+Новый formal step нужен только если:
+- действие требует другого набора разрешений
+- действие требует compact boundary
+- действие меняет git branch/checkpoint
+- действие должно пережить crash как отдельная точка восстановления
+
+Иначе это scope текущего step.
+
+### Git guard
+
+Если plan неактивен, extension не вмешивается.
+
+Если plan активен, raw git полностью запрещён во всех stage/step:
+- `git status`
+- `git diff`
+- `git log`
+- `git show`
+- `git commit`
+- `git branch`
+- `git switch`
+- `git checkout`
+- `git merge`
+- `git reset`
+- `git rebase`
+- `git worktree`
+
+Даже read-only git commands запрещены через shell. Если модели нужен status, diff или history, она вызывает `planner_status` или planner git tool. Extension сам выполняет внутренний git read/write и возвращает безопасный результат.
+
+Перед каждым planner tool call extension проверяет git/worktree reality. Если branch, commit, dirty state или checkpoint отличаются от `state.json`, normal flow останавливается и включается recovery/discovery_update logic.
+
 ### Stage 1: `init`
 
 Цель: подготовить project storage, git и plan worktree.
