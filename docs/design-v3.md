@@ -232,7 +232,7 @@ Storage расширения создаётся через PI API:
 getAgentDir()/extensions/pi-code-planner/
 ```
 
-Внутри extension storage состояние хранится отдельно для каждого открытого проекта. Нельзя хранить один глобальный `state.json` на все проекты: это ломает восстановление, путает активные планы и делает восстановление после crash неоднозначным.
+Внутри extension storage данные хранятся отдельно для каждого открытого проекта. Нельзя хранить один глобальный `state.json` на все проекты или один общий `state.json` на все plans внутри проекта: это ломает восстановление, путает активные планы и делает восстановление после crash неоднозначным.
 
 ### Директория проекта
 
@@ -255,10 +255,10 @@ Hash нужен, потому что разные проекты могут им
 ```
 projects/<project-id>/
   project.json
-  state.json
   plans/
     <plan-id>/
       plan.json
+      state.json
       plan.md
       discovery.md
       questions.md
@@ -313,7 +313,7 @@ getAgentDir()/extensions/pi-code-planner/projects/<project-id>/worktrees/<plan-i
 
 ### `project.json`
 
-`project.json` — постоянная карточка проекта. Она отвечает на вопрос: какой это project и какие планы с ним связаны.
+`project.json` — постоянная карточка проекта и index plans. Она отвечает только на вопросы: какой это project, какие планы есть в этом project, и какой plan сейчас active.
 
 Пример:
 
@@ -328,22 +328,27 @@ getAgentDir()/extensions/pi-code-planner/projects/<project-id>/worktrees/<plan-i
     {
       "planId": "plan-fix-find-command",
       "title": "Fix approval-modes false positive",
-      "status": "active",
-      "createdAt": "2026-05-22T10:00:00.000Z"
+      "status": "active"
     }
   ]
 }
 ```
 
 Правила:
+- `project.json` не хранит stage/step/worktree/branches
 - `plans` хранит только summary всех планов проекта
 - подробности плана лежат в `plans/<plan-id>/plan.json`
-- `createdAt` нужен для списка и сортировки планов
+- execution state плана лежит в `plans/<plan-id>/state.json`
+- `activePlanId` показывает, с каким plan работает extension сейчас
+- при переключении плана меняется только `activePlanId`; state другого plan не перетирается
+- `createdAt` не используется в MVP
 - `lastOpenedAt` не используется в v3, потому что не помогает модели и создаёт лишние записи
 
-### `state.json`
+### `plans/<plan-id>/state.json`
 
-`state.json` — восстанавливаемое после crash состояние выполнения planner в этом проекте. Он отвечает на вопрос: что planner делает сейчас и какой следующий step должен быть выполнен.
+`state.json` — восстанавливаемое после crash состояние выполнения конкретного plan. У каждого plan свой `state.json`.
+
+Он отвечает на вопрос: что именно этот plan делает сейчас и какой следующий step должен быть выполнен.
 
 Главная идея: завершённый step нельзя повторять автоматически. Если компьютер выключился после завершения step, extension читает `nextStep` и продолжает с него.
 
@@ -352,7 +357,6 @@ getAgentDir()/extensions/pi-code-planner/projects/<project-id>/worktrees/<plan-i
 ```json
 {
   "schemaVersion": 1,
-  "activePlanId": "plan-fix-find-command",
   "stage": "discovery",
   "step": "read_project",
   "stepStatus": "completed",
@@ -376,24 +380,30 @@ getAgentDir()/extensions/pi-code-planner/projects/<project-id>/worktrees/<plan-i
   "lastCheckpointCommit": null,
   "requiresCompact": false,
   "requiresUserDecision": false,
+  "broken": false,
+  "brokenReason": null,
   "blockedReason": null
 }
 ```
 
 Правила:
 - `state.json` часто обновляется
-- state всегда привязан к конкретному project
+- state всегда привязан к конкретному plan
+- plan определяется путём `plans/<plan-id>/state.json`, поэтому `activePlanId` внутри state не нужен
 - `stage` — крупная стадия: например `init`, `discovery`, `planning`, `execution`, `recovery`, `done`
 - `step` — конкретный подшаг внутри stage
 - `stepStatus` — состояние подшага: `pending`, `running`, `completed`, `failed`, `blocked`
 - `nextStep` показывает следующий допустимый step после завершения текущего
 - `branches` хранит реальные имена веток, чтобы модель не решала сама куда merge делать
 - `mergeTargets` хранит ожидаемые merge пары для текущего этапа
-- после restart extension сначала читает `state.json`, затем проверяет git/worktree, затем либо продолжает с `nextStep`, либо переходит в recovery
+- после restart extension сначала читает `project.json`, берёт `activePlanId`, затем читает `plans/<activePlanId>/state.json`
+- после чтения state extension проверяет git/worktree, затем либо продолжает с `nextStep`, либо переходит в recovery
 - если state противоречит реальному git/worktree состоянию, planner переходит в recovery stage
 - extension не должен повторять `completed` step без явного recovery/user decision
+- если expected branch/worktree отсутствует, state помечается `broken=true`, а destructive repair требует решения пользователя
+- если branch могла быть переименована, recovery сначала ищет возможный renamed branch по planId/taskId/checkpoint, а не сразу считает plan потерянным
 
-Модель не выбирает merge target. Например, при `select_experiment` модель выбирает только `experimentId`, а extension берёт target из `state.json`:
+Модель не выбирает merge target. Например, при `select_experiment` модель выбирает только `experimentId`, а extension берёт target из `plans/<plan-id>/state.json`:
 
 ```
 selected experiment branch -> current task branch
@@ -403,7 +413,7 @@ plan branch -> output branch
 
 ### `plans/<plan-id>/plan.json`
 
-`plan.json` — machine-readable состояние конкретного плана.
+`plan.json` — structured index конкретного плана. Он хранит структуру плана, а не runtime execution state.
 
 Пример:
 
@@ -413,25 +423,55 @@ plan branch -> output branch
   "planId": "plan-fix-find-command",
   "title": "Fix approval-modes false positive",
   "status": "active",
-  "stage": "planning",
-  "baseBranch": "main",
-  "planBranch": "plan/plan-fix-find-command",
-  "worktreePath": "/home/m62624/Projects/main/pi-approval-modes/.pi/worktrees/plan-fix-find-command",
-  "tasks": []
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Add failing test for blocked find command",
+      "status": "pending"
+    }
+  ]
 }
 ```
 
 Правила:
 - `project.json` знает только краткое описание плана
-- `state.json` знает активное execution состояние
-- `plan.json` знает структуру и progress конкретного плана
+- `plans/<plan-id>/state.json` знает активное execution состояние этого plan
+- `plan.json` знает task list и progress конкретного плана
+- `plan.json` не хранит current branch/current step/current experiment
 - markdown-файлы рядом с `plan.json` являются читаемым контекстом для модели, но не заменяют JSON state
+
+### Переключение планов
+
+Порядок работы extension:
+
+1. Определить opened project root.
+2. Вычислить `projectId`.
+3. Прочитать `projects/<project-id>/project.json`.
+4. Взять `activePlanId`.
+5. Прочитать `projects/<project-id>/plans/<activePlanId>/state.json`.
+6. Проверить worktree, expected branch, current commit, dirty/conflict state.
+
+Если active plan ожидает ветку, которой больше нет:
+- не делать reset/delete/checkout автоматически
+- пометить `broken=true`
+- записать `brokenReason`
+- спросить пользователя, что делать дальше
+
+Возможные user decisions:
+- оставить plan broken
+- поискать renamed branch
+- принять найденный renamed branch
+- пересоздать branch из checkpoint, если это безопасно
+- переключить active plan
+- удалить/reset plan через user command
+
+Модель не выполняет destructive recovery сама.
 
 ---
 
 ## 5. Машина стадий
 
-Модель всегда должна вызывать status/next-step tool, если не уверена что делать дальше. Tool читает `state.json`, проверяет git/worktree и возвращает единственный допустимый следующий шаг. Модель не должна сама перескакивать stage или выполнять raw git.
+Модель всегда должна вызывать status/next-step tool, если не уверена что делать дальше. Tool читает `project.json`, затем `plans/<activePlanId>/state.json`, проверяет git/worktree и возвращает единственный допустимый следующий шаг. Модель не должна сама перескакивать stage или выполнять raw git.
 
 ### `planner_status`
 
@@ -439,7 +479,7 @@ plan branch -> output branch
 
 Tool читает:
 - `project.json`
-- `state.json`
+- `plans/<activePlanId>/state.json`
 - активный `plan.json`
 - git/worktree состояние через внутренний git слой
 - memory dirty/checkpoint состояние
@@ -531,7 +571,7 @@ Retry не создаёт новый global stage. Он остаётся вну�
 
 Даже read-only git commands запрещены через shell. Если модели нужен status, diff или history, она вызывает `planner_status` или planner git tool. Extension сам выполняет внутренний git read/write и возвращает безопасный результат.
 
-Перед каждым planner tool call extension проверяет git/worktree reality. Если branch, commit, dirty state или checkpoint отличаются от `state.json`, normal flow останавливается и включается recovery/discovery_update logic.
+Перед каждым planner tool call extension проверяет git/worktree reality. Если branch, commit, dirty state или checkpoint отличаются от `plans/<activePlanId>/state.json`, normal flow останавливается и включается recovery/discovery_update logic.
 
 ### Stage 1: `init`
 
@@ -541,11 +581,11 @@ Retry не создаёт новый global stage. Он остаётся вну�
 
 1. `check_project` — определить root открытого проекта и project id.
 2. `check_git` — проверить, есть ли git repo; если нет, planner предлагает/выполняет git init через controlled tool.
-3. `prepare_storage` — создать или загрузить `project.json`, `state.json`, директории проекта.
+3. `prepare_storage` — создать или загрузить `project.json` и директории проекта.
 4. `choose_worktree_location` — выбрать расположение для plan worktree: project-local, agent-dir или custom.
-5. `create_plan_record` — создать `plan.json`, `plan.md`, базовые artifacts и краткое описание в `project.json`.
+5. `create_plan_record` — создать `plan.json`, `state.json`, `plan.md`, базовые artifacts и краткое описание в `project.json`.
 6. `create_plan_worktree` — создать один git worktree для всего plan.
-7. `enter_discovery` — обновить `state.json`: `stage=discovery`, `step=read_project`.
+7. `enter_discovery` — обновить `plans/<plan-id>/state.json`: `stage=discovery`, `step=read_project`.
 
 ### Stage 2: `discovery`
 
@@ -561,7 +601,7 @@ Retry не создаёт новый global stage. Он остаётся вну�
 6. `write_questions` — записать вопросы и неопределённости в `questions.md`.
 7. `verify_memory` — проверить, что memory entries действительно ссылаются на существующие файлы и symbols.
 8. `compact_discovery` — выполнить compact boundary после discovery.
-9. `enter_planning` — обновить `state.json`: `stage=planning`, `step=read_memory`.
+9. `enter_planning` — обновить `plans/<plan-id>/state.json`: `stage=planning`, `step=read_memory`.
 
 ### Stage 3: `planning`
 
@@ -575,7 +615,7 @@ Retry не создаёт новый global stage. Он остаётся вну�
 4. `write_task_files` — создать `tasks/<task-id>/task.json` и `task.md` для каждого task.
 5. `verify_plan` — проверить, что tasks атомарные, упорядоченные и имеют чёткие acceptance criteria.
 6. `compact_planning` — выполнить compact boundary после planning.
-7. `enter_execution` — обновить `state.json`: `stage=execution`, `step=prepare_task`.
+7. `enter_execution` — обновить `plans/<plan-id>/state.json`: `stage=execution`, `step=prepare_task`.
 
 ### Stage 4: `execution`
 
@@ -591,7 +631,7 @@ Retry не создаёт новый global stage. Он остаётся вну�
 6. `run_experiment` — реализовать один подход в experiment branch.
 7. `summarize_experiment` — записать summary, diff и результат проверки experiment.
 8. `compact_experiment` — выполнить compact boundary перед следующим experiment или selection.
-9. `select_experiment` — модель выбирает лучший `experimentId`; merge target берётся из `state.json`.
+9. `select_experiment` — модель выбирает лучший `experimentId`; merge target берётся из `plans/<plan-id>/state.json`.
 10. `merge_best_experiment` — extension merge выбранный experiment branch в current task branch.
 11. `refactor_task` — улучшить код на task branch без изменения поведения.
 12. `run_final_tests` — прогнать финальные проверки task branch.
@@ -609,7 +649,7 @@ Retry не создаёт новый global stage. Он остаётся вну�
 2. `prepare_output_branch` — создать или обновить output branch в исходном repo проекта.
 3. `merge_or_export_result` — перенести итог plan branch из worktree в output branch.
 4. `cleanup_worktree` — удалить plan worktree и временные managed branches, которые безопасно удалять.
-5. `mark_done` — обновить `project.json`, `plan.json`, `state.json`: plan завершён, active execution отсутствует.
+5. `mark_done` — обновить `project.json`, `plan.json`, `plans/<plan-id>/state.json`: plan завершён, active execution отсутствует.
 
 ### Stage 6: `recovery`
 
@@ -617,12 +657,12 @@ Retry не создаёт новый global stage. Он остаётся вну�
 
 Подшаги:
 
-1. `read_state` — прочитать `project.json`, `state.json`, активный `plan.json`.
+1. `read_state` — прочитать `project.json`, `plans/<activePlanId>/state.json`, активный `plan.json`.
 2. `inspect_git` — проверить repo, worktree, current branch, commits, dirty/conflict state.
-3. `compare_expected_actual` — сравнить реальное git-состояние с `state.json`: expected branch, worktree path, checkpoint commit, merge targets.
+3. `compare_expected_actual` — сравнить реальное git-состояние с `plans/<activePlanId>/state.json`: expected branch, worktree path, checkpoint commit, merge targets.
 4. `classify_recovery` — определить тип проблемы: missing worktree, wrong branch, dirty checkpoint, external commit, conflict, missing plan files.
 5. `ask_user_if_destructive` — если repair требует удаления, reset или force operation, спросить пользователя; модель не принимает destructive решение сама.
-6. `repair_or_resume` — выполнить безопасное восстановление или вернуться к stage/step/nextStep из `state.json`.
+6. `repair_or_resume` — выполнить безопасное восстановление или вернуться к stage/step/nextStep из `plans/<activePlanId>/state.json`.
 
 ---
 
