@@ -219,22 +219,22 @@ Git API — это внутренний слой extension. Модель не д
 - Перед переходом stage extension решает, нужен ли clean checkpoint
 
 #### `git diff`
-- Inspect изменений до commit
-- Используется для verification, experiment summary и candidate selection
+- Просмотр изменений до commit
+- Используется для verification, summary эксперимента и выбора кандидата
 
 ---
 
-## 4. Project Persistence: состояние проекта
+## 4. Состояние проекта
 
-Storage extension создаётся через PI API:
+Storage расширения создаётся через PI API:
 
 ```
 getAgentDir()/extensions/pi-code-planner/
 ```
 
-Внутри extension storage состояние хранится отдельно для каждого opened project. Нельзя хранить один глобальный `state.json` на все проекты: это ломает восстановление, путает активные планы и делает crash recovery неоднозначным.
+Внутри extension storage состояние хранится отдельно для каждого открытого проекта. Нельзя хранить один глобальный `state.json` на все проекты: это ломает восстановление, путает активные планы и делает восстановление после crash неоднозначным.
 
-### Project directory
+### Директория проекта
 
 Каждый project получает стабильную директорию:
 
@@ -248,9 +248,9 @@ getAgentDir()/extensions/pi-code-planner/projects/<project-folder-name>-<short-h
 
 Hash нужен, потому что разные проекты могут иметь одинаковое имя папки.
 
-### Layout
+### Структура
 
-Extension state всегда хранится в agent dir:
+Состояние расширения всегда хранится в agent dir:
 
 ```
 projects/<project-id>/
@@ -283,21 +283,21 @@ projects/<project-id>/
               diff.md
 ```
 
-Plan worktree хранится отдельно от state. Его location настраивается.
+Plan worktree хранится отдельно от state. Его расположение настраивается.
 
-Default:
+По умолчанию:
 
 ```
 <project-root>/.pi/worktrees/<plan-id>/
 ```
 
-Alternative:
+Альтернатива:
 
 ```
 getAgentDir()/extensions/pi-code-planner/projects/<project-id>/worktrees/<plan-id>/
 ```
 
-Custom:
+Пользовательский путь:
 
 ```
 <user-selected-root>/<project-id>/<plan-id>/
@@ -305,10 +305,10 @@ Custom:
 
 Правила:
 - один plan создаёт ровно один worktree
-- task, experiment и refactor являются git branches внутри этого worktree
-- worktree location выбирается при создании plan
+- task, experiment и refactor являются git-ветками внутри этого worktree
+- расположение worktree выбирается при создании plan
 - если используется project-local worktree, extension автоматически добавляет `.pi/worktrees/` в `.gitignore`
-- extension не должен автоматически игнорировать всю `.pi/`, потому что user может хранить там полезные project-local настройки
+- extension не должен автоматически игнорировать всю `.pi/`, потому что пользователь может хранить там полезные project-local настройки
 - если `.pi/worktrees/` уже покрыт существующим `.gitignore`, extension не дублирует правило
 
 ### `project.json`
@@ -343,7 +343,7 @@ Custom:
 
 ### `state.json`
 
-`state.json` — crash-resumable состояние выполнения planner в этом проекте. Он отвечает на вопрос: что planner делает сейчас и какой следующий step должен быть выполнен.
+`state.json` — восстанавливаемое после crash состояние выполнения planner в этом проекте. Он отвечает на вопрос: что planner делает сейчас и какой следующий step должен быть выполнен.
 
 Главная идея: завершённый step нельзя повторять автоматически. Если компьютер выключился после завершения step, extension читает `nextStep` и продолжает с него.
 
@@ -382,12 +382,12 @@ Custom:
 
 Правила:
 - `state.json` часто обновляется
-- state всегда project-scoped
+- state всегда привязан к конкретному project
 - `stage` — крупная стадия: например `init`, `discovery`, `planning`, `execution`, `recovery`, `done`
 - `step` — конкретный подшаг внутри stage
 - `stepStatus` — состояние подшага: `pending`, `running`, `completed`, `failed`, `blocked`
 - `nextStep` показывает следующий допустимый step после завершения текущего
-- `branches` хранит реальные branch names, чтобы модель не решала сама куда merge делать
+- `branches` хранит реальные имена веток, чтобы модель не решала сама куда merge делать
 - `mergeTargets` хранит ожидаемые merge пары для текущего этапа
 - после restart extension сначала читает `state.json`, затем проверяет git/worktree, затем либо продолжает с `nextStep`, либо переходит в recovery
 - если state противоречит реальному git/worktree состоянию, planner переходит в recovery stage
@@ -422,14 +422,14 @@ plan branch -> output branch
 ```
 
 Правила:
-- `project.json` знает только summary плана
+- `project.json` знает только краткое описание плана
 - `state.json` знает активное execution состояние
 - `plan.json` знает структуру и progress конкретного плана
-- markdown files рядом с `plan.json` являются readable context для модели, но не заменяют JSON state
+- markdown-файлы рядом с `plan.json` являются читаемым контекстом для модели, но не заменяют JSON state
 
 ---
 
-## 5. Stage Machine
+## 5. Машина стадий
 
 Модель всегда должна вызывать status/next-step tool, если не уверена что делать дальше. Tool читает `state.json`, проверяет git/worktree и возвращает единственный допустимый следующий шаг. Модель не должна сама перескакивать stage или выполнять raw git.
 
@@ -439,11 +439,11 @@ plan branch -> output branch
 
 Подшаги:
 
-1. `check_project` — определить opened project root и project id.
+1. `check_project` — определить root открытого проекта и project id.
 2. `check_git` — проверить, есть ли git repo; если нет, planner предлагает/выполняет git init через controlled tool.
-3. `prepare_storage` — создать или загрузить `project.json`, `state.json`, project directories.
-4. `choose_worktree_location` — выбрать location для plan worktree: project-local, agent-dir или custom.
-5. `create_plan_record` — создать `plan.json`, `plan.md`, базовые artifacts и summary в `project.json`.
+3. `prepare_storage` — создать или загрузить `project.json`, `state.json`, директории проекта.
+4. `choose_worktree_location` — выбрать расположение для plan worktree: project-local, agent-dir или custom.
+5. `create_plan_record` — создать `plan.json`, `plan.md`, базовые artifacts и краткое описание в `project.json`.
 6. `create_plan_worktree` — создать один git worktree для всего plan.
 7. `enter_discovery` — обновить `state.json`: `stage=discovery`, `step=read_project`.
 
@@ -459,7 +459,7 @@ plan branch -> output branch
 4. `write_symbols` — записать сигнатуры функций, типов, классов, публичных API в `memory/symbols/index.jsonl`.
 5. `write_relations` — записать связи между файлами, символами и модулями в `memory/relations/index.jsonl`.
 6. `write_questions` — записать вопросы и неопределённости в `questions.md`.
-7. `verify_memory` — проверить, что memory entries действительно ссылаются на существующие файлы/символы.
+7. `verify_memory` — проверить, что memory entries действительно ссылаются на существующие файлы и symbols.
 8. `compact_discovery` — выполнить compact boundary после discovery.
 9. `enter_planning` — обновить `state.json`: `stage=planning`, `step=read_memory`.
 
@@ -473,7 +473,7 @@ plan branch -> output branch
 2. `draft_plan` — записать общий план в `plan.md`.
 3. `split_tasks` — разбить работу на atomic tasks.
 4. `write_task_files` — создать `tasks/<task-id>/task.json` и `task.md` для каждого task.
-5. `verify_plan` — проверить, что tasks атомарные, упорядоченные и имеют clear acceptance criteria.
+5. `verify_plan` — проверить, что tasks атомарные, упорядоченные и имеют чёткие acceptance criteria.
 6. `compact_planning` — выполнить compact boundary после planning.
 7. `enter_execution` — обновить `state.json`: `stage=execution`, `step=prepare_task`.
 
@@ -483,11 +483,11 @@ plan branch -> output branch
 
 Подшаги для каждого task:
 
-1. `prepare_task` — выбрать следующий task, создать/переключить task branch, загрузить task artifacts.
+1. `prepare_task` — выбрать следующий task, создать или переключить task branch, загрузить task artifacts.
 2. `write_tdd_plan` — записать TDD план до любых production edits.
 3. `write_tests` — написать failing/mock/contract tests до production code.
 4. `run_failing_tests` — подтвердить, что тесты действительно проверяют требование и падают/ловят отсутствие реализации.
-5. `start_experiments` — создать список experiment attempts и первый experiment branch.
+5. `start_experiments` — создать список попыток эксперимента и первый experiment branch.
 6. `run_experiment` — реализовать один подход в experiment branch.
 7. `summarize_experiment` — записать summary, diff и результат проверки experiment.
 8. `compact_experiment` — выполнить compact boundary перед следующим experiment или selection.
@@ -506,9 +506,9 @@ plan branch -> output branch
 Подшаги:
 
 1. `verify_plan_branch` — проверить, что plan branch содержит все merged tasks и проходит финальные проверки.
-2. `prepare_output_branch` — создать или обновить output branch в original project repo.
+2. `prepare_output_branch` — создать или обновить output branch в исходном repo проекта.
 3. `merge_or_export_result` — перенести итог plan branch из worktree в output branch.
-4. `cleanup_worktree` — удалить plan worktree и managed temporary branches, которые безопасно удалять.
+4. `cleanup_worktree` — удалить plan worktree и временные managed branches, которые безопасно удалять.
 5. `mark_done` — обновить `project.json`, `plan.json`, `state.json`: plan завершён, active execution отсутствует.
 
 ### Stage 6: `recovery`
@@ -519,7 +519,311 @@ plan branch -> output branch
 
 1. `read_state` — прочитать `project.json`, `state.json`, активный `plan.json`.
 2. `inspect_git` — проверить repo, worktree, current branch, commits, dirty/conflict state.
-3. `compare_expected_actual` — сравнить git reality с `state.json`: expected branch, worktree path, checkpoint commit, merge targets.
+3. `compare_expected_actual` — сравнить реальное git-состояние с `state.json`: expected branch, worktree path, checkpoint commit, merge targets.
 4. `classify_recovery` — определить тип проблемы: missing worktree, wrong branch, dirty checkpoint, external commit, conflict, missing plan files.
-5. `ask_user_if_destructive` — если repair требует удаления, reset или force operation, спросить user; модель не принимает destructive решение сама.
+5. `ask_user_if_destructive` — если repair требует удаления, reset или force operation, спросить пользователя; модель не принимает destructive решение сама.
 6. `repair_or_resume` — выполнить безопасное восстановление или вернуться к stage/step/nextStep из `state.json`.
+
+---
+
+## 6. Memory System
+
+Memory System — это сжатая knowledge base проекта для локальной модели. Она нужна, чтобы модель не перечитывала весь проект после каждого compact, rebase, checkout или task.
+
+Memory не заменяет source code. Memory хранит минимальную безопасную информацию:
+- какие файлы существуют
+- какие API/signatures есть в этих файлах
+- какие symbols связаны друг с другом
+- какие functions/types имеют side effects
+- какие memory entries устарели после git/filesystem изменений
+
+### Главный принцип
+
+Git отвечает за историю и ветки. Memory отвечает за фактическое состояние файлов и API.
+
+```
+Git commit hash = checkpoint истории
+File hash = checkpoint содержимого файла
+Symbol anchor = способ найти API без line numbers
+Memory dirty state = список файлов, чьи compressed entries нужно обновить
+```
+
+Это важно для rebase: commit hash может измениться, но file hashes показывают, что реально поменялось.
+
+### Структура
+
+Memory живёт внутри конкретного plan:
+
+```
+plans/<plan-id>/memory/
+  project_patterns.md
+  files/index.jsonl
+  symbols/index.jsonl
+  relations/index.jsonl
+  dirty.json
+  checkpoints/
+    latest.json
+```
+
+Для MVP достаточно одного `symbols/index.jsonl`. Sharding можно добавить позже как внутреннюю оптимизацию, если файл станет слишком большим.
+
+### `files/index.jsonl`
+
+Файловый индекс хранит минимальную информацию о файлах проекта.
+
+Пример записи:
+
+```json
+{
+  "path": "src/config.ts",
+  "kind": "source",
+  "language": "ts",
+  "hash": "sha256-file-content",
+  "status": "indexed",
+  "summary": "Configuration parsing and validation."
+}
+```
+
+Поля:
+- `path` — relative path от project root
+- `kind` — `source`, `test`, `config`, `docs`, `generated`, `vendor`, `unknown`
+- `language` — язык или `unknown`
+- `hash` — hash содержимого файла на момент indexing
+- `status` — `pending`, `indexed`, `dirty`, `ignored`, `missing`, `failed`
+- `summary` — короткое описание файла для модели
+
+Правила:
+- line numbers не храним
+- absolute paths не храним внутри memory entries
+- если current file hash отличается от stored hash, файл становится dirty
+- ignored files берутся из gitignore и planner worktree ignore rules
+
+### `symbols/index.jsonl`
+
+Symbol index хранит API/signatures. Это главная часть memory.
+
+Пример записи:
+
+```json
+{
+  "id": "sym_parse_config",
+  "path": "src/config.ts",
+  "language": "ts",
+  "kind": "function",
+  "name": "parseConfig",
+  "qualifiedName": "parseConfig",
+  "signature": "function parseConfig(input: string): Config",
+  "summary": "Parses raw config text into Config.",
+  "visibility": "public",
+  "effects": {
+    "reads": [],
+    "writes": [],
+    "io": [],
+    "globalState": "none"
+  },
+  "anchor": {
+    "searchText": "function parseConfig(input: string): Config"
+  },
+  "verification": {
+    "fileHash": "sha256-file-content",
+    "status": "verified"
+  }
+}
+```
+
+Поля:
+- `id` — stable symbol id внутри plan memory
+- `path` — relative file path
+- `language` — язык или `unknown`
+- `kind` — `function`, `method`, `type`, `class`, `trait`, `interface`, `module`, `constant`, `test`, `unknown`
+- `name` — short name
+- `qualifiedName` — language-specific full name если есть
+- `signature` — compact signature, без body
+- `summary` — короткое описание поведения
+- `visibility` — `public`, `package`, `crate`, `private`, `test_only`, `unknown`
+- `effects` — side effects и state dependencies
+- `anchor.searchText` — текст, по которому можно найти symbol в файле
+- `verification.fileHash` — hash файла, где symbol был проверен
+- `verification.status` — `verified`, `stale`, `missing`, `unverified`
+
+### Effects
+
+`effects` описывает, влияет ли symbol на state или внешний мир. Это language-neutral поле: оно подходит для TypeScript, Rust, Go, Python и других языков.
+
+Примеры:
+
+Чистая функция:
+
+```json
+{
+  "reads": [],
+  "writes": [],
+  "io": [],
+  "globalState": "none"
+}
+```
+
+Функция читает окружение:
+
+```json
+{
+  "reads": ["process.env.CONFIG_PATH"],
+  "writes": [],
+  "io": [],
+  "globalState": "reads"
+}
+```
+
+Функция меняет global cache и пишет файл:
+
+```json
+{
+  "reads": ["global.cache"],
+  "writes": ["global.cache"],
+  "io": ["filesystem:write"],
+  "globalState": "writes"
+}
+```
+
+Допустимые значения `globalState`:
+- `none` — нет известной зависимости от global/external state
+- `reads` — читает global/external state
+- `writes` — пишет global/external state
+- `unknown` — модель не смогла безопасно определить
+
+Правила:
+- если нет уверенности, использовать `unknown`
+- не выдумывать точные internals без evidence
+- effects используются planning/TDD для оценки риска и стратегии тестов
+- функции с `writes` или `unknown` требуют более строгих тестов и меньших tasks
+
+### `relations/index.jsonl`
+
+Relations описывают полезные graph-связи между symbols и файлами.
+
+Пример:
+
+```json
+{
+  "id": "rel_parse_config_tests",
+  "from": "sym_parse_config_tests",
+  "to": "sym_parse_config",
+  "kind": "tests",
+  "evidencePath": "src/config.test.ts",
+  "evidenceSearchText": "parseConfig("
+}
+```
+
+Допустимые relation kinds:
+- `calls`
+- `implements`
+- `extends`
+- `contains`
+- `returns`
+- `accepts`
+- `throws`
+- `reads`
+- `writes`
+- `tests`
+- `configures`
+- `depends_on`
+- `exposes`
+- `unknown`
+
+Правила:
+- relation должна иметь evidence path
+- если target symbol неизвестен, `to` может быть `null`
+- relations — это подсказки для compact context, а не compiler graph
+
+### `dirty.json`
+
+Dirty memory state хранит файлы, которым нужен discovery update.
+
+Пример:
+
+```json
+{
+  "files": {
+    "src/config.ts": {
+      "reason": "file hash changed after git checkout",
+      "detectedAt": "2026-05-22T10:00:00.000Z"
+    }
+  }
+}
+```
+
+Причины dirty:
+- `file_hash_changed`
+- `git_status_changed`
+- `external_commit`
+- `rebase_or_history_rewrite`
+- `manual_checkout`
+- `symbol_missing`
+- `verification_failed`
+
+Правила:
+- dirty file блокирует steps, которые опираются на stale memory
+- dirty file не блокирует всю работу автоматически
+- затронутая memory должна быть обновлена перед compact или перед использованием связанных symbols как trusted context
+
+### Memory checkpoint
+
+`checkpoints/latest.json` — минимальная контрольная точка консистентности memory.
+
+Пример:
+
+```json
+{
+  "commit": "abc123",
+  "filesIndexHash": "sha256-files-index",
+  "symbolsIndexHash": "sha256-symbols-index",
+  "relationsIndexHash": "sha256-relations-index"
+}
+```
+
+Правила:
+- checkpoint сам по себе не source of truth
+- checkpoint помогает обнаружить memory corruption или неожиданные перезаписи
+- если checkpoint hashes не совпадают с текущими memory files, перейти в recovery
+- если git history переписана, file hashes всё равно определяют, какие memory entries стали stale
+
+### Discovery update
+
+`discovery_update` используется, когда project files изменились после построения memory.
+
+Триггеры:
+- current commit изменился вне planner flow
+- rebase/merge/manual checkout изменили file hashes
+- dirty files существуют перед compact
+- symbol verification возвращает `missing`
+- пользователь изменил файлы при активном плане
+
+Flow:
+
+1. Сравнить текущие файлы с `files/index.jsonl`.
+2. Отметить changed/missing/new files в `dirty.json`.
+3. Модель читает только dirty files и связанные memory entries.
+4. Модель обновляет file entries, symbols, relations и questions.
+5. Проверить обновлённые symbols через anchors.
+6. Очистить dirty flags для обновлённых файлов.
+7. Записать новый checkpoint.
+8. Продолжить исходный stage/step.
+
+### Rebase и повреждённое git-состояние
+
+Когда git history меняется, extension не должен опираться только на commit ancestry.
+
+Порядок решения:
+
+1. Если expected commit является ancestor текущего commit, использовать git diff.
+2. Если ancestry переписана, сравнить file hashes с `files/index.jsonl`.
+3. Если memory checkpoint валиден, обновить только changed files.
+4. Если memory checkpoint повреждён, перейти в recovery.
+5. Если git и memory одновременно неопределённы, спросить пользователя перед destructive repair.
+
+Важное правило:
+
+```
+Никогда не делать reset, delete или force checkout только потому, что memory stale.
+Stale memory запускает discovery_update, а не destructive git repair.
+```
