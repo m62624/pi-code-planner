@@ -967,3 +967,66 @@ Flow:
 Никогда не делать reset, delete или force checkout только потому, что memory stale.
 Stale memory запускает discovery_update, а не destructive git repair.
 ```
+
+---
+
+## 7. Markdown Instructions Sync
+
+Markdown instructions — это основной текстовый контракт для модели. Extension не должен зашивать длинные prompts в `planner_status`. Вместо этого `planner_status` сообщает, какие markdown files нужно прочитать для текущего `stage/step/task/experiment`.
+
+### Источники instructions
+
+В repo extension лежат default markdown files. Они являются source of truth для новой версии extension.
+
+При запуске или инициализации extension проверяет instruction files в PI extension dir:
+
+```
+getAgentDir()/extensions/pi-code-planner/instructions/
+```
+
+Если файлов нет, extension копирует default markdown files из repo в PI extension dir.
+
+### Hash check
+
+Для каждого default markdown file extension хранит hash. При запуске:
+
+1. Посчитать hash default file из repo.
+2. Посчитать hash installed file из PI extension dir.
+3. Если installed file отсутствует — скопировать default.
+4. Если hash совпадает — ничего не делать.
+5. Если hash не совпадает и `custom_instructions=false` — перезаписать installed file новым default.
+6. Если hash не совпадает и `custom_instructions=true` — не перезаписывать installed file.
+
+Это нужно, чтобы extension мог обновлять системные инструкции после upgrade, но не затирал пользовательские правки, если user явно включил custom mode.
+
+### Settings
+
+Минимальная настройка:
+
+```json
+{
+  "instructions": {
+    "custom_instructions": false
+  }
+}
+```
+
+Правила:
+- `custom_instructions=false` означает, что user принимает auto-sync default markdown files
+- `custom_instructions=true` означает, что user сам отвечает за содержимое markdown files
+- extension не должен перезаписывать custom instructions
+- project-local overrides можно добавить позже, но базовый sync идёт через PI extension dir
+
+### Как модель использует markdown
+
+Каждый stage/step/task/experiment получает список markdown artifacts через `planner_status`.
+
+Модель обязана читать эти files перед действием:
+- stage instruction
+- task instruction
+- TDD instruction
+- verify instruction
+- memory context
+- пользовательские notes, если они есть
+
+Markdown files могут быть пустыми в момент создания plan. Модель заполняет project/task-specific markdown на соответствующих steps. Default markdown files задают процесс и правила, а plan/task markdown files содержат конкретный контекст текущей работы.
