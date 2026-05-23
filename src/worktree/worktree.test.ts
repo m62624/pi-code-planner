@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type {
+	GitBranchInput,
+	GitCommitInput,
+	GitCreateBranchInput,
+	GitDeleteBranchInput,
+	GitMergeInput,
+	GitRepoInput,
 	GitRunner,
+	GitSwitchBranchInput,
 	GitWorktreeAddInput,
 	GitWorktreeRemoveInput,
 } from "../git/runner";
@@ -17,6 +24,32 @@ import {
 class MockGitRunner implements GitRunner {
 	readonly added: GitWorktreeAddInput[] = [];
 	readonly removed: GitWorktreeRemoveInput[] = [];
+
+	async init(_input: GitRepoInput): Promise<void> {}
+	async currentBranch(_input: GitRepoInput): Promise<string> {
+		return "main";
+	}
+	async headCommit(_input: GitRepoInput): Promise<string> {
+		return "abc123";
+	}
+	async statusPorcelain(_input: GitRepoInput): Promise<string> {
+		return "";
+	}
+	async diffStat(_input: GitRepoInput): Promise<string> {
+		return "";
+	}
+	async diffNameOnly(_input: GitRepoInput): Promise<string> {
+		return "";
+	}
+	async branchExists(_input: GitBranchInput): Promise<boolean> {
+		return true;
+	}
+	async createBranch(_input: GitCreateBranchInput): Promise<void> {}
+	async deleteBranch(_input: GitDeleteBranchInput): Promise<void> {}
+	async switchBranch(_input: GitSwitchBranchInput): Promise<void> {}
+	async stageAll(_input: GitRepoInput): Promise<void> {}
+	async commit(_input: GitCommitInput): Promise<void> {}
+	async merge(_input: GitMergeInput): Promise<void> {}
 
 	async worktreeAdd(input: GitWorktreeAddInput): Promise<void> {
 		this.added.push(input);

@@ -1,11 +1,117 @@
 import { describe, expect, it } from "vitest";
 import {
+	buildGitBranchExistsArgs,
+	buildGitCommitArgs,
+	buildGitCreateBranchArgs,
+	buildGitCurrentBranchArgs,
+	buildGitDeleteBranchArgs,
+	buildGitDiffNameOnlyArgs,
+	buildGitDiffStatArgs,
+	buildGitHeadCommitArgs,
+	buildGitInitArgs,
+	buildGitMergeArgs,
+	buildGitStageAllArgs,
+	buildGitStatusPorcelainArgs,
+	buildGitSwitchBranchArgs,
 	buildGitWorktreeAddArgs,
 	buildGitWorktreeRemoveArgs,
 } from "./node-runner";
 
-describe("node git runner worktree command args", () => {
-	it("builds add args for creating a new branch from base ref", () => {
+describe("node git runner command args", () => {
+	it("builds repo read/status args", () => {
+		expect(buildGitInitArgs({ repoRoot: "/repo/app" })).toEqual([
+			"-C",
+			"/repo/app",
+			"init",
+		]);
+		expect(buildGitCurrentBranchArgs({ repoRoot: "/repo/app" })).toEqual([
+			"-C",
+			"/repo/app",
+			"branch",
+			"--show-current",
+		]);
+		expect(buildGitHeadCommitArgs({ repoRoot: "/repo/app" })).toEqual([
+			"-C",
+			"/repo/app",
+			"rev-parse",
+			"HEAD",
+		]);
+		expect(buildGitStatusPorcelainArgs({ repoRoot: "/repo/app" })).toEqual([
+			"-C",
+			"/repo/app",
+			"status",
+			"--porcelain=v1",
+		]);
+		expect(buildGitDiffStatArgs({ repoRoot: "/repo/app" })).toEqual([
+			"-C",
+			"/repo/app",
+			"diff",
+			"--stat",
+		]);
+		expect(buildGitDiffNameOnlyArgs({ repoRoot: "/repo/app" })).toEqual([
+			"-C",
+			"/repo/app",
+			"diff",
+			"--name-only",
+		]);
+	});
+
+	it("builds branch, switch, stage, commit, and merge args", () => {
+		expect(
+			buildGitBranchExistsArgs({ repoRoot: "/repo/app", branch: "task/a/b" }),
+		).toEqual([
+			"-C",
+			"/repo/app",
+			"rev-parse",
+			"--verify",
+			"--quiet",
+			"task/a/b",
+		]);
+		expect(
+			buildGitCreateBranchArgs({
+				repoRoot: "/repo/app",
+				branch: "task/a/b",
+				fromRef: "plan/a",
+			}),
+		).toEqual(["-C", "/repo/app", "branch", "task/a/b", "plan/a"]);
+		expect(
+			buildGitDeleteBranchArgs({
+				repoRoot: "/repo/app",
+				branch: "experiment/a/b/c",
+				force: true,
+			}),
+		).toEqual(["-C", "/repo/app", "branch", "-D", "experiment/a/b/c"]);
+		expect(
+			buildGitSwitchBranchArgs({ repoRoot: "/repo/app", branch: "plan/a" }),
+		).toEqual(["-C", "/repo/app", "switch", "plan/a"]);
+		expect(buildGitStageAllArgs({ repoRoot: "/repo/app" })).toEqual([
+			"-C",
+			"/repo/app",
+			"add",
+			"-A",
+		]);
+		expect(
+			buildGitCommitArgs({ repoRoot: "/repo/app", message: "finish task" }),
+		).toEqual(["-C", "/repo/app", "commit", "-m", "finish task"]);
+		expect(
+			buildGitMergeArgs({
+				repoRoot: "/repo/app",
+				sourceBranch: "task/a/b",
+				noFastForward: true,
+				message: "merge task",
+			}),
+		).toEqual([
+			"-C",
+			"/repo/app",
+			"merge",
+			"--no-ff",
+			"-m",
+			"merge task",
+			"task/a/b",
+		]);
+	});
+
+	it("builds worktree add args for creating a new branch from base ref", () => {
 		expect(
 			buildGitWorktreeAddArgs({
 				repoRoot: "/repo/app",
@@ -25,7 +131,7 @@ describe("node git runner worktree command args", () => {
 		]);
 	});
 
-	it("builds add args for existing branch checkout", () => {
+	it("builds worktree add args for existing branch checkout", () => {
 		expect(
 			buildGitWorktreeAddArgs({
 				repoRoot: "/repo/app",
@@ -43,7 +149,7 @@ describe("node git runner worktree command args", () => {
 		]);
 	});
 
-	it("builds remove args with and without force", () => {
+	it("builds worktree remove args with and without force", () => {
 		expect(
 			buildGitWorktreeRemoveArgs({
 				repoRoot: "/repo/app",

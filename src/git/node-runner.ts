@@ -1,7 +1,14 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type {
+	GitBranchInput,
+	GitCommitInput,
+	GitCreateBranchInput,
+	GitDeleteBranchInput,
+	GitMergeInput,
+	GitRepoInput,
 	GitRunner,
+	GitSwitchBranchInput,
 	GitWorktreeAddInput,
 	GitWorktreeRemoveInput,
 } from "./runner";
@@ -20,6 +27,63 @@ export class GitCommandError extends Error {
 }
 
 export class NodeGitRunner implements GitRunner {
+	async init(input: GitRepoInput): Promise<void> {
+		await runGitCommand(buildGitInitArgs(input));
+	}
+
+	async currentBranch(input: GitRepoInput): Promise<string> {
+		return await runGitCommandOutput(buildGitCurrentBranchArgs(input));
+	}
+
+	async headCommit(input: GitRepoInput): Promise<string> {
+		return await runGitCommandOutput(buildGitHeadCommitArgs(input));
+	}
+
+	async statusPorcelain(input: GitRepoInput): Promise<string> {
+		return await runGitCommandOutput(buildGitStatusPorcelainArgs(input));
+	}
+
+	async diffStat(input: GitRepoInput): Promise<string> {
+		return await runGitCommandOutput(buildGitDiffStatArgs(input));
+	}
+
+	async diffNameOnly(input: GitRepoInput): Promise<string> {
+		return await runGitCommandOutput(buildGitDiffNameOnlyArgs(input));
+	}
+
+	async branchExists(input: GitBranchInput): Promise<boolean> {
+		try {
+			await runGitCommand(buildGitBranchExistsArgs(input));
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	async createBranch(input: GitCreateBranchInput): Promise<void> {
+		await runGitCommand(buildGitCreateBranchArgs(input));
+	}
+
+	async deleteBranch(input: GitDeleteBranchInput): Promise<void> {
+		await runGitCommand(buildGitDeleteBranchArgs(input));
+	}
+
+	async switchBranch(input: GitSwitchBranchInput): Promise<void> {
+		await runGitCommand(buildGitSwitchBranchArgs(input));
+	}
+
+	async stageAll(input: GitRepoInput): Promise<void> {
+		await runGitCommand(buildGitStageAllArgs(input));
+	}
+
+	async commit(input: GitCommitInput): Promise<void> {
+		await runGitCommand(buildGitCommitArgs(input));
+	}
+
+	async merge(input: GitMergeInput): Promise<void> {
+		await runGitCommand(buildGitMergeArgs(input));
+	}
+
 	async worktreeAdd(input: GitWorktreeAddInput): Promise<void> {
 		await runGitCommand(buildGitWorktreeAddArgs(input));
 	}
@@ -27,6 +91,85 @@ export class NodeGitRunner implements GitRunner {
 	async worktreeRemove(input: GitWorktreeRemoveInput): Promise<void> {
 		await runGitCommand(buildGitWorktreeRemoveArgs(input));
 	}
+}
+
+export function buildGitInitArgs(input: GitRepoInput): string[] {
+	return ["-C", input.repoRoot, "init"];
+}
+
+export function buildGitCurrentBranchArgs(input: GitRepoInput): string[] {
+	return ["-C", input.repoRoot, "branch", "--show-current"];
+}
+
+export function buildGitHeadCommitArgs(input: GitRepoInput): string[] {
+	return ["-C", input.repoRoot, "rev-parse", "HEAD"];
+}
+
+export function buildGitStatusPorcelainArgs(input: GitRepoInput): string[] {
+	return ["-C", input.repoRoot, "status", "--porcelain=v1"];
+}
+
+export function buildGitDiffStatArgs(input: GitRepoInput): string[] {
+	return ["-C", input.repoRoot, "diff", "--stat"];
+}
+
+export function buildGitDiffNameOnlyArgs(input: GitRepoInput): string[] {
+	return ["-C", input.repoRoot, "diff", "--name-only"];
+}
+
+export function buildGitBranchExistsArgs(input: GitBranchInput): string[] {
+	return [
+		"-C",
+		input.repoRoot,
+		"rev-parse",
+		"--verify",
+		"--quiet",
+		input.branch,
+	];
+}
+
+export function buildGitCreateBranchArgs(
+	input: GitCreateBranchInput,
+): string[] {
+	return ["-C", input.repoRoot, "branch", input.branch, input.fromRef];
+}
+
+export function buildGitDeleteBranchArgs(
+	input: GitDeleteBranchInput,
+): string[] {
+	return [
+		"-C",
+		input.repoRoot,
+		"branch",
+		input.force ? "-D" : "-d",
+		input.branch,
+	];
+}
+
+export function buildGitSwitchBranchArgs(
+	input: GitSwitchBranchInput,
+): string[] {
+	return ["-C", input.repoRoot, "switch", input.branch];
+}
+
+export function buildGitStageAllArgs(input: GitRepoInput): string[] {
+	return ["-C", input.repoRoot, "add", "-A"];
+}
+
+export function buildGitCommitArgs(input: GitCommitInput): string[] {
+	return ["-C", input.repoRoot, "commit", "-m", input.message];
+}
+
+export function buildGitMergeArgs(input: GitMergeInput): string[] {
+	return [
+		"-C",
+		input.repoRoot,
+		"merge",
+		...(input.noFastForward ? ["--no-ff"] : []),
+		...(input.noCommit ? ["--no-commit"] : []),
+		...(input.message ? ["-m", input.message] : []),
+		input.sourceBranch,
+	];
 }
 
 export function buildGitWorktreeAddArgs(input: GitWorktreeAddInput): string[] {
@@ -61,6 +204,20 @@ export function buildGitWorktreeRemoveArgs(
 async function runGitCommand(args: string[]): Promise<void> {
 	try {
 		await execFileAsync("git", args);
+	} catch (error) {
+		const stderr = getExecStderr(error);
+		throw new GitCommandError(
+			`git ${args.join(" ")} failed`,
+			["git", ...args],
+			stderr,
+		);
+	}
+}
+
+async function runGitCommandOutput(args: string[]): Promise<string> {
+	try {
+		const result = await execFileAsync("git", args);
+		return result.stdout.trimEnd();
 	} catch (error) {
 		const stderr = getExecStderr(error);
 		throw new GitCommandError(

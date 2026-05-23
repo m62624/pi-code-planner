@@ -91,13 +91,52 @@ async function readActivePlannerState(projectRoot: string): Promise<{
 
 export { EXTENSION_NAME, SCHEMA_VERSION } from "./constants";
 export {
+	experimentBranchName,
+	outputBranchName,
+	planBranchName,
+	refactorBranchName,
+	taskBranchName,
+} from "./git/branches";
+export {
+	buildGitBranchExistsArgs,
+	buildGitCommitArgs,
+	buildGitCreateBranchArgs,
+	buildGitCurrentBranchArgs,
+	buildGitDeleteBranchArgs,
+	buildGitDiffNameOnlyArgs,
+	buildGitDiffStatArgs,
+	buildGitHeadCommitArgs,
+	buildGitInitArgs,
+	buildGitMergeArgs,
+	buildGitStageAllArgs,
+	buildGitStatusPorcelainArgs,
+	buildGitSwitchBranchArgs,
 	buildGitWorktreeAddArgs,
 	buildGitWorktreeRemoveArgs,
 	GitCommandError,
 	NodeGitRunner,
 } from "./git/node-runner";
+export type { PlannerGitOperationResult } from "./git/planner-ops";
+export {
+	createAndSwitchExperimentBranch,
+	createAndSwitchRefactorBranch,
+	createAndSwitchTaskBranch,
+	deleteManagedBranch,
+	exportPlanToOutputBranch,
+	mergeRefactorToTask,
+	mergeSelectedExperimentToTask,
+	mergeTaskToPlan,
+	selectExperiment,
+} from "./git/planner-ops";
 export type {
+	GitBranchInput,
+	GitCommitInput,
+	GitCreateBranchInput,
+	GitDeleteBranchInput,
+	GitMergeInput,
+	GitRepoInput,
 	GitRunner,
+	GitSwitchBranchInput,
 	GitWorktreeAddInput,
 	GitWorktreeRemoveInput,
 } from "./git/runner";
