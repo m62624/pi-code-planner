@@ -18,6 +18,12 @@ export type {
 	SyncedInstructionFile,
 } from "./instructions/schema";
 export { INSTRUCTION_KEYS } from "./instructions/schema";
+export type { GitignoreWorktreeRuleResult } from "./project-local/gitignore";
+export {
+	ensureProjectWorktreesIgnored,
+	hasExactWorktreesIgnoreRule,
+	PROJECT_WORKTREES_IGNORE_RULE,
+} from "./project-local/gitignore";
 export { createNodeFs, type PlannerFs } from "./storage/fs";
 export { createProjectId, sanitizeIdPart } from "./storage/ids";
 export {
