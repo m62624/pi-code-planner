@@ -641,17 +641,44 @@ Retry не создаёт новый global stage. Он остаётся вну�
 
 ### Stage 5: `finalize`
 
-Цель: подготовить один чистый результат для user.
+Цель: проверить plan branch и подготовить результат к user review.
 
 Подшаги:
 
 1. `verify_plan_branch` — проверить, что plan branch содержит все merged tasks и проходит финальные проверки.
-2. `prepare_output_branch` — создать или обновить output branch в исходном repo проекта.
-3. `merge_or_export_result` — перенести итог plan branch из worktree в output branch.
-4. `cleanup_worktree` — удалить plan worktree и временные managed branches, которые безопасно удалять.
-5. `mark_done` — обновить `project.json`, `plan.json`, `plans/<plan-id>/state.json`: plan завершён, active execution отсутствует.
+2. `write_final_summary` — записать summary результата, diff, проверки, known risks и список изменённых файлов.
+3. `compact_finalize` — выполнить compact boundary перед user acceptance.
+4. `enter_done` — обновить `plans/<plan-id>/state.json`: `stage=done`, `step=present_result`.
 
-### Stage 6: `recovery`
+### Stage 6: `done`
+
+Цель: получить решение пользователя по готовому результату и либо отправить plan на доработку, либо вывести одну чистую ветку в рабочий repo.
+
+`done` — это реальный stage, а не просто terminal marker. На этом этапе model не пишет новый production code. Она показывает результат, ждёт user decision и следует controlled tools.
+
+Подшаги:
+
+1. `present_result` — показать user summary результата: что сделано, какие проверки прошли, где лежит plan branch/worktree, какие риски остались.
+2. `await_user_acceptance` — остановиться и получить решение пользователя: accept или request changes.
+3. `handle_change_request` — если user не принимает результат, записать feedback в plan artifacts и перейти обратно в `planning` внутри того же plan worktree и plan branch.
+4. `prepare_output_branch` — если user принимает результат, создать или обновить output branch в исходном repo проекта.
+5. `merge_or_export_result` — перенести итог plan branch из plan worktree в output branch исходного repo.
+6. `cleanup_worktree` — удалить plan worktree и временные managed branches, которые безопасно удалять.
+7. `mark_done` — обновить `project.json`: сбросить `activePlanId`, пометить plan как завершённый/удалённый, записать имя output branch.
+8. `cleanup_plan_files` — удалить `plans/<plan-id>/` из agent storage: `plan.json`, `state.json`, markdown artifacts, memory, task files и experiment summaries.
+
+Правила:
+- если user просит изменения, worktree не удаляется
+- change request не создаёт новый root project state; он продолжает текущий plan
+- после change request planner возвращается в `planning`, потому что нужно пересобрать task list на основе feedback
+- destructive cleanup выполняется только после explicit accept
+- `mark_done` выполняется до `cleanup_plan_files`, чтобы crash между этими шагами можно было восстановить
+- после `cleanup_plan_files` директории `plans/<plan-id>/` больше нет; старые planner artifacts не являются source of truth
+- после успешного done у user остаётся только одна output branch в обычном рабочем repo, рядом с остальными git branches; user сам решает merge/rebase/delete
+- plan worktree удалён, временные managed branches удалены, agent storage plan files удалены
+- `project.json` может сохранить только минимальную историческую запись о завершённом plan, но не содержит runtime state
+
+### Stage 7: `recovery`
 
 Цель: восстановить planner после crash, ручных git изменений или несовпадения state с реальностью.
 

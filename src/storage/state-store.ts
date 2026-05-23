@@ -1,7 +1,12 @@
 import type { PlannerFs } from "./fs";
 import { readJson, readJsonIfExists, writeJson } from "./json";
 import type { PlanStoragePaths } from "./paths";
-import type { PlannerStage, PlanStateRecord, StepStatus } from "./schema";
+import type {
+	PlannerStage,
+	PlannerStep,
+	PlanStateRecord,
+	StepStatus,
+} from "./schema";
 
 export async function initializePlanState(
 	fs: PlannerFs,
@@ -51,9 +56,9 @@ export async function setPlanStep(
 	paths: PlanStoragePaths,
 	input: {
 		stage: PlannerStage;
-		step: string;
+		step: PlannerStep;
 		stepStatus?: StepStatus;
-		nextStep?: string | null;
+		nextStep?: PlannerStep | null;
 	},
 ): Promise<PlanStateRecord> {
 	return await updatePlanState(fs, paths, (state) => ({
@@ -69,7 +74,7 @@ export async function setPlanStep(
 export async function completePlanStep(
 	fs: PlannerFs,
 	paths: PlanStoragePaths,
-	nextStep: string | null,
+	nextStep: PlannerStep | null,
 ): Promise<PlanStateRecord> {
 	return await updatePlanState(fs, paths, (state) => ({
 		...state,

@@ -10,8 +10,161 @@ export type PlannerStage =
 	| "planning"
 	| "execution"
 	| "finalize"
-	| "recovery"
-	| "done";
+	| "done"
+	| "recovery";
+
+export type InitStep =
+	| "check_project"
+	| "check_git"
+	| "prepare_storage"
+	| "choose_worktree_location"
+	| "create_plan_record"
+	| "create_plan_worktree"
+	| "enter_discovery";
+
+export type DiscoveryStep =
+	| "read_project"
+	| "write_project_patterns"
+	| "write_file_index"
+	| "write_symbols"
+	| "write_relations"
+	| "write_questions"
+	| "verify_memory"
+	| "compact_discovery"
+	| "enter_planning";
+
+export type PlanningStep =
+	| "read_memory"
+	| "draft_plan"
+	| "split_tasks"
+	| "write_task_files"
+	| "verify_plan"
+	| "compact_planning"
+	| "enter_execution";
+
+export type ExecutionStep =
+	| "prepare_task"
+	| "write_tdd_plan"
+	| "write_tests"
+	| "run_failing_tests"
+	| "start_experiments"
+	| "run_experiment"
+	| "summarize_experiment"
+	| "compact_experiment"
+	| "select_experiment"
+	| "merge_best_experiment"
+	| "refactor_task"
+	| "run_final_tests"
+	| "merge_task_to_plan"
+	| "compact_task"
+	| "select_next_task";
+
+export type FinalizeStep =
+	| "verify_plan_branch"
+	| "write_final_summary"
+	| "compact_finalize"
+	| "enter_done";
+
+export type DoneStep =
+	| "present_result"
+	| "await_user_acceptance"
+	| "handle_change_request"
+	| "prepare_output_branch"
+	| "merge_or_export_result"
+	| "cleanup_worktree"
+	| "mark_done"
+	| "cleanup_plan_files";
+
+export type RecoveryStep =
+	| "read_state"
+	| "inspect_git"
+	| "compare_expected_actual"
+	| "classify_recovery"
+	| "ask_user_if_destructive"
+	| "repair_or_resume";
+
+export type PlannerStep =
+	| InitStep
+	| DiscoveryStep
+	| PlanningStep
+	| ExecutionStep
+	| FinalizeStep
+	| RecoveryStep
+	| DoneStep;
+
+export const PLANNER_STAGE_STEPS = {
+	init: [
+		"check_project",
+		"check_git",
+		"prepare_storage",
+		"choose_worktree_location",
+		"create_plan_record",
+		"create_plan_worktree",
+		"enter_discovery",
+	],
+	discovery: [
+		"read_project",
+		"write_project_patterns",
+		"write_file_index",
+		"write_symbols",
+		"write_relations",
+		"write_questions",
+		"verify_memory",
+		"compact_discovery",
+		"enter_planning",
+	],
+	planning: [
+		"read_memory",
+		"draft_plan",
+		"split_tasks",
+		"write_task_files",
+		"verify_plan",
+		"compact_planning",
+		"enter_execution",
+	],
+	execution: [
+		"prepare_task",
+		"write_tdd_plan",
+		"write_tests",
+		"run_failing_tests",
+		"start_experiments",
+		"run_experiment",
+		"summarize_experiment",
+		"compact_experiment",
+		"select_experiment",
+		"merge_best_experiment",
+		"refactor_task",
+		"run_final_tests",
+		"merge_task_to_plan",
+		"compact_task",
+		"select_next_task",
+	],
+	finalize: [
+		"verify_plan_branch",
+		"write_final_summary",
+		"compact_finalize",
+		"enter_done",
+	],
+	done: [
+		"present_result",
+		"await_user_acceptance",
+		"handle_change_request",
+		"prepare_output_branch",
+		"merge_or_export_result",
+		"cleanup_worktree",
+		"mark_done",
+		"cleanup_plan_files",
+	],
+	recovery: [
+		"read_state",
+		"inspect_git",
+		"compare_expected_actual",
+		"classify_recovery",
+		"ask_user_if_destructive",
+		"repair_or_resume",
+	],
+} as const satisfies Record<PlannerStage, readonly PlannerStep[]>;
+
 export type StepStatus =
 	| "pending"
 	| "running"
@@ -65,9 +218,9 @@ export interface MergeTargets {
 export interface PlanStateRecord {
 	schemaVersion: typeof SCHEMA_VERSION;
 	stage: PlannerStage;
-	step: string;
+	step: PlannerStep;
 	stepStatus: StepStatus;
-	nextStep: string | null;
+	nextStep: PlannerStep | null;
 	activeTaskId: string | null;
 	activeExperimentId: string | null;
 	worktreePath: string | null;

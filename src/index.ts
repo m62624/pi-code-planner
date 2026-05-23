@@ -29,9 +29,16 @@ export {
 	upsertProjectPlanSummary,
 } from "./storage/project-store";
 export type {
+	DiscoveryStep,
+	DoneStep,
+	ExecutionStep,
+	FinalizeStep,
+	InitStep,
 	MergeTargets,
 	PlanBranches,
 	PlannerStage,
+	PlannerStep,
+	PlanningStep,
 	PlanRecord,
 	PlanStateRecord,
 	PlanStatus,
@@ -39,6 +46,7 @@ export type {
 	PlanTaskSummary,
 	ProjectPlanSummary,
 	ProjectRecord,
+	RecoveryStep,
 	StepStatus,
 	TaskStatus,
 } from "./storage/schema";
@@ -46,6 +54,7 @@ export {
 	createEmptyProjectRecord,
 	createInitialPlanState,
 	createPlanRecord,
+	PLANNER_STAGE_STEPS,
 } from "./storage/schema";
 export {
 	completePlanStep,

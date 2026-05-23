@@ -17,6 +17,7 @@ import {
 import {
 	createInitialPlanState,
 	createPlanRecord,
+	PLANNER_STAGE_STEPS,
 	type PlanStateRecord,
 } from "./schema";
 import {
@@ -179,6 +180,100 @@ describe("plan record store", () => {
 });
 
 describe("plan state store", () => {
+	it("declares every documented stage step as runtime data", () => {
+		expect(PLANNER_STAGE_STEPS).toEqual({
+			init: [
+				"check_project",
+				"check_git",
+				"prepare_storage",
+				"choose_worktree_location",
+				"create_plan_record",
+				"create_plan_worktree",
+				"enter_discovery",
+			],
+			discovery: [
+				"read_project",
+				"write_project_patterns",
+				"write_file_index",
+				"write_symbols",
+				"write_relations",
+				"write_questions",
+				"verify_memory",
+				"compact_discovery",
+				"enter_planning",
+			],
+			planning: [
+				"read_memory",
+				"draft_plan",
+				"split_tasks",
+				"write_task_files",
+				"verify_plan",
+				"compact_planning",
+				"enter_execution",
+			],
+			execution: [
+				"prepare_task",
+				"write_tdd_plan",
+				"write_tests",
+				"run_failing_tests",
+				"start_experiments",
+				"run_experiment",
+				"summarize_experiment",
+				"compact_experiment",
+				"select_experiment",
+				"merge_best_experiment",
+				"refactor_task",
+				"run_final_tests",
+				"merge_task_to_plan",
+				"compact_task",
+				"select_next_task",
+			],
+			finalize: [
+				"verify_plan_branch",
+				"write_final_summary",
+				"compact_finalize",
+				"enter_done",
+			],
+			done: [
+				"present_result",
+				"await_user_acceptance",
+				"handle_change_request",
+				"prepare_output_branch",
+				"merge_or_export_result",
+				"cleanup_worktree",
+				"mark_done",
+				"cleanup_plan_files",
+			],
+			recovery: [
+				"read_state",
+				"inspect_git",
+				"compare_expected_actual",
+				"classify_recovery",
+				"ask_user_if_destructive",
+				"repair_or_resume",
+			],
+		});
+	});
+
+	it("keeps documented stage step counts stable", () => {
+		expect(
+			Object.fromEntries(
+				Object.entries(PLANNER_STAGE_STEPS).map(([stage, steps]) => [
+					stage,
+					steps.length,
+				]),
+			),
+		).toEqual({
+			init: 7,
+			discovery: 9,
+			planning: 7,
+			execution: 15,
+			finalize: 4,
+			done: 8,
+			recovery: 6,
+		});
+	});
+
 	it("stores runtime state per plan and keeps plans isolated", async () => {
 		const fs = new MockPlannerFs();
 		const project = createProjectStoragePaths({
