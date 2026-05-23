@@ -1064,6 +1064,66 @@ Flow:
 7. Записать новый checkpoint.
 8. Продолжить исходный stage/step.
 
+### Memory freshness verification
+
+Перед compact, после git checkout/merge/rebase или после внешнего изменения файлов extension должен проверить, не устарел ли memory blob.
+
+Проверка работает через snapshot текущих project files:
+
+```ts
+[
+  { path: "src/config.ts", hash: "sha256-current-file-content" }
+]
+```
+
+API:
+
+```ts
+analyzeMemoryFreshness({
+  currentFiles
+})
+```
+
+Read-only результат:
+
+```ts
+{
+  clean: false,
+  unchangedFiles: ["src/env.ts"],
+  changedFiles: ["src/config.ts"],
+  missingFiles: ["src/server.ts"],
+  newFiles: ["src/new.ts"],
+  affectedSymbolIds: ["sym_parse_config"],
+  affectedRelationIds: ["rel_server_config"],
+  filesToReindex: ["src/config.ts", "src/new.ts", "src/server.ts"]
+}
+```
+
+Mutating API:
+
+```ts
+applyMemoryFreshness({
+  currentFiles,
+  detectedAt
+})
+```
+
+Что делает `applyMemoryFreshness`:
+- changed indexed files получает `status=dirty`
+- missing indexed files получает `status=missing`
+- symbols из changed files получают `verification.status=stale`
+- symbols из missing files получают `verification.status=missing`
+- changed/new files пишутся в `dirty.json` с reason `file_hash_changed`
+- missing files пишутся в `dirty.json` с reason `verification_failed`
+
+Что API не делает:
+- не читает project source files сам
+- не создаёт file/symbol/relation entries за модель
+- не удаляет missing entries автоматически
+- не делает git recovery
+
+Модель после этого должна прочитать только `filesToReindex` и связанные entries через bounded retrieval, затем обновить memory через batch write API.
+
 ### Rebase и повреждённое git-состояние
 
 Когда git history меняется, extension не должен опираться только на commit ancestry.

@@ -242,6 +242,17 @@ export type {
 	MemoryVerificationStatus,
 } from "./memory/schema";
 export type {
+	MemoryFreshnessApplyInput,
+	MemoryFreshnessApplyResult,
+	MemoryFreshnessInput,
+	MemoryFreshnessResult,
+	MemoryProjectFileSnapshotEntry,
+} from "./memory/verification";
+export {
+	analyzeMemoryFreshness,
+	applyMemoryFreshness,
+} from "./memory/verification";
+export type {
 	MemoryBatchEntryKind,
 	MemoryBatchRejectedEntry,
 	MemoryBatchWriteResult,
