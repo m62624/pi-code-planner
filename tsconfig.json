@@ -11,7 +11,8 @@
 		"skipLibCheck": true,
 		"forceConsistentCasingInFileNames": true,
 		"isolatedModules": true,
-		"verbatimModuleSyntax": true
+		"verbatimModuleSyntax": true,
+		"types": ["node"]
 	},
 	"include": ["src/**/*.ts"],
 	"exclude": ["src/**/*.test.ts", "src/**/*.mock.ts", "src/test/**"]
