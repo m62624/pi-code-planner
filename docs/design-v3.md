@@ -573,6 +573,36 @@ Retry не создаёт новый global stage. Он остаётся вну�
 
 Перед каждым planner tool call extension проверяет git/worktree reality. Если branch, commit, dirty state или checkpoint отличаются от `plans/<activePlanId>/state.json`, normal flow останавливается и включается recovery/discovery_update logic.
 
+### Planner wrapper policy
+
+`planner_status` пока не обязан быть полной реализацией маршрутизатора. До него нужен отдельный policy слой, который не читает Pi API и не выполняет git, а только отвечает на вопрос: можно ли сейчас вызвать конкретный planner wrapper.
+
+Policy input:
+- текущий `stage`
+- текущий `step`
+- `stepStatus`
+- `requiresCompact`
+- `requiresUserDecision`
+- `broken`
+- имя wrapper tool
+
+Policy output:
+- `allow=true/false`
+- текущие `stage/step`
+- список разрешённых wrappers
+- короткая причина блокировки
+- короткая подсказка модели: прочитать markdown текущего stage/step и не использовать raw git
+
+Этот слой нужен, чтобы каждый будущий public tool был тонкой оболочкой:
+1. прочитать active project/plan/state
+2. проверить git/worktree reality
+3. вызвать wrapper policy
+4. если wrapper запрещён, вернуть причину и подсказку
+5. если wrapper разрешён, выполнить state-bound operation
+6. сохранить обновлённый `plans/<plan-id>/state.json`
+
+Важно: policy не должен знать source/target branch для merge. Merge targets берутся только из `state.json`. Модель может выбрать `taskId` или `attemptId`, но не может сама указать `experiment -> task`, `task -> plan` или `plan -> output`.
+
 ### Stage 1: `init`
 
 Цель: подготовить project storage, git и plan worktree.

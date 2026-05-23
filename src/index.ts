@@ -147,6 +147,16 @@ export {
 	checkRawGitAllowed,
 	PLANNER_STATUS_TOOL_NAME,
 } from "./guard/git-watcher";
+export type {
+	PlannerToolPolicyDecision,
+	PlannerWrapperTool,
+} from "./guard/tool-policy";
+export {
+	buildPlannerToolHint,
+	checkPlannerWrapperAllowed,
+	getAllowedPlannerWrapperTools,
+	PLANNER_WRAPPER_TOOLS,
+} from "./guard/tool-policy";
 export { DEFAULT_INSTRUCTIONS } from "./instructions/defaults";
 export {
 	getInstructionContent,
