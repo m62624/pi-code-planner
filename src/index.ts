@@ -1,4 +1,15 @@
 export { EXTENSION_NAME, SCHEMA_VERSION } from "./constants";
+export {
+	buildGitWorktreeAddArgs,
+	buildGitWorktreeRemoveArgs,
+	GitCommandError,
+	NodeGitRunner,
+} from "./git/node-runner";
+export type {
+	GitRunner,
+	GitWorktreeAddInput,
+	GitWorktreeRemoveInput,
+} from "./git/runner";
 export { DEFAULT_INSTRUCTIONS } from "./instructions/defaults";
 export {
 	getInstructionContent,
@@ -101,21 +112,9 @@ export {
 	createPlanWorktree,
 	removePlanWorktree,
 } from "./worktree/manager";
-export {
-	buildGitWorktreeAddArgs,
-	buildGitWorktreeRemoveArgs,
-	GitWorktreeCommandError,
-	NodeGitWorktreeRunner,
-} from "./worktree/node-runner";
 export type { WorktreeLocation, WorktreeLocationKind } from "./worktree/paths";
 export {
-	createAgentDirWorktreeLocation,
 	createCustomWorktreeLocation,
 	createProjectLocalWorktreeLocation,
 	isProjectLocalWorktreePath,
 } from "./worktree/paths";
-export type {
-	GitWorktreeAddInput,
-	GitWorktreeRemoveInput,
-	GitWorktreeRunner,
-} from "./worktree/runner";

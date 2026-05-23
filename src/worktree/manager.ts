@@ -1,3 +1,4 @@
+import type { GitRunner } from "../git/runner";
 import {
 	ensureProjectWorktreesIgnored,
 	type GitignoreWorktreeRuleResult,
@@ -5,11 +6,10 @@ import {
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
 import { isProjectLocalWorktreePath } from "./paths";
-import type { GitWorktreeRunner } from "./runner";
 
 export interface CreatePlanWorktreeInput {
 	fs: PlannerFs;
-	runner: GitWorktreeRunner;
+	git: GitRunner;
 	projectPaths: ProjectStoragePaths;
 	worktreePath: string;
 	branch: string;
@@ -24,7 +24,7 @@ export interface CreatePlanWorktreeResult {
 }
 
 export interface RemovePlanWorktreeInput {
-	runner: GitWorktreeRunner;
+	git: GitRunner;
 	projectRoot: string;
 	worktreePath: string;
 	force?: boolean;
@@ -48,7 +48,7 @@ export async function createPlanWorktree(
 			)
 		: null;
 
-	await input.runner.add({
+	await input.git.worktreeAdd({
 		repoRoot: input.projectPaths.projectRoot,
 		path: input.worktreePath,
 		branch: input.branch,
@@ -66,7 +66,7 @@ export async function createPlanWorktree(
 export async function removePlanWorktree(
 	input: RemovePlanWorktreeInput,
 ): Promise<RemovePlanWorktreeResult> {
-	await input.runner.remove({
+	await input.git.worktreeRemove({
 		repoRoot: input.projectRoot,
 		path: input.worktreePath,
 		force: input.force ?? false,

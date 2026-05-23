@@ -165,11 +165,12 @@ Git API — это внутренний слой extension. Модель не д
 - Один plan = один worktree
 - Task, experiment и refactor — это ветки внутри plan worktree, а не отдельные worktrees
 - Default path: `<project-root>/.pi/pi-code-planner/worktrees/<plan-id>`
-- User может выбрать другой worktree root при создании плана
+- User может выбрать custom worktree root при создании плана
 
 #### `git worktree remove <path>`
 - Удаляет worktree после завершения плана
-- Вызывается после merge plan в оригинальную папку
+- Вызывается после export/merge результата в output branch исходного repo
+- Worktree lifecycle не является agent tool: extension выполняет его автоматически при создании plan и при accepted done cleanup
 
 ### Управление ветками
 
@@ -290,12 +291,6 @@ Plan worktree хранится отдельно от state. Его распол�
 <project-root>/.pi/pi-code-planner/worktrees/<plan-id>/
 ```
 
-Альтернатива:
-
-```
-getAgentDir()/extensions/pi-code-planner/projects/<project-id>/worktrees/<plan-id>/
-```
-
 Пользовательский путь:
 
 ```
@@ -305,8 +300,9 @@ getAgentDir()/extensions/pi-code-planner/projects/<project-id>/worktrees/<plan-i
 Правила:
 - один plan создаёт ровно один worktree
 - task, experiment и refactor являются git-ветками внутри этого worktree
-- расположение worktree выбирается при создании plan
+- расположение worktree выбирается при создании plan: `project-local` по умолчанию или `custom`
 - если используется project-local worktree, extension автоматически добавляет `.pi/pi-code-planner/worktrees/` в `.gitignore`
+- если используется custom worktree root, extension не редактирует `.gitignore`
 - extension не должен автоматически игнорировать всю `.pi/`, потому что пользователь может хранить там полезные project-local настройки
 - `.gitignore` проверяется по полной строке, а не substring match: `.pi/pi-code-planner/worktrees/` и `./.pi/pi-code-planner/worktrees/` считаются одним правилом
 - если точное правило уже есть, extension не меняет `.gitignore`
@@ -586,7 +582,7 @@ Retry не создаёт новый global stage. Он остаётся вну�
 1. `check_project` — определить root открытого проекта и project id.
 2. `check_git` — проверить, есть ли git repo; если нет, planner предлагает/выполняет git init через controlled tool.
 3. `prepare_storage` — создать или загрузить `project.json` и директории проекта.
-4. `choose_worktree_location` — выбрать расположение для plan worktree: project-local, agent-dir или custom.
+4. `choose_worktree_location` — выбрать расположение для plan worktree: project-local по умолчанию или custom.
 5. `create_plan_record` — создать `plan.json`, `state.json`, `plan.md`, базовые artifacts и краткое описание в `project.json`.
 6. `create_plan_worktree` — создать один git worktree для всего plan.
 7. `enter_discovery` — обновить `plans/<plan-id>/state.json`: `stage=discovery`, `step=read_project`.

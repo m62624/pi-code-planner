@@ -1,31 +1,31 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type {
+	GitRunner,
 	GitWorktreeAddInput,
 	GitWorktreeRemoveInput,
-	GitWorktreeRunner,
 } from "./runner";
 
 const execFileAsync = promisify(execFile);
 
-export class GitWorktreeCommandError extends Error {
+export class GitCommandError extends Error {
 	constructor(
 		message: string,
 		public readonly command: readonly string[],
 		public readonly stderr: string,
 	) {
 		super(message);
-		this.name = "GitWorktreeCommandError";
+		this.name = "GitCommandError";
 	}
 }
 
-export class NodeGitWorktreeRunner implements GitWorktreeRunner {
-	async add(input: GitWorktreeAddInput): Promise<void> {
-		await runGitWorktreeCommand(buildGitWorktreeAddArgs(input));
+export class NodeGitRunner implements GitRunner {
+	async worktreeAdd(input: GitWorktreeAddInput): Promise<void> {
+		await runGitCommand(buildGitWorktreeAddArgs(input));
 	}
 
-	async remove(input: GitWorktreeRemoveInput): Promise<void> {
-		await runGitWorktreeCommand(buildGitWorktreeRemoveArgs(input));
+	async worktreeRemove(input: GitWorktreeRemoveInput): Promise<void> {
+		await runGitCommand(buildGitWorktreeRemoveArgs(input));
 	}
 }
 
@@ -58,12 +58,12 @@ export function buildGitWorktreeRemoveArgs(
 	];
 }
 
-async function runGitWorktreeCommand(args: string[]): Promise<void> {
+async function runGitCommand(args: string[]): Promise<void> {
 	try {
 		await execFileAsync("git", args);
 	} catch (error) {
 		const stderr = getExecStderr(error);
-		throw new GitWorktreeCommandError(
+		throw new GitCommandError(
 			`git ${args.join(" ")} failed`,
 			["git", ...args],
 			stderr,

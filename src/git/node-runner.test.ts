@@ -4,7 +4,7 @@ import {
 	buildGitWorktreeRemoveArgs,
 } from "./node-runner";
 
-describe("node git worktree runner command args", () => {
+describe("node git runner worktree command args", () => {
 	it("builds add args for creating a new branch from base ref", () => {
 		expect(
 			buildGitWorktreeAddArgs({

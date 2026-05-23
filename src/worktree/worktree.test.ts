@@ -1,29 +1,28 @@
 import { describe, expect, it } from "vitest";
+import type {
+	GitRunner,
+	GitWorktreeAddInput,
+	GitWorktreeRemoveInput,
+} from "../git/runner";
 import { PROJECT_WORKTREES_IGNORE_RULE } from "../project-local/gitignore";
 import { createProjectStoragePaths } from "../storage/paths";
 import { MockPlannerFs } from "../test/mock-fs";
 import { createPlanWorktree, removePlanWorktree } from "./manager";
 import {
-	createAgentDirWorktreeLocation,
 	createCustomWorktreeLocation,
 	createProjectLocalWorktreeLocation,
 	isProjectLocalWorktreePath,
 } from "./paths";
-import type {
-	GitWorktreeAddInput,
-	GitWorktreeRemoveInput,
-	GitWorktreeRunner,
-} from "./runner";
 
-class MockGitWorktreeRunner implements GitWorktreeRunner {
+class MockGitRunner implements GitRunner {
 	readonly added: GitWorktreeAddInput[] = [];
 	readonly removed: GitWorktreeRemoveInput[] = [];
 
-	async add(input: GitWorktreeAddInput): Promise<void> {
+	async worktreeAdd(input: GitWorktreeAddInput): Promise<void> {
 		this.added.push(input);
 	}
 
-	async remove(input: GitWorktreeRemoveInput): Promise<void> {
+	async worktreeRemove(input: GitWorktreeRemoveInput): Promise<void> {
 		this.removed.push(input);
 	}
 }
@@ -57,16 +56,12 @@ describe("worktree paths", () => {
 		).toBe(false);
 	});
 
-	it("resolves agent-dir and custom worktree paths", () => {
+	it("resolves custom worktree path", () => {
 		const paths = createProjectStoragePaths({
 			agentDir: "/agent",
 			projectRoot: "/repo/app",
 		});
 
-		expect(createAgentDirWorktreeLocation(paths, "plan-a")).toMatchObject({
-			kind: "agent-dir",
-			path: `${paths.projectDir}/worktrees/plan-a`,
-		});
 		expect(
 			createCustomWorktreeLocation({
 				root: "/tmp/worktrees",
@@ -83,7 +78,7 @@ describe("worktree paths", () => {
 describe("worktree manager", () => {
 	it("creates project-local worktree and prepares .gitignore", async () => {
 		const fs = new MockPlannerFs();
-		const runner = new MockGitWorktreeRunner();
+		const git = new MockGitRunner();
 		const paths = createProjectStoragePaths({
 			agentDir: "/agent",
 			projectRoot: "/repo/app",
@@ -92,7 +87,7 @@ describe("worktree manager", () => {
 
 		const result = await createPlanWorktree({
 			fs,
-			runner,
+			git,
 			projectPaths: paths,
 			worktreePath: location.path,
 			branch: "plan/plan-a",
@@ -103,7 +98,7 @@ describe("worktree manager", () => {
 		expect(fs.snapshot()["/repo/app/.gitignore"]).toBe(
 			`${PROJECT_WORKTREES_IGNORE_RULE}\n`,
 		);
-		expect(runner.added).toEqual([
+		expect(git.added).toEqual([
 			{
 				repoRoot: "/repo/app",
 				path: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
@@ -113,18 +108,22 @@ describe("worktree manager", () => {
 		]);
 	});
 
-	it("creates non-project-local worktree without touching .gitignore", async () => {
+	it("creates custom worktree without touching .gitignore", async () => {
 		const fs = new MockPlannerFs();
-		const runner = new MockGitWorktreeRunner();
+		const git = new MockGitRunner();
 		const paths = createProjectStoragePaths({
 			agentDir: "/agent",
 			projectRoot: "/repo/app",
 		});
-		const location = createAgentDirWorktreeLocation(paths, "plan-a");
+		const location = createCustomWorktreeLocation({
+			root: "/tmp/worktrees",
+			projectId: paths.projectId,
+			planId: "plan-a",
+		});
 
 		const result = await createPlanWorktree({
 			fs,
-			runner,
+			git,
 			projectPaths: paths,
 			worktreePath: location.path,
 			branch: "plan/plan-a",
@@ -132,7 +131,7 @@ describe("worktree manager", () => {
 
 		expect(result.gitignore).toBeNull();
 		expect(await fs.exists("/repo/app/.gitignore")).toBe(false);
-		expect(runner.added).toEqual([
+		expect(git.added).toEqual([
 			{
 				repoRoot: "/repo/app",
 				path: location.path,
@@ -143,10 +142,10 @@ describe("worktree manager", () => {
 	});
 
 	it("removes worktree through runner without deleting plan files itself", async () => {
-		const runner = new MockGitWorktreeRunner();
+		const git = new MockGitRunner();
 
 		const result = await removePlanWorktree({
-			runner,
+			git,
 			projectRoot: "/repo/app",
 			worktreePath: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
 			force: true,
@@ -156,7 +155,7 @@ describe("worktree manager", () => {
 			path: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
 			force: true,
 		});
-		expect(runner.removed).toEqual([
+		expect(git.removed).toEqual([
 			{
 				repoRoot: "/repo/app",
 				path: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",

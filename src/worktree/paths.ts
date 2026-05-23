@@ -1,7 +1,7 @@
 import { isAbsolute, join, relative, resolve } from "node:path";
 import type { ProjectStoragePaths } from "../storage/paths";
 
-export type WorktreeLocationKind = "project-local" | "agent-dir" | "custom";
+export type WorktreeLocationKind = "project-local" | "custom";
 
 export interface WorktreeLocation {
 	kind: WorktreeLocationKind;
@@ -16,18 +16,6 @@ export function createProjectLocalWorktreeLocation(
 	const root = join(projectPaths.projectLocalDir, "worktrees");
 	return {
 		kind: "project-local",
-		root,
-		path: join(root, planId),
-	};
-}
-
-export function createAgentDirWorktreeLocation(
-	projectPaths: ProjectStoragePaths,
-	planId: string,
-): WorktreeLocation {
-	const root = join(projectPaths.projectDir, "worktrees");
-	return {
-		kind: "agent-dir",
 		root,
 		path: join(root, planId),
 	};

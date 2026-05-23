@@ -11,7 +11,7 @@ export interface GitWorktreeRemoveInput {
 	force?: boolean;
 }
 
-export interface GitWorktreeRunner {
-	add(input: GitWorktreeAddInput): Promise<void>;
-	remove(input: GitWorktreeRemoveInput): Promise<void>;
+export interface GitRunner {
+	worktreeAdd(input: GitWorktreeAddInput): Promise<void>;
+	worktreeRemove(input: GitWorktreeRemoveInput): Promise<void>;
 }
