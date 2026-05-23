@@ -1080,18 +1080,19 @@ Project-local append files работают как `.vscode` настройки 
 - Global append находится в `getAgentDir()/extensions/pi-code-planner/instructions/append/`.
 - Project append находится в `<project-root>/.pi/pi-code-planner/instructions/append/`.
 - Project append заменяет global append для того же instruction file.
+- Default instruction всегда читается первым. Append никогда не заменяет default, он только добавляется после default.
 - На чтении делаем concat:
 
 ```text
 defaults/discovery.md
 +
-append/discovery.md
+selected append/discovery.md
 ```
 
-Где `append/discovery.md` выбирается так:
-- если project append существует, используется project append
-- если project append отсутствует, используется global append
-- если оба отсутствуют, используется только default
+Где `selected append/discovery.md` выбирается так:
+- если project append существует, concat = default + project append
+- если project append отсутствует, concat = default + global append
+- если оба append отсутствуют, concat = default
 
 Так мы сохраняем upgrade path и при этом даём user/project/company style override.
 
