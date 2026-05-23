@@ -164,7 +164,7 @@ Git API — это внутренний слой extension. Модель не д
 - Worktree = изолированная среда агента
 - Один plan = один worktree
 - Task, experiment и refactor — это ветки внутри plan worktree, а не отдельные worktrees
-- Default path: `<project-root>/.pi/worktrees/<plan-id>`
+- Default path: `<project-root>/.pi/pi-code-planner/worktrees/<plan-id>`
 - User может выбрать другой worktree root при создании плана
 
 #### `git worktree remove <path>`
@@ -280,7 +280,6 @@ projects/<project-id>/
             <attempt-id>/
               experiment.json
               summary.md
-              diff.md
 ```
 
 Plan worktree хранится отдельно от state. Его расположение настраивается.
@@ -288,7 +287,7 @@ Plan worktree хранится отдельно от state. Его распол�
 По умолчанию:
 
 ```
-<project-root>/.pi/worktrees/<plan-id>/
+<project-root>/.pi/pi-code-planner/worktrees/<plan-id>/
 ```
 
 Альтернатива:
@@ -307,9 +306,14 @@ getAgentDir()/extensions/pi-code-planner/projects/<project-id>/worktrees/<plan-i
 - один plan создаёт ровно один worktree
 - task, experiment и refactor являются git-ветками внутри этого worktree
 - расположение worktree выбирается при создании plan
-- если используется project-local worktree, extension автоматически добавляет `.pi/worktrees/` в `.gitignore`
+- если используется project-local worktree, extension автоматически добавляет `.pi/pi-code-planner/worktrees/` в `.gitignore`
 - extension не должен автоматически игнорировать всю `.pi/`, потому что пользователь может хранить там полезные project-local настройки
-- если `.pi/worktrees/` уже покрыт существующим `.gitignore`, extension не дублирует правило
+- `.gitignore` проверяется по полной строке, а не substring match: `.pi/pi-code-planner/worktrees/` и `./.pi/pi-code-planner/worktrees/` считаются одним правилом
+- если точное правило уже есть, extension не меняет `.gitignore`
+- если `.gitignore` отсутствует, extension создаёт `.gitignore`
+- если точного правила нет, extension добавляет `.pi/pi-code-planner/worktrees/` в конец `.gitignore`
+- project-local instructions живут в `.pi/pi-code-planner/instructions/append/`; extension не добавляет эту папку в `.gitignore` автоматически
+- пользователь сам решает, версионировать project-local instructions или держать их локально
 
 ### `project.json`
 
@@ -363,7 +367,7 @@ getAgentDir()/extensions/pi-code-planner/projects/<project-id>/worktrees/<plan-i
   "nextStep": "write_memory",
   "activeTaskId": null,
   "activeExperimentId": null,
-  "worktreePath": "/home/m62624/Projects/main/pi-approval-modes/.pi/worktrees/plan-fix-find-command",
+  "worktreePath": "/home/m62624/Projects/main/pi-approval-modes/.pi/pi-code-planner/worktrees/plan-fix-find-command",
   "branches": {
     "base": "main",
     "plan": "plan/plan-fix-find-command",
@@ -1011,38 +1015,119 @@ Markdown instructions — это основной текстовый контр�
 getAgentDir()/extensions/pi-code-planner/instructions/
 ```
 
-Если файлов нет, extension копирует default markdown files из repo в PI extension dir.
+Схема:
+
+```text
+getAgentDir()/extensions/pi-code-planner/instructions/
+  defaults/
+    init.md
+    discovery.md
+    planning.md
+    execution.md
+    finalize.md
+    done.md
+    recovery.md
+    tdd.md
+    experiment.md
+    refactor.md
+    memory.md
+    git.md
+    git-commit.md
+
+  append/
+    init.md
+    discovery.md
+    planning.md
+    execution.md
+    finalize.md
+    done.md
+    recovery.md
+    tdd.md
+    experiment.md
+    refactor.md
+    memory.md
+    git.md
+    git-commit.md
+```
+
+Project-local append files работают как `.vscode` настройки проекта:
+
+```text
+<project-root>/.pi/pi-code-planner/instructions/append/
+  init.md
+  discovery.md
+  planning.md
+  execution.md
+  finalize.md
+  done.md
+  recovery.md
+  tdd.md
+  experiment.md
+  refactor.md
+  memory.md
+  git.md
+  git-commit.md
+```
+
+Пользователь сам решает, создавать project-local append files или нет. Extension не создаёт их автоматически и не добавляет `.pi/pi-code-planner/instructions/append/` в `.gitignore`.
+
+### Defaults and append
+
+- `defaults/*.md` всегда принадлежат extension.
+- Extension может перезаписывать `defaults/*.md` при update, если hash изменился.
+- User не должен редактировать `defaults`.
+- User правит только `append/*.md`.
+- Global append находится в `getAgentDir()/extensions/pi-code-planner/instructions/append/`.
+- Project append находится в `<project-root>/.pi/pi-code-planner/instructions/append/`.
+- Project append заменяет global append для того же instruction file.
+- На чтении делаем concat:
+
+```text
+defaults/discovery.md
++
+append/discovery.md
+```
+
+Где `append/discovery.md` выбирается так:
+- если project append существует, используется project append
+- если project append отсутствует, используется global append
+- если оба отсутствуют, используется только default
+
+Так мы сохраняем upgrade path и при этом даём user/project/company style override.
 
 ### Hash check
 
 Для каждого default markdown file extension хранит hash. При запуске:
 
 1. Посчитать hash default file из repo.
-2. Посчитать hash installed file из PI extension dir.
+2. Посчитать hash installed file из PI extension dir `instructions/defaults/`.
 3. Если installed file отсутствует — скопировать default.
 4. Если hash совпадает — ничего не делать.
-5. Если hash не совпадает и `custom_instructions=false` — перезаписать installed file новым default.
-6. Если hash не совпадает и `custom_instructions=true` — не перезаписывать installed file.
+5. Если hash не совпадает — перезаписать installed default новым default.
 
-Это нужно, чтобы extension мог обновлять системные инструкции после upgrade, но не затирал пользовательские правки, если user явно включил custom mode.
-
-### Settings
-
-Минимальная настройка:
-
-```json
-{
-  "instructions": {
-    "custom_instructions": false
-  }
-}
-```
+Это нужно, чтобы extension мог обновлять системные инструкции после upgrade. User changes не теряются, потому что user правит `append/*.md`, а не `defaults/*.md`.
 
 Правила:
-- `custom_instructions=false` означает, что user принимает auto-sync default markdown files
-- `custom_instructions=true` означает, что user сам отвечает за содержимое markdown files
-- extension не должен перезаписывать custom instructions
-- project-local overrides можно добавить позже, но базовый sync идёт через PI extension dir
+- defaults всегда sync/update by hash
+- append никогда не перезаписывается extension
+- если append file отсутствует, он просто пропускается
+- если append file пустой, он не меняет instruction
+- `custom_instructions` не используется, потому что он ломает upgrade path
+
+### `git-commit.md`
+
+`git-commit.md` нужен отдельно от `git.md`.
+
+`git.md` описывает planner-controlled git workflow: worktree, branch lifecycle, forbidden raw git, merge boundaries, recovery.
+
+`git-commit.md` описывает только стиль сообщений:
+- commit message style
+- merge message style
+- experiment checkpoint message style
+- forbidden message patterns
+- language/team conventions
+
+Commit style не должен менять git flow. Он только формирует текст commit/merge messages, когда planner git tool уже решил, что commit или merge разрешён.
 
 ### Как модель использует markdown
 
@@ -1057,3 +1142,14 @@ getAgentDir()/extensions/pi-code-planner/instructions/
 - пользовательские notes, если они есть
 
 Markdown files могут быть пустыми в момент создания plan. Модель заполняет project/task-specific markdown на соответствующих steps. Default markdown files задают процесс и правила, а plan/task markdown files содержат конкретный контекст текущей работы.
+
+Порядок concat для model prompt:
+
+```text
+default stage instruction
++ selected append for that instruction
++ current plan/task artifact
++ memory links from planner_status
+```
+
+`planner_status` возвращает ссылки на нужные markdown files и memory files. Он не вставляет длинный prompt внутрь tool result.
