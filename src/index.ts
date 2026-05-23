@@ -182,6 +182,16 @@ export {
 	hasExactWorktreesIgnoreRule,
 	PROJECT_WORKTREES_IGNORE_RULE,
 } from "./project-local/gitignore";
+export type {
+	ActivePlanContext,
+	ActivePlanContextReady,
+	ActivePlanContextStatus,
+	ActivePlanContextUnavailable,
+} from "./runtime/active-plan";
+export {
+	readActivePlanContext,
+	updateActivePlanState,
+} from "./runtime/active-plan";
 export { createNodeFs, type PlannerFs } from "./storage/fs";
 export { createProjectId, sanitizeIdPart } from "./storage/ids";
 export {
