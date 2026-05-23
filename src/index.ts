@@ -91,3 +91,31 @@ export {
 	setPlanStep,
 	updatePlanState,
 } from "./storage/state-store";
+export type {
+	CreatePlanWorktreeInput,
+	CreatePlanWorktreeResult,
+	RemovePlanWorktreeInput,
+	RemovePlanWorktreeResult,
+} from "./worktree/manager";
+export {
+	createPlanWorktree,
+	removePlanWorktree,
+} from "./worktree/manager";
+export {
+	buildGitWorktreeAddArgs,
+	buildGitWorktreeRemoveArgs,
+	GitWorktreeCommandError,
+	NodeGitWorktreeRunner,
+} from "./worktree/node-runner";
+export type { WorktreeLocation, WorktreeLocationKind } from "./worktree/paths";
+export {
+	createAgentDirWorktreeLocation,
+	createCustomWorktreeLocation,
+	createProjectLocalWorktreeLocation,
+	isProjectLocalWorktreePath,
+} from "./worktree/paths";
+export type {
+	GitWorktreeAddInput,
+	GitWorktreeRemoveInput,
+	GitWorktreeRunner,
+} from "./worktree/runner";
