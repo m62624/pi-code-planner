@@ -1,3 +1,94 @@
+import {
+	type ExtensionAPI,
+	getAgentDir,
+	isToolCallEventType,
+} from "@earendil-works/pi-coding-agent";
+import {
+	checkRawGitAllowed,
+	PLANNER_STATUS_TOOL_NAME,
+} from "./guard/git-watcher";
+import { createNodeFs } from "./storage/fs";
+import { createProjectStoragePaths } from "./storage/paths";
+import { readProjectRecordIfExists } from "./storage/project-store";
+
+const EMPTY_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {},
+	additionalProperties: false,
+} as const;
+
+export default function piCodePlannerExtension(pi: ExtensionAPI): void {
+	pi.registerTool({
+		name: PLANNER_STATUS_TOOL_NAME,
+		label: "Planner Status",
+		description:
+			"Show the current pi-code-planner stage, instruction files, and allowed planner tools.",
+		promptSnippet:
+			"Use planner_status when a planner action is blocked or when you are unsure which planner step/tool is allowed.",
+		parameters: EMPTY_TOOL_PARAMETERS as never,
+		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+			const state = await readActivePlannerState(ctx.cwd);
+			const text = state.active
+				? [
+						"Planner status stub.",
+						`Active plan: ${state.activePlanId}`,
+						"",
+						"Detailed stage/step routing is not implemented yet.",
+						"Until planner git wrapper tools are available, do not run raw git through bash while a plan is active.",
+					].join("\n")
+				: [
+						"Planner status stub.",
+						"No active pi-code-planner plan was found for this project.",
+						"Normal Pi tool behavior is allowed.",
+					].join("\n");
+
+			return {
+				content: [{ type: "text", text }],
+				details: state,
+			};
+		},
+	});
+
+	pi.on("tool_call", async (event, ctx) => {
+		if (!isToolCallEventType("bash", event)) {
+			return;
+		}
+
+		const state = await readActivePlannerState(ctx.cwd);
+		const decision = checkRawGitAllowed({
+			command: event.input.command,
+			state,
+		});
+
+		if (!decision.allow) {
+			return {
+				block: true,
+				reason:
+					decision.reason ??
+					"Raw git is blocked while pi-code-planner is active.",
+			};
+		}
+	});
+}
+
+async function readActivePlannerState(projectRoot: string): Promise<{
+	activePlanId: string | null;
+	active: boolean;
+}> {
+	try {
+		const fs = createNodeFs();
+		const paths = createProjectStoragePaths({
+			agentDir: getAgentDir(),
+			projectRoot,
+		});
+		const project = await readProjectRecordIfExists(fs, paths);
+		const activePlanId = project?.activePlanId ?? null;
+		return { activePlanId, active: activePlanId !== null };
+	} catch {
+		return { activePlanId: null, active: false };
+	}
+}
+
 export { EXTENSION_NAME, SCHEMA_VERSION } from "./constants";
 export {
 	buildGitWorktreeAddArgs,
@@ -10,6 +101,13 @@ export type {
 	GitWorktreeAddInput,
 	GitWorktreeRemoveInput,
 } from "./git/runner";
+export type { GitWatcherDecision, GitWatcherState } from "./guard/git-watcher";
+export {
+	analyzeRawGitCommand,
+	buildRawGitBlockedReason,
+	checkRawGitAllowed,
+	PLANNER_STATUS_TOOL_NAME,
+} from "./guard/git-watcher";
 export { DEFAULT_INSTRUCTIONS } from "./instructions/defaults";
 export {
 	getInstructionContent,
