@@ -211,6 +211,19 @@ export {
 export type { MemoryStoragePaths } from "./memory/paths";
 export { createMemoryStoragePaths } from "./memory/paths";
 export type {
+	MemoryRetrievalCursor,
+	MemoryRetrievalFilters,
+	MemoryRetrievalInput,
+	MemoryRetrievalLimits,
+	MemoryRetrievalPage,
+	MemoryRetrievalResult,
+} from "./memory/retrieval";
+export {
+	DEFAULT_MEMORY_RETRIEVAL_LIMIT,
+	MAX_MEMORY_RETRIEVAL_LIMIT,
+	retrieveMemoryContext,
+} from "./memory/retrieval";
+export type {
 	MemoryCheckpoint,
 	MemoryCheckpointVerification,
 	MemoryDirtyFile,

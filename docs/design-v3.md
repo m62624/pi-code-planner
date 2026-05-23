@@ -766,6 +766,62 @@ plans/<plan-id>/memory/
 
 Для v3 достаточно одного `symbols/index.jsonl`. Sharding можно добавить позже как внутреннюю оптимизацию, если файл станет слишком большим.
 
+### Retrieval limits
+
+Memory нельзя отдавать модели целиком без лимитов. Даже если memory хранится в JSONL, tool result всегда должен быть bounded chunk.
+
+Правило:
+
+```
+Модель получает только ограниченный memory context.
+Если нужно больше, она повторяет поиск с cursor/offset или уточняет query.
+```
+
+Базовый retrieval API:
+
+```ts
+retrieveMemoryContext({
+  query?: string,
+  cursor?: {
+    files?: number,
+    symbols?: number,
+    relations?: number
+  },
+  limits?: {
+    files?: number,
+    symbols?: number,
+    relations?: number
+  },
+  filters?: {
+    paths?: string[],
+    languages?: string[],
+    symbolKinds?: string[],
+    relationKinds?: string[],
+    globalState?: string[],
+    verificationStatus?: string[],
+    dirtyOnly?: boolean
+  }
+})
+```
+
+Ответ:
+
+```ts
+{
+  files: { entries, totalMatched, start, limit, nextCursor },
+  symbols: { entries, totalMatched, start, limit, nextCursor },
+  relations: { entries, totalMatched, start, limit, nextCursor }
+}
+```
+
+Правила:
+- `nextCursor=null` означает, что chunk для этой категории закончился
+- default limit небольшой, чтобы не раздувать context
+- max limit жёстко ограничен кодом
+- project patterns и dirty state добавляются только если caller явно запросил
+- retrieval сначала exact/structured/lexical; vector RAG можно добавить позже как backend, не меняя внешний API
+- для больших проектов модель должна уточнять query или читать следующий chunk, а не просить весь memory blob
+
 ### `files/index.jsonl`
 
 Файловый индекс хранит минимальную информацию о файлах проекта.
