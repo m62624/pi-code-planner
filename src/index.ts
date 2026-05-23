@@ -176,6 +176,58 @@ export type {
 	SyncedInstructionFile,
 } from "./instructions/schema";
 export { INSTRUCTION_KEYS } from "./instructions/schema";
+export type { JsonlValidator } from "./memory/jsonl";
+export {
+	PlannerJsonlError,
+	readJsonl,
+	removeJsonlEntries,
+	upsertJsonlEntries,
+	writeJsonl,
+} from "./memory/jsonl";
+export {
+	clearMemoryDirty,
+	computeMemoryCheckpoint,
+	initializeMemoryFiles,
+	markMemoryDirty,
+	readFileIndex,
+	readMemoryCheckpoint,
+	readMemoryDirtyState,
+	readProjectPatterns,
+	readRelationIndex,
+	readSymbolIndex,
+	removeFileEntries,
+	removeRelationEntries,
+	removeSymbolEntries,
+	replaceFileIndex,
+	replaceRelationIndex,
+	replaceSymbolIndex,
+	upsertFileEntries,
+	upsertRelationEntries,
+	upsertSymbolEntries,
+	verifyMemoryCheckpoint,
+	writeMemoryCheckpoint,
+	writeProjectPatterns,
+} from "./memory/manager";
+export type { MemoryStoragePaths } from "./memory/paths";
+export { createMemoryStoragePaths } from "./memory/paths";
+export type {
+	MemoryCheckpoint,
+	MemoryCheckpointVerification,
+	MemoryDirtyFile,
+	MemoryDirtyReason,
+	MemoryDirtyState,
+	MemoryFileEntry,
+	MemoryFileKind,
+	MemoryFileStatus,
+	MemoryRelationEntry,
+	MemoryRelationKind,
+	MemorySymbolEffects,
+	MemorySymbolEntry,
+	MemorySymbolGlobalState,
+	MemorySymbolKind,
+	MemorySymbolVisibility,
+	MemoryVerificationStatus,
+} from "./memory/schema";
 export type { GitignoreWorktreeRuleResult } from "./project-local/gitignore";
 export {
 	ensureProjectWorktreesIgnored,
