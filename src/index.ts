@@ -228,6 +228,16 @@ export type {
 	MemorySymbolVisibility,
 	MemoryVerificationStatus,
 } from "./memory/schema";
+export type {
+	MemoryBatchEntryKind,
+	MemoryBatchRejectedEntry,
+	MemoryBatchWriteResult,
+} from "./memory/write-api";
+export {
+	validateMemoryBatchAgainstIndexes,
+	writeMemoryBatch,
+	writeMemoryBatchWithReferences,
+} from "./memory/write-api";
 export type { GitignoreWorktreeRuleResult } from "./project-local/gitignore";
 export {
 	ensureProjectWorktreesIgnored,
