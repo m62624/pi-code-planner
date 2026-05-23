@@ -242,6 +242,11 @@ export type {
 	MemoryVerificationStatus,
 } from "./memory/schema";
 export type {
+	MemoryProjectSnapshot,
+	MemoryProjectSnapshotInput,
+} from "./memory/snapshot";
+export { createMemoryProjectSnapshot } from "./memory/snapshot";
+export type {
 	MemoryFreshnessApplyInput,
 	MemoryFreshnessApplyResult,
 	MemoryFreshnessInput,

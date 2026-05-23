@@ -53,6 +53,10 @@ class MockGitRunner implements GitRunner {
 		this.calls.push({ name: "diffNameOnly", input });
 		return "";
 	}
+	async listProjectFiles(input: GitRepoInput): Promise<string[]> {
+		this.calls.push({ name: "listProjectFiles", input });
+		return [];
+	}
 	async branchExists(input: GitBranchInput): Promise<boolean> {
 		this.calls.push({ name: "branchExists", input });
 		return true;

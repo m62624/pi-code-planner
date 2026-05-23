@@ -1068,7 +1068,18 @@ Flow:
 
 Перед compact, после git checkout/merge/rebase или после внешнего изменения файлов extension должен проверить, не устарел ли memory blob.
 
-Проверка работает через snapshot текущих project files:
+Проверка работает через snapshot текущих project files. Snapshot строится из git, а не из полного рекурсивного filesystem scan:
+
+```bash
+git ls-files --cached --others --exclude-standard
+```
+
+Это означает:
+- tracked files входят в snapshot
+- untracked files входят в snapshot
+- ignored files не входят в snapshot
+- если tracked file удалён с диска, он не попадает в `files`, но попадает в `missingFiles`
+- новые файлы, созданные моделью до commit, видны как `newFiles` при freshness analysis
 
 ```ts
 [

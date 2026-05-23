@@ -9,6 +9,7 @@ import {
 	buildGitDiffStatArgs,
 	buildGitHeadCommitArgs,
 	buildGitInitArgs,
+	buildGitListProjectFilesArgs,
 	buildGitMergeArgs,
 	buildGitStageAllArgs,
 	buildGitStatusPorcelainArgs,
@@ -53,6 +54,14 @@ describe("node git runner command args", () => {
 			"/repo/app",
 			"diff",
 			"--name-only",
+		]);
+		expect(buildGitListProjectFilesArgs({ repoRoot: "/repo/app" })).toEqual([
+			"-C",
+			"/repo/app",
+			"ls-files",
+			"--cached",
+			"--others",
+			"--exclude-standard",
 		]);
 	});
 

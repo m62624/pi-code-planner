@@ -51,6 +51,13 @@ export class NodeGitRunner implements GitRunner {
 		return await runGitCommandOutput(buildGitDiffNameOnlyArgs(input));
 	}
 
+	async listProjectFiles(input: GitRepoInput): Promise<string[]> {
+		const output = await runGitCommandOutput(
+			buildGitListProjectFilesArgs(input),
+		);
+		return output.split(/\r?\n/).filter(Boolean);
+	}
+
 	async branchExists(input: GitBranchInput): Promise<boolean> {
 		try {
 			await runGitCommand(buildGitBranchExistsArgs(input));
@@ -115,6 +122,17 @@ export function buildGitDiffStatArgs(input: GitRepoInput): string[] {
 
 export function buildGitDiffNameOnlyArgs(input: GitRepoInput): string[] {
 	return ["-C", input.repoRoot, "diff", "--name-only"];
+}
+
+export function buildGitListProjectFilesArgs(input: GitRepoInput): string[] {
+	return [
+		"-C",
+		input.repoRoot,
+		"ls-files",
+		"--cached",
+		"--others",
+		"--exclude-standard",
+	];
 }
 
 export function buildGitBranchExistsArgs(input: GitBranchInput): string[] {

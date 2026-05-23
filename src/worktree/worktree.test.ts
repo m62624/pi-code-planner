@@ -41,6 +41,9 @@ class MockGitRunner implements GitRunner {
 	async diffNameOnly(_input: GitRepoInput): Promise<string> {
 		return "";
 	}
+	async listProjectFiles(_input: GitRepoInput): Promise<string[]> {
+		return [];
+	}
 	async branchExists(_input: GitBranchInput): Promise<boolean> {
 		return true;
 	}

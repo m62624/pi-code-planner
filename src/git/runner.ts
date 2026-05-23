@@ -50,6 +50,7 @@ export interface GitRunner {
 	statusPorcelain(input: GitRepoInput): Promise<string>;
 	diffStat(input: GitRepoInput): Promise<string>;
 	diffNameOnly(input: GitRepoInput): Promise<string>;
+	listProjectFiles(input: GitRepoInput): Promise<string[]>;
 	branchExists(input: GitBranchInput): Promise<boolean>;
 	createBranch(input: GitCreateBranchInput): Promise<void>;
 	deleteBranch(input: GitDeleteBranchInput): Promise<void>;
