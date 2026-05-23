@@ -137,6 +137,88 @@ describe("memory verification", () => {
 		});
 	});
 
+	it("keeps existing dirty state when clean apply has nothing to change", async () => {
+		const fs = new MockPlannerFs();
+		const paths = await initializeTestMemory(fs);
+		await seedMemory(fs, paths);
+		await applyMemoryFreshness({
+			fs,
+			paths,
+			currentFiles: [
+				{ path: "src/config.ts", hash: "hash:changed" },
+				{ path: "src/env.ts", hash: "hash:src/env.ts" },
+				{ path: "src/server.ts", hash: "hash:src/server.ts" },
+			],
+			detectedAt: "2026-05-23T11:00:00.000Z",
+		});
+
+		const clean = await applyMemoryFreshness({
+			fs,
+			paths,
+			currentFiles: [
+				{ path: "src/config.ts", hash: "hash:src/config.ts" },
+				{ path: "src/env.ts", hash: "hash:src/env.ts" },
+				{ path: "src/server.ts", hash: "hash:src/server.ts" },
+			],
+			detectedAt: "2026-05-23T12:00:00.000Z",
+		});
+
+		expect(clean.clean).toBe(true);
+		expect(clean.dirty).toEqual({
+			files: {
+				"src/config.ts": {
+					reason: "file_hash_changed",
+					detectedAt: "2026-05-23T11:00:00.000Z",
+				},
+			},
+		});
+	});
+
+	it("treats duplicate snapshot paths as last value wins", async () => {
+		const fs = new MockPlannerFs();
+		const paths = await initializeTestMemory(fs);
+		await seedMemory(fs, paths);
+
+		const result = await analyzeMemoryFreshness({
+			fs,
+			paths,
+			currentFiles: [
+				{ path: "src/config.ts", hash: "hash:wrong" },
+				{ path: "src/config.ts", hash: "hash:src/config.ts" },
+				{ path: "src/env.ts", hash: "hash:src/env.ts" },
+				{ path: "src/server.ts", hash: "hash:src/server.ts" },
+			],
+		});
+
+		expect(result.clean).toBe(true);
+		expect(result.changedFiles).toEqual([]);
+	});
+
+	it("marks relations affected through changed source or target symbols", async () => {
+		const fs = new MockPlannerFs();
+		const paths = await initializeTestMemory(fs);
+		await seedMemory(fs, paths);
+		await upsertRelationEntries(fs, paths, [
+			relationEntry("rel_env_config", "sym_load_env", "sym_parse_config"),
+		]);
+
+		const result = await analyzeMemoryFreshness({
+			fs,
+			paths,
+			currentFiles: [
+				{ path: "src/config.ts", hash: "hash:changed" },
+				{ path: "src/env.ts", hash: "hash:src/env.ts" },
+				{ path: "src/server.ts", hash: "hash:src/server.ts" },
+			],
+		});
+
+		expect(result.affectedSymbolIds).toEqual(["sym_parse_config"]);
+		expect(result.affectedRelationIds).toEqual([
+			"rel_env_config",
+			"rel_server_config",
+		]);
+	});
+
 	it("rejects unsafe snapshot paths before touching memory indexes", async () => {
 		const fs = new MockPlannerFs();
 		const paths = await initializeTestMemory(fs);
@@ -153,6 +235,27 @@ describe("memory verification", () => {
 		expect(
 			(await readFileIndex(fs, paths)).find(entryByPath("src/config.ts")),
 		).toMatchObject({ status: "indexed" });
+	});
+
+	it("rejects windows absolute paths and empty snapshot hashes", async () => {
+		const fs = new MockPlannerFs();
+		const paths = await initializeTestMemory(fs);
+		await seedMemory(fs, paths);
+
+		await expect(
+			analyzeMemoryFreshness({
+				fs,
+				paths,
+				currentFiles: [{ path: "C:\\repo\\src\\config.ts", hash: "hash" }],
+			}),
+		).rejects.toThrow("Snapshot path must be relative");
+		await expect(
+			analyzeMemoryFreshness({
+				fs,
+				paths,
+				currentFiles: [{ path: "src/config.ts", hash: "" }],
+			}),
+		).rejects.toThrow("Snapshot hash must be non-empty");
 	});
 });
 

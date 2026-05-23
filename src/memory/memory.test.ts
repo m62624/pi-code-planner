@@ -208,6 +208,35 @@ describe("memory manager", () => {
 		).rejects.toThrow("Invalid relation index entry.");
 	});
 
+	it("rejects unsupported enum values in direct manager writes", async () => {
+		const fs = new MockPlannerFs();
+		const paths = await initializeTestMemory(fs);
+
+		await expect(
+			upsertFileEntries(fs, paths, [
+				{ ...fileEntry("src/config.ts", "hash-a", "Config."), kind: "banana" },
+			] as unknown as MemoryFileEntry[]),
+		).rejects.toThrow("Invalid file index entry.");
+		await expect(
+			upsertSymbolEntries(fs, paths, [
+				{
+					...symbolEntry("sym_parse_config", "parseConfig", "none"),
+					effects: {
+						reads: [],
+						writes: [],
+						io: [],
+						globalState: "maybe",
+					},
+				},
+			] as unknown as MemorySymbolEntry[]),
+		).rejects.toThrow("Invalid symbol index entry.");
+		await expect(
+			upsertRelationEntries(fs, paths, [
+				{ ...relationEntry("rel_tests_config", "tests"), kind: "confuses" },
+			] as unknown as MemoryRelationEntry[]),
+		).rejects.toThrow("Invalid relation index entry.");
+	});
+
 	it("marks and clears dirty files without blocking unrelated files", async () => {
 		const fs = new MockPlannerFs();
 		const paths = await initializeTestMemory(fs);

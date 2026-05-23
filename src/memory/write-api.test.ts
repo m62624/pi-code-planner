@@ -4,7 +4,11 @@ import {
 	createProjectStoragePaths,
 } from "../storage/paths";
 import { MockPlannerFs } from "../test/mock-fs";
-import { initializeMemoryFiles, readRelationIndex } from "./manager";
+import {
+	initializeMemoryFiles,
+	readFileIndex,
+	readRelationIndex,
+} from "./manager";
 import type {
 	MemoryFileEntry,
 	MemoryRelationEntry,
@@ -148,6 +152,123 @@ describe("memory write api", () => {
 		});
 
 		expect(result.totals).toEqual({ input: 3, accepted: 3, rejected: 0 });
+	});
+
+	it("rejects unsupported enum values before they reach storage indexes", async () => {
+		const fs = new MockPlannerFs();
+		const paths = await initializeTestMemory(fs);
+		const result = await writeMemoryBatch({
+			fs,
+			paths,
+			files: [
+				{
+					...fileEntry("src/config.ts"),
+					kind: "banana",
+					status: "confused",
+				},
+			],
+			symbols: [
+				{
+					...symbolEntry("sym_parse_config", "src/config.ts"),
+					kind: "banana",
+					visibility: "everyone",
+					effects: {
+						reads: [],
+						writes: [],
+						io: [],
+						globalState: "maybe",
+					},
+					verification: {
+						fileHash: "hash:src/config.ts",
+						status: "probably",
+					},
+				},
+			],
+			relations: [
+				{
+					...relationEntry("rel_bad", "sym_a", "sym_b", "src/config.ts"),
+					kind: "confuses",
+				},
+			],
+		});
+
+		expect(result.accepted).toEqual({ files: [], symbols: [], relations: [] });
+		expect(result.rejected).toEqual([
+			{
+				kind: "file",
+				index: 0,
+				id: "src/config.ts",
+				reasons: [
+					"kind has unsupported value: banana.",
+					"status has unsupported value: confused.",
+				],
+			},
+			{
+				kind: "symbol",
+				index: 0,
+				id: "sym_parse_config",
+				reasons: [
+					"kind has unsupported value: banana.",
+					"visibility has unsupported value: everyone.",
+					"globalState has unsupported value: maybe.",
+					"status has unsupported value: probably.",
+				],
+			},
+			{
+				kind: "relation",
+				index: 0,
+				id: "rel_bad",
+				reasons: ["kind has unsupported value: confuses."],
+			},
+		]);
+		expect(await readFileIndex(fs, paths)).toEqual([]);
+		expect(await readRelationIndex(fs, paths)).toEqual([]);
+	});
+
+	it("uses last duplicate id in one batch through normal upsert semantics", async () => {
+		const fs = new MockPlannerFs();
+		const paths = await initializeTestMemory(fs);
+		const first = fileEntry("src/config.ts");
+		const second = { ...first, hash: "hash:updated", summary: "Updated." };
+
+		const result = await writeMemoryBatch({
+			fs,
+			paths,
+			files: [first, second],
+		});
+
+		expect(result.totals).toEqual({ input: 2, accepted: 2, rejected: 0 });
+		expect(await readFileIndex(fs, paths)).toEqual([second]);
+	});
+
+	it("rejects unsafe relation evidence paths", async () => {
+		const fs = new MockPlannerFs();
+		const paths = await initializeTestMemory(fs);
+		const result = await writeMemoryBatch({
+			fs,
+			paths,
+			relations: [
+				relationEntry("rel_parent", "sym_a", "sym_b", "../outside.ts"),
+				relationEntry("rel_windows", "sym_a", "sym_b", "C:\\repo\\file.ts"),
+			],
+		});
+
+		expect(result.accepted.relations).toEqual([]);
+		expect(result.rejected).toEqual([
+			{
+				kind: "relation",
+				index: 0,
+				id: "rel_parent",
+				reasons: ["evidencePath must not contain parent traversal."],
+			},
+			{
+				kind: "relation",
+				index: 1,
+				id: "rel_windows",
+				reasons: ["evidencePath must be relative, not absolute."],
+			},
+		]);
+		expect(await readRelationIndex(fs, paths)).toEqual([]);
 	});
 });
 

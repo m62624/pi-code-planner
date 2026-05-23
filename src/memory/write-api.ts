@@ -12,6 +12,11 @@ import type {
 	MemoryRelationEntry,
 	MemorySymbolEntry,
 } from "./schema";
+import {
+	validateMemoryFileEntry,
+	validateMemoryRelationEntry,
+	validateMemorySymbolEntry,
+} from "./validators";
 
 export type MemoryBatchEntryKind = "file" | "symbol" | "relation";
 
@@ -221,135 +226,6 @@ export async function validateMemoryBatchAgainstIndexes(input: {
 	return await writeMemoryBatchWithReferences(input);
 }
 
-type ValidationResult<T> =
-	| { ok: true; entry: T }
-	| { ok: false; reasons: string[] };
-
-function validateMemoryFileEntry(
-	value: unknown,
-): ValidationResult<MemoryFileEntry> {
-	const reasons: string[] = [];
-	if (!isRecord(value)) {
-		return { ok: false, reasons: ["Entry must be an object."] };
-	}
-
-	requiredString(value, "path", reasons);
-	requiredString(value, "kind", reasons);
-	requiredString(value, "language", reasons);
-	requiredString(value, "hash", reasons);
-	requiredString(value, "status", reasons);
-	requiredString(value, "summary", reasons);
-	if (hasAbsolutePath(value.path)) {
-		reasons.push("path must be relative, not absolute.");
-	}
-	if (hasParentTraversal(value.path)) {
-		reasons.push("path must not contain parent traversal.");
-	}
-
-	return reasons.length === 0
-		? { ok: true, entry: value as unknown as MemoryFileEntry }
-		: { ok: false, reasons };
-}
-
-function validateMemorySymbolEntry(
-	value: unknown,
-): ValidationResult<MemorySymbolEntry> {
-	const reasons: string[] = [];
-	if (!isRecord(value)) {
-		return { ok: false, reasons: ["Entry must be an object."] };
-	}
-
-	requiredString(value, "id", reasons);
-	requiredString(value, "path", reasons);
-	requiredString(value, "language", reasons);
-	requiredString(value, "kind", reasons);
-	requiredString(value, "name", reasons);
-	requiredString(value, "qualifiedName", reasons);
-	requiredString(value, "signature", reasons);
-	requiredString(value, "summary", reasons);
-	requiredString(value, "visibility", reasons);
-	if (hasAbsolutePath(value.path)) {
-		reasons.push("path must be relative, not absolute.");
-	}
-	if (hasParentTraversal(value.path)) {
-		reasons.push("path must not contain parent traversal.");
-	}
-
-	if (!isRecord(value.effects)) {
-		reasons.push("effects must be an object.");
-	} else {
-		requiredStringArray(value.effects, "reads", reasons);
-		requiredStringArray(value.effects, "writes", reasons);
-		requiredStringArray(value.effects, "io", reasons);
-		requiredString(value.effects, "globalState", reasons);
-	}
-
-	if (!isRecord(value.anchor)) {
-		reasons.push("anchor must be an object.");
-	} else {
-		requiredString(value.anchor, "searchText", reasons);
-	}
-
-	if (!isRecord(value.verification)) {
-		reasons.push("verification must be an object.");
-	} else {
-		requiredString(value.verification, "fileHash", reasons);
-		requiredString(value.verification, "status", reasons);
-	}
-
-	return reasons.length === 0
-		? { ok: true, entry: value as unknown as MemorySymbolEntry }
-		: { ok: false, reasons };
-}
-
-function validateMemoryRelationEntry(
-	value: unknown,
-): ValidationResult<MemoryRelationEntry> {
-	const reasons: string[] = [];
-	if (!isRecord(value)) {
-		return { ok: false, reasons: ["Entry must be an object."] };
-	}
-
-	requiredString(value, "id", reasons);
-	requiredString(value, "from", reasons);
-	if (!(typeof value.to === "string" || value.to === null)) {
-		reasons.push("to must be a string or null.");
-	}
-	requiredString(value, "kind", reasons);
-	requiredString(value, "evidencePath", reasons);
-	requiredString(value, "evidenceSearchText", reasons);
-	if (hasAbsolutePath(value.evidencePath)) {
-		reasons.push("evidencePath must be relative, not absolute.");
-	}
-	if (hasParentTraversal(value.evidencePath)) {
-		reasons.push("evidencePath must not contain parent traversal.");
-	}
-
-	return reasons.length === 0
-		? { ok: true, entry: value as unknown as MemoryRelationEntry }
-		: { ok: false, reasons };
-}
-
-function requiredString(
-	record: Record<string, unknown>,
-	key: string,
-	reasons: string[],
-): void {
-	if (typeof record[key] !== "string" || record[key] === "") {
-		reasons.push(`${key} must be a non-empty string.`);
-	}
-}
-
-function requiredStringArray(
-	record: Record<string, unknown>,
-	key: string,
-	reasons: string[],
-): void {
-	if (!Array.isArray(record[key]) || !record[key].every(isString)) {
-		reasons.push(`${key} must be a string array.`);
-	}
-}
-
 function idOf(value: unknown, key: string): string | null {
 	if (!isRecord(value)) {
 		return null;
@@ -358,21 +234,6 @@ function idOf(value: unknown, key: string): string | null {
 	return typeof id === "string" && id ? id : null;
 }
 
-function hasAbsolutePath(value: unknown): boolean {
-	return typeof value === "string" && /^[/\\]|^[A-Za-z]:[\\/]/.test(value);
-}
-
-function hasParentTraversal(value: unknown): boolean {
-	return (
-		typeof value === "string" &&
-		value.split(/[\\/]+/).some((part) => part === "..")
-	);
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isString(value: unknown): value is string {
-	return typeof value === "string";
 }

@@ -19,6 +19,11 @@ import type {
 	MemoryRelationEntry,
 	MemorySymbolEntry,
 } from "./schema";
+import {
+	isMemoryFileEntry,
+	isMemoryRelationEntry,
+	isMemorySymbolEntry,
+} from "./validators";
 
 export async function initializeMemoryFiles(
 	fs: PlannerFs,
@@ -336,65 +341,4 @@ function validateEntries<T>(
 			throw new TypeError(`Invalid ${label} entry.`);
 		}
 	}
-}
-
-function isMemoryFileEntry(value: unknown): value is MemoryFileEntry {
-	return (
-		isRecord(value) &&
-		isString(value.path) &&
-		isString(value.kind) &&
-		isString(value.language) &&
-		isString(value.hash) &&
-		isString(value.status) &&
-		isString(value.summary)
-	);
-}
-
-function isMemorySymbolEntry(value: unknown): value is MemorySymbolEntry {
-	return (
-		isRecord(value) &&
-		isString(value.id) &&
-		isString(value.path) &&
-		isString(value.language) &&
-		isString(value.kind) &&
-		isString(value.name) &&
-		isString(value.qualifiedName) &&
-		isString(value.signature) &&
-		isString(value.summary) &&
-		isString(value.visibility) &&
-		isRecord(value.effects) &&
-		isStringArray(value.effects.reads) &&
-		isStringArray(value.effects.writes) &&
-		isStringArray(value.effects.io) &&
-		isString(value.effects.globalState) &&
-		isRecord(value.anchor) &&
-		isString(value.anchor.searchText) &&
-		isRecord(value.verification) &&
-		isString(value.verification.fileHash) &&
-		isString(value.verification.status)
-	);
-}
-
-function isMemoryRelationEntry(value: unknown): value is MemoryRelationEntry {
-	return (
-		isRecord(value) &&
-		isString(value.id) &&
-		isString(value.from) &&
-		(isString(value.to) || value.to === null) &&
-		isString(value.kind) &&
-		isString(value.evidencePath) &&
-		isString(value.evidenceSearchText)
-	);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isString(value: unknown): value is string {
-	return typeof value === "string";
-}
-
-function isStringArray(value: unknown): value is string[] {
-	return Array.isArray(value) && value.every(isString);
 }

@@ -167,6 +167,87 @@ describe("memory retrieval", () => {
 		expect(result.symbols.entries).toEqual([]);
 		expect(result.relations.entries).toEqual([]);
 	});
+
+	it("clamps weird limits and cursors to bounded pages", async () => {
+		const fs = new MockPlannerFs();
+		const paths = await initializeTestMemory(fs);
+		await upsertFileEntries(fs, paths, [
+			fileEntry("src/a.ts"),
+			fileEntry("src/b.ts"),
+		]);
+
+		const negative = await retrieveMemoryContext({
+			fs,
+			paths,
+			cursor: { files: -10 },
+			limits: { files: 0 },
+		});
+		const tooLarge = await retrieveMemoryContext({
+			fs,
+			paths,
+			cursor: { files: 20 },
+			limits: { files: 1000 },
+		});
+
+		expect(negative.files).toMatchObject({
+			start: 0,
+			limit: 1,
+			nextCursor: 1,
+		});
+		expect(negative.files.entries.map((entry) => entry.path)).toEqual([
+			"src/a.ts",
+		]);
+		expect(tooLarge.files).toMatchObject({
+			entries: [],
+			start: 20,
+			limit: 100,
+			nextCursor: null,
+		});
+	});
+
+	it("filters by directory path, language, relation kind, and case-insensitive query", async () => {
+		const fs = new MockPlannerFs();
+		const paths = await initializeTestMemory(fs);
+		await upsertFileEntries(fs, paths, [
+			fileEntry("src/config/index.ts", "Configuration parser."),
+			fileEntry("tests/config.test.ts", "CONFIG tests."),
+			fileEntry("src/server.go", "Server."),
+		]);
+		await upsertSymbolEntries(fs, paths, [
+			symbolEntry("sym_parse_config", "src/config/index.ts", "reads"),
+			{
+				...symbolEntry("sym_go_server", "src/server.go", "none"),
+				language: "go",
+			},
+		]);
+		await upsertRelationEntries(fs, paths, [
+			relationEntry("rel_tests_config", "sym_test", "sym_parse_config"),
+			{
+				...relationEntry("rel_calls_config", "sym_server", "sym_parse_config"),
+				kind: "calls",
+			},
+		]);
+
+		const result = await retrieveMemoryContext({
+			fs,
+			paths,
+			query: "CONFIG",
+			filters: {
+				paths: ["src/config"],
+				languages: ["ts"],
+				relationKinds: ["calls"],
+			},
+			limits: { files: 10, symbols: 10, relations: 10 },
+		});
+
+		expect(result.files.entries.map((entry) => entry.path)).toEqual([
+			"src/config/index.ts",
+		]);
+		expect(result.symbols.entries.map((entry) => entry.id)).toEqual([
+			"sym_parse_config",
+		]);
+		expect(result.relations.entries).toEqual([]);
+	});
 });
 
 async function initializeTestMemory(fs: MockPlannerFs) {
