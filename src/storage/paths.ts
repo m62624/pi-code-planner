@@ -12,6 +12,7 @@ export interface ProjectStoragePaths {
 	projectJson: string;
 	plansDir: string;
 	instructionsDir: string;
+	projectLocalDir: string;
 }
 
 export interface PlanStoragePaths {
@@ -45,6 +46,7 @@ export function createProjectStoragePaths(input: {
 		projectJson: join(projectDir, "project.json"),
 		plansDir: join(projectDir, "plans"),
 		instructionsDir: join(extensionDir, "instructions"),
+		projectLocalDir: join(projectRoot, ".pi", EXTENSION_NAME),
 	};
 }
 

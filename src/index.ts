@@ -1,4 +1,23 @@
 export { EXTENSION_NAME, SCHEMA_VERSION } from "./constants";
+export { DEFAULT_INSTRUCTIONS } from "./instructions/defaults";
+export {
+	getInstructionContent,
+	readInstructionDefaultsFromDir,
+	syncInstructionFiles,
+} from "./instructions/manager";
+export {
+	createInstructionPaths,
+	instructionFilePath,
+} from "./instructions/paths";
+export type {
+	InstructionAppendSource,
+	InstructionContent,
+	InstructionDefaults,
+	InstructionKey,
+	InstructionPaths,
+	SyncedInstructionFile,
+} from "./instructions/schema";
+export { INSTRUCTION_KEYS } from "./instructions/schema";
 export { createNodeFs, type PlannerFs } from "./storage/fs";
 export { createProjectId, sanitizeIdPart } from "./storage/ids";
 export {

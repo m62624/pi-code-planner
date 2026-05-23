@@ -1,0 +1,42 @@
+export const INSTRUCTION_KEYS = [
+	"init",
+	"discovery",
+	"planning",
+	"execution",
+	"finalize",
+	"done",
+	"recovery",
+	"tdd",
+	"experiment",
+	"refactor",
+	"memory",
+	"git",
+	"git-commit",
+] as const;
+
+export type InstructionKey = (typeof INSTRUCTION_KEYS)[number];
+export type InstructionDefaults = Record<InstructionKey, string>;
+export type InstructionAppendSource = "project" | "global" | null;
+
+export interface InstructionPaths {
+	instructionsDir: string;
+	defaultsDir: string;
+	globalAppendDir: string;
+	projectAppendDir: string;
+}
+
+export interface SyncedInstructionFile {
+	key: InstructionKey;
+	defaultPath: string;
+	globalAppendPath: string;
+	defaultAction: "created" | "updated" | "unchanged";
+	globalAppendAction: "created" | "unchanged";
+}
+
+export interface InstructionContent {
+	key: InstructionKey;
+	defaultPath: string;
+	appendPath: string | null;
+	appendSource: InstructionAppendSource;
+	content: string;
+}
