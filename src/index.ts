@@ -283,6 +283,18 @@ export {
 	readActivePlanContext,
 	updateActivePlanState,
 } from "./runtime/active-plan";
+export type {
+	PlannerGitReality,
+	PlannerPreflightAction,
+	PlannerPreflightDecision,
+} from "./runtime/git-state-sync";
+export {
+	evaluatePlannerToolPreflight,
+	inspectPlannerGitReality,
+	markMemoryCheckpointSynced,
+	runSyncedPlannerGitMutation,
+	syncStateAfterPlannerGitMutation,
+} from "./runtime/git-state-sync";
 export { createNodeFs, type PlannerFs } from "./storage/fs";
 export { createProjectId, sanitizeIdPart } from "./storage/ids";
 export {
@@ -318,6 +330,7 @@ export type {
 	ExecutionStep,
 	FinalizeStep,
 	InitStep,
+	MemoryUpdateReason,
 	MergeTargets,
 	PlanBranches,
 	PlannerStage,

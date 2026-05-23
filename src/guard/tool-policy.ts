@@ -19,6 +19,9 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_git_export_plan_to_output",
 	"planner_git_remove_plan_worktree",
 	"planner_git_cleanup_managed_branches",
+	"planner_memory_inspect",
+	"planner_memory_write_batch",
+	"planner_memory_verify",
 	"planner_recovery_inspect",
 	"planner_recovery_accept",
 ] as const;
@@ -144,11 +147,25 @@ const STEP_ALLOWED_TOOLS = {
 export function getAllowedPlannerWrapperTools(
 	state: Pick<
 		PlanStateRecord,
-		"stage" | "step" | "broken" | "requiresUserDecision" | "requiresCompact"
+		| "stage"
+		| "step"
+		| "broken"
+		| "requiresUserDecision"
+		| "requiresCompact"
+		| "requiresMemoryUpdate"
 	>,
 ): readonly PlannerWrapperTool[] {
 	if (state.broken || state.requiresUserDecision) {
 		return withAlwaysAllowed(STEP_ALLOWED_TOOLS.recovery.read_state);
+	}
+
+	if (state.requiresMemoryUpdate) {
+		return withAlwaysAllowed([
+			"planner_git_inspect",
+			"planner_memory_inspect",
+			"planner_memory_write_batch",
+			"planner_memory_verify",
+		]);
 	}
 
 	if (state.requiresCompact) {
@@ -172,6 +189,7 @@ export function checkPlannerWrapperAllowed(input: {
 		| "broken"
 		| "requiresUserDecision"
 		| "requiresCompact"
+		| "requiresMemoryUpdate"
 	>;
 }): PlannerToolPolicyDecision {
 	const allowedTools = getAllowedPlannerWrapperTools(input.state);
@@ -185,6 +203,7 @@ export function checkPlannerWrapperAllowed(input: {
 				broken: input.state.broken,
 				requiresUserDecision: input.state.requiresUserDecision,
 				requiresCompact: input.state.requiresCompact,
+				requiresMemoryUpdate: input.state.requiresMemoryUpdate,
 			});
 
 	return {
@@ -222,6 +241,7 @@ function buildBlockedToolReason(input: {
 	broken: boolean;
 	requiresUserDecision: boolean;
 	requiresCompact: boolean;
+	requiresMemoryUpdate: boolean;
 }): string {
 	if (input.broken || input.requiresUserDecision) {
 		return [
@@ -236,6 +256,14 @@ function buildBlockedToolReason(input: {
 			`Planner wrapper ${input.tool} is blocked.`,
 			"The active plan is at a compact boundary.",
 			"Finish compact/resume flow before calling normal planner wrappers.",
+		].join("\n");
+	}
+
+	if (input.requiresMemoryUpdate) {
+		return [
+			`Planner wrapper ${input.tool} is blocked.`,
+			"The active plan requires a memory update before normal work can continue.",
+			"Inspect memory freshness, update affected memory entries, verify freshness, then resume.",
 		].join("\n");
 	}
 

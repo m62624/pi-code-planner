@@ -12,6 +12,7 @@ const baseState = {
 	broken: false,
 	requiresUserDecision: false,
 	requiresCompact: false,
+	requiresMemoryUpdate: false,
 } as const;
 
 describe("planner wrapper tool policy", () => {
@@ -98,6 +99,32 @@ describe("planner wrapper tool policy", () => {
 		expect(decision.allow).toBe(false);
 		expect(decision.allowedTools).toEqual(["planner_status"]);
 		expect(decision.reason).toContain("compact boundary");
+	});
+
+	it("blocks normal wrappers while memory update is required", () => {
+		const decision = checkPlannerWrapperAllowed({
+			tool: "planner_git_merge_task_to_plan",
+			state: { ...baseState, requiresMemoryUpdate: true },
+		});
+
+		expect(decision.allow).toBe(false);
+		expect(decision.allowedTools).toEqual([
+			"planner_status",
+			"planner_git_inspect",
+			"planner_memory_inspect",
+			"planner_memory_write_batch",
+			"planner_memory_verify",
+		] satisfies PlannerWrapperTool[]);
+		expect(decision.reason).toContain("requires a memory update");
+	});
+
+	it("allows memory wrappers while memory update is required", () => {
+		const decision = checkPlannerWrapperAllowed({
+			tool: "planner_memory_write_batch",
+			state: { ...baseState, requiresMemoryUpdate: true },
+		});
+
+		expect(decision.allow).toBe(true);
 	});
 
 	it("blocks normal wrappers during recovery or user decision", () => {

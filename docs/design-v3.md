@@ -378,6 +378,8 @@ Plan worktree хранится отдельно от state. Его распол�
     "planToOutput": null
   },
   "lastCheckpointCommit": null,
+  "requiresMemoryUpdate": false,
+  "memoryUpdateReason": null,
   "requiresCompact": false,
   "requiresUserDecision": false,
   "broken": false,
@@ -396,12 +398,16 @@ Plan worktree хранится отдельно от state. Его распол�
 - `nextStep` показывает следующий допустимый step после завершения текущего
 - `branches` хранит реальные имена веток, чтобы модель не решала сама куда merge делать
 - `mergeTargets` хранит ожидаемые merge пары для текущего этапа
+- `lastCheckpointCommit` хранит commit, до которого memory уже проверена и обновлена
+- `requiresMemoryUpdate=true` означает, что normal flow заблокирован до обновления memory
+- `memoryUpdateReason` объясняет, почему memory gate включён: `planner_commit`, `planner_merge`, `external_commit`, `manual_checkout`, `rebase_or_history_rewrite`, `file_hash_changed`
 - после restart extension сначала читает `project.json`, берёт `activePlanId`, затем читает `plans/<activePlanId>/state.json`
 - после чтения state extension проверяет git/worktree, затем либо продолжает с `nextStep`, либо переходит в recovery
 - если state противоречит реальному git/worktree состоянию, planner переходит в recovery stage
 - extension не должен повторять `completed` step без явного recovery/user decision
 - если expected branch/worktree отсутствует, state помечается `broken=true`, а destructive repair требует решения пользователя
 - если branch могла быть переименована, recovery сначала ищет возможный renamed branch по planId/taskId/checkpoint, а не сразу считает plan потерянным
+- `lastCheckpointCommit` нельзя обновлять сразу после git commit/merge; сначала нужно обновить и проверить memory checkpoint
 
 Модель не выбирает merge target. Например, при `select_experiment` модель выбирает только `experimentId`, а extension берёт target из `plans/<plan-id>/state.json`:
 
@@ -575,6 +581,62 @@ Retry не создаёт новый global stage. Он остаётся вну�
 
 Перед каждым planner tool call extension проверяет git/worktree reality. Если branch, commit, dirty state или checkpoint отличаются от `plans/<activePlanId>/state.json`, normal flow останавливается и включается recovery/discovery_update logic.
 
+### State/Git synchronization contract
+
+Перед любым public planner tool выполняется preflight:
+
+1. Прочитать active `project.json`, `plan.json`, `state.json`.
+2. Если active plan отсутствует — extension не вмешивается.
+3. Если plan active — прочитать actual git reality из worktree:
+   - current branch
+   - `HEAD`
+   - status/dirty/conflicts
+4. Сравнить actual reality с `state.json`.
+5. Если branch/worktree/merge targets противоречат state — normal tool не выполняется, перейти в recovery.
+6. Если есть conflict — normal tool не выполняется, перейти в recovery.
+7. Если `requiresMemoryUpdate=true` — разрешены только status/git inspect/memory update wrappers.
+8. Если `HEAD !== state.lastCheckpointCommit` и checkpoint не `null` — normal flow блокируется memory gate.
+9. Если всё совпадает — policy проверяет, разрешён ли конкретный wrapper на текущем `stage/step`.
+
+После любого planner git write выполняется post-mutation sync:
+
+1. Прочитать actual branch, `HEAD`, status/conflicts после операции.
+2. Обновить `state.currentBranch` по actual branch.
+3. Если `HEAD` изменился:
+   - не обновлять `state.lastCheckpointCommit`
+   - поставить `requiresMemoryUpdate=true`
+   - записать `memoryUpdateReason`
+4. Если после операции появились conflicts:
+   - перейти в `stage=recovery`, `step=inspect_git`
+   - поставить `stepStatus=blocked`
+   - записать `broken=true`, `brokenReason`, `blockedReason`
+5. Сохранить `state.json`.
+
+`lastCheckpointCommit` обновляется только после memory sync:
+
+1. Создать project snapshot.
+2. Запустить freshness analysis.
+3. Модель обновляет affected memory через memory tools.
+4. Freshness снова `clean=true`.
+5. Записать memory checkpoint с current `HEAD`.
+6. Обновить:
+
+```json
+{
+  "lastCheckpointCommit": "current-head",
+  "requiresMemoryUpdate": false,
+  "memoryUpdateReason": null
+}
+```
+
+Инвариант:
+
+```
+Любой git write tool возвращает уже синхронизированный state.
+Если state нельзя синхронизировать, normal flow считается blocked.
+Модель никогда не правит state.json вручную.
+```
+
 ### Planner wrapper policy
 
 `planner_status` пока не обязан быть полной реализацией маршрутизатора. До него нужен отдельный policy слой, который не читает Pi API и не выполняет git, а только отвечает на вопрос: можно ли сейчас вызвать конкретный planner wrapper.
@@ -584,6 +646,7 @@ Policy input:
 - текущий `step`
 - `stepStatus`
 - `requiresCompact`
+- `requiresMemoryUpdate`
 - `requiresUserDecision`
 - `broken`
 - имя wrapper tool
@@ -1134,6 +1197,93 @@ applyMemoryFreshness({
 - не делает git recovery
 
 Модель после этого должна прочитать только `filesToReindex` и связанные entries через bounded retrieval, затем обновить memory через batch write API.
+
+### Commit tracking and memory gate
+
+Snapshot по file hashes отвечает на вопрос:
+
+```
+Memory соответствует текущему содержимому файлов или нет?
+```
+
+Git commit tracking отвечает на другой вопрос:
+
+```
+Почему изменилось состояние repo и это сделал planner или внешний пользователь?
+```
+
+Обе проверки обязательны. Нельзя использовать только `git diff`, потому что после commit рабочее дерево может быть clean, но memory всё ещё stale.
+
+Главный инвариант:
+
+```
+state.lastCheckpointCommit = commit, до которого memory уже проверена и обновлена.
+memory checkpoint commit = commit, для которого indexes были записаны.
+```
+
+Если `HEAD !== state.lastCheckpointCommit`, planner не имеет права считать memory актуальной только потому, что `git diff` пустой.
+
+#### После planner commit
+
+Когда planner сам делает commit через wrapper:
+
+1. Выполнить commit.
+2. Прочитать новый `HEAD`.
+3. Построить project snapshot через `git ls-files --cached --others --exclude-standard`.
+4. Запустить `analyzeMemoryFreshness(snapshot)`.
+5. Если `clean=false`, перейти в memory/discovery update и не делать compact.
+6. Модель обновляет affected memory entries через memory batch tools.
+7. Проверить freshness ещё раз.
+8. Записать memory checkpoint с новым `HEAD`.
+9. Обновить `state.lastCheckpointCommit = HEAD`.
+10. Только после этого разрешить compact или переход stage.
+
+То есть commit не завершает atomic step. Atomic step завершён только когда code, tests, git commit и memory checkpoint согласованы.
+
+#### Если planner сделал merge commit
+
+Merge commit обрабатывается так же, как обычный planner commit:
+
+1. После merge прочитать `HEAD`.
+2. Построить snapshot.
+3. Сравнить file hashes с memory indexes.
+4. Обновить memory для changed/new/missing files.
+5. Записать checkpoint на merge commit.
+
+Extension не должен пытаться вручную угадать diff merge commit по родителям, если snapshot уже показывает фактическое состояние файлов. Parent diff может использоваться только как diagnostic/summary, не как source of truth для memory freshness.
+
+#### Если commit появился извне
+
+Перед каждым planner tool call extension сравнивает:
+
+```
+actual HEAD
+state.lastCheckpointCommit
+memory checkpoint commit
+```
+
+Если `HEAD` изменился не через planner wrapper:
+
+1. Normal flow останавливается.
+2. Planner переходит в `recovery` или `discovery_update`, в зависимости от риска.
+3. Если worktree clean и branch ожидаемая, destructive action не нужен.
+4. Extension строит snapshot и запускает freshness analysis.
+5. Если file hashes показывают изменения, модель обновляет memory только по affected files.
+6. После successful memory update checkpoint переносится на actual `HEAD`.
+7. Если branch/merge targets/worktree path не совпадают со state, остаёмся в recovery и просим user decision.
+
+Внешний commit не является ошибкой сам по себе. Ошибка — продолжить старый stage, не обновив memory и не подтвердив state.
+
+#### Если rebase переписал историю
+
+Если `state.lastCheckpointCommit` больше не находится в истории:
+
+1. Не делать reset автоматически.
+2. Проверить memory checkpoint hashes.
+3. Построить full snapshot.
+4. Сравнить file hashes с `files/index.jsonl`.
+5. Если memory files не повреждены, обновить только changed/new/missing files.
+6. Если memory checkpoint повреждён или state противоречит git/worktree, перейти в recovery и спросить пользователя перед destructive repair.
 
 ### Rebase и повреждённое git-состояние
 

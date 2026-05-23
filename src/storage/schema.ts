@@ -172,6 +172,14 @@ export type StepStatus =
 	| "failed"
 	| "blocked";
 
+export type MemoryUpdateReason =
+	| "planner_commit"
+	| "planner_merge"
+	| "external_commit"
+	| "manual_checkout"
+	| "rebase_or_history_rewrite"
+	| "file_hash_changed";
+
 export interface ProjectPlanSummary {
 	planId: string;
 	title: string;
@@ -228,6 +236,8 @@ export interface PlanStateRecord {
 	currentBranch: string | null;
 	mergeTargets: MergeTargets;
 	lastCheckpointCommit: string | null;
+	requiresMemoryUpdate: boolean;
+	memoryUpdateReason: MemoryUpdateReason | null;
 	requiresCompact: boolean;
 	requiresUserDecision: boolean;
 	broken: boolean;
@@ -293,6 +303,8 @@ export function createInitialPlanState(input: {
 			planToOutput: null,
 		},
 		lastCheckpointCommit: null,
+		requiresMemoryUpdate: false,
+		memoryUpdateReason: null,
 		requiresCompact: false,
 		requiresUserDecision: false,
 		broken: false,
