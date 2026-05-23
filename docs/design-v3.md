@@ -94,7 +94,7 @@ Merge task → plan = готовая задача с полным кодом.
 
 ---
 
-## 2. Stages: INIT → Discovery → Planning → Execution
+## 2. Stages: Init → Discovery → Planning → Execution → Finalize → Done / Recovery
 
 ### INIT
 - User пишет запрос
@@ -341,7 +341,7 @@ Plan worktree хранится отдельно от state. Его распол�
 - execution state плана лежит в `plans/<plan-id>/state.json`
 - `activePlanId` показывает, с каким plan работает extension сейчас
 - при переключении плана меняется только `activePlanId`; state другого plan не перетирается
-- `createdAt` не используется в MVP
+- `createdAt` не используется в v3
 - `lastOpenedAt` не используется в v3, потому что не помогает модели и создаёт лишние записи
 
 ### `plans/<plan-id>/state.json`
@@ -360,7 +360,7 @@ Plan worktree хранится отдельно от state. Его распол�
   "stage": "discovery",
   "step": "read_project",
   "stepStatus": "completed",
-  "nextStep": "write_memory",
+  "nextStep": "write_project_patterns",
   "activeTaskId": null,
   "activeExperimentId": null,
   "worktreePath": "/home/m62624/Projects/main/pi-approval-modes/.pi/pi-code-planner/worktrees/plan-fix-find-command",
@@ -471,11 +471,13 @@ plan branch -> output branch
 
 ## 5. Машина стадий
 
-Модель всегда должна вызывать status/next-step tool, если не уверена что делать дальше. Tool читает `project.json`, затем `plans/<activePlanId>/state.json`, проверяет git/worktree и возвращает единственный допустимый следующий шаг. Модель не должна сама перескакивать stage или выполнять raw git.
+Модель всегда должна вызывать navigation/status tool, если не уверена что делать дальше. Этот tool читает `project.json`, затем `plans/<activePlanId>/state.json`, проверяет git/worktree и возвращает единственный допустимый следующий шаг. Модель не должна сама перескакивать stage или выполнять raw git.
 
 ### `planner_status`
 
-`planner_status` — главный tool навигации. Он всегда разрешён, если plan активен.
+`planner_status` — будущий главный tool навигации. Он всегда разрешён, если plan активен.
+
+До полной реализации `planner_status` extension должен иметь отдельный wrapper policy слой. Этот слой не строит длинный ответ для модели, а только проверяет: разрешён ли конкретный planner wrapper на текущих `stage/step`.
 
 Tool читает:
 - `project.json`
@@ -518,7 +520,7 @@ Tool возвращает:
 
 - `read_project` — читать project files
 - `write_artifacts` — писать planner artifacts: `plan.md`, `task.md`, `tdd.md`, summaries
-- `write_memory` — обновлять memory files через planner memory tools
+- `write_memory` — обновлять memory files через planner memory tools. Это action category, а не имя step.
 - `write_tests` — писать tests, fixtures, mocks и необходимое подключение тестов
 - `write_production` — менять production behavior
 - `run_checks` — запускать команды проверки из markdown/settings
@@ -659,7 +661,7 @@ Policy output:
 4. `run_failing_tests` — подтвердить, что тесты действительно проверяют требование и падают/ловят отсутствие реализации.
 5. `start_experiments` — создать список попыток эксперимента и первый experiment branch.
 6. `run_experiment` — реализовать один подход в experiment branch.
-7. `summarize_experiment` — записать summary, diff и результат проверки experiment.
+7. `summarize_experiment` — записать summary, git diff summary и результат проверки experiment. Отдельный `diff.md` artifact не создаётся: diff берётся через planner git wrapper.
 8. `compact_experiment` — выполнить compact boundary перед следующим experiment или selection.
 9. `select_experiment` — модель выбирает лучший `experimentId`; merge target берётся из `plans/<plan-id>/state.json`.
 10. `merge_best_experiment` — extension merge выбранный experiment branch в current task branch.
@@ -676,7 +678,7 @@ Policy output:
 Подшаги:
 
 1. `verify_plan_branch` — проверить, что plan branch содержит все merged tasks и проходит финальные проверки.
-2. `write_final_summary` — записать summary результата, diff, проверки, known risks и список изменённых файлов.
+2. `write_final_summary` — записать summary результата, git diff summary, проверки, known risks и список изменённых файлов.
 3. `compact_finalize` — выполнить compact boundary перед user acceptance.
 4. `enter_done` — обновить `plans/<plan-id>/state.json`: `stage=done`, `step=present_result`.
 
@@ -762,7 +764,7 @@ plans/<plan-id>/memory/
     latest.json
 ```
 
-Для MVP достаточно одного `symbols/index.jsonl`. Sharding можно добавить позже как внутреннюю оптимизацию, если файл станет слишком большим.
+Для v3 достаточно одного `symbols/index.jsonl`. Sharding можно добавить позже как внутреннюю оптимизацию, если файл станет слишком большим.
 
 ### `files/index.jsonl`
 
