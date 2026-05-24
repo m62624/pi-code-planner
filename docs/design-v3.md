@@ -718,6 +718,47 @@ Runtime reality evaluator не делает recovery, compact, git reset, commit
 - allowed planner wrappers;
 - напоминание читать markdown текущего stage.
 
+### State machine core
+
+`state-machine` — pure слой поверх `PlanStateRecord`. Он не читает git/fs, не сохраняет `state.json` и не вызывает Pi API.
+
+Его задача — строго менять runtime state:
+- `startPlannerStep` — `pending/failed -> running`;
+- `completePlannerStep` — `running -> completed` и записать допустимый `nextStep`;
+- `advancePlannerStep` — перейти с `completed` на записанный `nextStep`;
+- `failPlannerStep` — оставить текущий position, поставить `failed`;
+- `blockPlannerStep` — оставить текущий position, поставить `blocked`;
+- `retryPlannerStep` — `failed/blocked -> pending`;
+- `requestPlannerCompact` — включить `requiresCompact` только на compact steps;
+- `completePlannerCompact` — завершить compact step после `session_compact`;
+- `enterPlannerRecovery` — перевести state в `recovery/read_state`;
+- `resumePlannerAfterRecovery` — вернуться из recovery в явный valid non-recovery position.
+
+Инварианты:
+
+1. Completed step нельзя запускать повторно. Нужно сначала `advancePlannerStep`.
+2. Normal flow нельзя стартовать, если state имеет `broken`, `requiresUserDecision`, `requiresMemoryUpdate` или `requiresCompact`.
+3. Обычные steps имеют ровно один следующий step.
+4. Stage boundary возможен только через documented `enter_*` steps.
+5. Decision steps требуют явный allowed target:
+   - `execution/select_next_task` -> `execution/prepare_task` или `finalize/verify_plan_branch`;
+   - `done/await_user_acceptance` -> `done/handle_change_request` или `done/prepare_output_branch`;
+   - `done/handle_change_request` -> `planning/read_memory`.
+6. `recovery` — исключение из обычного strict order. Recovery может вернуться только через `resumePlannerAfterRecovery` в valid non-recovery position.
+7. `cleanup_plan_files` — terminal step: после completed state `nextStep=null`, `advancePlannerStep` остаётся no-op.
+
+Public planner tools должны использовать порядок:
+
+```
+runPlannerPreflight
+-> check runtime action
+-> check wrapper allowed
+-> state-machine transition
+-> save state.json
+```
+
+Старые low-level storage helpers вроде прямого `setPlanStep` или `completePlanStep` не должны быть публичным workflow API. Они допустимы только как низкоуровневые persistence primitives или в миграциях/тестах.
+
 ### Planner wrapper policy
 
 `planner_status` пока не обязан быть полной реализацией маршрутизатора. До него нужен отдельный policy слой, который не читает Pi API и не выполняет git, а только отвечает на вопрос: можно ли сейчас вызвать конкретный planner wrapper.

@@ -327,6 +327,30 @@ export {
 	formatPlannerPreflightStatus,
 	runPlannerPreflight,
 } from "./runtime/preflight";
+export type {
+	BlockPlannerStepOptions,
+	CompletePlannerStepOptions,
+	EnterPlannerRecoveryOptions,
+	PlannerPosition,
+	PlannerStateMachineErrorCode,
+} from "./runtime/state-machine";
+export {
+	advancePlannerStep,
+	blockPlannerStep,
+	completePlannerCompact,
+	completePlannerStep,
+	enterPlannerRecovery,
+	failPlannerStep,
+	getAllowedNextPlannerPositions,
+	getPlannerStepStage,
+	isBeforePlannerWorktreeStep,
+	isPlannerStepInStage,
+	PlannerStateMachineError,
+	requestPlannerCompact,
+	resumePlannerAfterRecovery,
+	retryPlannerStep,
+	startPlannerStep,
+} from "./runtime/state-machine";
 export { createNodeFs, type PlannerFs } from "./storage/fs";
 export { createProjectId, sanitizeIdPart } from "./storage/ids";
 export {
