@@ -759,6 +759,31 @@ runPlannerPreflight
 
 Старые low-level storage helpers вроде прямого `setPlanStep` или `completePlanStep` не должны быть публичным workflow API. Они допустимы только как низкоуровневые persistence primitives или в миграциях/тестах.
 
+### Persisted state transition
+
+`applyPlannerStateTransition(...)` склеивает preflight, wrapper policy, state machine и `savePlanState`.
+
+Слой принимает:
+- `PlannerPreflightResult`;
+- transition type: `start_step`, `complete_step`, `advance_step`, `fail_step`, `block_step`, `retry_step`, `request_compact`, `complete_compact`, `enter_recovery`, `resume_after_recovery`;
+- optional wrapper tool name.
+
+Порядок:
+
+1. Если active context не `ready`, вернуть `blocked/context_not_ready`, ничего не сохранять.
+2. Если указан wrapper tool, проверить `checkPlannerPreflightToolAllowed`.
+3. Если runtime action не разрешает transition, вернуть `blocked/runtime_blocked`.
+4. Вызвать pure state machine transition.
+5. Если state machine вернула ошибку, вернуть `blocked/state_machine_error`, ничего не сохранять.
+6. Только после успешного transition сохранить `state.json`.
+
+Runtime gates:
+- normal transitions разрешены только при `allow_stage_machine`;
+- `complete_compact` разрешён только при `require_compact`;
+- `enter_recovery` и `resume_after_recovery` разрешены при `allow_stage_machine`, `require_recovery` или `require_user_decision`.
+
+Этот слой всё ещё не является public Pi tool. Это internal adapter, который должны использовать будущие workflow/git/memory/recovery tools.
+
 ### Planner wrapper policy
 
 `planner_status` пока не обязан быть полной реализацией маршрутизатора. До него нужен отдельный policy слой, который не читает Pi API и не выполняет git, а только отвечает на вопрос: можно ли сейчас вызвать конкретный planner wrapper.

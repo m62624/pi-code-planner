@@ -351,6 +351,13 @@ export {
 	retryPlannerStep,
 	startPlannerStep,
 } from "./runtime/state-machine";
+export type {
+	ApplyPlannerStateTransitionInput,
+	PlannerStateTransition,
+	PlannerStateTransitionBlockCode,
+	PlannerStateTransitionResult,
+} from "./runtime/state-transition";
+export { applyPlannerStateTransition } from "./runtime/state-transition";
 export { createNodeFs, type PlannerFs } from "./storage/fs";
 export { createProjectId, sanitizeIdPart } from "./storage/ids";
 export {
