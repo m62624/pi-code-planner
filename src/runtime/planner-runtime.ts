@@ -65,6 +65,7 @@ const STATUS_ONLY_TOOLS = [
 
 const RECOVERY_TOOLS = [
 	"planner_status",
+	"planner_git_inspect",
 	"planner_recovery_inspect",
 ] as const satisfies readonly PlannerWrapperTool[];
 

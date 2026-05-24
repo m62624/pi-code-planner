@@ -161,6 +161,35 @@ Task boundary строгий:
 
 Git API — это внутренний слой extension. Модель не должна выполнять raw git-команды через shell, когда planner активен. Она должна использовать planner tools, а extension уже вызывает нужные git-операции.
 
+### Public git tools
+
+Модель никогда не вызывает raw `git`. Public wrapper tools:
+
+- `planner_git_inspect` — безопасно показать branch/head/dirty/conflicts.
+- `planner_git_init` — выполнить `git init` на init/check_git.
+- `planner_git_create_plan_worktree` — создать plan worktree и plan branch.
+- `planner_git_commit` — выполнить `git add -A && git commit`; после этого `requiresMemoryUpdate=true`.
+- `planner_git_create_task_branch` — создать/switch task branch.
+- `planner_git_create_experiment_branch` — создать/switch experiment branch.
+- `planner_git_select_experiment` — выбрать experiment id; merge target остаётся в `state.json`.
+- `planner_git_merge_selected_experiment` — merge selected experiment -> current task.
+- `planner_git_create_refactor_branch` — создать/switch refactor branch.
+- `planner_git_merge_refactor_to_task` — merge refactor -> current task.
+- `planner_git_merge_task_to_plan` — merge current task -> plan.
+- `planner_git_export_plan_to_output` — export plan branch в output branch исходного repo.
+- `planner_git_remove_plan_worktree` — удалить plan worktree на accepted done cleanup.
+- `planner_git_cleanup_managed_branches` — удалить managed task/experiment branches; plan branch protected.
+
+Инварианты public git tools:
+
+1. Каждый git wrapper сначала выполняет `runPlannerPreflight`.
+2. Если wrapper не разрешён текущим `stage/step`, операция блокируется.
+3. Модель может передать id (`taskId`, `attemptId`) и commit/merge message, но не может передать merge target branch.
+4. Merge targets всегда берутся из `plans/<plan-id>/state.json`.
+5. Любой commit/merge, который меняет `HEAD`, сохраняет state с `requiresMemoryUpdate=true`.
+6. `state.lastCheckpointCommit` не обновляется git wrapper. Его обновляет только `planner_memory_sync_checkpoint`.
+7. Plan branch нельзя удалить через cleanup/delete helpers.
+
 ### Базовые операции
 
 #### `git init`

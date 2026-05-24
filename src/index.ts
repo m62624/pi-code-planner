@@ -9,6 +9,11 @@ import {
 	PLANNER_STATUS_TOOL_NAME,
 } from "./guard/git-watcher";
 import {
+	executePlannerGitTool,
+	PLANNER_GIT_TOOL_NAMES,
+	type PlannerGitToolName,
+} from "./runtime/git-tools";
+import {
 	executePlannerMemoryTool,
 	PLANNER_MEMORY_TOOL_NAMES,
 	type PlannerMemoryToolName,
@@ -96,6 +101,50 @@ const MEMORY_APPLY_FRESHNESS_TOOL_PARAMETERS = {
 	additionalProperties: false,
 } as const;
 
+const GIT_MESSAGE_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		message: { type: "string" },
+	},
+	required: ["message"],
+	additionalProperties: false,
+} as const;
+
+const GIT_TASK_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		taskId: { type: "string" },
+	},
+	required: ["taskId"],
+	additionalProperties: false,
+} as const;
+
+const GIT_EXPERIMENT_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		attemptId: { type: "string" },
+		taskId: { type: "string" },
+	},
+	required: ["attemptId"],
+	additionalProperties: false,
+} as const;
+
+const GIT_OPTIONAL_MESSAGE_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		message: { type: "string" },
+	},
+	additionalProperties: false,
+} as const;
+
+const GIT_FORCE_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		force: { type: "boolean" },
+	},
+	additionalProperties: false,
+} as const;
+
 export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: PLANNER_STATUS_TOOL_NAME,
@@ -172,6 +221,34 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 		});
 	}
 
+	for (const toolName of PLANNER_GIT_TOOL_NAMES) {
+		pi.registerTool({
+			name: toolName,
+			label: gitToolLabel(toolName),
+			description: gitToolDescription(toolName),
+			promptSnippet:
+				"Use planner git tools instead of raw git while a planner plan is active. Call planner_status first and only use allowed git wrappers.",
+			parameters: gitToolParameters(toolName) as never,
+			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const result = await executePlannerGitTool({
+					fs: createNodeFs(),
+					git: new NodeGitRunner(),
+					projectPaths: createProjectStoragePaths({
+						agentDir: getAgentDir(),
+						projectRoot: ctx.cwd,
+					}),
+					toolName,
+					params,
+				});
+
+				return {
+					content: [{ type: "text", text: result.text }],
+					details: result,
+				};
+			},
+		});
+	}
+
 	pi.on("tool_call", async (event, ctx) => {
 		if (!isToolCallEventType("bash", event)) {
 			return;
@@ -192,6 +269,97 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 			};
 		}
 	});
+}
+
+function gitToolLabel(toolName: PlannerGitToolName): string {
+	switch (toolName) {
+		case "planner_git_inspect":
+			return "Planner Git Inspect";
+		case "planner_git_init":
+			return "Planner Git Init";
+		case "planner_git_create_plan_worktree":
+			return "Planner Git Create Plan Worktree";
+		case "planner_git_commit":
+			return "Planner Git Commit";
+		case "planner_git_create_task_branch":
+			return "Planner Git Create Task Branch";
+		case "planner_git_create_experiment_branch":
+			return "Planner Git Create Experiment Branch";
+		case "planner_git_select_experiment":
+			return "Planner Git Select Experiment";
+		case "planner_git_merge_selected_experiment":
+			return "Planner Git Merge Selected Experiment";
+		case "planner_git_create_refactor_branch":
+			return "Planner Git Create Refactor Branch";
+		case "planner_git_merge_refactor_to_task":
+			return "Planner Git Merge Refactor To Task";
+		case "planner_git_merge_task_to_plan":
+			return "Planner Git Merge Task To Plan";
+		case "planner_git_export_plan_to_output":
+			return "Planner Git Export Plan To Output";
+		case "planner_git_remove_plan_worktree":
+			return "Planner Git Remove Plan Worktree";
+		case "planner_git_cleanup_managed_branches":
+			return "Planner Git Cleanup Managed Branches";
+	}
+}
+
+function gitToolDescription(toolName: PlannerGitToolName): string {
+	switch (toolName) {
+		case "planner_git_inspect":
+			return "Inspect planner-controlled git reality without raw shell git.";
+		case "planner_git_init":
+			return "Initialize git for the project during the init/check_git step.";
+		case "planner_git_create_plan_worktree":
+			return "Create the planner worktree and plan branch at the dedicated init step.";
+		case "planner_git_commit":
+			return "Create a planner-controlled commit and mark memory update required.";
+		case "planner_git_create_task_branch":
+			return "Create and switch to the current task branch from the plan branch.";
+		case "planner_git_create_experiment_branch":
+			return "Create and switch to an experiment branch for the active task.";
+		case "planner_git_select_experiment":
+			return "Select the best experiment by attempt id; merge target stays state-controlled.";
+		case "planner_git_merge_selected_experiment":
+			return "Merge the state-selected experiment branch into the current task branch.";
+		case "planner_git_create_refactor_branch":
+			return "Create and switch to a refactor branch for the active task.";
+		case "planner_git_merge_refactor_to_task":
+			return "Merge the refactor branch back into the current task branch.";
+		case "planner_git_merge_task_to_plan":
+			return "Merge the current task branch into the plan branch.";
+		case "planner_git_export_plan_to_output":
+			return "Export the completed plan branch to an output branch in the original repository.";
+		case "planner_git_remove_plan_worktree":
+			return "Remove the planner worktree during accepted done cleanup.";
+		case "planner_git_cleanup_managed_branches":
+			return "Delete planner-managed task/experiment branches; plan branch is protected.";
+	}
+}
+
+function gitToolParameters(toolName: PlannerGitToolName) {
+	switch (toolName) {
+		case "planner_git_commit":
+			return GIT_MESSAGE_TOOL_PARAMETERS;
+		case "planner_git_create_task_branch":
+			return GIT_TASK_TOOL_PARAMETERS;
+		case "planner_git_create_experiment_branch":
+		case "planner_git_select_experiment":
+			return GIT_EXPERIMENT_TOOL_PARAMETERS;
+		case "planner_git_merge_selected_experiment":
+		case "planner_git_merge_refactor_to_task":
+		case "planner_git_merge_task_to_plan":
+		case "planner_git_export_plan_to_output":
+			return GIT_OPTIONAL_MESSAGE_TOOL_PARAMETERS;
+		case "planner_git_remove_plan_worktree":
+		case "planner_git_cleanup_managed_branches":
+			return GIT_FORCE_TOOL_PARAMETERS;
+		case "planner_git_inspect":
+		case "planner_git_init":
+		case "planner_git_create_plan_worktree":
+		case "planner_git_create_refactor_branch":
+			return EMPTY_TOOL_PARAMETERS;
+	}
 }
 
 function memoryToolLabel(toolName: PlannerMemoryToolName): string {
@@ -562,6 +730,15 @@ export {
 	runSyncedPlannerGitMutation,
 	syncStateAfterPlannerGitMutation,
 } from "./runtime/git-state-sync";
+export type {
+	PlannerGitToolExecutionInput,
+	PlannerGitToolExecutionResult,
+	PlannerGitToolName,
+} from "./runtime/git-tools";
+export {
+	executePlannerGitTool,
+	PLANNER_GIT_TOOL_NAMES,
+} from "./runtime/git-tools";
 export type {
 	PlannerMemoryToolExecutionInput,
 	PlannerMemoryToolExecutionResult,

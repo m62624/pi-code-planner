@@ -99,6 +99,7 @@ describe("planner runtime reality evaluator", () => {
 		} satisfies Partial<PlannerRuntimeDecision>);
 		expect(decision.allowedTools).toEqual([
 			"planner_status",
+			"planner_git_inspect",
 			"planner_recovery_inspect",
 		] satisfies PlannerWrapperTool[]);
 	});
@@ -341,6 +342,7 @@ describe("planner runtime reality evaluator", () => {
 		expect(decision.allowedTools).toEqual([
 			"planner_status",
 			"planner_git_inspect",
+			"planner_git_commit",
 		] satisfies PlannerWrapperTool[]);
 	});
 });

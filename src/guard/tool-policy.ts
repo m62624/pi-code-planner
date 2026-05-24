@@ -9,6 +9,7 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_git_inspect",
 	"planner_git_init",
 	"planner_git_create_plan_worktree",
+	"planner_git_commit",
 	"planner_git_create_task_branch",
 	"planner_git_create_experiment_branch",
 	"planner_git_select_experiment",
@@ -84,14 +85,14 @@ const STEP_ALLOWED_TOOLS = {
 	execution: {
 		prepare_task: ["planner_git_inspect", "planner_git_create_task_branch"],
 		write_tdd_plan: ["planner_git_inspect"],
-		write_tests: ["planner_git_inspect"],
+		write_tests: ["planner_git_inspect", "planner_git_commit"],
 		run_failing_tests: ["planner_git_inspect"],
 		start_experiments: [
 			"planner_git_inspect",
 			"planner_git_create_experiment_branch",
 		],
-		run_experiment: ["planner_git_inspect"],
-		summarize_experiment: ["planner_git_inspect"],
+		run_experiment: ["planner_git_inspect", "planner_git_commit"],
+		summarize_experiment: ["planner_git_inspect", "planner_git_commit"],
 		compact_experiment: [],
 		select_experiment: ["planner_git_inspect", "planner_git_select_experiment"],
 		merge_best_experiment: [
@@ -100,10 +101,11 @@ const STEP_ALLOWED_TOOLS = {
 		],
 		refactor_task: [
 			"planner_git_inspect",
+			"planner_git_commit",
 			"planner_git_create_refactor_branch",
 			"planner_git_merge_refactor_to_task",
 		],
-		run_final_tests: ["planner_git_inspect"],
+		run_final_tests: ["planner_git_inspect", "planner_git_commit"],
 		merge_task_to_plan: [
 			"planner_git_inspect",
 			"planner_git_merge_task_to_plan",
@@ -162,7 +164,10 @@ export function getAllowedPlannerWrapperTools(
 	>,
 ): readonly PlannerWrapperTool[] {
 	if (state.broken || state.requiresUserDecision) {
-		return withAlwaysAllowed(STEP_ALLOWED_TOOLS.recovery.read_state);
+		return withAlwaysAllowed([
+			"planner_git_inspect",
+			...STEP_ALLOWED_TOOLS.recovery.read_state,
+		]);
 	}
 
 	if (state.requiresMemoryUpdate) {

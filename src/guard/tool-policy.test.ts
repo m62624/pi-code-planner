@@ -138,6 +138,7 @@ describe("planner wrapper tool policy", () => {
 		expect(decision.allow).toBe(false);
 		expect(decision.allowedTools).toEqual([
 			"planner_status",
+			"planner_git_inspect",
 			"planner_recovery_inspect",
 		] satisfies PlannerWrapperTool[]);
 		expect(decision.reason).toContain("requires recovery or a user decision");
