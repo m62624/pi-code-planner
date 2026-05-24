@@ -20,8 +20,10 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_git_remove_plan_worktree",
 	"planner_git_cleanup_managed_branches",
 	"planner_memory_inspect",
+	"planner_memory_apply_freshness",
 	"planner_memory_write_batch",
 	"planner_memory_verify",
+	"planner_memory_sync_checkpoint",
 	"planner_recovery_inspect",
 	"planner_recovery_accept",
 ] as const;
@@ -58,16 +60,20 @@ const STEP_ALLOWED_TOOLS = {
 	discovery: {
 		read_project: ["planner_git_inspect"],
 		write_project_patterns: [],
-		write_file_index: [],
-		write_symbols: [],
-		write_relations: [],
+		write_file_index: ["planner_memory_write_batch"],
+		write_symbols: ["planner_memory_write_batch"],
+		write_relations: ["planner_memory_write_batch"],
 		write_questions: [],
-		verify_memory: [],
+		verify_memory: [
+			"planner_memory_inspect",
+			"planner_memory_verify",
+			"planner_memory_sync_checkpoint",
+		],
 		compact_discovery: [],
 		enter_planning: [],
 	},
 	planning: {
-		read_memory: [],
+		read_memory: ["planner_memory_inspect"],
 		draft_plan: [],
 		split_tasks: [],
 		write_task_files: [],
@@ -163,8 +169,10 @@ export function getAllowedPlannerWrapperTools(
 		return withAlwaysAllowed([
 			"planner_git_inspect",
 			"planner_memory_inspect",
+			"planner_memory_apply_freshness",
 			"planner_memory_write_batch",
 			"planner_memory_verify",
+			"planner_memory_sync_checkpoint",
 		]);
 	}
 

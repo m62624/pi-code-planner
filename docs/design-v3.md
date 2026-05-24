@@ -715,11 +715,18 @@ Runtime reality evaluator не делает recovery, compact, git reset, commit
 7. Если git reality недоступна, branch wrong или есть conflicts — вернуть recovery без memory gate.
 8. Проверить memory checkpoint integrity.
 9. Если checkpoint corrupted — вернуть recovery без memory gate.
-10. Запустить memory gate/freshness inspection.
+10. Запустить memory gate/freshness inspection только если он нужен сейчас:
+   - `state.requiresMemoryUpdate=true`;
+   - `HEAD !== state.lastCheckpointCommit`;
+   - `state.requiresCompact=true`;
+   - текущий step является compact boundary;
+   - текущий step является stage boundary `enter_*`.
 11. Передать всё в `evaluatePlannerRuntimeReality(...)`.
 12. Если runtime decision = `require_memory_update`, записать в `state.json` `requiresMemoryUpdate=true` и `memoryUpdateReason`.
 13. Повторно оценить runtime decision уже с синхронизированным state.
 14. Вернуть `decision`, `allowedTools`, context, git reality, memory checkpoint и memory gate.
+
+Uncommitted edits во время обычного work step не должны сами по себе включать memory gate. Иначе модель не сможет дойти до commit: working tree уже отличается от memory, но atomic step ещё не закончен. Working-tree freshness становится blocking только на checkpoint/boundary или после git `HEAD` change.
 
 `checkPlannerPreflightToolAllowed(...)` проверяет конкретный planner wrapper уже после runtime decision. Это важно, потому что `requiresMemoryUpdate` может быть вычислен preflight-слоем из actual git/memory reality, даже если в `state.json` флаг ещё не стоял.
 
@@ -840,6 +847,28 @@ runPlannerPreflight
 Модель не должна угадывать порядок этих tools. Она вызывает `planner_status`, читает `Allowed state transitions`, затем вызывает только соответствующий workflow tool.
 
 Если transition заблокирован, tool возвращает `blocked` и причину: context not ready, runtime gate, wrapper policy или state-machine error.
+
+### Public memory tools
+
+Memory tools — public wrappers, через которые модель обновляет memory blob. Модель не правит memory JSONL напрямую.
+
+Доступные memory tools:
+
+- `planner_memory_inspect` — построить snapshot, показать `filesToReindex`, affected symbols/relations и required checks.
+- `planner_memory_apply_freshness` — пометить stale/missing entries dirty/missing перед переписыванием memory.
+- `planner_memory_write_batch` — записать validated file/symbol/relation entries.
+- `planner_memory_verify` — проверить, что memory совпадает с текущим project snapshot.
+- `planner_memory_sync_checkpoint` — если memory clean, записать checkpoint на current `HEAD`, обновить `state.lastCheckpointCommit`, снять `requiresMemoryUpdate`.
+
+Инвариант memory tools:
+
+1. Любой memory tool сначала выполняет `runPlannerPreflight`.
+2. Если policy не разрешает memory tool — tool возвращает `blocked`.
+3. Если memory tool меняет memory index files, он сразу переписывает checkpoint hashes с тем же checkpoint commit.
+4. `planner_memory_sync_checkpoint` запрещён, пока freshness не clean.
+5. `planner_memory_sync_checkpoint` — единственный memory tool, который переносит `state.lastCheckpointCommit` на current `HEAD`.
+
+Это предотвращает ложный recovery: частичное обновление memory меняет JSONL hashes, но это плановое изменение, а не corruption.
 
 ### Planner wrapper policy
 
@@ -1460,11 +1489,13 @@ memory checkpoint commit = commit, для которого indexes были за
 Текущий preflight уже делает минимальную синхронизацию state:
 
 1. Если `HEAD !== state.lastCheckpointCommit` и checkpoint существует, action становится `require_memory_update`.
-2. Если file hashes в memory index не совпадают с actual project snapshot, action становится `require_memory_update`.
+2. Если file hashes в memory index не совпадают с actual project snapshot на boundary/checkpoint step, action становится `require_memory_update`.
 3. Preflight сохраняет `requiresMemoryUpdate=true` и причину в `state.json`.
 4. Actual memory entries не переписываются автоматически. Модель должна обновить affected files/symbols/relations/effects через memory tools, затем отдельный sync переносит checkpoint на current `HEAD`.
 
 Это закрывает случай, когда commit уже сделан и `git diff` пустой: stale memory всё равно обнаруживается через `HEAD` и file hash snapshot.
+
+До commit обычные uncommitted edits не являются memory corruption. Они являются рабочим состоянием текущего step. После commit/merge git wrapper ставит `requiresMemoryUpdate=true`, и только тогда memory update становится обязательным gate.
 
 #### После planner commit
 

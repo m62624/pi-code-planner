@@ -219,6 +219,10 @@ describe("planner preflight orchestrator", () => {
 		const fs = new MockPlannerFs();
 		const projectPaths = await createProject(fs);
 		const setup = await createActivePlan(fs, projectPaths, {
+			state: {
+				stage: "discovery",
+				step: "compact_discovery",
+			},
 			gitFiles: ["src/a.ts"],
 		});
 		await fs.writeText(
@@ -254,6 +258,52 @@ describe("planner preflight orchestrator", () => {
 		).toMatchObject({
 			requiresMemoryUpdate: true,
 			memoryUpdateReason: "file_hash_changed",
+		});
+	});
+
+	it("does not block normal in-progress work just because uncommitted files differ from memory", async () => {
+		const fs = new MockPlannerFs();
+		const projectPaths = await createProject(fs);
+		const setup = await createActivePlan(fs, projectPaths, {
+			state: {
+				stage: "execution",
+				step: "run_experiment",
+				stepStatus: "running",
+			},
+			gitFiles: ["src/a.ts"],
+		});
+		await fs.writeText(
+			join(setup.worktreePath, "src/a.ts"),
+			"export const value = 2;\n",
+		);
+		await upsertFileEntries(fs, setup.memoryPaths, [
+			{
+				path: "src/a.ts",
+				kind: "source",
+				language: "ts",
+				hash: "old-hash",
+				status: "indexed",
+				summary: "A",
+			},
+		]);
+		await writeMemoryCheckpoint(fs, setup.memoryPaths, "abc123");
+
+		const result = await runPlannerPreflight({
+			fs,
+			git: new MockGitRunner({
+				files: ["src/a.ts"],
+				status: " M src/a.ts",
+			}),
+			projectPaths,
+		});
+
+		expect(result.memoryGate).toBeNull();
+		expect(result.decision.action).toBe("allow_stage_machine");
+		expect(
+			await readPlanState(fs, createPlanStoragePaths(projectPaths, "plan-a")),
+		).toMatchObject({
+			requiresMemoryUpdate: false,
+			memoryUpdateReason: null,
 		});
 	});
 
@@ -326,7 +376,7 @@ describe("planner preflight orchestrator", () => {
 			headCommit: "abc123",
 		});
 		expect(result.memoryCheckpoint?.valid).toBe(true);
-		expect(result.memoryGate?.clean).toBe(true);
+		expect(result.memoryGate).toBeNull();
 		expect(result.decision.action).toBe("allow_stage_machine");
 		expect(result.instructions?.keys).toEqual(["discovery", "memory"]);
 		expect(formatPlannerPreflightStatus(result)).toContain(

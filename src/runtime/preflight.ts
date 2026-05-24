@@ -153,12 +153,18 @@ export async function runPlannerPreflight(
 		};
 	}
 
-	const memoryGate = await inspectMemoryGate({
-		fs: input.fs,
-		git: input.git,
-		repoRoot: context.state.worktreePath,
-		memoryPaths,
+	const shouldInspectMemory = shouldInspectMemoryFreshness({
+		state: context.state,
+		git: gitReality,
 	});
+	const memoryGate = shouldInspectMemory
+		? await inspectMemoryGate({
+				fs: input.fs,
+				git: input.git,
+				repoRoot: context.state.worktreePath,
+				memoryPaths,
+			})
+		: null;
 	const decision = evaluatePlannerRuntimeReality({
 		contextStatus: context.status,
 		state: context.state,
@@ -303,6 +309,31 @@ function markStateRequiresMemoryUpdate(
 		requiresMemoryUpdate: true,
 		memoryUpdateReason: reason,
 	};
+}
+
+function shouldInspectMemoryFreshness(input: {
+	state: PlanStateRecord;
+	git: PlannerGitReality;
+}): boolean {
+	if (input.state.requiresMemoryUpdate) {
+		return true;
+	}
+	if (
+		input.state.lastCheckpointCommit !== null &&
+		input.git.headCommit !== input.state.lastCheckpointCommit
+	) {
+		return true;
+	}
+	if (input.state.requiresCompact) {
+		return true;
+	}
+	if (input.state.step.startsWith("compact_")) {
+		return true;
+	}
+	if (input.state.step.startsWith("enter_")) {
+		return true;
+	}
+	return false;
 }
 
 async function safeInspectGitReality(input: {

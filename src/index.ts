@@ -9,6 +9,11 @@ import {
 	PLANNER_STATUS_TOOL_NAME,
 } from "./guard/git-watcher";
 import {
+	executePlannerMemoryTool,
+	PLANNER_MEMORY_TOOL_NAMES,
+	type PlannerMemoryToolName,
+} from "./runtime/memory-tools";
+import {
 	formatPlannerPreflightStatus,
 	runPlannerPreflight,
 } from "./runtime/preflight";
@@ -73,6 +78,24 @@ const OPTIONAL_REASON_TOOL_PARAMETERS = {
 	additionalProperties: false,
 } as const;
 
+const MEMORY_BATCH_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		files: { type: "array", items: { type: "object" } },
+		symbols: { type: "array", items: { type: "object" } },
+		relations: { type: "array", items: { type: "object" } },
+	},
+	additionalProperties: false,
+} as const;
+
+const MEMORY_APPLY_FRESHNESS_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		detectedAt: { type: "string" },
+	},
+	additionalProperties: false,
+} as const;
+
 export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: PLANNER_STATUS_TOOL_NAME,
@@ -121,6 +144,34 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 		});
 	}
 
+	for (const toolName of PLANNER_MEMORY_TOOL_NAMES) {
+		pi.registerTool({
+			name: toolName,
+			label: memoryToolLabel(toolName),
+			description: memoryToolDescription(toolName),
+			promptSnippet:
+				"Use planner memory tools when planner_status reports require_memory_update or the current stage asks you to write/verify memory.",
+			parameters: memoryToolParameters(toolName) as never,
+			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const result = await executePlannerMemoryTool({
+					fs: createNodeFs(),
+					git: new NodeGitRunner(),
+					projectPaths: createProjectStoragePaths({
+						agentDir: getAgentDir(),
+						projectRoot: ctx.cwd,
+					}),
+					toolName,
+					params,
+				});
+
+				return {
+					content: [{ type: "text", text: result.text }],
+					details: result,
+				};
+			},
+		});
+	}
+
 	pi.on("tool_call", async (event, ctx) => {
 		if (!isToolCallEventType("bash", event)) {
 			return;
@@ -141,6 +192,49 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 			};
 		}
 	});
+}
+
+function memoryToolLabel(toolName: PlannerMemoryToolName): string {
+	switch (toolName) {
+		case "planner_memory_inspect":
+			return "Planner Memory Inspect";
+		case "planner_memory_apply_freshness":
+			return "Planner Memory Apply Freshness";
+		case "planner_memory_write_batch":
+			return "Planner Memory Write Batch";
+		case "planner_memory_verify":
+			return "Planner Memory Verify";
+		case "planner_memory_sync_checkpoint":
+			return "Planner Memory Sync Checkpoint";
+	}
+}
+
+function memoryToolDescription(toolName: PlannerMemoryToolName): string {
+	switch (toolName) {
+		case "planner_memory_inspect":
+			return "Inspect memory freshness and list affected files, symbols, relations, and required effect checks.";
+		case "planner_memory_apply_freshness":
+			return "Mark stale memory entries dirty or missing before the model rewrites affected memory.";
+		case "planner_memory_write_batch":
+			return "Write validated file, symbol, and relation memory entries.";
+		case "planner_memory_verify":
+			return "Verify whether memory matches the current project snapshot.";
+		case "planner_memory_sync_checkpoint":
+			return "Sync memory checkpoint to current HEAD after memory verifies clean.";
+	}
+}
+
+function memoryToolParameters(toolName: PlannerMemoryToolName) {
+	switch (toolName) {
+		case "planner_memory_write_batch":
+			return MEMORY_BATCH_TOOL_PARAMETERS;
+		case "planner_memory_apply_freshness":
+			return MEMORY_APPLY_FRESHNESS_TOOL_PARAMETERS;
+		case "planner_memory_inspect":
+		case "planner_memory_verify":
+		case "planner_memory_sync_checkpoint":
+			return EMPTY_TOOL_PARAMETERS;
+	}
 }
 
 function workflowToolLabel(toolName: PlannerWorkflowToolName): string {
@@ -468,6 +562,15 @@ export {
 	runSyncedPlannerGitMutation,
 	syncStateAfterPlannerGitMutation,
 } from "./runtime/git-state-sync";
+export type {
+	PlannerMemoryToolExecutionInput,
+	PlannerMemoryToolExecutionResult,
+	PlannerMemoryToolName,
+} from "./runtime/memory-tools";
+export {
+	executePlannerMemoryTool,
+	PLANNER_MEMORY_TOOL_NAMES,
+} from "./runtime/memory-tools";
 export type {
 	PlannerRuntimeAction,
 	PlannerRuntimeDecision,

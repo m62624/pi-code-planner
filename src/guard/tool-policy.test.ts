@@ -112,8 +112,10 @@ describe("planner wrapper tool policy", () => {
 			"planner_status",
 			"planner_git_inspect",
 			"planner_memory_inspect",
+			"planner_memory_apply_freshness",
 			"planner_memory_write_batch",
 			"planner_memory_verify",
+			"planner_memory_sync_checkpoint",
 		] satisfies PlannerWrapperTool[]);
 		expect(decision.reason).toContain("requires a memory update");
 	});
