@@ -125,6 +125,8 @@ Merge task → plan = готовая задача с полным кодом.
 - На основе discovery создаёт plan
 - Дробит на tasks
 - Каждый task = `task.md` с инструкциями
+- После `split_tasks` модель не выполняет tasks пачкой. Execution всегда берёт ровно один active task.
+- Следующий task нельзя начинать, пока текущий task не прошёл merge в plan branch и `compact_task`.
 
 ### Execution
 Каждый task проходит через подстадии:
@@ -137,6 +139,13 @@ Merge task → plan = готовая задача с полным кодом.
 6. Task branch merge → plan branch
 
 Каждая подстадия = compact перед следующей.
+
+Task boundary строгий:
+- task после merge в plan branch считается только compacted result;
+- модель не должна переносить живой chat/context завершённого task в следующий task;
+- следующий task получает только `plan.md`, свой `task.md`, memory blob и compact summary предыдущих результатов;
+- общий живой контекст между попытками разрешён только внутри experiment loop одного task: experiment A → compact → experiment B → compact → selection.
+- после `compact_task` текущий task закрыт; любые дополнительные изменения к нему требуют нового task или change request.
 
 ### PI Code API и Compact
 Каждый stage и каждый task включает PI Code API:
@@ -966,6 +975,16 @@ Policy output:
 13. `merge_task_to_plan` — extension merge current task branch в plan branch.
 14. `compact_task` — выполнить compact boundary после завершения task.
 15. `select_next_task` — выбрать следующий task или перейти в finalize.
+
+Инварианты task loop:
+
+1. В execution активен только один `taskId`.
+2. `prepare_task` выбирает один task и делает его единственным active task.
+3. `select_next_task` запрещён, пока current task не прошёл `merge_task_to_plan` и `compact_task`.
+4. После `compact_task` следующий task не наследует живой chat/context предыдущего task.
+5. Следующий task обязан заново читать актуальные artifacts и memory через `planner_status`.
+6. Experiment attempts внутри одного task могут использовать compact summary предыдущих attempts, потому что они сравнивают альтернативы одной и той же задачи.
+7. Между разными tasks общий контекст передаётся только через compacted artifacts, memory и plan branch state.
 
 ### Stage 5: `finalize`
 
