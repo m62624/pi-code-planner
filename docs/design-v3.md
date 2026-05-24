@@ -1198,6 +1198,36 @@ applyMemoryFreshness({
 
 Модель после этого должна прочитать только `filesToReindex` и связанные entries через bounded retrieval, затем обновить memory через batch write API.
 
+### Effects freshness
+
+Effects являются частью memory freshness. Если файл изменился, модель обязана переоценить effects для каждого affected symbol, а не только signature и summary.
+
+Required memory checks для changed/new/missing files:
+
+```text
+file_index
+symbols
+relations
+effects
+```
+
+Effects update обязателен, потому что изменение внешнего состояния может быть невидимо в signature:
+- функция стала читать env/config/process/global state
+- функция стала писать global cache/state
+- появился filesystem/network/database/UI IO
+- появилась зависимость от time/random/current working directory
+- symbol начал вызывать другой side-effectful symbol
+- changed relation меняет observable behavior callers/tests
+
+Правила:
+- если модель не уверена, использовать `globalState="unknown"`
+- не ставить `globalState="none"` без evidence
+- uncertainty записывать в summary/questions
+- effects должны обновляться до memory checkpoint sync
+- task planning/TDD использует effects как risk signal
+
+Memory gate всегда возвращает required checks `file_index`, `symbols`, `relations`, `effects`, если memory stale.
+
 ### Commit tracking and memory gate
 
 Snapshot по file hashes отвечает на вопрос:

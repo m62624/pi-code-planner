@@ -176,6 +176,15 @@ export type {
 	SyncedInstructionFile,
 } from "./instructions/schema";
 export { INSTRUCTION_KEYS } from "./instructions/schema";
+export type {
+	MemoryGateInspection,
+	MemoryGateRequiredCheck,
+} from "./memory/gate";
+export {
+	applyMemoryGateFreshness,
+	inspectMemoryGate,
+	MEMORY_GATE_REQUIRED_CHECKS,
+} from "./memory/gate";
 export type { JsonlValidator } from "./memory/jsonl";
 export {
 	PlannerJsonlError,
