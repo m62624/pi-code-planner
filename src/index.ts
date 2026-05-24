@@ -12,6 +12,11 @@ import {
 	formatPlannerPreflightStatus,
 	runPlannerPreflight,
 } from "./runtime/preflight";
+import {
+	executePlannerWorkflowTool,
+	PLANNER_WORKFLOW_TOOL_NAMES,
+	type PlannerWorkflowToolName,
+} from "./runtime/workflow-tools";
 import { createNodeFs } from "./storage/fs";
 import { createProjectStoragePaths } from "./storage/paths";
 import { readProjectRecordIfExists } from "./storage/project-store";
@@ -19,6 +24,52 @@ import { readProjectRecordIfExists } from "./storage/project-store";
 const EMPTY_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {},
+	additionalProperties: false,
+} as const;
+
+const COMPLETE_STEP_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		nextStage: { type: "string" },
+		nextStep: { type: "string" },
+	},
+	additionalProperties: false,
+} as const;
+
+const REASON_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		reason: { type: "string" },
+	},
+	required: ["reason"],
+	additionalProperties: false,
+} as const;
+
+const BLOCK_STEP_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		reason: { type: "string" },
+		requiresUserDecision: { type: "boolean" },
+	},
+	required: ["reason"],
+	additionalProperties: false,
+} as const;
+
+const RESUME_RECOVERY_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		targetStage: { type: "string" },
+		targetStep: { type: "string" },
+	},
+	required: ["targetStage", "targetStep"],
+	additionalProperties: false,
+} as const;
+
+const OPTIONAL_REASON_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		reason: { type: "string" },
+	},
 	additionalProperties: false,
 } as const;
 
@@ -42,6 +93,34 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 		},
 	});
 
+	for (const toolName of PLANNER_WORKFLOW_TOOL_NAMES) {
+		pi.registerTool({
+			name: toolName,
+			label: workflowToolLabel(toolName),
+			description: workflowToolDescription(toolName),
+			promptSnippet:
+				"Use planner_status first, then call only the workflow transition listed as allowed for the current stage/step.",
+			parameters: workflowToolParameters(toolName) as never,
+			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const result = await executePlannerWorkflowTool({
+					fs: createNodeFs(),
+					git: new NodeGitRunner(),
+					projectPaths: createProjectStoragePaths({
+						agentDir: getAgentDir(),
+						projectRoot: ctx.cwd,
+					}),
+					toolName,
+					params,
+				});
+
+				return {
+					content: [{ type: "text", text: result.text }],
+					details: result,
+				};
+			},
+		});
+	}
+
 	pi.on("tool_call", async (event, ctx) => {
 		if (!isToolCallEventType("bash", event)) {
 			return;
@@ -62,6 +141,77 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 			};
 		}
 	});
+}
+
+function workflowToolLabel(toolName: PlannerWorkflowToolName): string {
+	switch (toolName) {
+		case "planner_start_step":
+			return "Planner Start Step";
+		case "planner_complete_step":
+			return "Planner Complete Step";
+		case "planner_advance_step":
+			return "Planner Advance Step";
+		case "planner_fail_step":
+			return "Planner Fail Step";
+		case "planner_block_step":
+			return "Planner Block Step";
+		case "planner_retry_step":
+			return "Planner Retry Step";
+		case "planner_request_compact":
+			return "Planner Request Compact";
+		case "planner_complete_compact":
+			return "Planner Complete Compact";
+		case "planner_enter_recovery":
+			return "Planner Enter Recovery";
+		case "planner_resume_after_recovery":
+			return "Planner Resume After Recovery";
+	}
+}
+
+function workflowToolDescription(toolName: PlannerWorkflowToolName): string {
+	switch (toolName) {
+		case "planner_start_step":
+			return "Start the current pending planner step after planner_status says start_step is allowed.";
+		case "planner_complete_step":
+			return "Mark the current running planner step as completed and store its next step.";
+		case "planner_advance_step":
+			return "Move from a completed planner step to its recorded next step.";
+		case "planner_fail_step":
+			return "Mark the current planner step as failed so the model can retry through planner_status.";
+		case "planner_block_step":
+			return "Mark the current planner step as blocked, optionally requiring a user decision.";
+		case "planner_retry_step":
+			return "Return a failed or non-user-blocked planner step to pending.";
+		case "planner_request_compact":
+			return "Request planner-controlled compaction for a compact step.";
+		case "planner_complete_compact":
+			return "Complete a planner compact gate after Pi compaction has finished.";
+		case "planner_enter_recovery":
+			return "Enter planner recovery when planner_status or a workflow transition requires recovery.";
+		case "planner_resume_after_recovery":
+			return "Resume the planner from recovery into an explicit valid stage and step.";
+	}
+}
+
+function workflowToolParameters(toolName: PlannerWorkflowToolName) {
+	switch (toolName) {
+		case "planner_complete_step":
+			return COMPLETE_STEP_TOOL_PARAMETERS;
+		case "planner_fail_step":
+			return REASON_TOOL_PARAMETERS;
+		case "planner_block_step":
+		case "planner_enter_recovery":
+			return BLOCK_STEP_TOOL_PARAMETERS;
+		case "planner_resume_after_recovery":
+			return RESUME_RECOVERY_TOOL_PARAMETERS;
+		case "planner_request_compact":
+			return OPTIONAL_REASON_TOOL_PARAMETERS;
+		case "planner_start_step":
+		case "planner_advance_step":
+		case "planner_retry_step":
+		case "planner_complete_compact":
+			return EMPTY_TOOL_PARAMETERS;
+	}
 }
 
 async function readPlannerPreflight(projectRoot: string) {
@@ -364,8 +514,22 @@ export type {
 	PlannerStateTransition,
 	PlannerStateTransitionBlockCode,
 	PlannerStateTransitionResult,
+	PlannerStateTransitionType,
 } from "./runtime/state-transition";
-export { applyPlannerStateTransition } from "./runtime/state-transition";
+export {
+	applyPlannerStateTransition,
+	getAllowedPlannerStateTransitionTypes,
+} from "./runtime/state-transition";
+export type {
+	PlannerWorkflowToolExecutionInput,
+	PlannerWorkflowToolExecutionResult,
+	PlannerWorkflowToolName,
+} from "./runtime/workflow-tools";
+export {
+	executePlannerWorkflowTool,
+	PLANNER_WORKFLOW_TOOL_NAMES,
+	workflowToolTransition,
+} from "./runtime/workflow-tools";
 export { createNodeFs, type PlannerFs } from "./storage/fs";
 export { createProjectId, sanitizeIdPart } from "./storage/ids";
 export {

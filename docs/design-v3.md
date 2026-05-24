@@ -717,7 +717,9 @@ Runtime reality evaluator не делает recovery, compact, git reset, commit
 9. Если checkpoint corrupted — вернуть recovery без memory gate.
 10. Запустить memory gate/freshness inspection.
 11. Передать всё в `evaluatePlannerRuntimeReality(...)`.
-12. Вернуть `decision`, `allowedTools`, context, git reality, memory checkpoint и memory gate.
+12. Если runtime decision = `require_memory_update`, записать в `state.json` `requiresMemoryUpdate=true` и `memoryUpdateReason`.
+13. Повторно оценить runtime decision уже с синхронизированным state.
+14. Вернуть `decision`, `allowedTools`, context, git reality, memory checkpoint и memory gate.
 
 `checkPlannerPreflightToolAllowed(...)` проверяет конкретный planner wrapper уже после runtime decision. Это важно, потому что `requiresMemoryUpdate` может быть вычислен preflight-слоем из actual git/memory reality, даже если в `state.json` флаг ещё не стоял.
 
@@ -729,7 +731,19 @@ Runtime reality evaluator не делает recovery, compact, git reset, commit
 - worktree;
 - git branch/head;
 - allowed planner wrappers;
+- allowed state transitions: `start_step`, `complete_step`, `advance_step`, `fail_step`, `block_step`, `retry_step`, `request_compact`, `complete_compact`, когда они допустимы в текущем state;
 - напоминание читать markdown текущего stage.
+
+`planner_status` не должен сам менять workflow state, кроме одного безопасного случая: если preflight обнаружил stale memory, он обязан записать gate в `state.json`:
+
+```json
+{
+  "requiresMemoryUpdate": true,
+  "memoryUpdateReason": "external_commit"
+}
+```
+
+Это нужно, чтобы после внезапного выключения или нового tool call система не потеряла факт, что git/memory уже рассинхронизированы.
 
 ### State machine core
 
@@ -796,6 +810,36 @@ Runtime gates:
 - `enter_recovery` и `resume_after_recovery` разрешены при `allow_stage_machine`, `require_recovery` или `require_user_decision`.
 
 Этот слой всё ещё не является public Pi tool. Это internal adapter, который должны использовать будущие workflow/git/memory/recovery tools.
+
+### Public workflow transition tools
+
+Public workflow tools — тонкая оболочка над `applyPlannerStateTransition(...)`.
+
+Они не решают сами, можно ли двигаться дальше. Каждый вызов делает:
+
+```
+runPlannerPreflight
+-> applyPlannerStateTransition
+-> savePlanState on success
+-> text result with next planner_status instruction
+```
+
+Доступные workflow tools:
+
+- `planner_start_step` -> `start_step`;
+- `planner_complete_step` -> `complete_step`;
+- `planner_advance_step` -> `advance_step`;
+- `planner_fail_step` -> `fail_step`;
+- `planner_block_step` -> `block_step`;
+- `planner_retry_step` -> `retry_step`;
+- `planner_request_compact` -> `request_compact`;
+- `planner_complete_compact` -> `complete_compact`.
+- `planner_enter_recovery` -> `enter_recovery`;
+- `planner_resume_after_recovery` -> `resume_after_recovery`.
+
+Модель не должна угадывать порядок этих tools. Она вызывает `planner_status`, читает `Allowed state transitions`, затем вызывает только соответствующий workflow tool.
+
+Если transition заблокирован, tool возвращает `blocked` и причину: context not ready, runtime gate, wrapper policy или state-machine error.
 
 ### Planner wrapper policy
 
@@ -1412,6 +1456,15 @@ memory checkpoint commit = commit, для которого indexes были за
 ```
 
 Если `HEAD !== state.lastCheckpointCommit`, planner не имеет права считать memory актуальной только потому, что `git diff` пустой.
+
+Текущий preflight уже делает минимальную синхронизацию state:
+
+1. Если `HEAD !== state.lastCheckpointCommit` и checkpoint существует, action становится `require_memory_update`.
+2. Если file hashes в memory index не совпадают с actual project snapshot, action становится `require_memory_update`.
+3. Preflight сохраняет `requiresMemoryUpdate=true` и причину в `state.json`.
+4. Actual memory entries не переписываются автоматически. Модель должна обновить affected files/symbols/relations/effects через memory tools, затем отдельный sync переносит checkpoint на current `HEAD`.
+
+Это закрывает случай, когда commit уже сделан и `git diff` пустой: stale memory всё равно обнаруживается через `HEAD` и file hash snapshot.
 
 #### После planner commit
 

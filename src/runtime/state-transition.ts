@@ -39,6 +39,8 @@ export type PlannerStateTransition =
 	  }
 	| { type: "resume_after_recovery"; target: PlannerPosition };
 
+export type PlannerStateTransitionType = PlannerStateTransition["type"];
+
 export type PlannerStateTransitionBlockCode =
 	| "context_not_ready"
 	| "runtime_blocked"
@@ -131,6 +133,47 @@ export async function applyPlannerStateTransition(
 		previousState,
 		state: nextState,
 	};
+}
+
+export function getAllowedPlannerStateTransitionTypes(
+	preflight: PlannerPreflightResult,
+): PlannerStateTransitionType[] {
+	if (preflight.context.status !== "ready") {
+		return [];
+	}
+
+	if (preflight.decision.action === "require_compact") {
+		return ["complete_compact"];
+	}
+
+	if (
+		preflight.decision.action === "require_recovery" ||
+		preflight.decision.action === "require_user_decision"
+	) {
+		return ["resume_after_recovery"];
+	}
+
+	if (preflight.decision.action !== "allow_stage_machine") {
+		return [];
+	}
+
+	const state = preflight.context.state;
+	switch (state.stepStatus) {
+		case "pending":
+			return ["start_step", "block_step", "enter_recovery"];
+		case "running":
+			return state.step.startsWith("compact_")
+				? ["request_compact", "fail_step", "block_step", "enter_recovery"]
+				: ["complete_step", "fail_step", "block_step", "enter_recovery"];
+		case "completed":
+			return ["advance_step"];
+		case "failed":
+			return ["retry_step", "block_step", "enter_recovery"];
+		case "blocked":
+			return state.requiresUserDecision
+				? ["enter_recovery"]
+				: ["retry_step", "enter_recovery"];
+	}
 }
 
 function applyTransition(

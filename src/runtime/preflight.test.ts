@@ -33,7 +33,7 @@ import {
 	createPlanRecord,
 	type PlanStateRecord,
 } from "../storage/schema";
-import { initializePlanState } from "../storage/state-store";
+import { initializePlanState, readPlanState } from "../storage/state-store";
 import { MockPlannerFs } from "../test/mock-fs";
 import {
 	checkPlannerPreflightToolAllowed,
@@ -249,6 +249,62 @@ describe("planner preflight orchestrator", () => {
 			action: "require_memory_update",
 			memoryUpdateReason: "file_hash_changed",
 		});
+		expect(
+			await readPlanState(fs, createPlanStoragePaths(projectPaths, "plan-a")),
+		).toMatchObject({
+			requiresMemoryUpdate: true,
+			memoryUpdateReason: "file_hash_changed",
+		});
+	});
+
+	it("persists memory update gate when a new git commit changes indexed files", async () => {
+		const fs = new MockPlannerFs();
+		const projectPaths = await createProject(fs);
+		const setup = await createActivePlan(fs, projectPaths, {
+			state: { lastCheckpointCommit: "old123" },
+			gitFiles: ["src/a.ts"],
+		});
+		await fs.writeText(
+			join(setup.worktreePath, "src/a.ts"),
+			"export const value = 2;\n",
+		);
+		await upsertFileEntries(fs, setup.memoryPaths, [
+			{
+				path: "src/a.ts",
+				kind: "source",
+				language: "ts",
+				hash: "old-hash",
+				status: "indexed",
+				summary: "A",
+			},
+		]);
+		await writeMemoryCheckpoint(fs, setup.memoryPaths, "old123");
+
+		const result = await runPlannerPreflight({
+			fs,
+			git: new MockGitRunner({ head: "new456", files: ["src/a.ts"] }),
+			projectPaths,
+		});
+
+		expect(result.decision).toMatchObject({
+			action: "require_memory_update",
+			memoryUpdateReason: "external_commit",
+		});
+		expect(result.memoryGate?.freshness.filesToReindex).toEqual(["src/a.ts"]);
+		expect(result.context.status).toBe("ready");
+		if (result.context.status === "ready") {
+			expect(result.context.state).toMatchObject({
+				requiresMemoryUpdate: true,
+				memoryUpdateReason: "external_commit",
+			});
+		}
+		expect(
+			await readPlanState(fs, createPlanStoragePaths(projectPaths, "plan-a")),
+		).toMatchObject({
+			requiresMemoryUpdate: true,
+			memoryUpdateReason: "external_commit",
+			lastCheckpointCommit: "old123",
+		});
 	});
 
 	it("allows stage machine when storage, git, checkpoint, and memory are clean", async () => {
@@ -273,6 +329,9 @@ describe("planner preflight orchestrator", () => {
 		expect(result.memoryGate?.clean).toBe(true);
 		expect(result.decision.action).toBe("allow_stage_machine");
 		expect(result.instructions?.keys).toEqual(["discovery", "memory"]);
+		expect(formatPlannerPreflightStatus(result)).toContain(
+			"Allowed state transitions: complete_step, fail_step, block_step",
+		);
 	});
 
 	it("blocks normal wrappers when runtime preflight derives a memory gate", async () => {

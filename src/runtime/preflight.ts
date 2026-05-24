@@ -14,6 +14,8 @@ import {
 import type { MemoryCheckpointVerification } from "../memory/schema";
 import type { PlannerFs } from "../storage/fs";
 import type { PlanStoragePaths, ProjectStoragePaths } from "../storage/paths";
+import type { MemoryUpdateReason, PlanStateRecord } from "../storage/schema";
+import { savePlanState } from "../storage/state-store";
 import { type ActivePlanContext, readActivePlanContext } from "./active-plan";
 import {
 	inspectPlannerGitReality,
@@ -23,6 +25,7 @@ import {
 	evaluatePlannerRuntimeReality,
 	type PlannerRuntimeDecision,
 } from "./planner-runtime";
+import { getAllowedPlannerStateTransitionTypes } from "./state-transition";
 
 export interface PlannerPreflightInput {
 	fs: PlannerFs;
@@ -156,17 +159,37 @@ export async function runPlannerPreflight(
 		repoRoot: context.state.worktreePath,
 		memoryPaths,
 	});
+	const decision = evaluatePlannerRuntimeReality({
+		contextStatus: context.status,
+		state: context.state,
+		git: gitReality,
+		memory: memoryGate,
+		memoryCheckpointValid: true,
+		worktreeExists,
+	});
+	const syncedContext =
+		decision.action === "require_memory_update"
+			? await persistMemoryUpdateGate({
+					fs: input.fs,
+					context,
+					reason: decision.memoryUpdateReason,
+				})
+			: context;
+	const syncedDecision =
+		syncedContext === context
+			? decision
+			: evaluatePlannerRuntimeReality({
+					contextStatus: syncedContext.status,
+					state: syncedContext.state,
+					git: gitReality,
+					memory: memoryGate,
+					memoryCheckpointValid: true,
+					worktreeExists,
+				});
 
 	return {
-		context,
-		decision: evaluatePlannerRuntimeReality({
-			contextStatus: context.status,
-			state: context.state,
-			git: gitReality,
-			memory: memoryGate,
-			memoryCheckpointValid: true,
-			worktreeExists,
-		}),
+		context: syncedContext,
+		decision: syncedDecision,
 		planPaths: context.planPaths,
 		memoryPaths,
 		gitReality,
@@ -246,9 +269,40 @@ export function formatPlannerPreflightStatus(
 	lines.push(
 		`Allowed planner wrappers: ${preflight.decision.allowedTools.join(", ") || "(none)"}`,
 	);
+	lines.push(
+		`Allowed state transitions: ${getAllowedPlannerStateTransitionTypes(preflight).join(", ") || "(none)"}`,
+	);
 	lines.push("Read the listed markdown instruction files before continuing.");
 	lines.push("Do not use raw git while a planner plan is active.");
 	return lines.join("\n");
+}
+
+async function persistMemoryUpdateGate(input: {
+	fs: PlannerFs;
+	context: Extract<ActivePlanContext, { status: "ready" }>;
+	reason: MemoryUpdateReason | null;
+}): Promise<Extract<ActivePlanContext, { status: "ready" }>> {
+	const state = input.context.state;
+	const next = markStateRequiresMemoryUpdate(state, input.reason);
+	if (next === state) {
+		return input.context;
+	}
+	await savePlanState(input.fs, input.context.planPaths, next);
+	return { ...input.context, state: next };
+}
+
+function markStateRequiresMemoryUpdate(
+	state: PlanStateRecord,
+	reason: MemoryUpdateReason | null,
+): PlanStateRecord {
+	if (state.requiresMemoryUpdate && state.memoryUpdateReason === reason) {
+		return state;
+	}
+	return {
+		...state,
+		requiresMemoryUpdate: true,
+		memoryUpdateReason: reason,
+	};
 }
 
 async function safeInspectGitReality(input: {
