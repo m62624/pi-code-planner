@@ -56,6 +56,7 @@ describe("persisted planner state transition", () => {
 			gitReality: null,
 			memoryGate: null,
 			memoryCheckpoint: null,
+			instructions: null,
 			worktreeExists: null,
 		};
 
@@ -359,6 +360,7 @@ async function withPreflight(
 		gitReality: null,
 		memoryGate: null,
 		memoryCheckpoint: null,
+		instructions: null,
 		worktreeExists: true,
 	};
 	return { ...setup, preflight };

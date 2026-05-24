@@ -272,6 +272,7 @@ describe("planner preflight orchestrator", () => {
 		expect(result.memoryCheckpoint?.valid).toBe(true);
 		expect(result.memoryGate?.clean).toBe(true);
 		expect(result.decision.action).toBe("allow_stage_machine");
+		expect(result.instructions?.keys).toEqual(["discovery", "memory"]);
 	});
 
 	it("blocks normal wrappers when runtime preflight derives a memory gate", async () => {
@@ -332,6 +333,15 @@ describe("planner preflight orchestrator", () => {
 		);
 		expect(formatPlannerPreflightStatus(result)).toContain(
 			"Allowed planner wrappers: planner_status",
+		);
+		expect(formatPlannerPreflightStatus(result)).toContain(
+			"Instruction keys: discovery, memory",
+		);
+		expect(formatPlannerPreflightStatus(result)).toContain(
+			"default: /agent/extensions/pi-code-planner/instructions/defaults/discovery.md",
+		);
+		expect(formatPlannerPreflightStatus(result)).toContain(
+			"project append: /repo/app/.pi/pi-code-planner/instructions/append/discovery.md",
 		);
 	});
 });

@@ -497,12 +497,25 @@ Tool возвращает:
 - активные `planId`, `taskId`, `experimentId`
 - разрешённые категории действий для текущего step
 - заблокированные категории действий и причину
-- список markdown artifacts, которые модель должна прочитать
+- список markdown instruction keys и exact paths, которые модель должна прочитать
 - ссылку на active worktree
 - флаг `requiresCompact`
 - флаг `requiresUserDecision`
 
 `planner_status` не заменяет stage/task instructions. Он только сообщает, где находится модель и что ей разрешено делать. Подробная инструкция берётся из markdown artifacts.
+
+Instruction routing не вставляет длинный markdown content в status. Он возвращает только:
+- `Instruction keys`;
+- default instruction path;
+- project append path;
+- global append path.
+
+Содержимое читается отдельно через read tool или будущий `planner_instruction_read`.
+
+Правило append:
+- если есть project append, модель учитывает `default + project append`;
+- если project append отсутствует, модель учитывает `default + global append`;
+- если append пустой, остаётся только default.
 
 ### Markdown instructions
 

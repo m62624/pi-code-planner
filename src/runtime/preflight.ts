@@ -1,5 +1,10 @@
 import type { GitRunner } from "../git/runner";
 import type { PlannerWrapperTool } from "../guard/tool-policy";
+import { createInstructionPaths } from "../instructions/paths";
+import {
+	getInstructionRoutingForState,
+	type InstructionRouting,
+} from "../instructions/routing";
 import { inspectMemoryGate, type MemoryGateInspection } from "../memory/gate";
 import { verifyMemoryCheckpoint } from "../memory/manager";
 import {
@@ -33,6 +38,7 @@ export interface PlannerPreflightResult {
 	gitReality: PlannerGitReality | null;
 	memoryGate: MemoryGateInspection | null;
 	memoryCheckpoint: MemoryCheckpointVerification | null;
+	instructions: InstructionRouting | null;
 	worktreeExists: boolean | null;
 }
 
@@ -63,10 +69,15 @@ export async function runPlannerPreflight(
 			gitReality: null,
 			memoryGate: null,
 			memoryCheckpoint: null,
+			instructions: null,
 			worktreeExists: null,
 		};
 	}
 
+	const instructions = getInstructionRoutingForState({
+		state: context.state,
+		paths: createInstructionPaths(input.projectPaths),
+	});
 	const worktreeExists = context.state.worktreePath
 		? await input.fs.exists(context.state.worktreePath)
 		: false;
@@ -84,6 +95,7 @@ export async function runPlannerPreflight(
 			gitReality: null,
 			memoryGate: null,
 			memoryCheckpoint: null,
+			instructions,
 			worktreeExists,
 		};
 	}
@@ -107,6 +119,7 @@ export async function runPlannerPreflight(
 			gitReality,
 			memoryGate: null,
 			memoryCheckpoint: null,
+			instructions,
 			worktreeExists,
 		};
 	}
@@ -132,6 +145,7 @@ export async function runPlannerPreflight(
 			gitReality,
 			memoryGate: null,
 			memoryCheckpoint,
+			instructions,
 			worktreeExists,
 		};
 	}
@@ -158,6 +172,7 @@ export async function runPlannerPreflight(
 		gitReality,
 		memoryGate,
 		memoryCheckpoint,
+		instructions,
 		worktreeExists,
 	};
 }
@@ -212,6 +227,18 @@ export function formatPlannerPreflightStatus(
 				`Git: ${preflight.gitReality.branch} @ ${preflight.gitReality.headCommit}`,
 			);
 		}
+		if (preflight.instructions) {
+			lines.push(
+				`Instruction keys: ${preflight.instructions.keys.join(", ") || "(none)"}`,
+			);
+			lines.push("Instruction files:");
+			for (const entry of preflight.instructions.entries) {
+				lines.push(`- ${entry.key}`);
+				lines.push(`  default: ${entry.defaultPath}`);
+				lines.push(`  project append: ${entry.projectAppendPath}`);
+				lines.push(`  global append: ${entry.globalAppendPath}`);
+			}
+		}
 	} else {
 		lines.push(`Context status: ${preflight.context.status}`);
 		lines.push(preflight.context.reason);
@@ -219,9 +246,7 @@ export function formatPlannerPreflightStatus(
 	lines.push(
 		`Allowed planner wrappers: ${preflight.decision.allowedTools.join(", ") || "(none)"}`,
 	);
-	lines.push(
-		"Read the markdown instruction for the current stage before continuing.",
-	);
+	lines.push("Read the listed markdown instruction files before continuing.");
 	lines.push("Do not use raw git while a planner plan is active.");
 	return lines.join("\n");
 }

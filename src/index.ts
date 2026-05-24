@@ -174,6 +174,14 @@ export {
 	instructionFilePath,
 } from "./instructions/paths";
 export type {
+	InstructionRouteEntry,
+	InstructionRouting,
+} from "./instructions/routing";
+export {
+	getInstructionKeysForPlannerStep,
+	getInstructionRoutingForState,
+} from "./instructions/routing";
+export type {
 	InstructionAppendSource,
 	InstructionContent,
 	InstructionDefaults,
