@@ -304,6 +304,13 @@ export {
 	runSyncedPlannerGitMutation,
 	syncStateAfterPlannerGitMutation,
 } from "./runtime/git-state-sync";
+export type {
+	PlannerRuntimeAction,
+	PlannerRuntimeDecision,
+	PlannerRuntimeRealityInput,
+	PlannerRuntimeRecoveryReason,
+} from "./runtime/planner-runtime";
+export { evaluatePlannerRuntimeReality } from "./runtime/planner-runtime";
 export { createNodeFs, type PlannerFs } from "./storage/fs";
 export { createProjectId, sanitizeIdPart } from "./storage/ids";
 export {

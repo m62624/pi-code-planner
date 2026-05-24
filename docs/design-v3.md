@@ -637,6 +637,52 @@ Retry не создаёт новый global stage. Он остаётся вну�
 Модель никогда не правит state.json вручную.
 ```
 
+### Runtime reality evaluator
+
+Перед state machine стоит отдельный слой `evaluatePlannerRuntimeReality(...)`.
+
+Его задача — не двигать stage/step и не писать файлы, а принять уже собранные факты:
+- статус active plan context;
+- `state.json`;
+- actual git reality;
+- memory gate inspection;
+- признак валидности memory checkpoint;
+- признак существования worktree.
+
+И вернуть одно детерминированное решение:
+- `no_active_plan` — plan отсутствует, extension не вмешивается в normal Pi flow;
+- `allow_stage_machine` — storage, git и memory согласованы, можно проверять текущий stage/step;
+- `require_memory_update` — normal stage/step временно заблокирован, модель должна обновить memory;
+- `require_compact` — текущий атомарный boundary завершён, нужен compact/resume flow;
+- `require_recovery` — state/worktree/git противоречат друг другу, нужен recovery;
+- `require_user_decision` — продолжение требует решения пользователя.
+
+Порядок приоритетов:
+
+1. Если active plan отсутствует — вернуть `no_active_plan`.
+2. Если `plan.json` или `state.json` missing — `require_recovery`.
+3. Если `state.requiresUserDecision=true` — `require_user_decision`.
+4. Если `state.broken=true` — `require_recovery`.
+5. Если worktree path отсутствует или worktree удалён — `require_recovery`.
+6. Если memory checkpoint повреждён — `require_recovery`.
+7. Если git reality недоступна — `require_recovery`.
+8. Если есть git conflicts — `require_recovery`.
+9. Если actual branch не совпадает с `state.currentBranch` — `require_recovery`.
+10. Если `state.requiresMemoryUpdate=true` — `require_memory_update`.
+11. Если `HEAD !== state.lastCheckpointCommit` — `require_memory_update` с reason `external_commit`, если это не было уже помечено planner git wrapper.
+12. Если memory gate показывает file hash mismatch/new/missing files — `require_memory_update` с reason `file_hash_changed`.
+13. Если `state.requiresCompact=true` — `require_compact`.
+14. Иначе — `allow_stage_machine`.
+
+Этот слой также возвращает `allowedTools`, но сам не решает, можно ли конкретный wrapper выполнить. Конкретный wrapper проверяется следующим policy слоем.
+
+Важно:
+
+```
+Runtime reality evaluator не делает recovery, compact, git reset, commit, merge или file writes.
+Он только выбирает gate: stage machine, memory update, compact, recovery, user decision или no active plan.
+```
+
 ### Planner wrapper policy
 
 `planner_status` пока не обязан быть полной реализацией маршрутизатора. До него нужен отдельный policy слой, который не читает Pi API и не выполняет git, а только отвечает на вопрос: можно ли сейчас вызвать конкретный planner wrapper.
