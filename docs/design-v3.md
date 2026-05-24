@@ -683,6 +683,41 @@ Runtime reality evaluator не делает recovery, compact, git reset, commit
 Он только выбирает gate: stage machine, memory update, compact, recovery, user decision или no active plan.
 ```
 
+### Preflight orchestrator
+
+`runPlannerPreflight(...)` — слой, который реально собирает runtime facts перед `planner_status`, state machine и public planner wrappers.
+
+Он выполняет порядок:
+
+1. Прочитать active plan context через `project.json -> activePlanId -> plan.json/state.json`.
+2. Если active plan отсутствует — вернуть `no_active_plan` и не трогать git.
+3. Если `plan.json` или `state.json` missing — вернуть recovery и не трогать git.
+4. Если текущий step находится в раннем `init` до создания worktree — разрешить state machine без git/memory inspection.
+5. Если worktree уже должен существовать, но отсутствует — вернуть recovery.
+6. Прочитать git reality из planner worktree:
+   - branch;
+   - HEAD;
+   - porcelain status;
+   - conflict flag.
+7. Если git reality недоступна, branch wrong или есть conflicts — вернуть recovery без memory gate.
+8. Проверить memory checkpoint integrity.
+9. Если checkpoint corrupted — вернуть recovery без memory gate.
+10. Запустить memory gate/freshness inspection.
+11. Передать всё в `evaluatePlannerRuntimeReality(...)`.
+12. Вернуть `decision`, `allowedTools`, context, git reality, memory checkpoint и memory gate.
+
+`checkPlannerPreflightToolAllowed(...)` проверяет конкретный planner wrapper уже после runtime decision. Это важно, потому что `requiresMemoryUpdate` может быть вычислен preflight-слоем из actual git/memory reality, даже если в `state.json` флаг ещё не стоял.
+
+`planner_status` должен использовать preflight formatter и показывать короткий routing snapshot:
+- runtime action;
+- reason;
+- stage/step/nextStep;
+- active plan;
+- worktree;
+- git branch/head;
+- allowed planner wrappers;
+- напоминание читать markdown текущего stage.
+
 ### Planner wrapper policy
 
 `planner_status` пока не обязан быть полной реализацией маршрутизатора. До него нужен отдельный policy слой, который не читает Pi API и не выполняет git, а только отвечает на вопрос: можно ли сейчас вызвать конкретный planner wrapper.

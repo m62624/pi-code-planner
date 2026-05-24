@@ -63,6 +63,28 @@ describe("planner runtime reality evaluator", () => {
 		});
 	});
 
+	it("allows early init steps before planner worktree exists", () => {
+		const decision = evaluatePlannerRuntimeReality({
+			contextStatus: "ready",
+			state: state({
+				stage: "init",
+				step: "create_plan_worktree",
+				currentBranch: null,
+				worktreePath: null,
+				lastCheckpointCommit: null,
+			}),
+			worktreeExists: false,
+		});
+
+		expect(decision).toMatchObject({
+			action: "allow_stage_machine",
+			stage: "init",
+			step: "create_plan_worktree",
+			requiresRecovery: false,
+		} satisfies Partial<PlannerRuntimeDecision>);
+		expect(decision.allowedTools).toContain("planner_git_create_plan_worktree");
+	});
+
 	it("requires recovery when active state has no usable worktree", () => {
 		const decision = evaluatePlannerRuntimeReality({
 			contextStatus: "ready",

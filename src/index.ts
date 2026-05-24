@@ -3,10 +3,15 @@ import {
 	getAgentDir,
 	isToolCallEventType,
 } from "@earendil-works/pi-coding-agent";
+import { NodeGitRunner } from "./git/node-runner";
 import {
 	checkRawGitAllowed,
 	PLANNER_STATUS_TOOL_NAME,
 } from "./guard/git-watcher";
+import {
+	formatPlannerPreflightStatus,
+	runPlannerPreflight,
+} from "./runtime/preflight";
 import { createNodeFs } from "./storage/fs";
 import { createProjectStoragePaths } from "./storage/paths";
 import { readProjectRecordIfExists } from "./storage/project-store";
@@ -27,24 +32,12 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 			"Use planner_status when a planner action is blocked or when you are unsure which planner step/tool is allowed.",
 		parameters: EMPTY_TOOL_PARAMETERS as never,
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-			const state = await readActivePlannerState(ctx.cwd);
-			const text = state.active
-				? [
-						"Planner status stub.",
-						`Active plan: ${state.activePlanId}`,
-						"",
-						"Detailed stage/step routing is not implemented yet.",
-						"Until planner git wrapper tools are available, do not run raw git through bash while a plan is active.",
-					].join("\n")
-				: [
-						"Planner status stub.",
-						"No active pi-code-planner plan was found for this project.",
-						"Normal Pi tool behavior is allowed.",
-					].join("\n");
+			const preflight = await readPlannerPreflight(ctx.cwd);
+			const text = formatPlannerPreflightStatus(preflight);
 
 			return {
 				content: [{ type: "text", text }],
-				details: state,
+				details: preflight,
 			};
 		},
 	});
@@ -68,6 +61,19 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 					"Raw git is blocked while pi-code-planner is active.",
 			};
 		}
+	});
+}
+
+async function readPlannerPreflight(projectRoot: string) {
+	const fs = createNodeFs();
+	const projectPaths = createProjectStoragePaths({
+		agentDir: getAgentDir(),
+		projectRoot,
+	});
+	return await runPlannerPreflight({
+		fs,
+		git: new NodeGitRunner(),
+		projectPaths,
 	});
 }
 
@@ -311,6 +317,16 @@ export type {
 	PlannerRuntimeRecoveryReason,
 } from "./runtime/planner-runtime";
 export { evaluatePlannerRuntimeReality } from "./runtime/planner-runtime";
+export type {
+	PlannerPreflightInput,
+	PlannerPreflightResult,
+	PlannerPreflightToolDecision,
+} from "./runtime/preflight";
+export {
+	checkPlannerPreflightToolAllowed,
+	formatPlannerPreflightStatus,
+	runPlannerPreflight,
+} from "./runtime/preflight";
 export { createNodeFs, type PlannerFs } from "./storage/fs";
 export { createProjectId, sanitizeIdPart } from "./storage/ids";
 export {

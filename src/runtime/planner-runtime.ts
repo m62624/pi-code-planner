@@ -4,6 +4,7 @@ import {
 } from "../guard/tool-policy";
 import type { MemoryGateInspection } from "../memory/gate";
 import type {
+	InitStep,
 	MemoryUpdateReason,
 	PlannerStage,
 	PlannerStep,
@@ -67,6 +68,15 @@ const RECOVERY_TOOLS = [
 	"planner_recovery_inspect",
 ] as const satisfies readonly PlannerWrapperTool[];
 
+const INIT_STEPS_BEFORE_WORKTREE = new Set<InitStep>([
+	"check_project",
+	"check_git",
+	"prepare_storage",
+	"choose_worktree_location",
+	"create_plan_record",
+	"create_plan_worktree",
+]);
+
 export function evaluatePlannerRuntimeReality(
 	input: PlannerRuntimeRealityInput,
 ): PlannerRuntimeDecision {
@@ -109,12 +119,24 @@ export function evaluatePlannerRuntimeReality(
 		);
 	}
 
-	if (!input.state.worktreePath || input.worktreeExists === false) {
+	if (
+		(!input.state.worktreePath || input.worktreeExists === false) &&
+		requiresPlannerWorktree(input.state)
+	) {
 		return recovery(
 			input,
 			"missing_worktree",
 			"Expected planner worktree is missing.",
 		);
+	}
+
+	if (!input.state.worktreePath || input.worktreeExists === false) {
+		return decision({
+			input,
+			action: "allow_stage_machine",
+			reason: null,
+			allowedTools: getAllowedPlannerWrapperTools(input.state),
+		});
 	}
 
 	if (input.memoryCheckpointValid === false) {
@@ -276,4 +298,11 @@ function decision(input: {
 		memory: input.input.memory ?? null,
 		git: input.input.git ?? null,
 	};
+}
+
+function requiresPlannerWorktree(state: PlanStateRecord): boolean {
+	return !(
+		state.stage === "init" &&
+		INIT_STEPS_BEFORE_WORKTREE.has(state.step as InitStep)
+	);
 }
