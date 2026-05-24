@@ -223,6 +223,17 @@ export interface MergeTargets {
 	planToOutput: string | null;
 }
 
+export interface ManagedTaskBranchRegistry {
+	task: string | null;
+	experiments: string[];
+	selectedExperiment: string | null;
+	refactor: string | null;
+}
+
+export interface ManagedBranchRegistry {
+	tasks: Record<string, ManagedTaskBranchRegistry>;
+}
+
 export interface PlanStateRecord {
 	schemaVersion: typeof SCHEMA_VERSION;
 	stage: PlannerStage;
@@ -233,6 +244,7 @@ export interface PlanStateRecord {
 	activeExperimentId: string | null;
 	worktreePath: string | null;
 	branches: PlanBranches;
+	branchRegistry: ManagedBranchRegistry;
 	currentBranch: string | null;
 	mergeTargets: MergeTargets;
 	lastCheckpointCommit: string | null;
@@ -296,6 +308,7 @@ export function createInitialPlanState(input: {
 			currentExperiment: null,
 			selectedExperiment: null,
 		},
+		branchRegistry: { tasks: {} },
 		currentBranch: null,
 		mergeTargets: {
 			experimentToTask: null,

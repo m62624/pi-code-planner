@@ -222,8 +222,11 @@ Git API — это внутренний слой extension. Модель не д
 #### `git branch -d <name>` / `git branch -D <name>`
 - `-d` — safe delete, проверяет что ветка merged
 - `-D` — force delete
-- Удаляет experiment ветку после выбора кандидата
-- Удаляет task ветку после merge в plan
+- После merge выбранного experiment в task удаляются все experiment branches этого task:
+  - selected experiment уже merged, но может удаляться через общий cleanup
+  - unselected experiments считаются abandoned attempts и force-deleted
+- После merge refactor в task удаляется refactor branch
+- После merge task в plan удаляется task branch и остаточные child branches этого task
 - Protected: plan branch не удаляется автоматически
 
 #### `git switch <branch>`
@@ -409,6 +412,19 @@ Plan worktree хранится отдельно от state. Его распол�
     "currentExperiment": null,
     "selectedExperiment": null
   },
+  "branchRegistry": {
+    "tasks": {
+      "task-1": {
+        "task": "task/plan-fix-find-command/task-1",
+        "experiments": [
+          "experiment/plan-fix-find-command/task-1/attempt-a",
+          "experiment/plan-fix-find-command/task-1/attempt-b"
+        ],
+        "selectedExperiment": "experiment/plan-fix-find-command/task-1/attempt-a",
+        "refactor": null
+      }
+    }
+  },
   "currentBranch": "plan/plan-fix-find-command",
   "mergeTargets": {
     "experimentToTask": null,
@@ -435,6 +451,7 @@ Plan worktree хранится отдельно от state. Его распол�
 - `stepStatus` — состояние подшага: `pending`, `running`, `completed`, `failed`, `blocked`
 - `nextStep` показывает следующий допустимый step после завершения текущего
 - `branches` хранит реальные имена веток, чтобы модель не решала сама куда merge делать
+- `branchRegistry` хранит все managed child branches по taskId: task branch, experiment branches, selected experiment branch и refactor branch
 - `mergeTargets` хранит ожидаемые merge пары для текущего этапа
 - `lastCheckpointCommit` хранит commit, до которого memory уже проверена и обновлена
 - `requiresMemoryUpdate=true` означает, что normal flow заблокирован до обновления memory
@@ -446,6 +463,10 @@ Plan worktree хранится отдельно от state. Его распол�
 - если expected branch/worktree отсутствует, state помечается `broken=true`, а destructive repair требует решения пользователя
 - если branch могла быть переименована, recovery сначала ищет возможный renamed branch по planId/taskId/checkpoint, а не сразу считает plan потерянным
 - `lastCheckpointCommit` нельзя обновлять сразу после git commit/merge; сначала нужно обновить и проверить memory checkpoint
+- после merge selected experiment -> task extension удаляет selected experiment branch и все остальные experiment branches этого task
+- после merge refactor -> task extension удаляет refactor branch
+- после merge task -> plan extension удаляет task branch и остаточные child branches этого task
+- после удаления всех child branches для task registry entry удаляется из `branchRegistry.tasks`
 
 Модель не выбирает merge target. Например, при `select_experiment` модель выбирает только `experimentId`, а extension берёт target из `plans/<plan-id>/state.json`:
 

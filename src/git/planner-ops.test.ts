@@ -150,9 +150,18 @@ describe("planner git operations", () => {
 				attemptId: "attempt-a",
 			})
 		).state;
+		const secondExperiment = (
+			await createAndSwitchExperimentBranch({
+				git,
+				state: experiment,
+				planId: "plan-a",
+				taskId: "task-1",
+				attemptId: "attempt-b",
+			})
+		).state;
 		const selected = (
 			await selectExperiment({
-				state: experiment,
+				state: secondExperiment,
 				planId: "plan-a",
 				taskId: "task-1",
 				attemptId: "attempt-a",
@@ -171,7 +180,11 @@ describe("planner git operations", () => {
 		);
 		expect(merged.currentBranch).toBe("task/plan-a/task-1");
 		expect(merged.mergeTargets.experimentToTask).toBeNull();
-		expect(git.calls.slice(-2)).toEqual([
+		expect(merged.branchRegistry.tasks["task-1"]).toMatchObject({
+			experiments: [],
+			selectedExperiment: null,
+		});
+		expect(git.calls.slice(-4)).toEqual([
 			{
 				name: "switchBranch",
 				input: {
@@ -186,6 +199,22 @@ describe("planner git operations", () => {
 					sourceBranch: "experiment/plan-a/task-1/attempt-a",
 					noFastForward: true,
 					message: "merge selected experiment",
+				},
+			},
+			{
+				name: "deleteBranch",
+				input: {
+					repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
+					branch: "experiment/plan-a/task-1/attempt-a",
+					force: true,
+				},
+			},
+			{
+				name: "deleteBranch",
+				input: {
+					repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
+					branch: "experiment/plan-a/task-1/attempt-b",
+					force: true,
 				},
 			},
 		]);
@@ -229,13 +258,22 @@ describe("planner git operations", () => {
 		expect(planMerged.currentBranch).toBe("plan/plan-a");
 		expect(planMerged.branches.currentTask).toBeNull();
 		expect(planMerged.activeTaskId).toBeNull();
-		expect(git.calls.at(-1)).toEqual({
+		expect(planMerged.branchRegistry.tasks["task-1"]).toBeUndefined();
+		expect(git.calls.at(-2)).toEqual({
 			name: "merge",
 			input: {
 				repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
 				sourceBranch: "task/plan-a/task-1",
 				noFastForward: true,
 				message: "merge task",
+			},
+		});
+		expect(git.calls.at(-1)).toEqual({
+			name: "deleteBranch",
+			input: {
+				repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
+				branch: "task/plan-a/task-1",
+				force: false,
 			},
 		});
 	});

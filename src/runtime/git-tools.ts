@@ -438,6 +438,12 @@ async function cleanupManagedBranchesTool(
 		ready.state.branches.currentExperiment,
 		ready.state.branches.selectedExperiment,
 		ready.state.branches.currentTask,
+		...Object.values(ready.state.branchRegistry.tasks).flatMap((registry) => [
+			registry.task,
+			...registry.experiments,
+			registry.selectedExperiment,
+			registry.refactor,
+		]),
 	]);
 	for (const branch of branches) {
 		await deleteManagedBranch({
@@ -457,6 +463,7 @@ async function cleanupManagedBranchesTool(
 			currentExperiment: null,
 			selectedExperiment: null,
 		},
+		branchRegistry: { ...ready.state.branchRegistry, tasks: {} },
 		mergeTargets: {
 			...ready.state.mergeTargets,
 			experimentToTask: null,
