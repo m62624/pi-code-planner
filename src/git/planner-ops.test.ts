@@ -109,7 +109,7 @@ describe("planner git operations", () => {
 			taskId: "task-1",
 		});
 
-		expect(result.state.branches.currentTask).toBe("task/plan-a/task-1");
+		expect(result.state.activeBranches.currentTask).toBe("task/plan-a/task-1");
 		expect(result.state.mergeTargets.taskToPlan).toBe("plan/plan-a");
 		expect(git.calls).toEqual([
 			{
@@ -175,12 +175,12 @@ describe("planner git operations", () => {
 			})
 		).state;
 
-		expect(selected.branches.selectedExperiment).toBe(
+		expect(selected.activeBranches.selectedExperiment).toBe(
 			"experiment/plan-a/task-1/attempt-a",
 		);
 		expect(merged.currentBranch).toBe("task/plan-a/task-1");
 		expect(merged.mergeTargets.experimentToTask).toBeNull();
-		expect(merged.branchRegistry.tasks["task-1"]).toMatchObject({
+		expect(merged.managedBranches.tasks["task-1"]).toMatchObject({
 			experiments: [],
 			selectedExperiment: null,
 		});
@@ -256,9 +256,9 @@ describe("planner git operations", () => {
 		).state;
 
 		expect(planMerged.currentBranch).toBe("plan/plan-a");
-		expect(planMerged.branches.currentTask).toBeNull();
+		expect(planMerged.activeBranches.currentTask).toBeNull();
 		expect(planMerged.activeTaskId).toBeNull();
-		expect(planMerged.branchRegistry.tasks["task-1"]).toBeUndefined();
+		expect(planMerged.managedBranches.tasks["task-1"]).toBeUndefined();
 		expect(git.calls.at(-2)).toEqual({
 			name: "merge",
 			input: {

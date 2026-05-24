@@ -168,7 +168,7 @@ describe("planner git tools", () => {
 				stepStatus: "running",
 				currentBranch: "task/plan-a/task-1",
 				lastCheckpointCommit: "old123",
-				branches: {
+				activeBranches: {
 					base: "main",
 					plan: "plan/plan-a",
 					currentTask: "task/plan-a/task-1",
@@ -219,7 +219,7 @@ describe("planner git tools", () => {
 				activeTaskId: "task-1",
 				activeExperimentId: "attempt-a",
 				currentBranch: "experiment/plan-a/task-1/attempt-a",
-				branches: {
+				activeBranches: {
 					base: "main",
 					plan: "plan/plan-a",
 					currentTask: "task/plan-a/task-1",
@@ -300,7 +300,7 @@ describe("planner git tools", () => {
 				stage: "done",
 				step: "cleanup_worktree",
 				stepStatus: "running",
-				branches: {
+				activeBranches: {
 					base: "main",
 					plan: "plan/plan-a",
 					currentTask: "task/plan-a/task-1",

@@ -209,7 +209,7 @@ export interface PlanRecord {
 	tasks: PlanTaskSummary[];
 }
 
-export interface PlanBranches {
+export interface ActivePlanBranches {
 	base: string;
 	plan: string;
 	currentTask: string | null;
@@ -243,8 +243,8 @@ export interface PlanStateRecord {
 	activeTaskId: string | null;
 	activeExperimentId: string | null;
 	worktreePath: string | null;
-	branches: PlanBranches;
-	branchRegistry: ManagedBranchRegistry;
+	activeBranches: ActivePlanBranches;
+	managedBranches: ManagedBranchRegistry;
 	currentBranch: string | null;
 	mergeTargets: MergeTargets;
 	lastCheckpointCommit: string | null;
@@ -301,14 +301,14 @@ export function createInitialPlanState(input: {
 		activeTaskId: null,
 		activeExperimentId: null,
 		worktreePath: input.worktreePath ?? null,
-		branches: {
+		activeBranches: {
 			base: input.baseBranch,
 			plan: input.planBranch,
 			currentTask: null,
 			currentExperiment: null,
 			selectedExperiment: null,
 		},
-		branchRegistry: { tasks: {} },
+		managedBranches: { tasks: {} },
 		currentBranch: null,
 		mergeTargets: {
 			experimentToTask: null,

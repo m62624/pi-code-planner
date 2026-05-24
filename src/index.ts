@@ -840,6 +840,7 @@ export {
 	upsertProjectPlanSummary,
 } from "./storage/project-store";
 export type {
+	ActivePlanBranches,
 	DiscoveryStep,
 	DoneStep,
 	ExecutionStep,
@@ -847,7 +848,6 @@ export type {
 	InitStep,
 	MemoryUpdateReason,
 	MergeTargets,
-	PlanBranches,
 	PlannerStage,
 	PlannerStep,
 	PlanningStep,

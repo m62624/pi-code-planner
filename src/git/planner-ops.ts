@@ -25,7 +25,7 @@ export async function createAndSwitchTaskBranch(input: {
 	await input.git.createBranch({
 		repoRoot: worktreePath,
 		branch,
-		fromRef: input.state.branches.plan,
+		fromRef: input.state.activeBranches.plan,
 	});
 	await input.git.switchBranch({ repoRoot: worktreePath, branch });
 
@@ -38,8 +38,8 @@ export async function createAndSwitchTaskBranch(input: {
 			})),
 			activeTaskId: input.taskId,
 			activeExperimentId: null,
-			branches: {
-				...input.state.branches,
+			activeBranches: {
+				...input.state.activeBranches,
 				currentTask: branch,
 				currentExperiment: null,
 				selectedExperiment: null,
@@ -47,7 +47,7 @@ export async function createAndSwitchTaskBranch(input: {
 			currentBranch: branch,
 			mergeTargets: {
 				...input.state.mergeTargets,
-				taskToPlan: input.state.branches.plan,
+				taskToPlan: input.state.activeBranches.plan,
 				experimentToTask: null,
 			},
 		},
@@ -83,8 +83,8 @@ export async function createAndSwitchExperimentBranch(input: {
 			})),
 			activeTaskId: input.taskId,
 			activeExperimentId: input.attemptId,
-			branches: {
-				...input.state.branches,
+			activeBranches: {
+				...input.state.activeBranches,
 				currentExperiment: branch,
 			},
 			currentBranch: branch,
@@ -114,8 +114,8 @@ export async function selectExperiment(input: {
 				selectedExperiment,
 			})),
 			activeExperimentId: input.attemptId,
-			branches: {
-				...input.state.branches,
+			activeBranches: {
+				...input.state.activeBranches,
 				selectedExperiment,
 			},
 		},
@@ -157,8 +157,8 @@ export async function mergeSelectedExperimentToTask(input: {
 			})),
 			activeExperimentId: null,
 			currentBranch: taskBranch,
-			branches: {
-				...input.state.branches,
+			activeBranches: {
+				...input.state.activeBranches,
 				currentExperiment: null,
 				selectedExperiment: null,
 			},
@@ -238,7 +238,7 @@ export async function mergeTaskToPlan(input: {
 	const worktreePath = requireWorktreePath(input.state);
 	const taskId = requireActiveTaskId(input.state);
 	const taskBranch = requireCurrentTaskBranch(input.state);
-	const planBranch = input.state.branches.plan;
+	const planBranch = input.state.activeBranches.plan;
 	const registry = getTaskBranchRegistry(input.state, taskId);
 	await input.git.switchBranch({ repoRoot: worktreePath, branch: planBranch });
 	await input.git.merge({
@@ -271,8 +271,8 @@ export async function mergeTaskToPlan(input: {
 			activeTaskId: null,
 			activeExperimentId: null,
 			currentBranch: planBranch,
-			branches: {
-				...input.state.branches,
+			activeBranches: {
+				...input.state.activeBranches,
 				currentTask: null,
 				currentExperiment: null,
 				selectedExperiment: null,
@@ -297,7 +297,7 @@ export async function exportPlanToOutputBranch(input: {
 	await input.git.createBranch({
 		repoRoot: input.projectRoot,
 		branch: outputBranch,
-		fromRef: input.state.branches.base,
+		fromRef: input.state.activeBranches.base,
 	});
 	await input.git.switchBranch({
 		repoRoot: input.projectRoot,
@@ -305,7 +305,7 @@ export async function exportPlanToOutputBranch(input: {
 	});
 	await input.git.merge({
 		repoRoot: input.projectRoot,
-		sourceBranch: input.state.branches.plan,
+		sourceBranch: input.state.activeBranches.plan,
 		noFastForward: true,
 		message: input.message,
 	});
@@ -346,10 +346,10 @@ function requireWorktreePath(state: PlanStateRecord): string {
 }
 
 function requireCurrentTaskBranch(state: PlanStateRecord): string {
-	if (!state.branches.currentTask) {
+	if (!state.activeBranches.currentTask) {
 		throw new Error("Plan state has no current task branch.");
 	}
-	return state.branches.currentTask;
+	return state.activeBranches.currentTask;
 }
 
 function requireActiveTaskId(state: PlanStateRecord): string {
@@ -360,10 +360,10 @@ function requireActiveTaskId(state: PlanStateRecord): string {
 }
 
 function requireSelectedExperimentBranch(state: PlanStateRecord): string {
-	if (!state.branches.selectedExperiment) {
+	if (!state.activeBranches.selectedExperiment) {
 		throw new Error("Plan state has no selected experiment branch.");
 	}
-	return state.branches.selectedExperiment;
+	return state.activeBranches.selectedExperiment;
 }
 
 function getTaskBranchRegistry(
@@ -371,7 +371,7 @@ function getTaskBranchRegistry(
 	taskId: string,
 ): ManagedTaskBranchRegistry {
 	return (
-		state.branchRegistry.tasks[taskId] ?? {
+		state.managedBranches.tasks[taskId] ?? {
 			task: null,
 			experiments: [],
 			selectedExperiment: null,
@@ -387,10 +387,10 @@ function withTaskBranchRegistry(
 ): PlanStateRecord {
 	return {
 		...state,
-		branchRegistry: {
-			...state.branchRegistry,
+		managedBranches: {
+			...state.managedBranches,
 			tasks: {
-				...state.branchRegistry.tasks,
+				...state.managedBranches.tasks,
 				[taskId]: update(getTaskBranchRegistry(state, taskId)),
 			},
 		},
@@ -401,12 +401,12 @@ function removeTaskBranchRegistry(
 	state: PlanStateRecord,
 	taskId: string,
 ): PlanStateRecord {
-	const tasks = { ...state.branchRegistry.tasks };
+	const tasks = { ...state.managedBranches.tasks };
 	delete tasks[taskId];
 	return {
 		...state,
-		branchRegistry: {
-			...state.branchRegistry,
+		managedBranches: {
+			...state.managedBranches,
 			tasks,
 		},
 	};

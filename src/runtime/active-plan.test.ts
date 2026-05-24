@@ -66,7 +66,7 @@ describe("active plan runtime context", () => {
 		}
 		expect(context.activePlanId).toBe("plan-b");
 		expect(context.plan.planId).toBe("plan-b");
-		expect(context.state.branches.plan).toBe("plan/plan-b");
+		expect(context.state.activeBranches.plan).toBe("plan/plan-b");
 		expect(context.planPaths.stateJson).toContain("/plans/plan-b/state.json");
 	});
 

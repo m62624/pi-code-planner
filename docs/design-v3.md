@@ -405,14 +405,14 @@ Plan worktree хранится отдельно от state. Его распол�
   "activeTaskId": null,
   "activeExperimentId": null,
   "worktreePath": "/home/m62624/Projects/main/pi-approval-modes/.pi/pi-code-planner/worktrees/plan-fix-find-command",
-  "branches": {
+  "activeBranches": {
     "base": "main",
     "plan": "plan/plan-fix-find-command",
     "currentTask": null,
     "currentExperiment": null,
     "selectedExperiment": null
   },
-  "branchRegistry": {
+  "managedBranches": {
     "tasks": {
       "task-1": {
         "task": "task/plan-fix-find-command/task-1",
@@ -450,8 +450,8 @@ Plan worktree хранится отдельно от state. Его распол�
 - `step` — конкретный подшаг внутри stage
 - `stepStatus` — состояние подшага: `pending`, `running`, `completed`, `failed`, `blocked`
 - `nextStep` показывает следующий допустимый step после завершения текущего
-- `branches` хранит реальные имена веток, чтобы модель не решала сама куда merge делать
-- `branchRegistry` хранит все managed child branches по taskId: task branch, experiment branches, selected experiment branch и refactor branch
+- `activeBranches` хранит реальные имена веток, чтобы модель не решала сама куда merge делать
+- `managedBranches` хранит все managed child branches по taskId: task branch, experiment branches, selected experiment branch и refactor branch
 - `mergeTargets` хранит ожидаемые merge пары для текущего этапа
 - `lastCheckpointCommit` хранит commit, до которого memory уже проверена и обновлена
 - `requiresMemoryUpdate=true` означает, что normal flow заблокирован до обновления memory
@@ -466,7 +466,7 @@ Plan worktree хранится отдельно от state. Его распол�
 - после merge selected experiment -> task extension удаляет selected experiment branch и все остальные experiment branches этого task
 - после merge refactor -> task extension удаляет refactor branch
 - после merge task -> plan extension удаляет task branch и остаточные child branches этого task
-- после удаления всех child branches для task registry entry удаляется из `branchRegistry.tasks`
+- после удаления всех child branches для task registry entry удаляется из `managedBranches.tasks`
 
 Модель не выбирает merge target. Например, при `select_experiment` модель выбирает только `experimentId`, а extension берёт target из `plans/<plan-id>/state.json`:
 

@@ -194,8 +194,8 @@ async function createPlanWorktreeTool(
 		git: input.git,
 		projectPaths: input.projectPaths,
 		worktreePath: location,
-		branch: ready.state.branches.plan,
-		fromRef: ready.state.branches.base,
+		branch: ready.state.activeBranches.plan,
+		fromRef: ready.state.activeBranches.base,
 	});
 	const reality = await inspectPlannerGitReality({
 		git: input.git,
@@ -434,18 +434,18 @@ async function cleanupManagedBranchesTool(
 	input: PlannerGitToolExecutionInput,
 	ready: ReadyGitContext,
 ): Promise<PlannerGitToolExecutionResult> {
-	const branches = uniqueBranches([
-		ready.state.branches.currentExperiment,
-		ready.state.branches.selectedExperiment,
-		ready.state.branches.currentTask,
-		...Object.values(ready.state.branchRegistry.tasks).flatMap((registry) => [
+	const managedChildBranches = uniqueBranches([
+		ready.state.activeBranches.currentExperiment,
+		ready.state.activeBranches.selectedExperiment,
+		ready.state.activeBranches.currentTask,
+		...Object.values(ready.state.managedBranches.tasks).flatMap((registry) => [
 			registry.task,
 			...registry.experiments,
 			registry.selectedExperiment,
 			registry.refactor,
 		]),
 	]);
-	for (const branch of branches) {
+	for (const branch of managedChildBranches) {
 		await deleteManagedBranch({
 			git: input.git,
 			repoRoot: input.projectPaths.projectRoot,
@@ -457,13 +457,13 @@ async function cleanupManagedBranchesTool(
 		...ready.state,
 		activeTaskId: null,
 		activeExperimentId: null,
-		branches: {
-			...ready.state.branches,
+		activeBranches: {
+			...ready.state.activeBranches,
 			currentTask: null,
 			currentExperiment: null,
 			selectedExperiment: null,
 		},
-		branchRegistry: { ...ready.state.branchRegistry, tasks: {} },
+		managedBranches: { ...ready.state.managedBranches, tasks: {} },
 		mergeTargets: {
 			...ready.state.mergeTargets,
 			experimentToTask: null,
@@ -471,8 +471,8 @@ async function cleanupManagedBranchesTool(
 		},
 	};
 	await savePlanState(input.fs, ready.preflight.context.planPaths, state);
-	return applied(input.toolName, "Planner managed branches cleaned up.", {
-		deletedBranches: branches,
+	return applied(input.toolName, "Planner managed child branches cleaned up.", {
+		deletedBranches: managedChildBranches,
 		state,
 	});
 }
