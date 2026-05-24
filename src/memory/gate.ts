@@ -104,6 +104,8 @@ function buildMemoryUpdateInstruction(
 	return [
 		"Memory is stale. Update memory before compact or stage transition.",
 		`Files to reindex: ${freshness.filesToReindex.join(", ") || "(none)"}.`,
+		`New files: ${freshness.newFiles.join(", ") || "(none)"}.`,
+		`Missing indexed files: ${freshness.missingFiles.join(", ") || "(none)"}.`,
 		`Affected symbols: ${freshness.affectedSymbolIds.join(", ") || "(none)"}.`,
 		`Affected relations: ${freshness.affectedRelationIds.join(", ") || "(none)"}.`,
 		"Required checks: file_index, symbols, relations, effects.",

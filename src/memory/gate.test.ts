@@ -25,11 +25,17 @@ import {
 import {
 	initializeMemoryFiles,
 	readFileIndex,
+	readRelationIndex,
 	readSymbolIndex,
 	upsertFileEntries,
+	upsertRelationEntries,
 	upsertSymbolEntries,
 } from "./manager";
-import type { MemoryFileEntry, MemorySymbolEntry } from "./schema";
+import type {
+	MemoryFileEntry,
+	MemoryRelationEntry,
+	MemorySymbolEntry,
+} from "./schema";
 
 class MockGitRunner implements GitRunner {
 	constructor(private readonly files: string[]) {}
@@ -92,16 +98,22 @@ describe("memory gate", () => {
 		const fs = new MockPlannerFs();
 		const paths = await initializeTestMemory(fs);
 		await fs.writeText("/repo/app/src/config.ts", "export const config = 2;\n");
+		await fs.writeText("/repo/app/src/test.ts", "config;\n");
 		await upsertFileEntries(fs, paths, [
 			fileEntry("src/config.ts", "old-hash"),
+			fileEntry("src/test.ts", hashOf("config;\n")),
 		]);
 		await upsertSymbolEntries(fs, paths, [
 			symbolEntry("sym_config", "src/config.ts"),
+			symbolEntry("sym_test", "src/test.ts"),
+		]);
+		await upsertRelationEntries(fs, paths, [
+			relationEntry("rel_test_config", "sym_test", "sym_config", "src/test.ts"),
 		]);
 
 		const result = await inspectMemoryGate({
 			fs,
-			git: new MockGitRunner(["src/config.ts"]),
+			git: new MockGitRunner(["src/config.ts", "src/test.ts"]),
 			repoRoot: "/repo/app",
 			memoryPaths: paths,
 		});
@@ -111,9 +123,80 @@ describe("memory gate", () => {
 		expect(result.requiredChecks).toEqual(MEMORY_GATE_REQUIRED_CHECKS);
 		expect(result.freshness.filesToReindex).toEqual(["src/config.ts"]);
 		expect(result.freshness.affectedSymbolIds).toEqual(["sym_config"]);
+		expect(result.freshness.affectedRelationIds).toEqual(["rel_test_config"]);
 		expect(result.instruction).toContain("Required checks");
 		expect(result.instruction).toContain("effects");
 		expect(result.instruction).toContain('globalState="unknown"');
+	});
+
+	it("requires memory update for new files that are not in the file index yet", async () => {
+		const fs = new MockPlannerFs();
+		const paths = await initializeTestMemory(fs);
+		await fs.writeText("/repo/app/src/new.ts", "export const value = 1;\n");
+
+		const result = await inspectMemoryGate({
+			fs,
+			git: new MockGitRunner(["src/new.ts"]),
+			repoRoot: "/repo/app",
+			memoryPaths: paths,
+		});
+
+		expect(result.clean).toBe(false);
+		expect(result.nextAction).toBe("update_memory");
+		expect(result.requiredChecks).toEqual(MEMORY_GATE_REQUIRED_CHECKS);
+		expect(result.freshness.newFiles).toEqual(["src/new.ts"]);
+		expect(result.freshness.filesToReindex).toEqual(["src/new.ts"]);
+		expect(result.instruction).toContain("New files: src/new.ts.");
+	});
+
+	it("requires memory update for indexed files missing from the current snapshot", async () => {
+		const fs = new MockPlannerFs();
+		const paths = await initializeTestMemory(fs);
+		await upsertFileEntries(fs, paths, [
+			fileEntry("src/deleted.ts", "old-hash"),
+		]);
+		await upsertSymbolEntries(fs, paths, [
+			symbolEntry("sym_deleted", "src/deleted.ts"),
+		]);
+
+		const result = await applyMemoryGateFreshness({
+			fs,
+			git: new MockGitRunner([]),
+			repoRoot: "/repo/app",
+			memoryPaths: paths,
+			detectedAt: "2026-05-24T07:10:00.000Z",
+		});
+
+		expect(result.clean).toBe(false);
+		expect(result.freshness.missingFiles).toEqual(["src/deleted.ts"]);
+		expect(result.instruction).toContain(
+			"Missing indexed files: src/deleted.ts.",
+		);
+		expect((await readFileIndex(fs, paths))[0]).toMatchObject({
+			path: "src/deleted.ts",
+			status: "missing",
+		});
+		expect((await readSymbolIndex(fs, paths))[0]).toMatchObject({
+			id: "sym_deleted",
+			verification: { status: "missing" },
+		});
+	});
+
+	it("keeps gate blocked when git lists a file that is missing from disk", async () => {
+		const fs = new MockPlannerFs();
+		const paths = await initializeTestMemory(fs);
+
+		const result = await inspectMemoryGate({
+			fs,
+			git: new MockGitRunner(["src/missing-unindexed.ts"]),
+			repoRoot: "/repo/app",
+			memoryPaths: paths,
+		});
+
+		expect(result.clean).toBe(false);
+		expect(result.nextAction).toBe("update_memory");
+		expect(result.snapshot.missingFiles).toEqual(["src/missing-unindexed.ts"]);
+		expect(result.requiredChecks).toEqual(MEMORY_GATE_REQUIRED_CHECKS);
 	});
 
 	it("applies freshness so stale entries become dirty before model memory update", async () => {
@@ -144,6 +227,34 @@ describe("memory gate", () => {
 			id: "sym_config",
 			verification: { status: "stale" },
 		});
+	});
+
+	it("clean apply leaves indexes unchanged and does not require checks", async () => {
+		const fs = new MockPlannerFs();
+		const paths = await initializeTestMemory(fs);
+		await fs.writeText("/repo/app/src/config.ts", "export const config = 1;\n");
+		const file = fileEntry(
+			"src/config.ts",
+			hashOf("export const config = 1;\n"),
+		);
+		const symbol = symbolEntry("sym_config", "src/config.ts");
+		await upsertFileEntries(fs, paths, [file]);
+		await upsertSymbolEntries(fs, paths, [symbol]);
+
+		const result = await applyMemoryGateFreshness({
+			fs,
+			git: new MockGitRunner(["src/config.ts"]),
+			repoRoot: "/repo/app",
+			memoryPaths: paths,
+			detectedAt: "2026-05-24T07:20:00.000Z",
+		});
+
+		expect(result.clean).toBe(true);
+		expect(result.nextAction).toBe("continue");
+		expect(result.requiredChecks).toEqual([]);
+		expect(await readFileIndex(fs, paths)).toEqual([file]);
+		expect(await readSymbolIndex(fs, paths)).toEqual([symbol]);
+		expect(await readRelationIndex(fs, paths)).toEqual([]);
 	});
 });
 
@@ -191,6 +302,22 @@ function symbolEntry(id: string, path: string): MemorySymbolEntry {
 			fileHash: "old-hash",
 			status: "verified",
 		},
+	};
+}
+
+function relationEntry(
+	id: string,
+	from: string,
+	to: string | null,
+	evidencePath: string,
+): MemoryRelationEntry {
+	return {
+		id,
+		from,
+		to,
+		kind: "tests",
+		evidencePath,
+		evidenceSearchText: "config",
 	};
 }
 
