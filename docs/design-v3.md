@@ -1566,6 +1566,8 @@ memory checkpoint commit = commit, для которого indexes были за
 
 До commit обычные uncommitted edits не являются memory corruption. Они являются рабочим состоянием текущего step. После commit/merge git wrapper ставит `requiresMemoryUpdate=true`, и только тогда memory update становится обязательным gate.
 
+Memory checkpoint sync разрешён только на clean worktree. Если в worktree есть staged/unstaged/untracked изменения, `planner_memory_sync_checkpoint` обязан заблокироваться и сказать модели сначала сделать planner-controlled commit. Иначе memory может быть записана под содержимое файлов, которое ещё не закреплено в git `HEAD`.
+
 #### После planner commit
 
 Когда planner сам делает commit через wrapper:
@@ -1577,9 +1579,10 @@ memory checkpoint commit = commit, для которого indexes были за
 5. Если `clean=false`, перейти в memory/discovery update и не делать compact.
 6. Модель обновляет affected memory entries через memory batch tools.
 7. Проверить freshness ещё раз.
-8. Записать memory checkpoint с новым `HEAD`.
-9. Обновить `state.lastCheckpointCommit = HEAD`.
-10. Только после этого разрешить compact или переход stage.
+8. Проверить, что worktree clean.
+9. Записать memory checkpoint с новым `HEAD`.
+10. Обновить `state.lastCheckpointCommit = HEAD`.
+11. Только после этого разрешить compact или переход stage.
 
 То есть commit не завершает atomic step. Atomic step завершён только когда code, tests, git commit и memory checkpoint согласованы.
 

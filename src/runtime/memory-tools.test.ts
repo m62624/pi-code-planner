@@ -239,6 +239,41 @@ describe("planner memory tools", () => {
 		expect(result.status).toBe("blocked");
 		expect(result.text).toContain("blocked");
 	});
+
+	it("blocks checkpoint sync while the worktree is dirty even when memory hashes are fresh", async () => {
+		const fs = new MockPlannerFs();
+		const content = "export const value = 2;\n";
+		const setup = await createMemoryToolSetup(fs, {
+			state: {
+				lastCheckpointCommit: "old123",
+				requiresMemoryUpdate: true,
+				memoryUpdateReason: "planner_commit",
+			},
+			fileContent: content,
+			indexedHash: hashOf(content),
+			checkpointCommit: "old123",
+		});
+
+		const result = await executePlannerMemoryTool({
+			fs,
+			git: new MockGitRunner({
+				head: "new456",
+				status: " M src/a.ts",
+				files: ["src/a.ts"],
+			}),
+			projectPaths: setup.projectPaths,
+			toolName: "planner_memory_sync_checkpoint",
+			params: {},
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("worktree is dirty");
+		expect(await readPlanState(fs, setup.planPaths)).toMatchObject({
+			lastCheckpointCommit: "old123",
+			requiresMemoryUpdate: true,
+			memoryUpdateReason: "planner_commit",
+		});
+	});
 });
 
 async function createMemoryToolSetup(

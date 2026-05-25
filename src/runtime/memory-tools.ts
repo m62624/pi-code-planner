@@ -128,6 +128,13 @@ export async function executePlannerMemoryTool(
 			);
 		}
 		case "planner_memory_sync_checkpoint": {
+			if (preflight.gitReality?.isDirty) {
+				return blocked(
+					input.toolName,
+					"Cannot sync planner memory checkpoint while the worktree is dirty. Commit planner changes first with planner_git_commit, then update and verify memory for the new HEAD.",
+					{ gitReality: preflight.gitReality },
+				);
+			}
 			const inspection = await inspectMemoryGate({
 				fs: input.fs,
 				git: input.git,
