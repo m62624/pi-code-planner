@@ -54,6 +54,7 @@ export async function createPlanWorktree(
 		branch: input.branch,
 		fromRef: input.fromRef ?? null,
 	});
+	await input.fs.mkdirp(input.worktreePath);
 
 	return {
 		path: input.worktreePath,

@@ -12,6 +12,66 @@
 - Worktree удаляется
 - User получает: main (чистый) + готовую ветку
 
+### Plan bootstrap и cwd
+
+Plan bootstrap должен быть атомарным:
+
+```
+planner_create_plan
+  -> check git/project
+  -> create storage
+  -> create plan branch
+  -> create worktree immediately
+  -> save worktreePath into state.json
+  -> move state to discovery/read_project
+```
+
+До создания plan worktree модель не должна читать проект, писать код, создавать task или запускать discovery. Ранний init существует только внутри extension bootstrap.
+
+PI extension API не даёт прямой `ctx.setCwd()` для текущей сессии. `ctx.cwd` является текущей рабочей директорией session runtime, а built-in tools (`read`, `write`, `edit`, `bash`, `grep`, `find`, `ls`) привязаны к этому cwd.
+
+Рабочий способ сменить cwd из extension: переключиться на session file, чей session header содержит `cwd = worktreePath`.
+
+```
+create/open session jsonl with header cwd = <plan-worktree-path>
+ctx.switchSession(sessionFile, {
+  withSession: async (ctx) => {
+    // replacement ctx.cwd is the worktree cwd
+    // send planner resume/status instruction here
+  }
+})
+```
+
+Ограничения PI API:
+
+- `ctx.newSession()` не подходит для смены cwd: он создаёт новую session в текущем runtime cwd.
+- `ctx.switchSession(sessionPath)` подходит, если target session file уже содержит header с нужным cwd.
+- После успешного switch старые `pi`/`ctx` stale; продолжение делается только внутри `withSession`.
+- Если cwd из session header не существует, PI бросит missing cwd error.
+- Если extension создаёт новый session file сам, header должен быть записан физически до `ctx.switchSession`.
+
+Практический вывод для planner:
+
+1. `planner_create_plan` создаёт plan branch и worktree сразу.
+2. `planner_create_plan` сохраняет `worktreePath`, `currentBranch`, `lastCheckpointCommit`.
+3. `planner_create_plan` переводит state сразу в `discovery/read_project`.
+4. Planner создаёт или выбирает session file для worktree cwd.
+5. Planner переключает PI session на этот file через `ctx.switchSession`.
+6. После switch `planner_status`/resume-инструкция говорит модели начинать `discovery/read_project`.
+7. Если active plan есть, но `ctx.cwd !== state.worktreePath`, normal planner flow блокируется до переключения в worktree session.
+
+Успешное завершение плана:
+
+1. `done/present_result` показывает итог в planner worktree session.
+2. `done/await_user_acceptance` ждёт explicit accept от user.
+3. После accept extension export/merge plan branch в output branch исходного repo.
+4. Extension удаляет worktree и managed task/experiment/refactor branches.
+5. Plan branch/output branch остаётся в обычном git repo как результат.
+6. Extension переключает PI обратно в original session.
+7. Original session получает короткое сообщение: plan finished, output branch, cleanup status, что user может review/merge.
+
+Chat histories не merge-ятся. Original session хранит запрос и финальный handoff. Planner worktree session хранит рабочую историю. Источник истины — disk artifacts и git branch, а не объединённый чат.
+
 ### Почему
 - User не видит agent-хаос
 - User не мешает агенту
@@ -167,7 +227,7 @@ Git API — это внутренний слой extension. Модель не д
 
 - `planner_git_inspect` — безопасно показать branch/head/dirty/conflicts.
 - `planner_git_init` — выполнить `git init` на init/check_git.
-- `planner_git_create_plan_worktree` — создать plan worktree и plan branch.
+- `planner_git_create_plan_worktree` — legacy/recovery wrapper для создания plan worktree, если bootstrap был восстановлен вручную. В normal flow worktree создаёт `planner_create_plan`.
 - `planner_git_commit` — выполнить `git add -A && git commit`; после этого `requiresMemoryUpdate=true`.
 - `planner_git_create_task_branch` — создать/switch task branch.
 - `planner_git_create_experiment_branch` — создать/switch experiment branch.
@@ -203,7 +263,7 @@ Git API — это внутренний слой extension. Модель не д
 - Один plan = один worktree
 - Task, experiment и refactor — это ветки внутри plan worktree, а не отдельные worktrees
 - Default path: `<project-root>/.pi/pi-code-planner/worktrees/<plan-id>`
-- User может выбрать custom worktree root при создании плана
+- User может выбрать custom worktree root заранее через global/project `settings.json`
 
 #### `git worktree remove <path>`
 - Удаляет worktree после завершения плана
@@ -341,9 +401,9 @@ Plan worktree хранится отдельно от state. Его распол�
 Правила:
 - один plan создаёт ровно один worktree
 - task, experiment и refactor являются git-ветками внутри этого worktree
-- расположение worktree выбирается при создании plan: `project-local` по умолчанию или `custom`
+- расположение worktree выбирается из settings, а не из model-facing tool params
 - если используется project-local worktree, extension автоматически добавляет `.pi/pi-code-planner/worktrees/` в `.gitignore`
-- если используется custom worktree root, extension не редактирует `.gitignore`
+- если используется custom worktree settings root, extension не редактирует `.gitignore`
 - extension не должен автоматически игнорировать всю `.pi/`, потому что пользователь может хранить там полезные project-local настройки
 - `.gitignore` проверяется по полной строке, а не substring match: `.pi/pi-code-planner/worktrees/` и `./.pi/pi-code-planner/worktrees/` считаются одним правилом
 - если точное правило уже есть, extension не меняет `.gitignore`
@@ -351,6 +411,78 @@ Plan worktree хранится отдельно от state. Его распол�
 - если точного правила нет, extension добавляет `.pi/pi-code-planner/worktrees/` в конец `.gitignore`
 - project-local instructions живут в `.pi/pi-code-planner/instructions/append/`; extension не добавляет эту папку в `.gitignore` автоматически
 - пользователь сам решает, версионировать project-local instructions или держать их локально
+
+### `settings.json`
+
+Global settings:
+
+```
+getAgentDir()/extensions/pi-code-planner/settings.json
+```
+
+Project override settings:
+
+```
+<project-root>/.pi/pi-code-planner/settings.json
+```
+
+Global settings создаются extension автоматически, если файл отсутствует или был удалён. Project settings являются optional override: extension не обязан создавать их в каждом проекте, чтобы не загрязнять repo.
+
+Effective settings строятся так:
+
+```
+default settings -> global settings -> project settings
+```
+
+Для `worktree` override применяется целиком:
+
+- если project settings содержит `worktree`, используется project `worktree`
+- если project settings не содержит `worktree`, используется global `worktree`
+- если global settings отсутствовал, extension пересоздаёт его с default `worktree`
+
+Default:
+
+```json
+{
+  "worktree": {
+    "mode": "project-local"
+  }
+}
+```
+
+Custom global root:
+
+```json
+{
+  "worktree": {
+    "mode": "custom",
+    "root": "/mnt/fast/pi-worktrees"
+  }
+}
+```
+
+Custom path layout:
+
+```
+<root>/<project-id>/<plan-id>
+```
+
+Пример:
+
+```
+/mnt/fast/pi-worktrees/project-a-8f31aa10/plan-1
+/mnt/fast/pi-worktrees/project-a-8f31aa10/plan-2
+/mnt/fast/pi-worktrees/project-b-91bc22de/plan-1
+```
+
+Инварианты:
+
+- `planner_create_plan` не принимает public `worktreeRoot`
+- модель не выбирает filesystem layout
+- settings влияют только на новые plans
+- после создания plan итоговый путь фиксируется в `plans/<plan-id>/state.json` как `worktreePath`
+- изменение settings не переносит существующие worktrees
+- project settings может переопределить global worktree policy для конкретного repo
 
 ### `project.json`
 
@@ -963,6 +1095,8 @@ Policy output:
 ### Stage 1: `init`
 
 Цель: подготовить project storage, git и plan worktree.
+
+В normal flow эта стадия выполняется атомарно внутри `planner_create_plan`. Модель не проходит init руками. После успешного `planner_create_plan` state уже должен быть `discovery/read_project`.
 
 Подшаги:
 

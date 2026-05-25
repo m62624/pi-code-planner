@@ -325,7 +325,7 @@ function planToolLabel(toolName: PlannerPlanToolName): string {
 function planToolDescription(toolName: PlannerPlanToolName): string {
 	switch (toolName) {
 		case "planner_create_plan":
-			return "Create project storage, plan files, initial state, memory files, and activate the planner plan.";
+			return "Create project storage, plan files, memory files, the plan branch/worktree, and activate discovery.";
 	}
 }
 

@@ -4,6 +4,8 @@ import { DEFAULT_INSTRUCTIONS } from "../instructions/defaults";
 import { syncInstructionFiles } from "../instructions/manager";
 import { createInstructionPaths } from "../instructions/paths";
 import { initializeMemoryFiles } from "../memory/manager";
+import { loadEffectivePlannerSettings } from "../settings/manager";
+import type { WorktreeSettings } from "../settings/schema";
 import type { PlannerFs } from "../storage/fs";
 import { sanitizeIdPart } from "../storage/ids";
 import {
@@ -24,6 +26,12 @@ import {
 	initializePlanState,
 	readPlanStateIfExists,
 } from "../storage/state-store";
+import { createPlanWorktree } from "../worktree/manager";
+import {
+	createCustomWorktreeLocation,
+	createProjectLocalWorktreeLocation,
+} from "../worktree/paths";
+import { inspectPlannerGitReality } from "./git-state-sync";
 
 export const PLANNER_PLAN_TOOL_NAMES = ["planner_create_plan"] as const;
 
@@ -90,13 +98,45 @@ async function createPlanTool(
 		"main";
 	const planBranch = planBranchName(planId);
 	const plan = createPlanRecord({ planId, title, status: "active" });
-	const state = createInitialPlanState({ baseBranch, planBranch });
+	const settings = await loadEffectivePlannerSettings({
+		fs: input.fs,
+		projectPaths: input.projectPaths,
+	});
+	const worktreeLocation = worktreeLocationForPlan({
+		projectPaths: input.projectPaths,
+		planId,
+		worktree: settings.effective.worktree,
+	});
 
 	await syncInstructionFiles(
 		input.fs,
 		createInstructionPaths(input.projectPaths),
 		DEFAULT_INSTRUCTIONS,
 	);
+	const worktree = await createPlanWorktree({
+		fs: input.fs,
+		git: input.git,
+		projectPaths: input.projectPaths,
+		worktreePath: worktreeLocation,
+		branch: planBranch,
+		fromRef: baseBranch,
+	});
+	const reality = await inspectPlannerGitReality({
+		git: input.git,
+		repoRoot: worktreeLocation,
+	});
+	const state = {
+		...createInitialPlanState({
+			baseBranch,
+			planBranch,
+			worktreePath: worktreeLocation,
+		}),
+		stage: "discovery",
+		step: "read_project",
+		stepStatus: "pending",
+		currentBranch: reality.branch,
+		lastCheckpointCommit: reality.headCommit,
+	} as const;
 	await initializePlanFiles(input.fs, planPaths, plan);
 	await initializePlanState(input.fs, planPaths, state);
 	const memoryPaths = await initializeMemoryFiles(input.fs, planPaths);
@@ -114,7 +154,8 @@ async function createPlanTool(
 			`Plan: ${planId}`,
 			`Title: ${title}`,
 			`Base branch: ${baseBranch}`,
-			"Next: call planner_status, then follow init/check_project.",
+			`Worktree: ${worktreeLocation}`,
+			"Next: switch/open Pi in the planner worktree session, call planner_status, then start discovery/read_project.",
 		].join("\n"),
 		{
 			project: nextProject,
@@ -122,8 +163,26 @@ async function createPlanTool(
 			state,
 			planPaths,
 			memoryPaths,
+			worktree,
+			settings,
 		},
 	);
+}
+
+function worktreeLocationForPlan(input: {
+	projectPaths: ProjectStoragePaths;
+	planId: string;
+	worktree: WorktreeSettings;
+}): string {
+	if (input.worktree.mode === "custom") {
+		return createCustomWorktreeLocation({
+			root: input.worktree.root,
+			projectId: input.projectPaths.projectId,
+			planId: input.planId,
+		}).path;
+	}
+	return createProjectLocalWorktreeLocation(input.projectPaths, input.planId)
+		.path;
 }
 
 async function safeCurrentBranch(

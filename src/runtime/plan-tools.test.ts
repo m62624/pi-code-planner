@@ -30,20 +30,29 @@ import { executePlannerPlanTool } from "./plan-tools";
 
 class MockGitRunner implements GitRunner {
 	failCurrentBranch = false;
+	readonly calls: Array<{ name: string; input: unknown }> = [];
+	private branch: string;
 
-	constructor(private readonly branch = "main") {}
+	constructor(branch = "main") {
+		this.branch = branch;
+	}
 
-	async init(_input: GitRepoInput): Promise<void> {}
-	async currentBranch(_input: GitRepoInput): Promise<string> {
-		if (this.failCurrentBranch) {
+	async init(input: GitRepoInput): Promise<void> {
+		this.calls.push({ name: "init", input });
+	}
+	async currentBranch(input: GitRepoInput): Promise<string> {
+		this.calls.push({ name: "currentBranch", input });
+		if (this.failCurrentBranch && input.repoRoot === "/repo/app") {
 			throw new Error("not a git repository");
 		}
 		return this.branch;
 	}
-	async headCommit(_input: GitRepoInput): Promise<string> {
+	async headCommit(input: GitRepoInput): Promise<string> {
+		this.calls.push({ name: "headCommit", input });
 		return "abc123";
 	}
-	async statusPorcelain(_input: GitRepoInput): Promise<string> {
+	async statusPorcelain(input: GitRepoInput): Promise<string> {
+		this.calls.push({ name: "statusPorcelain", input });
 		return "";
 	}
 	async diffStat(_input: GitRepoInput): Promise<string> {
@@ -64,7 +73,10 @@ class MockGitRunner implements GitRunner {
 	async stageAll(_input: GitRepoInput): Promise<void> {}
 	async commit(_input: GitCommitInput): Promise<void> {}
 	async merge(_input: GitMergeInput): Promise<void> {}
-	async worktreeAdd(_input: GitWorktreeAddInput): Promise<void> {}
+	async worktreeAdd(input: GitWorktreeAddInput): Promise<void> {
+		this.calls.push({ name: "worktreeAdd", input });
+		this.branch = input.branch;
+	}
 	async worktreeRemove(_input: GitWorktreeRemoveInput): Promise<void> {}
 }
 
@@ -109,15 +121,16 @@ describe("planner plan tools", () => {
 			tasks: [],
 		});
 		await expect(readPlanState(fs, planPaths)).resolves.toMatchObject({
-			stage: "init",
-			step: "check_project",
+			stage: "discovery",
+			step: "read_project",
 			stepStatus: "pending",
 			activeBranches: {
 				base: "feature/base",
 				plan: "plan/api-audit",
 			},
-			worktreePath: null,
-			lastCheckpointCommit: null,
+			worktreePath: "/repo/app/.pi/pi-code-planner/worktrees/api-audit",
+			currentBranch: "plan/api-audit",
+			lastCheckpointCommit: "abc123",
 			requiresMemoryUpdate: false,
 		});
 		await expect(readMemoryCheckpoint(fs, memoryPaths)).resolves.toMatchObject({
@@ -125,6 +138,12 @@ describe("planner plan tools", () => {
 		});
 		expect(fs.snapshot()[planPaths.planMd]).toBe("");
 		expect(fs.snapshot()[planPaths.discoveryMd]).toBe("");
+		expect(fs.snapshot()["/repo/app/.gitignore"]).toBe(
+			".pi/pi-code-planner/worktrees/\n",
+		);
+		await expect(
+			fs.exists("/repo/app/.pi/pi-code-planner/worktrees/api-audit"),
+		).resolves.toBe(true);
 
 		const instructionPaths = createInstructionPaths(projectPaths);
 		for (const key of INSTRUCTION_KEYS) {
@@ -141,6 +160,7 @@ describe("planner plan tools", () => {
 
 	it("uses explicit baseBranch and blocks accidental overwrite of an active plan", async () => {
 		const fs = new MockPlannerFs();
+		const git = new MockGitRunner("ignored");
 		const projectPaths = createProjectStoragePaths({
 			agentDir: "/agent",
 			projectRoot: "/repo/app",
@@ -148,7 +168,7 @@ describe("planner plan tools", () => {
 
 		const created = await executePlannerPlanTool({
 			fs,
-			git: new MockGitRunner("ignored"),
+			git,
 			projectPaths,
 			toolName: "planner_create_plan",
 			params: {
@@ -164,6 +184,15 @@ describe("planner plan tools", () => {
 			activeBranches: {
 				base: "release/1",
 				plan: "plan/plan-a",
+			},
+		});
+		expect(git.calls).toContainEqual({
+			name: "worktreeAdd",
+			input: {
+				repoRoot: "/repo/app",
+				path: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
+				branch: "plan/plan-a",
+				fromRef: "release/1",
 			},
 		});
 
@@ -207,6 +236,99 @@ describe("planner plan tools", () => {
 			readPlanState(fs, createPlanStoragePaths(projectPaths, "plan-a")),
 		).resolves.toMatchObject({
 			activeBranches: { base: "main" },
+		});
+	});
+
+	it("uses project settings custom worktree settings without adding a project-local gitignore rule", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner("main");
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		await fs.writeTextAtomic(
+			"/repo/app/.pi/pi-code-planner/settings.json",
+			`${JSON.stringify({
+				worktree: {
+					mode: "custom",
+					root: "/tmp/planner-worktrees",
+				},
+			})}\n`,
+		);
+
+		const result = await executePlannerPlanTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_create_plan",
+			params: {
+				planId: "plan-a",
+				title: "Plan A",
+			},
+		});
+
+		expect(result.status).toBe("applied");
+		const expectedPath = `/tmp/planner-worktrees/${projectPaths.projectId}/plan-a`;
+		await expect(
+			readPlanState(fs, createPlanStoragePaths(projectPaths, "plan-a")),
+		).resolves.toMatchObject({
+			worktreePath: expectedPath,
+		});
+		expect(git.calls).toContainEqual({
+			name: "worktreeAdd",
+			input: {
+				repoRoot: "/repo/app",
+				path: expectedPath,
+				branch: "plan/plan-a",
+				fromRef: "main",
+			},
+		});
+		await expect(fs.exists("/repo/app/.gitignore")).resolves.toBe(false);
+	});
+
+	it("uses global settings custom worktree settings when project settings are absent", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner("main");
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		await fs.writeTextAtomic(
+			"/agent/extensions/pi-code-planner/settings.json",
+			`${JSON.stringify({
+				worktree: {
+					mode: "custom",
+					root: "/global/worktrees",
+				},
+			})}\n`,
+		);
+
+		const result = await executePlannerPlanTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_create_plan",
+			params: {
+				planId: "plan-a",
+				title: "Plan A",
+			},
+		});
+
+		expect(result.status).toBe("applied");
+		const expectedPath = `/global/worktrees/${projectPaths.projectId}/plan-a`;
+		await expect(
+			readPlanState(fs, createPlanStoragePaths(projectPaths, "plan-a")),
+		).resolves.toMatchObject({
+			worktreePath: expectedPath,
+		});
+		expect(git.calls).toContainEqual({
+			name: "worktreeAdd",
+			input: {
+				repoRoot: "/repo/app",
+				path: expectedPath,
+				branch: "plan/plan-a",
+				fromRef: "main",
+			},
 		});
 	});
 
