@@ -26,6 +26,7 @@ describe("planner runtime reality evaluator", () => {
 		} satisfies Partial<PlannerRuntimeDecision>);
 		expect(decision.allowedTools).toEqual([
 			"planner_status",
+			"planner_create_plan",
 		] satisfies PlannerWrapperTool[]);
 	});
 

@@ -19,6 +19,11 @@ import {
 	type PlannerMemoryToolName,
 } from "./runtime/memory-tools";
 import {
+	executePlannerPlanTool,
+	PLANNER_PLAN_TOOL_NAMES,
+	type PlannerPlanToolName,
+} from "./runtime/plan-tools";
+import {
 	formatPlannerPreflightStatus,
 	runPlannerPreflight,
 } from "./runtime/preflight";
@@ -34,6 +39,17 @@ import { readProjectRecordIfExists } from "./storage/project-store";
 const EMPTY_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {},
+	additionalProperties: false,
+} as const;
+
+const CREATE_PLAN_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		planId: { type: "string" },
+		title: { type: "string" },
+		baseBranch: { type: "string" },
+	},
+	required: ["planId", "title"],
 	additionalProperties: false,
 } as const;
 
@@ -165,6 +181,34 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 		},
 	});
 
+	for (const toolName of PLANNER_PLAN_TOOL_NAMES) {
+		pi.registerTool({
+			name: toolName,
+			label: planToolLabel(toolName),
+			description: planToolDescription(toolName),
+			promptSnippet:
+				"Use planner_create_plan before project reads when the user asks to start a planner-controlled task.",
+			parameters: CREATE_PLAN_TOOL_PARAMETERS as never,
+			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const result = await executePlannerPlanTool({
+					fs: createNodeFs(),
+					git: new NodeGitRunner(),
+					projectPaths: createProjectStoragePaths({
+						agentDir: getAgentDir(),
+						projectRoot: ctx.cwd,
+					}),
+					toolName,
+					params,
+				});
+
+				return {
+					content: [{ type: "text", text: result.text }],
+					details: result,
+				};
+			},
+		});
+	}
+
 	for (const toolName of PLANNER_WORKFLOW_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
@@ -269,6 +313,20 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 			};
 		}
 	});
+}
+
+function planToolLabel(toolName: PlannerPlanToolName): string {
+	switch (toolName) {
+		case "planner_create_plan":
+			return "Planner Create Plan";
+	}
+}
+
+function planToolDescription(toolName: PlannerPlanToolName): string {
+	switch (toolName) {
+		case "planner_create_plan":
+			return "Create project storage, plan files, initial state, memory files, and activate the planner plan.";
+	}
 }
 
 function gitToolLabel(toolName: PlannerGitToolName): string {
@@ -748,6 +806,15 @@ export {
 	executePlannerMemoryTool,
 	PLANNER_MEMORY_TOOL_NAMES,
 } from "./runtime/memory-tools";
+export type {
+	PlannerPlanToolExecutionInput,
+	PlannerPlanToolExecutionResult,
+	PlannerPlanToolName,
+} from "./runtime/plan-tools";
+export {
+	executePlannerPlanTool,
+	PLANNER_PLAN_TOOL_NAMES,
+} from "./runtime/plan-tools";
 export type {
 	PlannerRuntimeAction,
 	PlannerRuntimeDecision,

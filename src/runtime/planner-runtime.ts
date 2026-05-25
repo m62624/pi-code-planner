@@ -61,6 +61,7 @@ export interface PlannerRuntimeDecision {
 
 const STATUS_ONLY_TOOLS = [
 	"planner_status",
+	"planner_create_plan",
 ] as const satisfies readonly PlannerWrapperTool[];
 
 const RECOVERY_TOOLS = [

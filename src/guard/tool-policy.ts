@@ -6,6 +6,7 @@ import type {
 
 export const PLANNER_WRAPPER_TOOLS = [
 	"planner_status",
+	"planner_create_plan",
 	"planner_git_inspect",
 	"planner_git_init",
 	"planner_git_create_plan_worktree",
