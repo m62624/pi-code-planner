@@ -1,10 +1,20 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import {
+	mkdir,
+	readFile,
+	rename,
+	rm,
+	stat,
+	unlink,
+	writeFile,
+} from "node:fs/promises";
 import { dirname } from "node:path";
 
 export interface PlannerFs {
 	exists(path: string): Promise<boolean>;
 	mkdirp(path: string): Promise<void>;
 	readText(path: string): Promise<string>;
+	removeDir(path: string): Promise<void>;
+	removeFile(path: string): Promise<void>;
 	writeText(path: string, content: string): Promise<void>;
 	writeTextAtomic(path: string, content: string): Promise<void>;
 }
@@ -13,7 +23,7 @@ export function createNodeFs(): PlannerFs {
 	return {
 		async exists(path) {
 			try {
-				await readFile(path);
+				await stat(path);
 				return true;
 			} catch (error) {
 				if (isNodeError(error) && error.code === "ENOENT") {
@@ -27,6 +37,19 @@ export function createNodeFs(): PlannerFs {
 		},
 		async readText(path) {
 			return await readFile(path, "utf8");
+		},
+		async removeDir(path) {
+			await rm(path, { recursive: true, force: true });
+		},
+		async removeFile(path) {
+			try {
+				await unlink(path);
+			} catch (error) {
+				if (isNodeError(error) && error.code === "ENOENT") {
+					return;
+				}
+				throw error;
+			}
 		},
 		async writeText(path, content) {
 			await mkdir(dirname(path), { recursive: true });

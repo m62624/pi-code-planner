@@ -33,6 +33,24 @@ export class MockPlannerFs implements PlannerFs {
 		return value;
 	}
 
+	async removeDir(path: string): Promise<void> {
+		const key = normalize(path);
+		for (const file of [...this.files.keys()]) {
+			if (file === key || file.startsWith(`${key}/`)) {
+				this.files.delete(file);
+			}
+		}
+		for (const dir of [...this.dirs]) {
+			if (dir === key || dir.startsWith(`${key}/`)) {
+				this.dirs.delete(dir);
+			}
+		}
+	}
+
+	async removeFile(path: string): Promise<void> {
+		this.files.delete(normalize(path));
+	}
+
 	async writeText(path: string, content: string): Promise<void> {
 		await this.mkdirp(dirname(path));
 		this.files.set(normalize(path), content);

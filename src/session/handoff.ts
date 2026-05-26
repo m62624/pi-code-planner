@@ -66,3 +66,17 @@ export function buildPlannerHandoffPrompt(input: {
 		"Do not use raw git while the planner plan is active.",
 	].join("\n");
 }
+
+export function buildPlannerResumePrompt(input: {
+	planId: string;
+	worktreePath: string;
+}): string {
+	return [
+		`Planner plan ${input.planId} is now active and this session is in its planner worktree.`,
+		`Worktree: ${input.worktreePath}`,
+		"",
+		"Call planner_status now.",
+		"Resume only from the stage/step reported by planner_status.",
+		"Do not use raw git while the planner plan is active.",
+	].join("\n");
+}

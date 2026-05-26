@@ -33,6 +33,7 @@ import {
 	formatPlannerPreflightStatus,
 	runPlannerPreflight,
 } from "./runtime/preflight";
+import { executePlannerUserCommand } from "./runtime/user-commands";
 import {
 	executePlannerWorkflowTool,
 	PLANNER_WORKFLOW_TOOL_NAMES,
@@ -40,6 +41,7 @@ import {
 } from "./runtime/workflow-tools";
 import {
 	buildPlannerHandoffPrompt,
+	buildPlannerResumePrompt,
 	createPlannerHandoffSession,
 } from "./session/handoff";
 import { createNodeFs } from "./storage/fs";
@@ -270,6 +272,119 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 					);
 				},
 			} as PlannerSwitchSessionOptionsWithCwdOverride);
+		},
+	});
+
+	pi.registerCommand("planner-list", {
+		description: "List planner plans for the current project.",
+		handler: async (_args, ctx) => {
+			const result = await executePlannerUserCommand({
+				fs: createNodeFs(),
+				git: new NodeGitRunner(),
+				projectPaths: await createRuntimeProjectPaths(ctx.cwd),
+				commandName: "planner_list",
+				params: {},
+			});
+			notifyPlannerCommandResult(ctx, result);
+		},
+	});
+
+	pi.registerCommand("planner-rename", {
+		description:
+			"Rename a planner plan title without changing its stable plan id.",
+		handler: async (args, ctx) => {
+			const parsed = parsePlannerCreateCommandArgs(args);
+			if (!parsed) {
+				ctx.ui.notify(
+					"Usage: /planner-rename [--id <plan-id>] <new-title>",
+					"error",
+				);
+				return;
+			}
+			const result = await executePlannerUserCommand({
+				fs: createNodeFs(),
+				git: new NodeGitRunner(),
+				projectPaths: await createRuntimeProjectPaths(ctx.cwd),
+				commandName: "planner_rename",
+				params: {
+					planId: parsed.planId,
+					title: parsed.title,
+				},
+			});
+			notifyPlannerCommandResult(ctx, result);
+		},
+	});
+
+	pi.registerCommand("planner-switch", {
+		description: "Switch to another planner plan in the current project.",
+		handler: async (args, ctx) => {
+			await ctx.waitForIdle();
+			const planId = parseSinglePlanIdArg(args);
+			if (!planId) {
+				ctx.ui.notify("Usage: /planner-switch <plan-id>", "error");
+				return;
+			}
+			const fs = createNodeFs();
+			const agentDir = getAgentDir();
+			const result = await executePlannerUserCommand({
+				fs,
+				git: new NodeGitRunner(),
+				projectPaths: await resolveProjectStoragePaths({
+					fs,
+					agentDir,
+					cwd: ctx.cwd,
+				}),
+				commandName: "planner_switch",
+				params: { planId },
+			});
+			if (result.status !== "applied") {
+				ctx.ui.notify(result.text, "error");
+				return;
+			}
+			const details = result.details as {
+				worktreePath?: string | null;
+			};
+			if (!details.worktreePath) {
+				ctx.ui.notify("Planner switch did not return worktreePath.", "error");
+				return;
+			}
+			const worktreePath = details.worktreePath;
+			const session = await createPlannerHandoffSession({
+				fs,
+				agentDir,
+				worktreePath,
+			});
+			await ctx.switchSession(session.sessionFile, {
+				cwdOverride: worktreePath,
+				withSession: async (replacementCtx) => {
+					await replacementCtx.sendUserMessage(
+						buildPlannerResumePrompt({
+							planId,
+							worktreePath,
+						}),
+					);
+				},
+			} as PlannerSwitchSessionOptionsWithCwdOverride);
+		},
+	});
+
+	pi.registerCommand("planner-delete", {
+		description:
+			"Delete an inactive clean planner plan and its managed worktree files.",
+		handler: async (args, ctx) => {
+			const planId = parseSinglePlanIdArg(args);
+			if (!planId) {
+				ctx.ui.notify("Usage: /planner-delete <plan-id>", "error");
+				return;
+			}
+			const result = await executePlannerUserCommand({
+				fs: createNodeFs(),
+				git: new NodeGitRunner(),
+				projectPaths: await createRuntimeProjectPaths(ctx.cwd),
+				commandName: "planner_delete",
+				params: { planId },
+			});
+			notifyPlannerCommandResult(ctx, result);
 		},
 	});
 
@@ -679,6 +794,18 @@ function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
+function parseSinglePlanIdArg(args: string): string | null {
+	const trimmed = args.trim();
+	return trimmed.length > 0 && !/\s/.test(trimmed) ? trimmed : null;
+}
+
+function notifyPlannerCommandResult(
+	ctx: ExtensionCommandContext,
+	result: { status: "applied" | "blocked"; text: string },
+): void {
+	ctx.ui.notify(result.text, result.status === "applied" ? "info" : "error");
+}
+
 export { EXTENSION_NAME, SCHEMA_VERSION } from "./constants";
 export {
 	experimentBranchName,
@@ -987,6 +1114,13 @@ export {
 	getAllowedPlannerStateTransitionTypes,
 } from "./runtime/state-transition";
 export type {
+	PlannerListEntry,
+	PlannerUserCommandInput,
+	PlannerUserCommandName,
+	PlannerUserCommandResult,
+} from "./runtime/user-commands";
+export { executePlannerUserCommand } from "./runtime/user-commands";
+export type {
 	PlannerWorkflowToolExecutionInput,
 	PlannerWorkflowToolExecutionResult,
 	PlannerWorkflowToolName,
@@ -1002,6 +1136,7 @@ export type {
 } from "./session/handoff";
 export {
 	buildPlannerHandoffPrompt,
+	buildPlannerResumePrompt,
 	createPiSessionDir,
 	createPlannerHandoffSession,
 } from "./session/handoff";

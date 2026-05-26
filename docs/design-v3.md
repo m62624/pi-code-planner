@@ -75,6 +75,15 @@ ctx.switchSession(sessionFile, {
 
 Сам `planner_create_plan` tool остаётся доступен как низкоуровневый wrapper, но он не может делать `switchSession`, потому что PI даёт `switchSession` только command context.
 
+User-level plan commands:
+
+- `/planner-list` — читает project storage через runtime resolver и показывает все plans текущего original project. Команда должна работать одинаково из original cwd и из любого planner worktree cwd.
+- `/planner-rename [--id <plan-id>] <new-title>` — меняет только human title в `plan.json` и `project.json.plans[]`. Не меняет `planId`, директорию плана, branch names или worktree path.
+- `/planner-switch <plan-id>` — переключает `project.json.activePlanId`, затем делает session handoff в `state.worktreePath` target plan. Перед switch проверяет текущий active plan: если его worktree dirty, step running, broken или requires user decision, switch блокируется.
+- `/planner-delete <plan-id>` — user command only. Active plan удалить нельзя. Inactive plan удаляется только если его worktree clean или уже missing. Команда удаляет managed worktree, managed child branches, `plans/<plan-id>/`, summary из `project.json.plans[]` и worktree-index. Protected plan branch не удаляется этой командой.
+
+Эти команды не являются model tools. Они нужны user для навигации и уборки plans. Model workflow по-прежнему должен идти через planner tools и `planner_status`.
+
 PI session JSONL хранится там же, где PI хранит обычные chats:
 
 ```

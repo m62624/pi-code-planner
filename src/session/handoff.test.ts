@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MockPlannerFs } from "../test/mock-fs";
 import {
 	buildPlannerHandoffPrompt,
+	buildPlannerResumePrompt,
 	createPiSessionDir,
 	createPlannerHandoffSession,
 } from "./handoff";
@@ -72,5 +73,14 @@ describe("planner session handoff", () => {
 				worktreePath: "/repo/worktree",
 			}),
 		).toContain("Call planner_status now.");
+	});
+
+	it("builds the resume prompt for switching between planner worktrees", () => {
+		expect(
+			buildPlannerResumePrompt({
+				planId: "plan-b",
+				worktreePath: "/repo/worktree-b",
+			}),
+		).toContain("Resume only from the stage/step reported by planner_status.");
 	});
 });
