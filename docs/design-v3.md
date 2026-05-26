@@ -60,6 +60,62 @@ ctx.switchSession(sessionFile, {
 6. После switch `planner_status`/resume-инструкция говорит модели начинать `discovery/read_project`.
 7. Если active plan есть, но `ctx.cwd !== state.worktreePath`, normal planner flow блокируется до переключения в worktree session.
 
+`/planner-create <plan-id> <title>` — user command, а не model tool. Он выполняет полный bootstrap и session handoff:
+
+1. ждёт idle через `ctx.waitForIdle()`;
+2. вызывает внутренний `planner_create_plan`;
+3. резервирует путь PI session JSONL для `worktreePath`;
+4. вызывает `ctx.switchSession(sessionFile, { cwdOverride: worktreePath })`;
+5. через `withSession` отправляет первое сообщение в worktree session: вызвать `planner_status` и начать `discovery/read_project`.
+
+Сам `planner_create_plan` tool остаётся доступен как низкоуровневый wrapper, но он не может делать `switchSession`, потому что PI даёт `switchSession` только command context.
+
+PI session JSONL хранится там же, где PI хранит обычные chats:
+
+```
+getAgentDir()/sessions/<encoded-worktree-cwd>/<timestamp>_<session-id>.jsonl
+```
+
+Физический JSONL не пишется заранее. Extension только создаёт sessions directory и выбирает будущий session path. Это важно, потому что PI сам управляет flush/persist логикой session file. Если заранее записать header-only JSONL, PI может позже дописать header повторно при первом assistant response.
+
+Switch выполняется через runtime option `cwdOverride`, который есть в PI runtime `switchSession`, но не описан в public `ExtensionCommandContext` type. Мы используем его только в command handoff, потому что без него невозможно создать новую session в другом cwd без предварительного физического JSONL.
+
+PI сам запишет валидный header, когда session начнёт persist. Extension не полагается на кастомные поля внутри PI session header:
+
+```json
+{"type":"session","version":3,"id":"...","timestamp":"...","cwd":"<worktreePath>"}
+```
+
+Первое user message добавляется после switch через `withSession`.
+
+Чтобы planner tools понимали original project, когда `ctx.cwd` уже равен worktree path, extension пишет worktree index:
+
+```
+getAgentDir()/extensions/pi-code-planner/worktree-index/<hash(worktreePath)>.json
+```
+
+Index содержит:
+
+```json
+{
+  "schemaVersion": 1,
+  "worktreePath": "<worktreePath>",
+  "projectRoot": "<originalProjectRoot>",
+  "projectId": "<projectId>",
+  "planId": "<planId>",
+  "originalSessionFile": "<original-session.jsonl or null>"
+}
+```
+
+`originalSessionFile` хранится в planner-controlled index, а не в PI JSONL header. Это нужно для финального возврата в исходную session после `done/cleanup_plan_files`. Если исходная session была ephemeral и PI вернул `undefined`, поле сохраняется как `null`; в таком случае финальный возврат делается через новое короткое сообщение в текущей worktree session или user command.
+
+Runtime path resolution:
+
+1. если `ctx.cwd` сам является original project и там есть `project.json`, использовать его;
+2. иначе искать `worktree-index` по `ctx.cwd`;
+3. если index найден, использовать `projectRoot` из него;
+4. если index не найден, считать `ctx.cwd` обычным project root.
+
 Успешное завершение плана:
 
 1. `done/present_result` показывает итог в planner worktree session.

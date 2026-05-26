@@ -1,8 +1,10 @@
 import {
 	type ExtensionAPI,
+	type ExtensionCommandContext,
 	getAgentDir,
 	isToolCallEventType,
 } from "@earendil-works/pi-coding-agent";
+import { SCHEMA_VERSION } from "./constants";
 import { NodeGitRunner } from "./git/node-runner";
 import {
 	checkRawGitAllowed,
@@ -32,15 +34,24 @@ import {
 	PLANNER_WORKFLOW_TOOL_NAMES,
 	type PlannerWorkflowToolName,
 } from "./runtime/workflow-tools";
+import {
+	buildPlannerHandoffPrompt,
+	createPlannerHandoffSession,
+} from "./session/handoff";
 import { createNodeFs } from "./storage/fs";
-import { createProjectStoragePaths } from "./storage/paths";
+import { resolveProjectStoragePaths } from "./storage/project-resolver";
 import { readProjectRecordIfExists } from "./storage/project-store";
+import { saveWorktreeProjectIndex } from "./storage/worktree-index";
 
 const EMPTY_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {},
 	additionalProperties: false,
 } as const;
+
+type PlannerSwitchSessionOptionsWithCwdOverride = NonNullable<
+	Parameters<ExtensionCommandContext["switchSession"]>[1]
+> & { cwdOverride: string };
 
 const CREATE_PLAN_TOOL_PARAMETERS = {
 	type: "object",
@@ -162,6 +173,81 @@ const GIT_FORCE_TOOL_PARAMETERS = {
 } as const;
 
 export default function piCodePlannerExtension(pi: ExtensionAPI): void {
+	pi.registerCommand("planner-create", {
+		description:
+			"Create a planner plan, create its worktree, and switch Pi into the worktree session.",
+		handler: async (args, ctx) => {
+			await ctx.waitForIdle();
+			const parsed = parsePlannerCreateCommandArgs(args);
+			if (!parsed) {
+				ctx.ui.notify("Usage: /planner-create <plan-id> <title>", "error");
+				return;
+			}
+
+			const fs = createNodeFs();
+			const agentDir = getAgentDir();
+			const projectPaths = await resolveProjectStoragePaths({
+				fs,
+				agentDir,
+				cwd: ctx.cwd,
+			});
+			const result = await executePlannerPlanTool({
+				fs,
+				git: new NodeGitRunner(),
+				projectPaths,
+				toolName: "planner_create_plan",
+				params: parsed,
+			});
+
+			if (result.status !== "applied") {
+				ctx.ui.notify(result.text, "error");
+				return;
+			}
+
+			const details = result.details as {
+				state?: { worktreePath?: string | null };
+				plan?: { planId?: string };
+			};
+			const worktreePath = details.state?.worktreePath;
+			const planId = details.plan?.planId ?? parsed.planId;
+			if (!worktreePath) {
+				ctx.ui.notify(
+					"Planner plan was created without worktreePath.",
+					"error",
+				);
+				return;
+			}
+
+			const originalSessionFile = ctx.sessionManager.getSessionFile();
+			await saveWorktreeProjectIndex({
+				fs,
+				agentDir,
+				record: {
+					schemaVersion: SCHEMA_VERSION,
+					worktreePath,
+					projectRoot: projectPaths.projectRoot,
+					projectId: projectPaths.projectId,
+					planId,
+					originalSessionFile: originalSessionFile ?? null,
+				},
+			});
+
+			const session = await createPlannerHandoffSession({
+				fs,
+				agentDir,
+				worktreePath,
+			});
+			await ctx.switchSession(session.sessionFile, {
+				cwdOverride: worktreePath,
+				withSession: async (replacementCtx) => {
+					await replacementCtx.sendUserMessage(
+						buildPlannerHandoffPrompt({ planId, worktreePath }),
+					);
+				},
+			} as PlannerSwitchSessionOptionsWithCwdOverride);
+		},
+	});
+
 	pi.registerTool({
 		name: PLANNER_STATUS_TOOL_NAME,
 		label: "Planner Status",
@@ -193,10 +279,7 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 				const result = await executePlannerPlanTool({
 					fs: createNodeFs(),
 					git: new NodeGitRunner(),
-					projectPaths: createProjectStoragePaths({
-						agentDir: getAgentDir(),
-						projectRoot: ctx.cwd,
-					}),
+					projectPaths: await createRuntimeProjectPaths(ctx.cwd),
 					toolName,
 					params,
 				});
@@ -221,10 +304,7 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 				const result = await executePlannerWorkflowTool({
 					fs: createNodeFs(),
 					git: new NodeGitRunner(),
-					projectPaths: createProjectStoragePaths({
-						agentDir: getAgentDir(),
-						projectRoot: ctx.cwd,
-					}),
+					projectPaths: await createRuntimeProjectPaths(ctx.cwd),
 					toolName,
 					params,
 				});
@@ -249,10 +329,7 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 				const result = await executePlannerMemoryTool({
 					fs: createNodeFs(),
 					git: new NodeGitRunner(),
-					projectPaths: createProjectStoragePaths({
-						agentDir: getAgentDir(),
-						projectRoot: ctx.cwd,
-					}),
+					projectPaths: await createRuntimeProjectPaths(ctx.cwd),
 					toolName,
 					params,
 				});
@@ -277,10 +354,7 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 				const result = await executePlannerGitTool({
 					fs: createNodeFs(),
 					git: new NodeGitRunner(),
-					projectPaths: createProjectStoragePaths({
-						agentDir: getAgentDir(),
-						projectRoot: ctx.cwd,
-					}),
+					projectPaths: await createRuntimeProjectPaths(ctx.cwd),
 					toolName,
 					params,
 				});
@@ -536,14 +610,24 @@ function workflowToolParameters(toolName: PlannerWorkflowToolName) {
 
 async function readPlannerPreflight(projectRoot: string) {
 	const fs = createNodeFs();
-	const projectPaths = createProjectStoragePaths({
+	const projectPaths = await resolveProjectStoragePaths({
+		fs,
 		agentDir: getAgentDir(),
-		projectRoot,
+		cwd: projectRoot,
 	});
 	return await runPlannerPreflight({
 		fs,
 		git: new NodeGitRunner(),
 		projectPaths,
+	});
+}
+
+async function createRuntimeProjectPaths(cwd: string) {
+	const fs = createNodeFs();
+	return await resolveProjectStoragePaths({
+		fs,
+		agentDir: getAgentDir(),
+		cwd,
 	});
 }
 
@@ -553,9 +637,10 @@ async function readActivePlannerState(projectRoot: string): Promise<{
 }> {
 	try {
 		const fs = createNodeFs();
-		const paths = createProjectStoragePaths({
+		const paths = await resolveProjectStoragePaths({
+			fs,
 			agentDir: getAgentDir(),
-			projectRoot,
+			cwd: projectRoot,
 		});
 		const project = await readProjectRecordIfExists(fs, paths);
 		const activePlanId = project?.activePlanId ?? null;
@@ -563,6 +648,21 @@ async function readActivePlannerState(projectRoot: string): Promise<{
 	} catch {
 		return { activePlanId: null, active: false };
 	}
+}
+
+function parsePlannerCreateCommandArgs(
+	args: string,
+): { planId: string; title: string } | null {
+	const trimmed = args.trim();
+	if (!trimmed) {
+		return null;
+	}
+	const [planId, ...titleParts] = trimmed.split(/\s+/);
+	if (!planId) {
+		return null;
+	}
+	const title = titleParts.join(" ").trim() || planId;
+	return { planId, title };
 }
 
 export { EXTENSION_NAME, SCHEMA_VERSION } from "./constants";
@@ -877,6 +977,28 @@ export {
 	PLANNER_WORKFLOW_TOOL_NAMES,
 	workflowToolTransition,
 } from "./runtime/workflow-tools";
+export type {
+	PiSessionHeader,
+	PlannerHandoffSession,
+} from "./session/handoff";
+export {
+	buildPlannerHandoffPrompt,
+	createPiSessionDir,
+	createPlannerHandoffSession,
+} from "./session/handoff";
+export type { EffectivePlannerSettings } from "./settings/manager";
+export {
+	ensureGlobalPlannerSettings,
+	loadEffectivePlannerSettings,
+} from "./settings/manager";
+export type { PlannerSettingsPaths } from "./settings/paths";
+export { createPlannerSettingsPaths } from "./settings/paths";
+export type {
+	PlannerSettings,
+	PlannerSettingsFile,
+	WorktreeSettings,
+} from "./settings/schema";
+export { DEFAULT_PLANNER_SETTINGS } from "./settings/schema";
 export { createNodeFs, type PlannerFs } from "./storage/fs";
 export { createProjectId, sanitizeIdPart } from "./storage/ids";
 export {
@@ -897,6 +1019,7 @@ export {
 	savePlanRecord,
 	updatePlanRecord,
 } from "./storage/plan-store";
+export { resolveProjectStoragePaths } from "./storage/project-resolver";
 export {
 	ensureProjectRecord,
 	readProjectRecord,
@@ -945,6 +1068,12 @@ export {
 	setPlanStep,
 	updatePlanState,
 } from "./storage/state-store";
+export type { WorktreeProjectIndexRecord } from "./storage/worktree-index";
+export {
+	createWorktreeProjectIndexPath,
+	readWorktreeProjectIndexIfExists,
+	saveWorktreeProjectIndex,
+} from "./storage/worktree-index";
 export type {
 	CreatePlanWorktreeInput,
 	CreatePlanWorktreeResult,

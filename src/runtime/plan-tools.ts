@@ -1,3 +1,4 @@
+import { SCHEMA_VERSION } from "../constants";
 import { planBranchName } from "../git/branches";
 import type { GitRunner } from "../git/runner";
 import { DEFAULT_INSTRUCTIONS } from "../instructions/defaults";
@@ -26,6 +27,7 @@ import {
 	initializePlanState,
 	readPlanStateIfExists,
 } from "../storage/state-store";
+import { saveWorktreeProjectIndex } from "../storage/worktree-index";
 import { createPlanWorktree } from "../worktree/manager";
 import {
 	createCustomWorktreeLocation,
@@ -124,6 +126,17 @@ async function createPlanTool(
 	const reality = await inspectPlannerGitReality({
 		git: input.git,
 		repoRoot: worktreeLocation,
+	});
+	await saveWorktreeProjectIndex({
+		fs: input.fs,
+		agentDir: input.projectPaths.agentDir,
+		record: {
+			schemaVersion: SCHEMA_VERSION,
+			worktreePath: worktreeLocation,
+			projectRoot: input.projectPaths.projectRoot,
+			projectId: input.projectPaths.projectId,
+			planId,
+		},
 	});
 	const state = {
 		...createInitialPlanState({

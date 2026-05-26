@@ -25,6 +25,7 @@ import {
 import { readPlanRecord } from "../storage/plan-store";
 import { readProjectRecord, setActivePlan } from "../storage/project-store";
 import { readPlanState } from "../storage/state-store";
+import { createWorktreeProjectIndexPath } from "../storage/worktree-index";
 import { MockPlannerFs } from "../test/mock-fs";
 import { executePlannerPlanTool } from "./plan-tools";
 
@@ -144,6 +145,14 @@ describe("planner plan tools", () => {
 		await expect(
 			fs.exists("/repo/app/.pi/pi-code-planner/worktrees/api-audit"),
 		).resolves.toBe(true);
+		expect(
+			fs.snapshot()[
+				createWorktreeProjectIndexPath({
+					agentDir: "/agent",
+					worktreePath: "/repo/app/.pi/pi-code-planner/worktrees/api-audit",
+				})
+			],
+		).toBeDefined();
 
 		const instructionPaths = createInstructionPaths(projectPaths);
 		for (const key of INSTRUCTION_KEYS) {
