@@ -21,6 +21,10 @@ import {
 	type PlannerMemoryToolName,
 } from "./runtime/memory-tools";
 import {
+	parsePlannerCreateCommandArgs,
+	resolvePlannerPlanId,
+} from "./runtime/plan-naming";
+import {
 	executePlannerPlanTool,
 	PLANNER_PLAN_TOOL_NAMES,
 	type PlannerPlanToolName,
@@ -40,7 +44,10 @@ import {
 } from "./session/handoff";
 import { createNodeFs } from "./storage/fs";
 import { resolveProjectStoragePaths } from "./storage/project-resolver";
-import { readProjectRecordIfExists } from "./storage/project-store";
+import {
+	ensureProjectRecord,
+	readProjectRecordIfExists,
+} from "./storage/project-store";
 import { saveWorktreeProjectIndex } from "./storage/worktree-index";
 
 const EMPTY_TOOL_PARAMETERS = {
@@ -180,7 +187,10 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 			await ctx.waitForIdle();
 			const parsed = parsePlannerCreateCommandArgs(args);
 			if (!parsed) {
-				ctx.ui.notify("Usage: /planner-create <plan-id> <title>", "error");
+				ctx.ui.notify(
+					"Usage: /planner-create [--id <plan-id>] <title>",
+					"error",
+				);
 				return;
 			}
 
@@ -191,12 +201,27 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 				agentDir,
 				cwd: ctx.cwd,
 			});
+			const project = await ensureProjectRecord(fs, projectPaths);
+			let planId: string;
+			try {
+				planId = resolvePlannerPlanId({
+					requestedPlanId: parsed.planId,
+					title: parsed.title,
+					project,
+				});
+			} catch (error) {
+				ctx.ui.notify(errorMessage(error), "error");
+				return;
+			}
 			const result = await executePlannerPlanTool({
 				fs,
 				git: new NodeGitRunner(),
 				projectPaths,
 				toolName: "planner_create_plan",
-				params: parsed,
+				params: {
+					planId,
+					title: parsed.title,
+				},
 			});
 
 			if (result.status !== "applied") {
@@ -209,7 +234,7 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 				plan?: { planId?: string };
 			};
 			const worktreePath = details.state?.worktreePath;
-			const planId = details.plan?.planId ?? parsed.planId;
+			const createdPlanId = details.plan?.planId ?? planId;
 			if (!worktreePath) {
 				ctx.ui.notify(
 					"Planner plan was created without worktreePath.",
@@ -227,7 +252,7 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 					worktreePath,
 					projectRoot: projectPaths.projectRoot,
 					projectId: projectPaths.projectId,
-					planId,
+					planId: createdPlanId,
 					originalSessionFile: originalSessionFile ?? null,
 				},
 			});
@@ -241,7 +266,7 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 				cwdOverride: worktreePath,
 				withSession: async (replacementCtx) => {
 					await replacementCtx.sendUserMessage(
-						buildPlannerHandoffPrompt({ planId, worktreePath }),
+						buildPlannerHandoffPrompt({ planId: createdPlanId, worktreePath }),
 					);
 				},
 			} as PlannerSwitchSessionOptionsWithCwdOverride);
@@ -650,19 +675,8 @@ async function readActivePlannerState(projectRoot: string): Promise<{
 	}
 }
 
-function parsePlannerCreateCommandArgs(
-	args: string,
-): { planId: string; title: string } | null {
-	const trimmed = args.trim();
-	if (!trimmed) {
-		return null;
-	}
-	const [planId, ...titleParts] = trimmed.split(/\s+/);
-	if (!planId) {
-		return null;
-	}
-	const title = titleParts.join(" ").trim() || planId;
-	return { planId, title };
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
 }
 
 export { EXTENSION_NAME, SCHEMA_VERSION } from "./constants";
@@ -906,6 +920,11 @@ export {
 	executePlannerMemoryTool,
 	PLANNER_MEMORY_TOOL_NAMES,
 } from "./runtime/memory-tools";
+export type { PlannerCreateCommandArgs } from "./runtime/plan-naming";
+export {
+	parsePlannerCreateCommandArgs,
+	resolvePlannerPlanId,
+} from "./runtime/plan-naming";
 export type {
 	PlannerPlanToolExecutionInput,
 	PlannerPlanToolExecutionResult,

@@ -60,13 +60,18 @@ ctx.switchSession(sessionFile, {
 6. После switch `planner_status`/resume-инструкция говорит модели начинать `discovery/read_project`.
 7. Если active plan есть, но `ctx.cwd !== state.worktreePath`, normal planner flow блокируется до переключения в worktree session.
 
-`/planner-create <plan-id> <title>` — user command, а не model tool. Он выполняет полный bootstrap и session handoff:
+`/planner-create [--id <plan-id>] <title>` — user command, а не model tool. Он выполняет полный bootstrap и session handoff:
 
 1. ждёт idle через `ctx.waitForIdle()`;
-2. вызывает внутренний `planner_create_plan`;
-3. резервирует путь PI session JSONL для `worktreePath`;
-4. вызывает `ctx.switchSession(sessionFile, { cwdOverride: worktreePath })`;
-5. через `withSession` отправляет первое сообщение в worktree session: вызвать `planner_status` и начать `discovery/read_project`.
+2. парсит title и optional explicit id;
+3. если id не указан, детерминированно генерирует plan id из title через code slug, например `Fix find command` -> `fix-find-command`;
+4. если auto-generated id уже существует, добавляет numeric suffix: `fix-find-command-2`, `fix-find-command-3`;
+5. вызывает внутренний `planner_create_plan`;
+6. резервирует путь PI session JSONL для `worktreePath`;
+7. вызывает `ctx.switchSession(sessionFile, { cwdOverride: worktreePath })`;
+8. через `withSession` отправляет первое сообщение в worktree session: вызвать `planner_status` и начать `discovery/read_project`.
+
+Если user явно указал `--id`, extension только sanitizes id и не подбирает похожий автоматически. Коллизия explicit id блокируется как ошибка: user явно выбрал технический идентификатор, значит planner не должен молча создавать другой.
 
 Сам `planner_create_plan` tool остаётся доступен как низкоуровневый wrapper, но он не может делать `switchSession`, потому что PI даёт `switchSession` только command context.
 
