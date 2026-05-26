@@ -80,7 +80,8 @@ User-level plan commands:
 - `/planner-list` — читает project storage через runtime resolver и показывает все plans текущего original project. Команда должна работать одинаково из original cwd и из любого planner worktree cwd.
 - `/planner-rename [--id <plan-id>] <new-title>` — меняет только human title в `plan.json` и `project.json.plans[]`. Не меняет `planId`, директорию плана, branch names или worktree path.
 - `/planner-switch <plan-id>` — переключает `project.json.activePlanId`, затем делает session handoff в `state.worktreePath` target plan. Перед switch проверяет текущий active plan: если его worktree dirty, step running, broken или requires user decision, switch блокируется.
-- `/planner-delete <plan-id>` — user command only. Active plan удалить нельзя. Inactive plan удаляется только если его worktree clean или уже missing. Команда удаляет managed worktree, managed child branches, `plans/<plan-id>/`, summary из `project.json.plans[]` и worktree-index. Protected plan branch не удаляется этой командой.
+- `/planner-delete <plan-id>` — user command only. Inactive plan удаляется только если его worktree clean или уже missing. Команда удаляет managed worktree, managed child branches, `plans/<plan-id>/`, summary из `project.json.plans[]`, worktree-index и worktree session directory. Protected plan branch не удаляется этой командой.
+- `/planner-delete --force-active <plan-id>` — опасный explicit escape hatch. Нужен, если user больше не хочет продолжать текущую feature. Команда не ждёт recovery/clean state: сначала автоматически переключает PI session в original project cwd, затем force-removes active worktree, удаляет связанные worktree chats, planner files, worktree-index, managed child branches и сбрасывает `activePlanId`. Original session/chat не удаляется.
 
 Эти команды не являются model tools. Они нужны user для навигации и уборки plans. Model workflow по-прежнему должен идти через planner tools и `planner_status`.
 

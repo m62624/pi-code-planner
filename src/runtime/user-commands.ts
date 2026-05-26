@@ -1,4 +1,5 @@
 import type { GitRunner } from "../git/runner";
+import { createPiSessionDir } from "../session/handoff";
 import type { PlannerFs } from "../storage/fs";
 import {
 	createPlanStoragePaths,
@@ -222,11 +223,14 @@ async function deletePlan(
 ): Promise<PlannerUserCommandResult> {
 	const params = asObject(input.params);
 	const planId = requiredString(params, "planId");
+	const forceActive = booleanParam(params, "forceActive") ?? false;
+	const deleteSessions = booleanParam(params, "deleteSessions") ?? false;
 	const project = await readProjectRecord(input.fs, input.projectPaths);
-	if (project.activePlanId === planId) {
+	const isActive = project.activePlanId === planId;
+	if (isActive && !forceActive) {
 		return blocked(
 			input.commandName,
-			`Active planner plan cannot be deleted: ${planId}. Switch or finish it first.`,
+			`Active planner plan cannot be deleted without --force-active: ${planId}.`,
 			{ project, planId },
 		);
 	}
@@ -245,28 +249,30 @@ async function deletePlan(
 	const planPaths = createPlanStoragePaths(input.projectPaths, planId);
 	const state = await readPlanStateIfExists(input.fs, planPaths);
 	if (state) {
-		const guard = await assertPlanSwitchable({
-			fs: input.fs,
-			git: input.git,
-			projectPaths: input.projectPaths,
-			planId,
-			state,
-		});
-		if (!guard.allow) {
-			return blocked(input.commandName, guard.reason, { project, state });
+		if (!forceActive) {
+			const guard = await assertPlanSwitchable({
+				fs: input.fs,
+				git: input.git,
+				projectPaths: input.projectPaths,
+				planId,
+				state,
+			});
+			if (!guard.allow) {
+				return blocked(input.commandName, guard.reason, { project, state });
+			}
 		}
 		if (state.worktreePath && (await input.fs.exists(state.worktreePath))) {
 			await input.git.worktreeRemove({
 				repoRoot: input.projectPaths.projectRoot,
 				path: state.worktreePath,
-				force: false,
+				force: forceActive,
 			});
 		}
 		for (const branch of managedChildBranches(state)) {
 			await input.git.deleteBranch({
 				repoRoot: input.projectPaths.projectRoot,
 				branch,
-				force: false,
+				force: forceActive,
 			});
 		}
 		if (state.worktreePath) {
@@ -276,12 +282,21 @@ async function deletePlan(
 					worktreePath: state.worktreePath,
 				}),
 			);
+			if (deleteSessions) {
+				await input.fs.removeDir(
+					createPiSessionDir({
+						agentDir: input.projectPaths.agentDir,
+						cwd: state.worktreePath,
+					}),
+				);
+			}
 		}
 	}
 
 	await input.fs.removeDir(planPaths.planDir);
 	const nextProject: ProjectRecord = {
 		...project,
+		activePlanId: isActive ? null : project.activePlanId,
 		plans: project.plans.filter((plan) => plan.planId !== planId),
 	};
 	await saveProjectRecord(input.fs, input.projectPaths, nextProject);
@@ -289,6 +304,7 @@ async function deletePlan(
 		project: nextProject,
 		planId,
 		removedPlanDir: planPaths.planDir,
+		forceActive,
 	});
 }
 
@@ -427,6 +443,13 @@ function optionalString(
 	return typeof value === "string" && value.trim().length > 0
 		? value.trim()
 		: null;
+}
+
+function booleanParam(
+	params: Record<string, unknown>,
+	key: string,
+): boolean | null {
+	return typeof params[key] === "boolean" ? params[key] : null;
 }
 
 function asObject(value: unknown): Record<string, unknown> {

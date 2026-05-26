@@ -369,20 +369,59 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.registerCommand("planner-delete", {
-		description:
-			"Delete an inactive clean planner plan and its managed worktree files.",
+		description: "Delete a planner plan. Active plans require --force-active.",
 		handler: async (args, ctx) => {
-			const planId = parseSinglePlanIdArg(args);
-			if (!planId) {
-				ctx.ui.notify("Usage: /planner-delete <plan-id>", "error");
+			await ctx.waitForIdle();
+			const parsed = parsePlannerDeleteCommandArgs(args);
+			if (!parsed) {
+				ctx.ui.notify(
+					"Usage: /planner-delete [--force-active] <plan-id>",
+					"error",
+				);
 				return;
 			}
+			const fs = createNodeFs();
+			const agentDir = getAgentDir();
+			const projectPaths = await resolveProjectStoragePaths({
+				fs,
+				agentDir,
+				cwd: ctx.cwd,
+			});
+			if (parsed.forceActive) {
+				const session = await createPlannerHandoffSession({
+					fs,
+					agentDir,
+					worktreePath: projectPaths.projectRoot,
+				});
+				await ctx.switchSession(session.sessionFile, {
+					cwdOverride: projectPaths.projectRoot,
+					withSession: async (replacementCtx) => {
+						const result = await executePlannerUserCommand({
+							fs,
+							git: new NodeGitRunner(),
+							projectPaths,
+							commandName: "planner_delete",
+							params: {
+								planId: parsed.planId,
+								forceActive: true,
+								deleteSessions: true,
+							},
+						});
+						notifyPlannerCommandResult(replacementCtx, result);
+					},
+				} as PlannerSwitchSessionOptionsWithCwdOverride);
+				return;
+			}
+
 			const result = await executePlannerUserCommand({
-				fs: createNodeFs(),
+				fs,
 				git: new NodeGitRunner(),
-				projectPaths: await createRuntimeProjectPaths(ctx.cwd),
+				projectPaths,
 				commandName: "planner_delete",
-				params: { planId },
+				params: {
+					planId: parsed.planId,
+					deleteSessions: true,
+				},
 			});
 			notifyPlannerCommandResult(ctx, result);
 		},
@@ -797,6 +836,28 @@ function errorMessage(error: unknown): string {
 function parseSinglePlanIdArg(args: string): string | null {
 	const trimmed = args.trim();
 	return trimmed.length > 0 && !/\s/.test(trimmed) ? trimmed : null;
+}
+
+function parsePlannerDeleteCommandArgs(
+	args: string,
+): { planId: string; forceActive: boolean } | null {
+	const tokens = args.trim().split(/\s+/).filter(Boolean);
+	if (tokens.length === 0) {
+		return null;
+	}
+	let forceActive = false;
+	const planIds: string[] = [];
+	for (const token of tokens) {
+		if (token === "--force-active") {
+			forceActive = true;
+			continue;
+		}
+		if (token.startsWith("--")) {
+			return null;
+		}
+		planIds.push(token);
+	}
+	return planIds.length === 1 ? { planId: planIds[0], forceActive } : null;
 }
 
 function notifyPlannerCommandResult(

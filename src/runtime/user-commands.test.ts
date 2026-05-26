@@ -11,6 +11,7 @@ import type {
 	GitWorktreeAddInput,
 	GitWorktreeRemoveInput,
 } from "../git/runner";
+import { createPiSessionDir } from "../session/handoff";
 import {
 	createPlanStoragePaths,
 	createProjectStoragePaths,
@@ -289,7 +290,7 @@ describe("planner user commands", () => {
 		});
 	});
 
-	it("blocks deleting the active plan", async () => {
+	it("blocks deleting the active plan without forceActive", async () => {
 		const { fs, git, projectPaths } = await createProjectFixture({
 			activePlanId: "plan-a",
 		});
@@ -303,7 +304,60 @@ describe("planner user commands", () => {
 		});
 
 		expect(result.status).toBe("blocked");
-		expect(result.text).toContain("Active planner plan cannot be deleted");
+		expect(result.text).toContain("without --force-active");
+	});
+
+	it("force-deletes active plan, clears active id, and removes worktree chat sessions", async () => {
+		const { fs, git, projectPaths } = await createProjectFixture({
+			activePlanId: "plan-a",
+		});
+		git.status = " M src/index.ts";
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		const sessionDir = createPiSessionDir({
+			agentDir: "/agent",
+			cwd: worktreePath,
+		});
+		await fs.writeTextAtomic(`${sessionDir}/active.jsonl`, "{}\n");
+		await fs.writeTextAtomic(
+			createWorktreeProjectIndexPath({
+				agentDir: "/agent",
+				worktreePath,
+			}),
+			"{}\n",
+		);
+
+		const result = await executePlannerUserCommand({
+			fs,
+			git,
+			projectPaths,
+			commandName: "planner_delete",
+			params: {
+				planId: "plan-a",
+				forceActive: true,
+				deleteSessions: true,
+			},
+		});
+
+		expect(result.status).toBe("applied");
+		await expect(readProjectRecord(fs, projectPaths)).resolves.toMatchObject({
+			activePlanId: null,
+			plans: [expect.objectContaining({ planId: "plan-b" })],
+		});
+		await expect(
+			fs.exists(createPlanStoragePaths(projectPaths, "plan-a").planDir),
+		).resolves.toBe(false);
+		await expect(fs.exists(sessionDir)).resolves.toBe(false);
+		expect(git.calls).toContainEqual({
+			name: "worktreeRemove",
+			input: {
+				repoRoot: "/repo/app",
+				path: worktreePath,
+				force: true,
+			},
+		});
+		expect(git.calls.some((call) => call.name === "statusPorcelain")).toBe(
+			false,
+		);
 	});
 
 	it("deletes inactive clean plan files, worktree index, worktree, and child branches", async () => {
@@ -324,7 +378,7 @@ describe("planner user commands", () => {
 			git,
 			projectPaths,
 			commandName: "planner_delete",
-			params: { planId: "plan-b" },
+			params: { planId: "plan-b", deleteSessions: true },
 		});
 
 		expect(result.status).toBe("applied");
@@ -343,6 +397,14 @@ describe("planner user commands", () => {
 			activePlanId: "plan-a",
 			plans: [expect.objectContaining({ planId: "plan-a" })],
 		});
+		await expect(
+			fs.exists(
+				createPiSessionDir({
+					agentDir: "/agent",
+					cwd: worktreePath,
+				}),
+			),
+		).resolves.toBe(false);
 		expect(git.calls).toContainEqual({
 			name: "worktreeRemove",
 			input: {
