@@ -360,6 +360,55 @@ describe("planner user commands", () => {
 		);
 	});
 
+	it("force-deletes active planner storage best-effort when original project root is gone", async () => {
+		const { fs, git, projectPaths } = await createProjectFixture({
+			activePlanId: "plan-a",
+		});
+		const customWorktreePath = "/custom/worktrees/plan-a";
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		await initializePlanState(fs, planPaths, {
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath: customWorktreePath,
+			}),
+			stage: "recovery",
+			step: "read_state",
+			stepStatus: "blocked",
+			currentBranch: "plan/plan-a",
+			broken: true,
+			brokenReason: "original project disappeared",
+			requiresUserDecision: true,
+		});
+		await fs.mkdirp(customWorktreePath);
+		await fs.removeDir(projectPaths.projectRoot);
+
+		const result = await executePlannerUserCommand({
+			fs,
+			git,
+			projectPaths,
+			commandName: "planner_delete",
+			params: {
+				planId: "plan-a",
+				forceActive: true,
+				deleteSessions: true,
+			},
+		});
+
+		expect(result.status).toBe("applied");
+		expect(result.details).toMatchObject({
+			projectRootExists: false,
+			gitCleanupSkipped: true,
+		});
+		await expect(readProjectRecord(fs, projectPaths)).resolves.toMatchObject({
+			activePlanId: null,
+			plans: [expect.objectContaining({ planId: "plan-b" })],
+		});
+		await expect(fs.exists(customWorktreePath)).resolves.toBe(false);
+		expect(git.calls.map((call) => call.name)).not.toContain("worktreeRemove");
+		expect(git.calls.map((call) => call.name)).not.toContain("deleteBranch");
+	});
+
 	it("deletes inactive clean plan files, worktree index, worktree, and child branches", async () => {
 		const { fs, git, projectPaths } = await createProjectFixture({
 			activePlanId: "plan-a",

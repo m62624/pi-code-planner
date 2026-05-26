@@ -105,6 +105,7 @@ describe("planner runtime reality evaluator", () => {
 			"planner_status",
 			"planner_git_inspect",
 			"planner_recovery_inspect",
+			"planner_recovery_resume",
 		] satisfies PlannerWrapperTool[]);
 	});
 

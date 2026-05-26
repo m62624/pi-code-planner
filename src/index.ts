@@ -402,13 +402,22 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			});
 			if (!parsed) return;
 			if (parsed.forceActive) {
+				const handoffCwd = (await fs.exists(projectPaths.projectRoot))
+					? projectPaths.projectRoot
+					: agentDir;
+				if (handoffCwd !== projectPaths.projectRoot) {
+					ctx.ui.notify(
+						"Original project directory is missing. Planner will switch to agent dir and delete planner storage best-effort.",
+						"warning",
+					);
+				}
 				const session = await createPlannerHandoffSession({
 					fs,
 					agentDir,
-					worktreePath: projectPaths.projectRoot,
+					worktreePath: handoffCwd,
 				});
 				await ctx.switchSession(session.sessionFile, {
-					cwdOverride: projectPaths.projectRoot,
+					cwdOverride: handoffCwd,
 					withSession: async (replacementCtx) => {
 						const result = await executePlannerUserCommand({
 							fs,
@@ -546,8 +555,8 @@ function registerPlannerTools(pi: ExtensionAPI): void {
 			label: recoveryToolLabel(toolName),
 			description: recoveryToolDescription(toolName),
 			promptSnippet:
-				"Use planner_recovery_inspect when planner_status reports recovery or user-decision gating. It is read-only and must run before any repair.",
-			parameters: EMPTY_TOOL_PARAMETERS as never,
+				"Use planner_recovery_inspect when planner_status reports recovery or user-decision gating. Use planner_recovery_resume only after inspection shows no blocking git/worktree/memory issues. Recovery tools never reset or delete git state.",
+			parameters: recoveryToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const result = await executePlannerRecoveryTool({
 					fs: createNodeFs(),
@@ -761,6 +770,8 @@ function recoveryToolLabel(toolName: PlannerRecoveryToolName): string {
 	switch (toolName) {
 		case "planner_recovery_inspect":
 			return "Planner Recovery Inspect";
+		case "planner_recovery_resume":
+			return "Planner Recovery Resume";
 	}
 }
 
@@ -768,6 +779,17 @@ function recoveryToolDescription(toolName: PlannerRecoveryToolName): string {
 	switch (toolName) {
 		case "planner_recovery_inspect":
 			return "Read-only recovery report: expected planner state, actual git/worktree/memory reality, issue classification, and safe/destructive options.";
+		case "planner_recovery_resume":
+			return "Resume from recovery to an explicit stage/step only when blocking git/worktree/memory issues are gone. Preserves required memory update gates.";
+	}
+}
+
+function recoveryToolParameters(toolName: PlannerRecoveryToolName) {
+	switch (toolName) {
+		case "planner_recovery_inspect":
+			return EMPTY_TOOL_PARAMETERS;
+		case "planner_recovery_resume":
+			return RESUME_RECOVERY_TOOL_PARAMETERS;
 	}
 }
 

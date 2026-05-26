@@ -34,7 +34,7 @@ import {
 	createPlanRecord,
 	type PlanStateRecord,
 } from "../storage/schema";
-import { initializePlanState } from "../storage/state-store";
+import { initializePlanState, readPlanState } from "../storage/state-store";
 import { MockPlannerFs } from "../test/mock-fs";
 import {
 	formatPlannerRecoveryInspection,
@@ -267,6 +267,130 @@ describe("planner recovery inspection", () => {
 		expect(applied.status).toBe("applied");
 		expect(applied.text).toContain("# Planner Recovery Inspection");
 		expect(applied.text).toContain("wrong_branch");
+	});
+
+	it("resumes recovery when only state gate issues remain", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createRecoverySetup(fs, {
+			state: {
+				stage: "recovery",
+				step: "read_state",
+				stepStatus: "blocked",
+				broken: true,
+				brokenReason: "user reviewed recovery report",
+				requiresUserDecision: true,
+			},
+		});
+
+		const result = await executePlannerRecoveryTool({
+			fs,
+			git: new MockGitRunner(),
+			projectPaths: setup.projectPaths,
+			toolName: "planner_recovery_resume",
+			params: { targetStage: "discovery", targetStep: "read_project" },
+		});
+
+		expect(result.status).toBe("applied");
+		expect(result.text).toContain("Planner recovery resumed");
+		expect(await readPlanState(fs, setup.planPaths)).toMatchObject({
+			stage: "discovery",
+			step: "read_project",
+			stepStatus: "pending",
+			broken: false,
+			requiresUserDecision: false,
+			requiresMemoryUpdate: false,
+		});
+	});
+
+	it("blocks recovery resume while actual git branch is still wrong", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createRecoverySetup(fs, {
+			state: {
+				stage: "recovery",
+				step: "read_state",
+				stepStatus: "blocked",
+				broken: true,
+				brokenReason: "wrong branch",
+				requiresUserDecision: true,
+			},
+		});
+		const before = await readPlanState(fs, setup.planPaths);
+
+		const result = await executePlannerRecoveryTool({
+			fs,
+			git: new MockGitRunner({ branch: "main" }),
+			projectPaths: setup.projectPaths,
+			toolName: "planner_recovery_resume",
+			params: { targetStage: "discovery", targetStep: "read_project" },
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("wrong_branch");
+		expect(await readPlanState(fs, setup.planPaths)).toEqual(before);
+	});
+
+	it("blocks recovery resume to an invalid target stage and step", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createRecoverySetup(fs, {
+			state: {
+				stage: "recovery",
+				step: "read_state",
+				stepStatus: "blocked",
+				broken: true,
+				brokenReason: "user reviewed recovery report",
+				requiresUserDecision: true,
+			},
+		});
+		const before = await readPlanState(fs, setup.planPaths);
+
+		const result = await executePlannerRecoveryTool({
+			fs,
+			git: new MockGitRunner(),
+			projectPaths: setup.projectPaths,
+			toolName: "planner_recovery_resume",
+			params: { targetStage: "done", targetStep: "read_project" },
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("Invalid recovery resume target");
+		expect(await readPlanState(fs, setup.planPaths)).toEqual(before);
+	});
+
+	it("resumes recovery with memory update gate after an external commit", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createRecoverySetup(fs, {
+			state: {
+				stage: "recovery",
+				step: "read_state",
+				stepStatus: "blocked",
+				broken: true,
+				brokenReason: "external commit needs review",
+				requiresUserDecision: true,
+				lastCheckpointCommit: "old-head",
+				requiresMemoryUpdate: false,
+				memoryUpdateReason: null,
+			},
+			checkpointCommit: "old-head",
+		});
+
+		const result = await executePlannerRecoveryTool({
+			fs,
+			git: new MockGitRunner({ head: "new-head" }),
+			projectPaths: setup.projectPaths,
+			toolName: "planner_recovery_resume",
+			params: { targetStage: "discovery", targetStep: "read_project" },
+		});
+
+		expect(result.status).toBe("applied");
+		expect(await readPlanState(fs, setup.planPaths)).toMatchObject({
+			stage: "discovery",
+			step: "read_project",
+			stepStatus: "pending",
+			broken: false,
+			requiresUserDecision: false,
+			requiresMemoryUpdate: true,
+			memoryUpdateReason: "external_commit",
+		});
 	});
 });
 

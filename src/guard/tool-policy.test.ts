@@ -139,6 +139,7 @@ describe("planner wrapper tool policy", () => {
 			"planner_status",
 			"planner_git_inspect",
 			"planner_recovery_inspect",
+			"planner_recovery_resume",
 		] satisfies PlannerWrapperTool[]);
 		expect(decision.reason).toContain("requires recovery or a user decision");
 	});

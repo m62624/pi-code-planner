@@ -282,6 +282,11 @@ export {
 	inspectPlannerRecovery,
 } from "./runtime/recovery";
 export type {
+	PlannerRecoveryResumeInput,
+	PlannerRecoveryResumeResult,
+} from "./runtime/recovery-manager";
+export { resumePlannerRecovery } from "./runtime/recovery-manager";
+export type {
 	PlannerRecoveryToolExecutionInput,
 	PlannerRecoveryToolExecutionResult,
 	PlannerRecoveryToolName,

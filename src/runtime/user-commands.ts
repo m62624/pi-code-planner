@@ -257,8 +257,11 @@ async function deletePlan(
 
 	const planPaths = createPlanStoragePaths(input.projectPaths, planId);
 	const state = await readPlanStateIfExists(input.fs, planPaths);
+	const projectRootExists = await input.fs.exists(
+		input.projectPaths.projectRoot,
+	);
 	if (state) {
-		if (!forceActive) {
+		if (!forceActive && projectRootExists) {
 			const guard = await assertPlanSwitchable({
 				fs: input.fs,
 				git: input.git,
@@ -271,18 +274,24 @@ async function deletePlan(
 			}
 		}
 		if (state.worktreePath && (await input.fs.exists(state.worktreePath))) {
-			await input.git.worktreeRemove({
-				repoRoot: input.projectPaths.projectRoot,
-				path: state.worktreePath,
-				force: forceActive,
-			});
+			if (projectRootExists) {
+				await input.git.worktreeRemove({
+					repoRoot: input.projectPaths.projectRoot,
+					path: state.worktreePath,
+					force: forceActive,
+				});
+			} else {
+				await input.fs.removeDir(state.worktreePath);
+			}
 		}
-		for (const branch of managedChildBranches(state)) {
-			await input.git.deleteBranch({
-				repoRoot: input.projectPaths.projectRoot,
-				branch,
-				force: forceActive,
-			});
+		if (projectRootExists) {
+			for (const branch of managedChildBranches(state)) {
+				await input.git.deleteBranch({
+					repoRoot: input.projectPaths.projectRoot,
+					branch,
+					force: forceActive,
+				});
+			}
 		}
 		if (state.worktreePath) {
 			await input.fs.removeFile(
@@ -314,6 +323,8 @@ async function deletePlan(
 		planId,
 		removedPlanDir: planPaths.planDir,
 		forceActive,
+		projectRootExists,
+		gitCleanupSkipped: !projectRootExists,
 	});
 }
 

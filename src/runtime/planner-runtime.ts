@@ -68,6 +68,7 @@ const RECOVERY_TOOLS = [
 	"planner_status",
 	"planner_git_inspect",
 	"planner_recovery_inspect",
+	"planner_recovery_resume",
 ] as const satisfies readonly PlannerWrapperTool[];
 
 const INIT_STEPS_BEFORE_WORKTREE = new Set<InitStep>([

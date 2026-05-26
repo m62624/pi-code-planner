@@ -1197,6 +1197,7 @@ Recovery tools — public wrappers для read-only диагностики recov
 Доступные recovery tools:
 
 - `planner_recovery_inspect` — собрать recovery report: expected state, actual git/worktree/memory reality, issue classification, safe options, destructive options requiring explicit user approval.
+- `planner_recovery_resume` — снять recovery gate и вернуться на explicit target stage/step только если actual git/worktree/memory blocking issues уже исчезли. Tool не делает reset/delete/checkout/merge.
 
 Инварианты recovery tools:
 
@@ -1209,8 +1210,11 @@ Recovery tools — public wrappers для read-only диагностики recov
 7. Dirty worktree классифицируется как warning: это допустимо внутри active work step, но блокирует checkpoint/switch/cleanup boundary.
 8. Любой reset, force checkout, abort merge, delete worktree, delete corrupted memory files или discard dirty changes требует explicit user approval.
 9. Empty commit запрещён: `planner_git_commit` обязан сначала увидеть dirty worktree и только потом вызывать `git stage/commit`; если изменений нет, state не мутируется.
+10. Recovery resume игнорирует только self-gates самого recovery state (`broken_state`, `user_decision_required`). Все реальные blocking issues (`wrong_branch`, `missing_worktree`, `git_conflict`, `memory_checkpoint_corrupt`) блокируют resume.
+11. Если recovery resume видит `external_commit` или `memory_update_required`, он может снять recovery gate, но обязан оставить `requiresMemoryUpdate=true`, чтобы normal flow не продолжился до memory update + checkpoint sync.
+12. Если original project root исчез, user delete должен работать best-effort: не пытаться делать git cleanup через исчезнувший repo, удалить planner storage/worktree dir если возможно, сбросить `activePlanId` и сообщить user, что git cleanup был пропущен.
 
-Recovery repair/apply tool пока не public API. До него recovery flow использует read-only inspect, user decision и `planner_resume_after_recovery` только после ручного/безопасного восстановления.
+Destructive recovery repair/apply tool пока не public API. До него recovery flow использует read-only inspect, non-destructive resume, user decision и planner user commands для удаления/abandon.
 
 ### Planner wrapper policy
 

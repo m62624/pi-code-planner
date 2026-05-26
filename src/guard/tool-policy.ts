@@ -26,6 +26,7 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_memory_verify",
 	"planner_memory_sync_checkpoint",
 	"planner_recovery_inspect",
+	"planner_recovery_resume",
 ] as const;
 
 export type PlannerWrapperTool = (typeof PLANNER_WRAPPER_TOOLS)[number];
@@ -141,7 +142,11 @@ const STEP_ALLOWED_TOOLS = {
 		compare_expected_actual: ["planner_recovery_inspect"],
 		classify_recovery: ["planner_recovery_inspect"],
 		ask_user_if_destructive: ["planner_recovery_inspect"],
-		repair_or_resume: ["planner_recovery_inspect", "planner_git_inspect"],
+		repair_or_resume: [
+			"planner_recovery_inspect",
+			"planner_recovery_resume",
+			"planner_git_inspect",
+		],
 	},
 } as const satisfies Record<
 	PlannerStage,
@@ -163,6 +168,7 @@ export function getAllowedPlannerWrapperTools(
 		return withAlwaysAllowed([
 			"planner_git_inspect",
 			...STEP_ALLOWED_TOOLS.recovery.read_state,
+			"planner_recovery_resume",
 		]);
 	}
 
