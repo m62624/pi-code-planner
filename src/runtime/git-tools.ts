@@ -15,8 +15,7 @@ import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
 import type { PlanStateRecord } from "../storage/schema";
 import { savePlanState } from "../storage/state-store";
-import { createPlanWorktree, removePlanWorktree } from "../worktree/manager";
-import { createProjectLocalWorktreeLocation } from "../worktree/paths";
+import { removePlanWorktree } from "../worktree/manager";
 import {
 	inspectPlannerGitReality,
 	runSyncedPlannerGitMutation,
@@ -31,7 +30,6 @@ import {
 export const PLANNER_GIT_TOOL_NAMES = [
 	"planner_git_inspect",
 	"planner_git_init",
-	"planner_git_create_plan_worktree",
 	"planner_git_commit",
 	"planner_git_create_task_branch",
 	"planner_git_create_experiment_branch",
@@ -86,8 +84,6 @@ export async function executePlannerGitTool(
 				return await inspectGitTool(input, ready);
 			case "planner_git_init":
 				return await initGitTool(input);
-			case "planner_git_create_plan_worktree":
-				return await createPlanWorktreeTool(input, ready);
 			case "planner_git_commit":
 				return await commitGitTool(input, ready);
 			case "planner_git_create_task_branch":
@@ -179,38 +175,6 @@ async function initGitTool(
 	await input.git.init({ repoRoot: input.projectPaths.projectRoot });
 	return applied(input.toolName, "Planner initialized git repository.", {
 		repoRoot: input.projectPaths.projectRoot,
-	});
-}
-
-async function createPlanWorktreeTool(
-	input: PlannerGitToolExecutionInput,
-	ready: ReadyGitContext,
-): Promise<PlannerGitToolExecutionResult> {
-	const location =
-		ready.state.worktreePath ??
-		createProjectLocalWorktreeLocation(input.projectPaths, ready.planId).path;
-	const result = await createPlanWorktree({
-		fs: input.fs,
-		git: input.git,
-		projectPaths: input.projectPaths,
-		worktreePath: location,
-		branch: ready.state.activeBranches.plan,
-		fromRef: ready.state.activeBranches.base,
-	});
-	const reality = await inspectPlannerGitReality({
-		git: input.git,
-		repoRoot: location,
-	});
-	const state = {
-		...ready.state,
-		worktreePath: location,
-		currentBranch: reality.branch,
-		lastCheckpointCommit: reality.headCommit,
-	};
-	await savePlanState(input.fs, ready.preflight.context.planPaths, state);
-	return applied(input.toolName, "Planner plan worktree created.", {
-		result,
-		state,
 	});
 }
 

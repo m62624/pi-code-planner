@@ -118,47 +118,6 @@ class MockGitRunner implements GitRunner {
 }
 
 describe("planner git tools", () => {
-	it("creates the plan worktree at the dedicated init step and stores branch/head state", async () => {
-		const fs = new MockPlannerFs();
-		const setup = await createGitToolSetup(fs, {
-			createWorktreeDir: false,
-			initializeMemory: false,
-			state: {
-				stage: "init",
-				step: "create_plan_worktree",
-				stepStatus: "running",
-				worktreePath: null,
-				currentBranch: null,
-				lastCheckpointCommit: null,
-			},
-		});
-		const git = new MockGitRunner({ branch: "plan/plan-a", head: "abc123" });
-
-		const result = await executePlannerGitTool({
-			fs,
-			git,
-			projectPaths: setup.projectPaths,
-			toolName: "planner_git_create_plan_worktree",
-			params: {},
-		});
-
-		expect(result.status).toBe("applied");
-		expect(git.calls).toContainEqual({
-			name: "worktreeAdd",
-			input: {
-				repoRoot: "/repo/app",
-				path: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
-				branch: "plan/plan-a",
-				fromRef: "main",
-			},
-		});
-		expect(await readPlanState(fs, setup.planPaths)).toMatchObject({
-			worktreePath: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
-			currentBranch: "plan/plan-a",
-			lastCheckpointCommit: "abc123",
-		});
-	});
-
 	it("commits through planner git and marks memory update required", async () => {
 		const fs = new MockPlannerFs();
 		const setup = await createGitToolSetup(fs, {

@@ -69,7 +69,7 @@ describe("planner wrapper tool policy", () => {
 		] satisfies PlannerWrapperTool[]);
 	});
 
-	it("allows init worktree operations only at the dedicated worktree step", () => {
+	it("does not expose plan worktree creation as a public wrapper", () => {
 		expect(
 			getAllowedPlannerWrapperTools({
 				...baseState,
@@ -79,12 +79,11 @@ describe("planner wrapper tool policy", () => {
 		).toEqual([
 			"planner_status",
 			"planner_git_inspect",
-			"planner_git_create_plan_worktree",
 		] satisfies PlannerWrapperTool[]);
 
 		expect(
 			checkPlannerWrapperAllowed({
-				tool: "planner_git_create_plan_worktree",
+				tool: "planner_git_create_task_branch",
 				state: { ...baseState, stage: "init", step: "prepare_storage" },
 			}).allow,
 		).toBe(false);

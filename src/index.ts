@@ -603,8 +603,6 @@ function gitToolLabel(toolName: PlannerGitToolName): string {
 			return "Planner Git Inspect";
 		case "planner_git_init":
 			return "Planner Git Init";
-		case "planner_git_create_plan_worktree":
-			return "Planner Git Create Plan Worktree";
 		case "planner_git_commit":
 			return "Planner Git Commit";
 		case "planner_git_create_task_branch":
@@ -636,8 +634,6 @@ function gitToolDescription(toolName: PlannerGitToolName): string {
 			return "Inspect planner-controlled git reality without raw shell git.";
 		case "planner_git_init":
 			return "Initialize git for the project during the init/check_git step.";
-		case "planner_git_create_plan_worktree":
-			return "Create the planner worktree and plan branch at the dedicated init step.";
 		case "planner_git_commit":
 			return "Create a planner-controlled commit and mark memory update required.";
 		case "planner_git_create_task_branch":
@@ -682,7 +678,6 @@ function gitToolParameters(toolName: PlannerGitToolName) {
 			return GIT_FORCE_TOOL_PARAMETERS;
 		case "planner_git_inspect":
 		case "planner_git_init":
-		case "planner_git_create_plan_worktree":
 		case "planner_git_create_refactor_branch":
 			return EMPTY_TOOL_PARAMETERS;
 	}

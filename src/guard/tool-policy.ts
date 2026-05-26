@@ -9,7 +9,6 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_create_plan",
 	"planner_git_inspect",
 	"planner_git_init",
-	"planner_git_create_plan_worktree",
 	"planner_git_commit",
 	"planner_git_create_task_branch",
 	"planner_git_create_experiment_branch",
@@ -53,10 +52,7 @@ const STEP_ALLOWED_TOOLS = {
 		prepare_storage: [],
 		choose_worktree_location: [],
 		create_plan_record: [],
-		create_plan_worktree: [
-			"planner_git_inspect",
-			"planner_git_create_plan_worktree",
-		],
+		create_plan_worktree: ["planner_git_inspect"],
 		enter_discovery: ["planner_git_inspect"],
 	},
 	discovery: {

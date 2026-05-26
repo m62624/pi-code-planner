@@ -83,7 +83,10 @@ describe("planner runtime reality evaluator", () => {
 			step: "create_plan_worktree",
 			requiresRecovery: false,
 		} satisfies Partial<PlannerRuntimeDecision>);
-		expect(decision.allowedTools).toContain("planner_git_create_plan_worktree");
+		expect(decision.allowedTools).toEqual([
+			"planner_status",
+			"planner_git_inspect",
+		]);
 	});
 
 	it("requires recovery when active state has no usable worktree", () => {

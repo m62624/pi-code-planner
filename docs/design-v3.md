@@ -316,7 +316,6 @@ Git API — это внутренний слой extension. Модель не д
 
 - `planner_git_inspect` — безопасно показать branch/head/dirty/conflicts.
 - `planner_git_init` — выполнить `git init` на init/check_git.
-- `planner_git_create_plan_worktree` — legacy/recovery wrapper для создания plan worktree, если bootstrap был восстановлен вручную. В normal flow worktree создаёт `planner_create_plan`.
 - `planner_git_commit` — выполнить `git add -A && git commit`; после этого `requiresMemoryUpdate=true`.
 - `planner_git_create_task_branch` — создать/switch task branch.
 - `planner_git_create_experiment_branch` — создать/switch experiment branch.
