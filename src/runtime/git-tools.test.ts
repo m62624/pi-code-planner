@@ -168,6 +168,46 @@ describe("planner git tools", () => {
 		});
 	});
 
+	it("blocks planner git commit when there are no changes to commit", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createGitToolSetup(fs, {
+			state: {
+				stage: "execution",
+				step: "write_tests",
+				stepStatus: "running",
+				currentBranch: "task/plan-a/task-1",
+				lastCheckpointCommit: "abc123",
+				activeBranches: {
+					base: "main",
+					plan: "plan/plan-a",
+					currentTask: "task/plan-a/task-1",
+					currentExperiment: null,
+					selectedExperiment: null,
+				},
+			},
+		});
+		const git = new MockGitRunner({
+			branch: "task/plan-a/task-1",
+			head: "abc123",
+			status: "",
+		});
+		const before = await readPlanState(fs, setup.planPaths);
+
+		const result = await executePlannerGitTool({
+			fs,
+			git,
+			projectPaths: setup.projectPaths,
+			toolName: "planner_git_commit",
+			params: { message: "empty commit should not happen" },
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("no changes to commit");
+		expect(git.calls.map((call) => call.name)).not.toContain("stageAll");
+		expect(git.calls.map((call) => call.name)).not.toContain("commit");
+		expect(await readPlanState(fs, setup.planPaths)).toEqual(before);
+	});
+
 	it("keeps merge targets state-bound when merging selected experiment", async () => {
 		const fs = new MockPlannerFs();
 		const setup = await createGitToolSetup(fs, {

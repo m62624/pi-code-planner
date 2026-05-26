@@ -30,6 +30,11 @@ import {
 	type PlannerPlanToolName,
 } from "./runtime/plan-tools";
 import { runPlannerPreflight } from "./runtime/preflight";
+import {
+	executePlannerRecoveryTool,
+	PLANNER_RECOVERY_TOOL_NAMES,
+	type PlannerRecoveryToolName,
+} from "./runtime/recovery-tools";
 import { buildPlannerStatusText } from "./runtime/status";
 import {
 	confirmPlannerDelete,
@@ -535,6 +540,31 @@ function registerPlannerTools(pi: ExtensionAPI): void {
 		});
 	}
 
+	for (const toolName of PLANNER_RECOVERY_TOOL_NAMES) {
+		pi.registerTool({
+			name: toolName,
+			label: recoveryToolLabel(toolName),
+			description: recoveryToolDescription(toolName),
+			promptSnippet:
+				"Use planner_recovery_inspect when planner_status reports recovery or user-decision gating. It is read-only and must run before any repair.",
+			parameters: EMPTY_TOOL_PARAMETERS as never,
+			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const result = await executePlannerRecoveryTool({
+					fs: createNodeFs(),
+					git: new NodeGitRunner(),
+					projectPaths: await createRuntimeProjectPaths(ctx.cwd),
+					toolName,
+					params,
+				});
+
+				return {
+					content: [{ type: "text", text: result.text }],
+					details: result,
+				};
+			},
+		});
+	}
+
 	for (const toolName of PLANNER_GIT_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
@@ -724,6 +754,20 @@ function memoryToolParameters(toolName: PlannerMemoryToolName) {
 		case "planner_memory_verify":
 		case "planner_memory_sync_checkpoint":
 			return EMPTY_TOOL_PARAMETERS;
+	}
+}
+
+function recoveryToolLabel(toolName: PlannerRecoveryToolName): string {
+	switch (toolName) {
+		case "planner_recovery_inspect":
+			return "Planner Recovery Inspect";
+	}
+}
+
+function recoveryToolDescription(toolName: PlannerRecoveryToolName): string {
+	switch (toolName) {
+		case "planner_recovery_inspect":
+			return "Read-only recovery report: expected planner state, actual git/worktree/memory reality, issue classification, and safe/destructive options.";
 	}
 }
 

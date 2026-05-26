@@ -189,7 +189,12 @@ async function commitGitTool(
 		state: ready.state,
 		repoRoot,
 		headChangeReason: "planner_commit",
-		async mutate() {
+		mutate: async ({ before }) => {
+			if (!before.isDirty) {
+				throw new Error(
+					"Planner git commit is blocked because the worktree has no changes to commit.",
+				);
+			}
 			await input.git.stageAll({ repoRoot });
 			await input.git.commit({ repoRoot, message });
 		},

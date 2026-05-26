@@ -271,6 +271,26 @@ export {
 	runPlannerPreflight,
 } from "./runtime/preflight";
 export type {
+	PlannerRecoveryBranchInspection,
+	PlannerRecoveryInspection,
+	PlannerRecoveryIssue,
+	PlannerRecoveryIssueCode,
+	PlannerRecoveryIssueSeverity,
+} from "./runtime/recovery";
+export {
+	formatPlannerRecoveryInspection,
+	inspectPlannerRecovery,
+} from "./runtime/recovery";
+export type {
+	PlannerRecoveryToolExecutionInput,
+	PlannerRecoveryToolExecutionResult,
+	PlannerRecoveryToolName,
+} from "./runtime/recovery-tools";
+export {
+	executePlannerRecoveryTool,
+	PLANNER_RECOVERY_TOOL_NAMES,
+} from "./runtime/recovery-tools";
+export type {
 	BlockPlannerStepOptions,
 	CompletePlannerStepOptions,
 	EnterPlannerRecoveryOptions,

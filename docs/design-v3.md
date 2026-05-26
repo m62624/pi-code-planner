@@ -1190,6 +1190,28 @@ Memory tools — public wrappers, через которые модель обн�
 
 Это предотвращает ложный recovery: частичное обновление memory меняет JSONL hashes, но это плановое изменение, а не corruption.
 
+### Public recovery tools
+
+Recovery tools — public wrappers для read-only диагностики recovery. Они не делают destructive repair и не меняют git/state автоматически.
+
+Доступные recovery tools:
+
+- `planner_recovery_inspect` — собрать recovery report: expected state, actual git/worktree/memory reality, issue classification, safe options, destructive options requiring explicit user approval.
+
+Инварианты recovery tools:
+
+1. Recovery inspect сначала выполняет `runPlannerPreflight`.
+2. Если policy не разрешает recovery tool — tool возвращает `blocked`.
+3. Recovery inspect не мутирует `state.json`, `project.json`, git, memory или worktree.
+4. Planner merge/commit head changes не считаются external commit, если `state.requiresMemoryUpdate=true` и `memoryUpdateReason` уже равен `planner_merge` или `planner_commit`.
+5. Если `HEAD !== state.lastCheckpointCommit`, но state не пометил planner-controlled memory update, это классифицируется как `external_commit`, а не автоматический reset.
+6. Wrong branch report обязан показать actual branch и его роль относительно state: plan, task, experiment, selectedExperiment или unmanaged.
+7. Dirty worktree классифицируется как warning: это допустимо внутри active work step, но блокирует checkpoint/switch/cleanup boundary.
+8. Любой reset, force checkout, abort merge, delete worktree, delete corrupted memory files или discard dirty changes требует explicit user approval.
+9. Empty commit запрещён: `planner_git_commit` обязан сначала увидеть dirty worktree и только потом вызывать `git stage/commit`; если изменений нет, state не мутируется.
+
+Recovery repair/apply tool пока не public API. До него recovery flow использует read-only inspect, user decision и `planner_resume_after_recovery` только после ручного/безопасного восстановления.
+
 ### Planner wrapper policy
 
 `planner_status` пока не обязан быть полной реализацией маршрутизатора. До него нужен отдельный policy слой, который не читает Pi API и не выполняет git, а только отвечает на вопрос: можно ли сейчас вызвать конкретный planner wrapper.

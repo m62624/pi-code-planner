@@ -44,7 +44,7 @@ export async function runSyncedPlannerGitMutation<T>(input: {
 	state: PlanStateRecord;
 	repoRoot: string;
 	headChangeReason: MemoryUpdateReason;
-	mutate: () => Promise<T>;
+	mutate: (context: { before: PlannerGitReality }) => Promise<T>;
 }): Promise<{
 	result: T;
 	state: PlanStateRecord;
@@ -55,7 +55,7 @@ export async function runSyncedPlannerGitMutation<T>(input: {
 		git: input.git,
 		repoRoot: input.repoRoot,
 	});
-	const result = await input.mutate();
+	const result = await input.mutate({ before });
 	const after = await inspectPlannerGitReality({
 		git: input.git,
 		repoRoot: input.repoRoot,
