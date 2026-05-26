@@ -29,10 +29,8 @@ import {
 	PLANNER_PLAN_TOOL_NAMES,
 	type PlannerPlanToolName,
 } from "./runtime/plan-tools";
-import {
-	formatPlannerPreflightStatus,
-	runPlannerPreflight,
-} from "./runtime/preflight";
+import { runPlannerPreflight } from "./runtime/preflight";
+import { buildPlannerStatusText } from "./runtime/status";
 import {
 	confirmPlannerDelete,
 	inputPlannerRenameTitle,
@@ -450,7 +448,10 @@ function registerPlannerTools(pi: ExtensionAPI): void {
 		parameters: EMPTY_TOOL_PARAMETERS as never,
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
 			const preflight = await readPlannerPreflight(ctx.cwd);
-			const text = formatPlannerPreflightStatus(preflight);
+			const text = await buildPlannerStatusText({
+				fs: createNodeFs(),
+				preflight,
+			});
 
 			return {
 				content: [{ type: "text", text }],

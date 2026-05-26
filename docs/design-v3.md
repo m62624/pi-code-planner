@@ -781,15 +781,31 @@ Tool возвращает:
 - флаг `requiresCompact`
 - флаг `requiresUserDecision`
 
-`planner_status` не заменяет stage/task instructions. Он только сообщает, где находится модель и что ей разрешено делать. Подробная инструкция берётся из markdown artifacts.
+`planner_status` — главный model-facing навигатор. Он не заменяет state machine и не выполняет работу за модель, но обязан вернуть достаточно контекста, чтобы модель не гадала и не забывала прочитать нужные инструкции.
 
-Instruction routing не вставляет длинный markdown content в status. Он возвращает только:
-- `Instruction keys`;
-- default instruction path;
-- project append path;
-- global append path.
+`planner_status` возвращает:
+- короткий runtime header;
+- persisted state snapshot;
+- git/worktree reality;
+- memory/checkpoint status;
+- next required action;
+- exact current step rule;
+- allowed planner wrappers;
+- allowed state transitions;
+- exact instruction file paths;
+- собранный instruction bundle для текущего `stage/step`;
+- planner artifact links;
+- memory-first rule;
+- full state machine order;
+- global invariants.
 
-Содержимое читается отдельно через read tool или будущий `planner_instruction_read`.
+Instruction bundle вставляет markdown content только для текущего маршрута:
+- default markdown текущего stage;
+- project append для этого key, если существует;
+- иначе global append для этого key, если существует;
+- дополнительные instruction keys текущего step: `memory`, `tdd`, `experiment`, `refactor`, `git`, `git-commit`.
+
+Memory indexes целиком в `planner_status` не вставляются. Вместо этого status возвращает exact paths и жёсткое правило: сначала inspect/retrieve memory, потом читать source code только если memory отсутствует, stale, недостаточна или требует verification.
 
 Правило append:
 - если есть project append, модель учитывает `default + project append`;
@@ -804,13 +820,38 @@ Instruction routing не вставляет длинный markdown content в s
 - конкретного `task.md`, `tdd.md`, `verify.md`, `summary.md`
 - memory context: `project_patterns.md`, `files/index.jsonl`, `symbols/index.jsonl`, `relations/index.jsonl`
 
-После compact модель должна заново прочитать markdown artifacts, которые указал `planner_status`. Markdown объясняет, как именно выполнять step, например:
+После compact модель должна снова вызвать `planner_status`. Status вернёт текущий instruction bundle и artifact links. Markdown объясняет, как именно выполнять step, например:
 - как запускать проверки проекта
 - какие test commands использовать: `cargo test`, `npm test`, `pytest`, `go test`
 - какие mocks/fixtures допустимы
 - какие project conventions соблюдать
 
-`planner_status` возвращает ссылки на нужные markdown files, но не вставляет длинный prompt внутрь tool result.
+`planner_status` вставляет только релевантный текущему `stage/step` markdown bundle. Он не вставляет все artifacts и не вставляет все memory indexes целиком.
+
+### Step rule matrix
+
+Для каждого documented `stage/step` в коде существует exact rule:
+- objective;
+- required actions;
+- allowed now;
+- forbidden now;
+- exit condition;
+- next instruction.
+
+Покрытие обязательно:
+
+```text
+init       7 steps
+discovery  9 steps
+planning   7 steps
+execution 15 steps
+finalize   4 steps
+done       8 steps
+recovery   6 steps
+total     56 steps
+```
+
+`planner_status` обязан вернуть current step rule целиком. Модель не должна выводить разрешения из общих категорий сама.
 
 ### Категории действий
 
@@ -1876,7 +1917,7 @@ Stale memory запускает discovery_update, а не destructive git repair
 
 ## 7. Markdown Instructions Sync
 
-Markdown instructions — это основной текстовый контракт для модели. Extension не должен зашивать длинные prompts в `planner_status`. Вместо этого `planner_status` сообщает, какие markdown files нужно прочитать для текущего `stage/step/task/experiment`.
+Markdown instructions — это основной текстовый контракт для модели. `planner_status` должен возвращать exact instruction files и собранный markdown bundle для текущего `stage/step`, чтобы модель не пропускала обязательное чтение инструкций. Полные memory indexes в status не вставляются; они выдаются как paths и retrieval hints.
 
 ### Источники instructions
 
@@ -2026,4 +2067,4 @@ default stage instruction
 + memory links from planner_status
 ```
 
-`planner_status` возвращает ссылки на нужные markdown files и memory files. Он не вставляет длинный prompt внутрь tool result.
+`planner_status` возвращает ссылки на нужные markdown files и memory files, а также вставляет собранный markdown bundle только для текущего `stage/step`. Он не вставляет весь project memory целиком и не подменяет memory retrieval.
