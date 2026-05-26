@@ -33,7 +33,16 @@ import {
 	formatPlannerPreflightStatus,
 	runPlannerPreflight,
 } from "./runtime/preflight";
-import { executePlannerUserCommand } from "./runtime/user-commands";
+import {
+	confirmPlannerDelete,
+	inputPlannerRenameTitle,
+	selectPlannerPlanId,
+	selectPlannerPlanIdFromList,
+} from "./runtime/user-command-ui";
+import {
+	executePlannerUserCommand,
+	readPlannerPlanList,
+} from "./runtime/user-commands";
 import {
 	executePlannerWorkflowTool,
 	PLANNER_WORKFLOW_TOOL_NAMES,
@@ -275,36 +284,23 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.registerCommand("planner-list", {
-		description: "List planner plans for the current project.",
-		handler: async (_args, ctx) => {
-			const result = await executePlannerUserCommand({
-				fs: createNodeFs(),
-				git: new NodeGitRunner(),
-				projectPaths: await createRuntimeProjectPaths(ctx.cwd),
-				commandName: "planner_list",
-				params: {},
-			});
-			notifyPlannerCommandResult(ctx, result);
-		},
-	});
-
 	pi.registerCommand("planner-rename", {
 		description:
 			"Rename a planner plan title without changing its stable plan id.",
 		handler: async (args, ctx) => {
-			const parsed = parsePlannerCreateCommandArgs(args);
-			if (!parsed) {
-				ctx.ui.notify(
-					"Usage: /planner-rename [--id <plan-id>] <new-title>",
-					"error",
-				);
-				return;
-			}
+			const fs = createNodeFs();
+			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+			const parsed = await resolveRenameCommandArgs({
+				args,
+				ctx,
+				fs,
+				projectPaths,
+			});
+			if (!parsed) return;
 			const result = await executePlannerUserCommand({
-				fs: createNodeFs(),
+				fs,
 				git: new NodeGitRunner(),
-				projectPaths: await createRuntimeProjectPaths(ctx.cwd),
+				projectPaths,
 				commandName: "planner_rename",
 				params: {
 					planId: parsed.planId,
@@ -319,21 +315,29 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 		description: "Switch to another planner plan in the current project.",
 		handler: async (args, ctx) => {
 			await ctx.waitForIdle();
-			const planId = parseSinglePlanIdArg(args);
-			if (!planId) {
-				ctx.ui.notify("Usage: /planner-switch <plan-id>", "error");
-				return;
-			}
 			const fs = createNodeFs();
 			const agentDir = getAgentDir();
+			const projectPaths = await resolveProjectStoragePaths({
+				fs,
+				agentDir,
+				cwd: ctx.cwd,
+			});
+			const planId =
+				parseSinglePlanIdArg(args) ??
+				(await selectPlannerPlanId({
+					ui: ctx.ui,
+					fs,
+					projectPaths,
+					title: "Switch planner plan",
+				}));
+			if (!planId) {
+				ctx.ui.notify("Planner switch cancelled.", "info");
+				return;
+			}
 			const result = await executePlannerUserCommand({
 				fs,
 				git: new NodeGitRunner(),
-				projectPaths: await resolveProjectStoragePaths({
-					fs,
-					agentDir,
-					cwd: ctx.cwd,
-				}),
+				projectPaths,
 				commandName: "planner_switch",
 				params: { planId },
 			});
@@ -372,14 +376,6 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 		description: "Delete a planner plan. Active plans require --force-active.",
 		handler: async (args, ctx) => {
 			await ctx.waitForIdle();
-			const parsed = parsePlannerDeleteCommandArgs(args);
-			if (!parsed) {
-				ctx.ui.notify(
-					"Usage: /planner-delete [--force-active] <plan-id>",
-					"error",
-				);
-				return;
-			}
 			const fs = createNodeFs();
 			const agentDir = getAgentDir();
 			const projectPaths = await resolveProjectStoragePaths({
@@ -387,6 +383,13 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 				agentDir,
 				cwd: ctx.cwd,
 			});
+			const parsed = await resolveDeleteCommandArgs({
+				args,
+				ctx,
+				fs,
+				projectPaths,
+			});
+			if (!parsed) return;
 			if (parsed.forceActive) {
 				const session = await createPlannerHandoffSession({
 					fs,
@@ -858,6 +861,79 @@ function parsePlannerDeleteCommandArgs(
 		planIds.push(token);
 	}
 	return planIds.length === 1 ? { planId: planIds[0], forceActive } : null;
+}
+
+async function resolveRenameCommandArgs(input: {
+	args: string;
+	ctx: ExtensionCommandContext;
+	fs: ReturnType<typeof createNodeFs>;
+	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
+}): Promise<{ planId?: string; title: string } | null> {
+	const parsed = parsePlannerCreateCommandArgs(input.args);
+	if (parsed) {
+		return parsed;
+	}
+
+	const planId = await selectPlannerPlanId({
+		ui: input.ctx.ui,
+		fs: input.fs,
+		projectPaths: input.projectPaths,
+		title: "Rename planner plan",
+	});
+	if (!planId) {
+		input.ctx.ui.notify("Planner rename cancelled.", "info");
+		return null;
+	}
+	const title = await inputPlannerRenameTitle({ ui: input.ctx.ui });
+	if (!title) {
+		return null;
+	}
+	return { planId, title };
+}
+
+async function resolveDeleteCommandArgs(input: {
+	args: string;
+	ctx: ExtensionCommandContext;
+	fs: ReturnType<typeof createNodeFs>;
+	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
+}): Promise<{ planId: string; forceActive: boolean } | null> {
+	const direct = parsePlannerDeleteCommandArgs(input.args);
+	if (direct) {
+		return direct;
+	}
+	if (input.args.trim().length > 0) {
+		input.ctx.ui.notify(
+			"Usage: /planner-delete [--force-active] <plan-id>",
+			"error",
+		);
+		return null;
+	}
+
+	const { project, plans } = await readPlannerPlanList({
+		fs: input.fs,
+		projectPaths: input.projectPaths,
+	});
+	const selected = await selectPlannerPlanIdFromList({
+		ui: input.ctx.ui,
+		plans,
+		title: "Delete planner plan",
+	});
+	if (!selected) {
+		input.ctx.ui.notify("Planner delete cancelled.", "info");
+		return null;
+	}
+
+	const isActive = project.activePlanId === selected;
+	const confirmed = await confirmPlannerDelete({
+		ui: input.ctx.ui,
+		planId: selected,
+		active: isActive,
+	});
+	if (!confirmed) {
+		input.ctx.ui.notify("Planner delete cancelled.", "info");
+		return null;
+	}
+	return { planId: selected, forceActive: isActive };
 }
 
 function notifyPlannerCommandResult(

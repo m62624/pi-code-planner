@@ -77,13 +77,31 @@ ctx.switchSession(sessionFile, {
 
 User-level plan commands:
 
-- `/planner-list` — читает project storage через runtime resolver и показывает все plans текущего original project. Команда должна работать одинаково из original cwd и из любого planner worktree cwd.
+- Planner plan list не имеет отдельной public slash command. Он используется внутри picker UX для switch/rename/delete.
 - `/planner-rename [--id <plan-id>] <new-title>` — меняет только human title в `plan.json` и `project.json.plans[]`. Не меняет `planId`, директорию плана, branch names или worktree path.
 - `/planner-switch <plan-id>` — переключает `project.json.activePlanId`, затем делает session handoff в `state.worktreePath` target plan. Перед switch проверяет текущий active plan: если его worktree dirty, step running, broken или requires user decision, switch блокируется.
 - `/planner-delete <plan-id>` — user command only. Inactive plan удаляется только если его worktree clean или уже missing. Команда удаляет managed worktree, managed child branches, `plans/<plan-id>/`, summary из `project.json.plans[]`, worktree-index и worktree session directory. Protected plan branch не удаляется этой командой.
-- `/planner-delete --force-active <plan-id>` — опасный explicit escape hatch. Нужен, если user больше не хочет продолжать текущую feature. Команда не ждёт recovery/clean state: сначала автоматически переключает PI session в original project cwd, затем force-removes active worktree, удаляет связанные worktree chats, planner files, worktree-index, managed child branches и сбрасывает `activePlanId`. Original session/chat не удаляется.
+- `/planner-delete --force-active <plan-id>` — опасный explicit escape hatch. Нужен, если user больше не хочет продолжать текущий planner plan. Команда не ждёт recovery/clean state: сначала автоматически переключает PI session в original project cwd, затем force-removes active worktree, удаляет связанные worktree chats, planner files, worktree-index, managed child branches и сбрасывает `activePlanId`. Original session/chat не удаляется.
 
 Эти команды не являются model tools. Они нужны user для навигации и уборки plans. Model workflow по-прежнему должен идти через planner tools и `planner_status`.
+
+Picker UX:
+
+1. `/planner-switch`
+   - без аргументов открывает TUI select со списком планов;
+   - с аргументом работает напрямую: `/planner-switch plan-a`.
+2. `/planner-rename`
+   - без id открывает TUI select со списком планов;
+   - потом `ctx.ui.input` для нового title;
+   - с аргументами работает напрямую.
+3. `/planner-delete`
+   - без аргументов открывает TUI select со списком планов;
+   - если выбран active plan, требует отдельный confirm с timeout 10s;
+   - direct CLI для active plan требует `--force-active`;
+   - TUI selection для active plan показывает timed confirm;
+   - inactive delete тоже требует confirm.
+4. `/planner-delete --force-active <plan-id>`
+   - быстрый escape hatch без лишнего ожидания, потому что user явно написал опасный флаг.
 
 PI session JSONL хранится там же, где PI хранит обычные chats:
 

@@ -187,7 +187,7 @@ describe("planner user commands", () => {
 			fs,
 			git,
 			projectPaths,
-			commandName: "planner_list",
+			commandName: "planner_get_plan_list",
 			params: {},
 		});
 

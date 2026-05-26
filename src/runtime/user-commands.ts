@@ -21,7 +21,7 @@ import { readPlanStateIfExists } from "../storage/state-store";
 import { createWorktreeProjectIndexPath } from "../storage/worktree-index";
 
 export type PlannerUserCommandName =
-	| "planner_list"
+	| "planner_get_plan_list"
 	| "planner_rename"
 	| "planner_switch"
 	| "planner_delete";
@@ -58,7 +58,7 @@ export async function executePlannerUserCommand(
 ): Promise<PlannerUserCommandResult> {
 	try {
 		switch (input.commandName) {
-			case "planner_list":
+			case "planner_get_plan_list":
 				return await listPlans(input);
 			case "planner_rename":
 				return await renamePlan(input);
@@ -70,6 +70,15 @@ export async function executePlannerUserCommand(
 	} catch (error) {
 		return blocked(input.commandName, errorMessage(error), { error });
 	}
+}
+
+export async function readPlannerPlanList(input: {
+	fs: PlannerFs;
+	projectPaths: ProjectStoragePaths;
+}): Promise<{ project: ProjectRecord; plans: PlannerListEntry[] }> {
+	const project = await readProjectRecord(input.fs, input.projectPaths);
+	const plans = await buildPlanList(input.fs, input.projectPaths, project);
+	return { project, plans };
 }
 
 async function listPlans(
