@@ -31,6 +31,7 @@ import {
 	PLANNER_MEMORY_TOOL_NAMES,
 	type PlannerMemoryToolName,
 } from "./runtime/memory-tools";
+import { runPlannerOrchestrator } from "./runtime/orchestrator";
 import {
 	parsePlannerCreateCommandArgs,
 	resolvePlannerPlanId,
@@ -46,7 +47,6 @@ import {
 	PLANNER_RECOVERY_TOOL_NAMES,
 	type PlannerRecoveryToolName,
 } from "./runtime/recovery-tools";
-import { buildPlannerStatusText } from "./runtime/status";
 import {
 	confirmPlannerDelete,
 	inputPlannerRenameTitle,
@@ -477,15 +477,16 @@ function registerPlannerTools(
 			"Use planner_status when a planner action is blocked or when you are unsure which planner step/tool is allowed.",
 		parameters: EMPTY_TOOL_PARAMETERS as never,
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-			const preflight = await readPlannerPreflight(ctx.cwd);
-			const text = await buildPlannerStatusText({
-				fs: createNodeFs(),
-				preflight,
+			const fs = createNodeFs();
+			const orchestration = await runPlannerOrchestrator({
+				fs,
+				git: new NodeGitRunner(),
+				projectPaths: await createRuntimeProjectPaths(ctx.cwd),
 			});
 
 			return {
-				content: [{ type: "text", text }],
-				details: preflight,
+				content: [{ type: "text", text: orchestration.statusText }],
+				details: orchestration,
 			};
 		},
 	});
@@ -990,20 +991,6 @@ function workflowToolParameters(toolName: PlannerWorkflowToolName) {
 		case "planner_complete_compact":
 			return EMPTY_TOOL_PARAMETERS;
 	}
-}
-
-async function readPlannerPreflight(projectRoot: string) {
-	const fs = createNodeFs();
-	const projectPaths = await resolveProjectStoragePaths({
-		fs,
-		agentDir: getAgentDir(),
-		cwd: projectRoot,
-	});
-	return await runPlannerPreflight({
-		fs,
-		git: new NodeGitRunner(),
-		projectPaths,
-	});
 }
 
 async function createRuntimeProjectPaths(cwd: string) {

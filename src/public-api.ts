@@ -266,6 +266,18 @@ export {
 	executePlannerMemoryTool,
 	PLANNER_MEMORY_TOOL_NAMES,
 } from "./runtime/memory-tools";
+export type {
+	PlannerManagedToolName,
+	PlannerOrchestratorInput,
+	PlannerOrchestratorNextAction,
+	PlannerOrchestratorResult,
+	PlannerOrchestratorToolDecision,
+} from "./runtime/orchestrator";
+export {
+	buildPlannerOrchestrator,
+	checkPlannerOrchestratorToolAllowed,
+	runPlannerOrchestrator,
+} from "./runtime/orchestrator";
 export type { PlannerCreateCommandArgs } from "./runtime/plan-naming";
 export {
 	parsePlannerCreateCommandArgs,
