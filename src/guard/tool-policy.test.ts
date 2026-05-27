@@ -69,6 +69,24 @@ describe("planner wrapper tool policy", () => {
 		] satisfies PlannerWrapperTool[]);
 	});
 
+	it("does not expose commit during experiment summary", () => {
+		const allowedTools = getAllowedPlannerWrapperTools({
+			...baseState,
+			step: "summarize_experiment",
+		});
+
+		expect(allowedTools).toEqual([
+			"planner_status",
+			"planner_git_inspect",
+		] satisfies PlannerWrapperTool[]);
+		expect(
+			checkPlannerWrapperAllowed({
+				tool: "planner_git_commit",
+				state: { ...baseState, step: "summarize_experiment" },
+			}),
+		).toMatchObject({ allow: false });
+	});
+
 	it("does not expose plan worktree creation as a public wrapper", () => {
 		expect(
 			getAllowedPlannerWrapperTools({

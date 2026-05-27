@@ -89,7 +89,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_git_create_experiment_branch",
 		],
 		run_experiment: ["planner_git_inspect", "planner_git_commit"],
-		summarize_experiment: ["planner_git_inspect", "planner_git_commit"],
+		summarize_experiment: ["planner_git_inspect"],
 		compact_experiment: [],
 		select_experiment: ["planner_git_inspect", "planner_git_select_experiment"],
 		merge_best_experiment: [

@@ -112,6 +112,41 @@ describe("planner stage behavior", () => {
 		}
 	});
 
+	it("keeps experiment summary as artifact-only work after implementation commit", () => {
+		const behavior = getPlannerStageStepBehavior({
+			stage: "execution",
+			step: "summarize_experiment",
+		});
+
+		expect(behavior).toMatchObject({
+			projectAccess: "planner_artifacts",
+			actions: ["write_artifacts"],
+			expectedTools: ["planner_git_inspect"],
+			commitPolicy: "forbidden",
+		});
+		expect(
+			checkPlannerStageBehaviorWrapperTool({
+				behavior,
+				tool: "planner_git_commit",
+			}),
+		).toMatchObject({ allow: false });
+	});
+
+	it("shows enter steps as complete-then-advance workflow boundaries", () => {
+		for (const [stage, step] of [
+			["init", "enter_discovery"],
+			["discovery", "enter_planning"],
+			["planning", "enter_execution"],
+			["finalize", "enter_done"],
+		] as const) {
+			expect(getPlannerStageStepBehavior({ stage, step })).toMatchObject({
+				actions: ["state_transition"],
+				expectedTools: ["planner_complete_step", "planner_advance_step"],
+				commitPolicy: "forbidden",
+			});
+		}
+	});
+
 	it("keeps done cleanup user-accepted and git-wrapper controlled", () => {
 		expect(
 			getPlannerStageStepBehavior({
