@@ -69,6 +69,9 @@ export {
 export { DEFAULT_INSTRUCTIONS } from "./instructions/defaults";
 export {
 	getInstructionContent,
+	getInstructionSection,
+	getInstructionSectionContent,
+	parseInstructionSections,
 	readInstructionDefaultsFromDir,
 	syncInstructionFiles,
 } from "./instructions/manager";
@@ -90,6 +93,8 @@ export type {
 	InstructionDefaults,
 	InstructionKey,
 	InstructionPaths,
+	InstructionSection,
+	InstructionSectionName,
 	SyncedInstructionFile,
 } from "./instructions/schema";
 export { INSTRUCTION_KEYS } from "./instructions/schema";
@@ -209,6 +214,23 @@ export {
 	readActivePlanContext,
 	updateActivePlanState,
 } from "./runtime/active-plan";
+export type {
+	PlannerCompactInstructionBundle,
+	PlannerCompactInstructionSection,
+	PlannerCompactRuntimeState,
+} from "./runtime/compact";
+export {
+	buildPlannerCompactInstructionBundle,
+	buildPlannerCompactInstructions,
+	buildPlannerPostAutoCompactMessage,
+	clearPlannerControlledCompact,
+	collectAutoCompactInstructionSections,
+	consumePlannerControlledCompact,
+	createPlannerCompactRuntimeState,
+	markPlannerControlledCompactStarted,
+	PLANNER_COMPACT_MARKER,
+	PLANNER_SYSTEM_INSTRUCTIONS_HEADER,
+} from "./runtime/compact";
 export type {
 	PlannerGitReality,
 	PlannerPreflightAction,

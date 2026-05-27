@@ -1,6 +1,7 @@
 import {
 	type ExtensionAPI,
 	type ExtensionCommandContext,
+	type ExtensionContext,
 	getAgentDir,
 	isToolCallEventType,
 } from "@earendil-works/pi-coding-agent";
@@ -10,6 +11,16 @@ import {
 	checkRawGitAllowed,
 	PLANNER_STATUS_TOOL_NAME,
 } from "./guard/git-watcher";
+import {
+	buildPlannerCompactInstructionBundle,
+	buildPlannerPostAutoCompactMessage,
+	clearPlannerControlledCompact,
+	collectAutoCompactInstructionSections,
+	consumePlannerControlledCompact,
+	createPlannerCompactRuntimeState,
+	markPlannerControlledCompactStarted,
+	type PlannerCompactRuntimeState,
+} from "./runtime/compact";
 import {
 	executePlannerGitTool,
 	PLANNER_GIT_TOOL_NAMES,
@@ -196,9 +207,11 @@ const GIT_FORCE_TOOL_PARAMETERS = {
 } as const;
 
 export default function piCodePlannerExtension(pi: ExtensionAPI): void {
+	const compactRuntime = createPlannerCompactRuntimeState();
 	registerPlannerCommands(pi);
-	registerPlannerTools(pi);
+	registerPlannerTools(pi, compactRuntime);
 	registerRawGitGuard(pi);
+	registerPlannerCompactEvents(pi, compactRuntime);
 }
 
 function registerPlannerCommands(pi: ExtensionAPI): void {
@@ -451,7 +464,10 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 	});
 }
 
-function registerPlannerTools(pi: ExtensionAPI): void {
+function registerPlannerTools(
+	pi: ExtensionAPI,
+	compactRuntime: PlannerCompactRuntimeState,
+): void {
 	pi.registerTool({
 		name: PLANNER_STATUS_TOOL_NAME,
 		label: "Planner Status",
@@ -508,17 +524,34 @@ function registerPlannerTools(pi: ExtensionAPI): void {
 				"Use planner_status first, then call only the workflow transition listed as allowed for the current stage/step.",
 			parameters: workflowToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const fs = createNodeFs();
+				const git = new NodeGitRunner();
+				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
 				const result = await executePlannerWorkflowTool({
-					fs: createNodeFs(),
-					git: new NodeGitRunner(),
-					projectPaths: await createRuntimeProjectPaths(ctx.cwd),
+					fs,
+					git,
+					projectPaths,
 					toolName,
 					params,
 				});
+				const compact = await maybeStartPlannerControlledCompact({
+					ctx,
+					fs,
+					git,
+					projectPaths,
+					compactRuntime,
+					toolName,
+					transitionStatus: result.result.status,
+				});
 
 				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
+					content: [
+						{
+							type: "text",
+							text: [result.text, compact?.text].filter(Boolean).join("\n\n"),
+						},
+					],
+					details: compact ? { ...result, compact } : result,
 				};
 			},
 		});
@@ -598,6 +631,101 @@ function registerPlannerTools(pi: ExtensionAPI): void {
 			},
 		});
 	}
+}
+
+function registerPlannerCompactEvents(
+	pi: ExtensionAPI,
+	compactRuntime: PlannerCompactRuntimeState,
+): void {
+	pi.on("session_compact", async (_event, ctx) => {
+		if (consumePlannerControlledCompact(compactRuntime)) {
+			return;
+		}
+
+		const fs = createNodeFs();
+		let projectPaths: Awaited<ReturnType<typeof resolveProjectStoragePaths>>;
+		try {
+			projectPaths = await resolveProjectStoragePaths({
+				fs,
+				agentDir: getAgentDir(),
+				cwd: ctx.cwd,
+			});
+		} catch {
+			return;
+		}
+
+		const preflight = await runPlannerPreflight({
+			fs,
+			git: new NodeGitRunner(),
+			projectPaths,
+		});
+		if (preflight.context.status !== "ready") {
+			return;
+		}
+
+		const sections = await collectAutoCompactInstructionSections({
+			fs,
+			projectPaths,
+			preflight,
+		});
+		const message = buildPlannerPostAutoCompactMessage({ preflight, sections });
+		if (ctx.isIdle() && !ctx.hasPendingMessages()) {
+			pi.sendUserMessage(message);
+			return;
+		}
+		pi.sendUserMessage(message, { deliverAs: "followUp" });
+	});
+}
+
+async function maybeStartPlannerControlledCompact(input: {
+	ctx: ExtensionContext;
+	fs: ReturnType<typeof createNodeFs>;
+	git: NodeGitRunner;
+	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
+	compactRuntime: PlannerCompactRuntimeState;
+	toolName: PlannerWorkflowToolName;
+	transitionStatus: "applied" | "blocked";
+}): Promise<{ text: string; customInstructions: string } | null> {
+	if (
+		input.toolName !== "planner_request_compact" ||
+		input.transitionStatus !== "applied"
+	) {
+		return null;
+	}
+
+	const preflight = await runPlannerPreflight({
+		fs: input.fs,
+		git: input.git,
+		projectPaths: input.projectPaths,
+	});
+	const bundle = await buildPlannerCompactInstructionBundle({
+		fs: input.fs,
+		projectPaths: input.projectPaths,
+		preflight,
+		sectionName: "manual-compact",
+	});
+
+	markPlannerControlledCompactStarted(input.compactRuntime);
+	setTimeout(() => {
+		input.ctx.compact({
+			customInstructions: bundle.text,
+			onComplete: () => {
+				input.ctx.ui.notify("Planner compact completed.", "info");
+			},
+			onError: (error) => {
+				clearPlannerControlledCompact(input.compactRuntime);
+				input.ctx.ui.notify(
+					`Planner compact failed: ${error.message}`,
+					"error",
+				);
+			},
+		});
+	}, 0);
+
+	return {
+		text: "Planner-controlled compact was requested through the Pi compact API. Do not continue until compaction finishes; then call planner_complete_compact followed by planner_status.",
+		customInstructions: bundle.text,
+	};
 }
 
 function registerRawGitGuard(pi: ExtensionAPI): void {
