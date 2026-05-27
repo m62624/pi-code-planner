@@ -13,6 +13,7 @@ import {
 	type PlannerLifecycleDecision,
 } from "./lifecycle";
 import type { PlannerPreflightResult } from "./preflight";
+import { getPlannerStageStepBehavior } from "./stage-behavior";
 import { getAllowedPlannerStateTransitionTypes } from "./state-transition";
 
 export interface PlannerStepRule {
@@ -782,6 +783,7 @@ export async function buildPlannerStatusText(
 
 	const state = preflight.context.state;
 	const rule = getPlannerStepRule(state);
+	const behavior = getPlannerStageStepBehavior(state);
 	const instructionBundle = await readInstructionBundle(input.fs, preflight);
 
 	lines.push(
@@ -833,6 +835,17 @@ export async function buildPlannerStatusText(
 		...formatBullets(rule.forbiddenNow),
 		`- exit condition: ${rule.exitCondition}`,
 		`- next instruction: ${rule.nextInstruction}`,
+		"",
+		"## Stage Behavior",
+		`- projectAccess: ${behavior.projectAccess}`,
+		`- actions: ${behavior.actions.join(", ") || "(none)"}`,
+		`- requiredArtifacts: ${behavior.requiredArtifacts.join(", ") || "(none)"}`,
+		`- updatedArtifacts: ${behavior.updatedArtifacts.join(", ") || "(none)"}`,
+		`- requiredGates: ${behavior.requiredGates.join(", ") || "(none)"}`,
+		`- expectedTools: ${behavior.expectedTools.join(", ") || "(none)"}`,
+		`- commitPolicy: ${behavior.commitPolicy}`,
+		`- memoryPolicy: ${behavior.memoryPolicy}`,
+		`- compactPolicy: ${behavior.compactPolicy}`,
 		"",
 		"## Allowed Planner Wrappers",
 		preflight.decision.allowedTools.join(", ") || "(none)",

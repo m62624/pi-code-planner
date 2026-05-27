@@ -335,6 +335,17 @@ export {
 	PLANNER_RECOVERY_TOOL_NAMES,
 } from "./runtime/recovery-tools";
 export type {
+	PlannerBehaviorAction,
+	PlannerBehaviorArtifact,
+	PlannerBehaviorGate,
+	PlannerProjectAccess,
+	PlannerStageStepBehavior,
+} from "./runtime/stage-behavior";
+export {
+	getPlannerStageStepBehavior,
+	PLANNER_STAGE_BEHAVIOR,
+} from "./runtime/stage-behavior";
+export type {
 	BlockPlannerStepOptions,
 	CompletePlannerStepOptions,
 	EnterPlannerRecoveryOptions,

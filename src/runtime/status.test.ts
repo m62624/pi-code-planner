@@ -121,6 +121,10 @@ describe("planner status text", () => {
 		expect(text).toContain(
 			"- objective: Write failing/mock/contract tests before production implementation.",
 		);
+		expect(text).toContain("## Stage Behavior");
+		expect(text).toContain("- projectAccess: test_edits");
+		expect(text).toContain("- requiredArtifacts: tdd.md");
+		expect(text).toContain("- commitPolicy: allowed_if_dirty");
 		expect(text).toContain("## Instruction Files To Read");
 		expect(text).toContain(
 			"default: /agent/extensions/pi-code-planner/instructions/defaults/tdd.md",
