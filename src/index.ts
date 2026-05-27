@@ -1112,7 +1112,7 @@ async function resolveDeleteCommandArgs(input: {
 		return null;
 	}
 
-	const isActive = project.activePlanId === selected;
+	const isActive = project?.activePlanId === selected;
 	const confirmed = await confirmPlannerDelete({
 		ui: input.ctx.ui,
 		planId: selected,

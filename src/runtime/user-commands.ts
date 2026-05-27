@@ -7,7 +7,7 @@ import {
 } from "../storage/paths";
 import { readPlanRecordIfExists, savePlanRecord } from "../storage/plan-store";
 import {
-	readProjectRecord,
+	readProjectRecordIfExists,
 	saveProjectRecord,
 	setActivePlan,
 } from "../storage/project-store";
@@ -75,8 +75,11 @@ export async function executePlannerUserCommand(
 export async function readPlannerPlanList(input: {
 	fs: PlannerFs;
 	projectPaths: ProjectStoragePaths;
-}): Promise<{ project: ProjectRecord; plans: PlannerListEntry[] }> {
-	const project = await readProjectRecord(input.fs, input.projectPaths);
+}): Promise<{ project: ProjectRecord | null; plans: PlannerListEntry[] }> {
+	const project = await readProjectRecordIfExists(input.fs, input.projectPaths);
+	if (!project) {
+		return { project: null, plans: [] };
+	}
 	const plans = await buildPlanList(input.fs, input.projectPaths, project);
 	return { project, plans };
 }
@@ -84,7 +87,13 @@ export async function readPlannerPlanList(input: {
 async function listPlans(
 	input: PlannerUserCommandInput,
 ): Promise<PlannerUserCommandResult> {
-	const project = await readProjectRecord(input.fs, input.projectPaths);
+	const project = await readProjectRecordIfExists(input.fs, input.projectPaths);
+	if (!project) {
+		return applied(input.commandName, formatPlanList([]), {
+			project: null,
+			plans: [],
+		});
+	}
 	const plans = await buildPlanList(input.fs, input.projectPaths, project);
 	return applied(input.commandName, formatPlanList(plans), { project, plans });
 }
@@ -93,7 +102,10 @@ async function renamePlan(
 	input: PlannerUserCommandInput,
 ): Promise<PlannerUserCommandResult> {
 	const params = asObject(input.params);
-	const project = await readProjectRecord(input.fs, input.projectPaths);
+	const project = await readProjectRecordIfExists(input.fs, input.projectPaths);
+	if (!project) {
+		return noProjectPlans(input.commandName);
+	}
 	const planId = optionalString(params, "planId") ?? project.activePlanId;
 	const title = requiredString(params, "title");
 	if (!planId) {
@@ -145,7 +157,10 @@ async function switchPlan(
 ): Promise<PlannerUserCommandResult> {
 	const params = asObject(input.params);
 	const targetPlanId = requiredString(params, "planId");
-	const project = await readProjectRecord(input.fs, input.projectPaths);
+	const project = await readProjectRecordIfExists(input.fs, input.projectPaths);
+	if (!project) {
+		return noProjectPlans(input.commandName);
+	}
 	const targetSummary = project.plans.find(
 		(plan) => plan.planId === targetPlanId,
 	);
@@ -234,7 +249,10 @@ async function deletePlan(
 	const planId = requiredString(params, "planId");
 	const forceActive = booleanParam(params, "forceActive") ?? false;
 	const deleteSessions = booleanParam(params, "deleteSessions") ?? false;
-	const project = await readProjectRecord(input.fs, input.projectPaths);
+	const project = await readProjectRecordIfExists(input.fs, input.projectPaths);
+	if (!project) {
+		return noProjectPlans(input.commandName);
+	}
 	const isActive = project.activePlanId === planId;
 	if (isActive && !forceActive) {
 		return blocked(
@@ -492,6 +510,16 @@ function blocked(
 	details: unknown,
 ): PlannerUserCommandResult {
 	return { status: "blocked", commandName, text, details };
+}
+
+function noProjectPlans(
+	commandName: PlannerUserCommandName,
+): PlannerUserCommandResult {
+	return blocked(
+		commandName,
+		"No planner plans in this project. Create one with /planner-create first.",
+		{ project: null },
+	);
 }
 
 function errorMessage(error: unknown): string {

@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { createProjectStoragePaths } from "../storage/paths";
+import { MockPlannerFs } from "../test/mock-fs";
 import {
 	confirmPlannerDelete,
 	inputPlannerRenameTitle,
 	type PlannerCommandUi,
 	planOptionLabel,
+	selectPlannerPlanId,
 	selectPlannerPlanIdFromList,
 } from "./user-command-ui";
 import type { PlannerListEntry } from "./user-commands";
@@ -104,6 +107,26 @@ describe("planner user command UI helpers", () => {
 				title: "Switch planner plan",
 			}),
 		).resolves.toBeNull();
+		expect(ui.notifications).toEqual([
+			{ message: "No planner plans in this project.", type: "warning" },
+		]);
+	});
+
+	it("does not throw when project storage does not exist yet", async () => {
+		const ui = new MockUi();
+
+		await expect(
+			selectPlannerPlanId({
+				ui,
+				fs: new MockPlannerFs(),
+				projectPaths: createProjectStoragePaths({
+					agentDir: "/agent",
+					projectRoot: "/repo/app",
+				}),
+				title: "Switch planner plan",
+			}),
+		).resolves.toBeNull();
+		expect(ui.selectCalls).toEqual([]);
 		expect(ui.notifications).toEqual([
 			{ message: "No planner plans in this project.", type: "warning" },
 		]);

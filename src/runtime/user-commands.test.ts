@@ -175,6 +175,56 @@ async function createPlanFixture(
 }
 
 describe("planner user commands", () => {
+	it("lists no plans when project storage was never created", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+
+		const result = await executePlannerUserCommand({
+			fs,
+			git,
+			projectPaths,
+			commandName: "planner_get_plan_list",
+			params: {},
+		});
+
+		expect(result.status).toBe("applied");
+		expect(result.text).toBe("No planner plans in this project.");
+		expect(result.details).toMatchObject({ project: null, plans: [] });
+	});
+
+	it("blocks user plan commands gracefully when project storage was never created", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+
+		for (const [commandName, params] of [
+			["planner_rename", { title: "New Title" }],
+			["planner_switch", { planId: "plan-a" }],
+			["planner_delete", { planId: "plan-a" }],
+		] as const) {
+			const result = await executePlannerUserCommand({
+				fs,
+				git,
+				projectPaths,
+				commandName,
+				params,
+			});
+
+			expect(result.status).toBe("blocked");
+			expect(result.text).toBe(
+				"No planner plans in this project. Create one with /planner-create first.",
+			);
+			expect(result.text).not.toContain("ENOENT");
+		}
+	});
+
 	it("lists plans for the resolved project with state and broken markers", async () => {
 		const { fs, git, projectPaths } = await createProjectFixture({
 			activePlanId: "plan-a",
