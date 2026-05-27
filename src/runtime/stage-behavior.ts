@@ -1,3 +1,4 @@
+import type { PlannerWrapperTool } from "../guard/tool-policy";
 import type { PlannerStage, PlannerStep } from "../storage/schema";
 
 export type PlannerProjectAccess =
@@ -99,6 +100,12 @@ export interface PlannerStageStepBehavior {
 		| "verify_and_sync"
 		| "sync_after_git";
 	compactPolicy: "not_allowed" | "request_required" | "complete_required";
+}
+
+export interface PlannerStageBehaviorToolDecision {
+	allow: boolean;
+	tool: PlannerWrapperTool;
+	reason: string | null;
 }
 
 export const PLANNER_STAGE_BEHAVIOR = {
@@ -666,6 +673,84 @@ export function getPlannerStageStepBehavior(input: {
 	return behavior;
 }
 
+export function checkPlannerStageBehaviorWrapperTool(input: {
+	behavior: PlannerStageStepBehavior;
+	tool: PlannerWrapperTool;
+}): PlannerStageBehaviorToolDecision {
+	if (input.tool === "planner_status") {
+		return allowBehaviorTool(input.tool);
+	}
+
+	if (input.tool === "planner_git_inspect") {
+		return allowBehaviorTool(input.tool);
+	}
+
+	if (input.tool === "planner_git_commit") {
+		return input.behavior.commitPolicy === "forbidden"
+			? blockBehaviorTool(
+					input.tool,
+					`Stage behavior forbids planner commits at ${input.behavior.stage}/${input.behavior.step}.`,
+				)
+			: allowBehaviorTool(input.tool);
+	}
+
+	if (isMemoryWriteTool(input.tool)) {
+		return input.behavior.memoryPolicy === "write_entries" ||
+			input.behavior.memoryPolicy === "sync_after_git"
+			? allowBehaviorTool(input.tool)
+			: blockBehaviorTool(
+					input.tool,
+					`Stage behavior does not allow memory writes at ${input.behavior.stage}/${input.behavior.step}.`,
+				);
+	}
+
+	if (isMemoryVerifyOrSyncTool(input.tool)) {
+		return input.behavior.memoryPolicy === "verify_and_sync" ||
+			input.behavior.memoryPolicy === "sync_after_git"
+			? allowBehaviorTool(input.tool)
+			: blockBehaviorTool(
+					input.tool,
+					`Stage behavior does not allow memory verification/sync at ${input.behavior.stage}/${input.behavior.step}.`,
+				);
+	}
+
+	if (isMemoryReadTool(input.tool)) {
+		return input.behavior.memoryPolicy === "not_required" &&
+			!input.behavior.expectedTools.includes(input.tool)
+			? blockBehaviorTool(
+					input.tool,
+					`Stage behavior does not require planner memory access at ${input.behavior.stage}/${input.behavior.step}.`,
+				)
+			: allowBehaviorTool(input.tool);
+	}
+
+	if (isRecoveryTool(input.tool)) {
+		return input.behavior.stage === "recovery" ||
+			input.behavior.expectedTools.includes(input.tool)
+			? allowBehaviorTool(input.tool)
+			: blockBehaviorTool(
+					input.tool,
+					`Stage behavior does not allow recovery wrappers at ${input.behavior.stage}/${input.behavior.step}.`,
+				);
+	}
+
+	if (isStateChangingGitTool(input.tool)) {
+		return input.behavior.actions.includes("planner_git")
+			? allowBehaviorTool(input.tool)
+			: blockBehaviorTool(
+					input.tool,
+					`Stage behavior does not allow git mutations at ${input.behavior.stage}/${input.behavior.step}.`,
+				);
+	}
+
+	return input.behavior.expectedTools.includes(input.tool)
+		? allowBehaviorTool(input.tool)
+		: blockBehaviorTool(
+				input.tool,
+				`Stage behavior does not list ${input.tool} as expected at ${input.behavior.stage}/${input.behavior.step}.`,
+			);
+}
+
 function behavior(
 	stage: PlannerStage,
 	step: PlannerStep,
@@ -744,4 +829,57 @@ function recoveryBehavior(
 		memoryPolicy: "read_first",
 		compactPolicy: "not_allowed",
 	});
+}
+
+function allowBehaviorTool(
+	tool: PlannerWrapperTool,
+): PlannerStageBehaviorToolDecision {
+	return { allow: true, tool, reason: null };
+}
+
+function blockBehaviorTool(
+	tool: PlannerWrapperTool,
+	reason: string,
+): PlannerStageBehaviorToolDecision {
+	return { allow: false, tool, reason };
+}
+
+function isMemoryReadTool(tool: PlannerWrapperTool): boolean {
+	return tool === "planner_memory_inspect";
+}
+
+function isMemoryWriteTool(tool: PlannerWrapperTool): boolean {
+	return (
+		tool === "planner_memory_apply_freshness" ||
+		tool === "planner_memory_write_batch"
+	);
+}
+
+function isMemoryVerifyOrSyncTool(tool: PlannerWrapperTool): boolean {
+	return (
+		tool === "planner_memory_verify" ||
+		tool === "planner_memory_sync_checkpoint"
+	);
+}
+
+function isRecoveryTool(tool: PlannerWrapperTool): boolean {
+	return (
+		tool === "planner_recovery_inspect" || tool === "planner_recovery_resume"
+	);
+}
+
+function isStateChangingGitTool(tool: PlannerWrapperTool): boolean {
+	return (
+		tool === "planner_git_init" ||
+		tool === "planner_git_create_task_branch" ||
+		tool === "planner_git_create_experiment_branch" ||
+		tool === "planner_git_select_experiment" ||
+		tool === "planner_git_merge_selected_experiment" ||
+		tool === "planner_git_create_refactor_branch" ||
+		tool === "planner_git_merge_refactor_to_task" ||
+		tool === "planner_git_merge_task_to_plan" ||
+		tool === "planner_git_export_plan_to_output" ||
+		tool === "planner_git_remove_plan_worktree" ||
+		tool === "planner_git_cleanup_managed_branches"
+	);
 }

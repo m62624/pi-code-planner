@@ -12,6 +12,7 @@ import {
 	decidePlannerLifecycleNext,
 	type PlannerLifecycleDecision,
 } from "./lifecycle";
+import { filterPlannerWrapperToolsForLifecycle } from "./orchestrator-gate";
 import type { PlannerPreflightResult } from "./preflight";
 import { getPlannerStageStepBehavior } from "./stage-behavior";
 import { getAllowedPlannerStateTransitionTypes } from "./state-transition";
@@ -784,6 +785,12 @@ export async function buildPlannerStatusText(
 	const state = preflight.context.state;
 	const rule = getPlannerStepRule(state);
 	const behavior = getPlannerStageStepBehavior(state);
+	const allowedWrapperTools = filterPlannerWrapperToolsForLifecycle({
+		preflight,
+		lifecycle,
+		behavior,
+		tools: preflight.decision.allowedTools,
+	});
 	const instructionBundle = await readInstructionBundle(input.fs, preflight);
 
 	lines.push(
@@ -848,7 +855,7 @@ export async function buildPlannerStatusText(
 		`- compactPolicy: ${behavior.compactPolicy}`,
 		"",
 		"## Allowed Planner Wrappers",
-		preflight.decision.allowedTools.join(", ") || "(none)",
+		allowedWrapperTools.join(", ") || "(none)",
 		"",
 		"## Allowed State Transitions",
 		getAllowedPlannerStateTransitionTypes(preflight).join(", ") || "(none)",

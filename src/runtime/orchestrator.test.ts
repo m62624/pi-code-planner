@@ -57,6 +57,11 @@ describe("planner lifecycle orchestrator", () => {
 			requiredTool: "planner_start_step",
 			requiredTransition: "start_step",
 		});
+		expect(result.behavior).toMatchObject({
+			stage: "planning",
+			step: "draft_plan",
+			projectAccess: "planner_artifacts",
+		});
 		expect(result.nextAction).toMatchObject({
 			kind: "tool",
 			toolName: "planner_start_step",
@@ -93,6 +98,54 @@ describe("planner lifecycle orchestrator", () => {
 			"Planner tool planner_complete_step is blocked",
 		);
 		expect(decision.reason).toContain("Allowed transitions: start_step");
+	});
+
+	it("blocks wrapper tools until the current step is running", async () => {
+		const setup = await createOrchestratorSetup({
+			stage: "execution",
+			step: "prepare_task",
+			stepStatus: "pending",
+		});
+		const result = await runPlannerOrchestrator({
+			fs: setup.fs,
+			git: new MockGitRunner(),
+			projectPaths: setup.projectPaths,
+		});
+
+		const decision = checkPlannerOrchestratorToolAllowed({
+			orchestrator: result,
+			toolName: "planner_git_create_task_branch",
+		});
+
+		expect(result.allowedWrapperTools).not.toContain(
+			"planner_git_create_task_branch",
+		);
+		expect(decision.allow).toBe(false);
+		expect(decision.reason).toContain("is pending");
+		expect(decision.reason).toContain("planner_start_step");
+	});
+
+	it("allows behavior-compatible wrapper tools while the current step is running", async () => {
+		const setup = await createOrchestratorSetup({
+			stage: "execution",
+			step: "prepare_task",
+			stepStatus: "running",
+		});
+		const result = await runPlannerOrchestrator({
+			fs: setup.fs,
+			git: new MockGitRunner(),
+			projectPaths: setup.projectPaths,
+		});
+
+		const decision = checkPlannerOrchestratorToolAllowed({
+			orchestrator: result,
+			toolName: "planner_git_create_task_branch",
+		});
+
+		expect(result.allowedWrapperTools).toContain(
+			"planner_git_create_task_branch",
+		);
+		expect(decision.allow).toBe(true);
 	});
 
 	it("routes external HEAD changes through memory checkpoint sync before normal lifecycle", async () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getAllowedPlannerWrapperTools } from "../guard/tool-policy";
 import { PLANNER_STAGE_STEPS } from "../storage/schema";
 import {
+	checkPlannerStageBehaviorWrapperTool,
 	getPlannerStageStepBehavior,
 	PLANNER_STAGE_BEHAVIOR,
 } from "./stage-behavior";
@@ -142,5 +143,35 @@ describe("planner stage behavior", () => {
 				}
 			}
 		}
+	});
+
+	it("uses behavior policy to block contradictory wrapper tools", () => {
+		expect(
+			checkPlannerStageBehaviorWrapperTool({
+				behavior: getPlannerStageStepBehavior({
+					stage: "execution",
+					step: "write_tdd_plan",
+				}),
+				tool: "planner_git_commit",
+			}),
+		).toMatchObject({ allow: false });
+		expect(
+			checkPlannerStageBehaviorWrapperTool({
+				behavior: getPlannerStageStepBehavior({
+					stage: "execution",
+					step: "write_tests",
+				}),
+				tool: "planner_git_commit",
+			}),
+		).toMatchObject({ allow: true });
+		expect(
+			checkPlannerStageBehaviorWrapperTool({
+				behavior: getPlannerStageStepBehavior({
+					stage: "discovery",
+					step: "read_project",
+				}),
+				tool: "planner_memory_inspect",
+			}),
+		).toMatchObject({ allow: false });
 	});
 });

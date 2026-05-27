@@ -278,6 +278,14 @@ export {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./runtime/orchestrator";
+export type {
+	PlannerWrapperLifecycleGateDecision,
+	PlannerWrapperLifecycleGateInput,
+} from "./runtime/orchestrator-gate";
+export {
+	checkPlannerWrapperToolForLifecycle,
+	filterPlannerWrapperToolsForLifecycle,
+} from "./runtime/orchestrator-gate";
 export type { PlannerCreateCommandArgs } from "./runtime/plan-naming";
 export {
 	parsePlannerCreateCommandArgs,
@@ -339,9 +347,11 @@ export type {
 	PlannerBehaviorArtifact,
 	PlannerBehaviorGate,
 	PlannerProjectAccess,
+	PlannerStageBehaviorToolDecision,
 	PlannerStageStepBehavior,
 } from "./runtime/stage-behavior";
 export {
+	checkPlannerStageBehaviorWrapperTool,
 	getPlannerStageStepBehavior,
 	PLANNER_STAGE_BEHAVIOR,
 } from "./runtime/stage-behavior";

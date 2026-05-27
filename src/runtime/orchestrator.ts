@@ -7,10 +7,18 @@ import {
 	type PlannerLifecycleDecision,
 } from "./lifecycle";
 import {
+	checkPlannerWrapperToolForLifecycle,
+	filterPlannerWrapperToolsForLifecycle,
+} from "./orchestrator-gate";
+import {
 	checkPlannerPreflightToolAllowed,
 	type PlannerPreflightResult,
 	runPlannerPreflight,
 } from "./preflight";
+import {
+	getPlannerStageStepBehavior,
+	type PlannerStageStepBehavior,
+} from "./stage-behavior";
 import {
 	getAllowedPlannerStateTransitionTypes,
 	type PlannerStateTransitionType,
@@ -48,6 +56,7 @@ export interface PlannerOrchestratorInput {
 export interface PlannerOrchestratorResult {
 	preflight: PlannerPreflightResult;
 	lifecycle: PlannerLifecycleDecision;
+	behavior: PlannerStageStepBehavior | null;
 	statusText: string;
 	nextAction: PlannerOrchestratorNextAction;
 	allowedWrapperTools: readonly PlannerWrapperTool[];
@@ -96,12 +105,21 @@ export async function buildPlannerOrchestrator(input: {
 	preflight: PlannerPreflightResult;
 }): Promise<PlannerOrchestratorResult> {
 	const lifecycle = decidePlannerLifecycleNext(input.preflight);
+	const behavior =
+		input.preflight.context.status === "ready"
+			? getPlannerStageStepBehavior(input.preflight.context.state)
+			: null;
 	const allowedTransitions = getAllowedPlannerStateTransitionTypes(
 		input.preflight,
 	);
 	const allowedWorkflowTools =
 		getAllowedWorkflowToolsForTransitions(allowedTransitions);
-	const allowedWrapperTools = input.preflight.decision.allowedTools;
+	const allowedWrapperTools = filterPlannerWrapperToolsForLifecycle({
+		preflight: input.preflight,
+		lifecycle,
+		behavior,
+		tools: input.preflight.decision.allowedTools,
+	});
 	const allowedTools = uniqueTools([
 		...allowedWrapperTools,
 		...allowedWorkflowTools,
@@ -109,6 +127,7 @@ export async function buildPlannerOrchestrator(input: {
 	return {
 		preflight: input.preflight,
 		lifecycle,
+		behavior,
 		statusText: await buildPlannerStatusText({
 			fs: input.fs,
 			preflight: input.preflight,
@@ -149,12 +168,21 @@ export function checkPlannerOrchestratorToolAllowed(input: {
 		preflight: input.orchestrator.preflight,
 		tool: input.toolName as PlannerWrapperTool,
 	});
+	const lifecycleGate = policy.allow
+		? checkPlannerWrapperToolForLifecycle({
+				preflight: input.orchestrator.preflight,
+				lifecycle: input.orchestrator.lifecycle,
+				behavior: input.orchestrator.behavior,
+				tool: input.toolName as PlannerWrapperTool,
+			})
+		: null;
 	return {
-		allow: policy.allow,
+		allow: policy.allow && (lifecycleGate?.allow ?? true),
 		toolName: input.toolName,
 		reason:
 			policy.reason ??
-			(policy.allow
+			lifecycleGate?.reason ??
+			(policy.allow && (lifecycleGate?.allow ?? true)
 				? null
 				: buildBlockedToolReason({
 						orchestrator: input.orchestrator,
