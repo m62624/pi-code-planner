@@ -7,6 +7,8 @@ import {
 	type InstructionDefaults,
 	type InstructionKey,
 	type InstructionPaths,
+	type InstructionSection,
+	type InstructionSectionName,
 	type SyncedInstructionFile,
 } from "./schema";
 
@@ -72,6 +74,55 @@ export async function getInstructionContent(
 		appendSource: append.source,
 		content: joinInstructionParts(defaultContent, append.content),
 	};
+}
+
+export async function getInstructionSectionContent(
+	fs: PlannerFs,
+	paths: InstructionPaths,
+	key: InstructionKey,
+	sectionName: InstructionSectionName,
+): Promise<InstructionContent & { section: InstructionSection }> {
+	const content = await getInstructionContent(fs, paths, key);
+	return {
+		...content,
+		section: getInstructionSection(content.content, sectionName),
+	};
+}
+
+export function getInstructionSection(
+	content: string,
+	sectionName: InstructionSectionName,
+): InstructionSection {
+	const sections = parseInstructionSections(content);
+	const section = sections.get(normalizeSectionName(sectionName));
+	return {
+		name: sectionName,
+		content: section?.trim() ?? "",
+		found: section !== undefined,
+	};
+}
+
+export function parseInstructionSections(content: string): Map<string, string> {
+	const sections = new Map<string, string>();
+	let currentName: string | null = null;
+	let currentLines: string[] = [];
+
+	for (const line of content.split(/\r?\n/)) {
+		const heading = parseLevelTwoHeading(line);
+		if (heading) {
+			flushSection(sections, currentName, currentLines);
+			currentName = heading;
+			currentLines = [];
+			continue;
+		}
+
+		if (currentName) {
+			currentLines.push(line);
+		}
+	}
+
+	flushSection(sections, currentName, currentLines);
+	return sections;
 }
 
 async function syncDefaultInstruction(
@@ -146,4 +197,31 @@ function joinInstructionParts(
 
 function hashText(content: string): string {
 	return createHash("sha256").update(content).digest("hex");
+}
+
+function parseLevelTwoHeading(line: string): string | null {
+	const match = /^##\s+(.+?)\s*$/.exec(line);
+	if (!match) {
+		return null;
+	}
+	const raw = match[1];
+	if (!raw || raw.startsWith("#")) {
+		return null;
+	}
+	return normalizeSectionName(raw);
+}
+
+function normalizeSectionName(name: string): string {
+	return name.trim().toLowerCase().replace(/\s+/g, "-");
+}
+
+function flushSection(
+	sections: Map<string, string>,
+	name: string | null,
+	lines: readonly string[],
+): void {
+	if (!name) {
+		return;
+	}
+	sections.set(name, lines.join("\n").trim());
 }

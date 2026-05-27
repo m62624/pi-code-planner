@@ -4,6 +4,9 @@ import { MockPlannerFs } from "../test/mock-fs";
 import { DEFAULT_INSTRUCTIONS } from "./defaults";
 import {
 	getInstructionContent,
+	getInstructionSection,
+	getInstructionSectionContent,
+	parseInstructionSections,
 	readInstructionDefaultsFromDir,
 	syncInstructionFiles,
 } from "./manager";
@@ -152,5 +155,91 @@ describe("instruction manager", () => {
 
 		expect(defaults.discovery).toBe("# discovery from md\n");
 		expect(defaults["git-commit"]).toBe("# git-commit from md\n");
+	});
+
+	it("parses only level-two instruction sections", () => {
+		const sections = parseInstructionSections(
+			[
+				"# compact",
+				"intro",
+				"## Manual Compact",
+				"manual body",
+				"### nested",
+				"nested body",
+				"## auto compact",
+				"auto body",
+				"# another title",
+				"still auto body",
+			].join("\n"),
+		);
+
+		expect(sections.get("manual-compact")).toBe(
+			"manual body\n### nested\nnested body",
+		);
+		expect(sections.get("auto-compact")).toBe(
+			"auto body\n# another title\nstill auto body",
+		);
+		expect(sections.has("compact")).toBe(false);
+	});
+
+	it("returns a requested compact section from joined default and append content", async () => {
+		const fs = new MockPlannerFs();
+		const paths = createInstructionPaths(
+			createProjectStoragePaths({
+				agentDir: "/agent",
+				projectRoot: "/repo/app",
+			}),
+		);
+		await syncInstructionFiles(fs, paths, {
+			...DEFAULT_INSTRUCTIONS,
+			execution: [
+				"# execution",
+				"",
+				"## manual-compact",
+				"Keep task id and artifact links.",
+			].join("\n"),
+		});
+		await fs.writeTextAtomic(
+			instructionFilePath(paths.projectAppendDir, "execution"),
+			["## auto-compact", "Call planner_status before resuming."].join("\n"),
+		);
+
+		const manual = await getInstructionSectionContent(
+			fs,
+			paths,
+			"execution",
+			"manual-compact",
+		);
+		const auto = await getInstructionSectionContent(
+			fs,
+			paths,
+			"execution",
+			"auto-compact",
+		);
+
+		expect(manual.section).toEqual({
+			name: "manual-compact",
+			content: "Keep task id and artifact links.",
+			found: true,
+		});
+		expect(auto.section).toEqual({
+			name: "auto-compact",
+			content: "Call planner_status before resuming.",
+			found: true,
+		});
+		expect(auto.appendSource).toBe("project");
+	});
+
+	it("reports missing compact sections without failing", () => {
+		const section = getInstructionSection(
+			"# execution\n\nNo compact section.",
+			"auto-compact",
+		);
+
+		expect(section).toEqual({
+			name: "auto-compact",
+			content: "",
+			found: false,
+		});
 	});
 });

@@ -17,6 +17,7 @@ export const INSTRUCTION_KEYS = [
 export type InstructionKey = (typeof INSTRUCTION_KEYS)[number];
 export type InstructionDefaults = Record<InstructionKey, string>;
 export type InstructionAppendSource = "project" | "global" | null;
+export type InstructionSectionName = "manual-compact" | "auto-compact";
 
 export interface InstructionPaths {
 	instructionsDir: string;
@@ -39,4 +40,10 @@ export interface InstructionContent {
 	appendPath: string | null;
 	appendSource: InstructionAppendSource;
 	content: string;
+}
+
+export interface InstructionSection {
+	name: string;
+	content: string;
+	found: boolean;
 }
