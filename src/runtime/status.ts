@@ -8,6 +8,10 @@ import type {
 import type { PlannerFs } from "../storage/fs";
 import type { PlannerStage, PlannerStep } from "../storage/schema";
 import { PLANNER_STAGE_STEPS } from "../storage/schema";
+import {
+	decidePlannerLifecycleNext,
+	type PlannerLifecycleDecision,
+} from "./lifecycle";
 import type { PlannerPreflightResult } from "./preflight";
 import { getAllowedPlannerStateTransitionTypes } from "./state-transition";
 
@@ -746,6 +750,7 @@ export async function buildPlannerStatusText(
 	input: PlannerStatusTextInput,
 ): Promise<string> {
 	const preflight = input.preflight;
+	const lifecycle = decidePlannerLifecycleNext(preflight);
 	const lines = [
 		"# Planner Status",
 		"",
@@ -763,8 +768,11 @@ export async function buildPlannerStatusText(
 			`- context: ${preflight.context.status}`,
 			`- detail: ${preflight.context.reason}`,
 			"",
+			"## Lifecycle Decision",
+			...formatLifecycleDecision(lifecycle),
+			"",
 			"## Next Required Action",
-			nextRequiredAction(preflight, null),
+			formatLifecycleNextAction(lifecycle, null),
 			"",
 			"## Global Invariants",
 			...formatNumbered(PLANNER_STATUS_INVARIANTS),
@@ -807,8 +815,11 @@ export async function buildPlannerStatusText(
 		"## Memory",
 		...formatMemorySection(preflight),
 		"",
+		"## Lifecycle Decision",
+		...formatLifecycleDecision(lifecycle),
+		"",
 		"## Next Required Action",
-		nextRequiredAction(preflight, rule),
+		formatLifecycleNextAction(lifecycle, rule),
 		"",
 		"## Current Step Rule",
 		`- stage: ${rule.stage}`,
@@ -905,59 +916,31 @@ async function safeGetInstructionContent(
 	}
 }
 
-function nextRequiredAction(
-	preflight: PlannerPreflightResult,
+function formatLifecycleDecision(decision: PlannerLifecycleDecision): string[] {
+	return [
+		`- action: ${decision.action}`,
+		`- requiredTool: ${decision.requiredTool ?? "(none)"}`,
+		`- requiredTransition: ${decision.requiredTransition ?? "(none)"}`,
+		`- reason: ${decision.reason}`,
+	];
+}
+
+function formatLifecycleNextAction(
+	decision: PlannerLifecycleDecision,
 	rule: PlannerStepRule | null,
 ): string {
-	const transitions = getAllowedPlannerStateTransitionTypes(preflight);
-	switch (preflight.decision.action) {
-		case "no_active_plan":
-			return "No active planner plan is running. Use /planner-create or planner_create_plan only when the user asks to start a planner-controlled task.";
-		case "require_recovery":
-			return "Normal flow is blocked. Inspect recovery state and do not edit project files or git until recovery is resolved.";
-		case "require_user_decision":
-			return "Stop and ask the user for the required decision. Do not continue normal flow.";
-		case "require_memory_update":
-			return "Update planner memory first: inspect/apply freshness, rewrite affected file/symbol/relation/effects entries, verify memory, then sync checkpoint when the worktree is clean.";
-		case "require_compact":
-			return "Compact boundary is pending. Run Pi compact flow, then call planner_complete_compact, then call planner_status again.";
-		case "allow_stage_machine":
-			break;
+	switch (decision.action) {
+		case "complete_step":
+			return `Complete the current step only after exit condition is true: ${rule?.exitCondition ?? "(missing rule)"}`;
+		case "start_step":
+			return `Call planner_start_step, then follow ${decision.stage}/${decision.step}: ${rule?.objective ?? "current step"}.`;
+		case "write_memory":
+		case "inspect_memory":
+		case "sync_memory_checkpoint":
+			return `Update planner memory first: inspect/apply freshness, rewrite affected file/symbol/relation/effects entries, verify memory, then sync checkpoint when the worktree is clean. Exact next action: ${decision.modelMessage}`;
+		default:
+			return decision.modelMessage;
 	}
-
-	if (preflight.context.status !== "ready") {
-		return "Call planner_status again after activating a plan.";
-	}
-
-	const state = preflight.context.state;
-	if (state.stepStatus === "pending") {
-		return transitions.includes("start_step")
-			? `Call planner_start_step, then follow ${state.stage}/${state.step}: ${rule?.objective ?? "current step"}.`
-			: "Step is pending, but start_step is not currently allowed. Follow runtime gate above.";
-	}
-	if (state.stepStatus === "running") {
-		if (state.step.startsWith("compact_")) {
-			return transitions.includes("request_compact")
-				? "When the compact summary is ready, call planner_request_compact."
-				: "Compact step is running, but request_compact is not currently allowed. Follow runtime gate above.";
-		}
-		return transitions.includes("complete_step")
-			? `Complete the current step only after exit condition is true: ${rule?.exitCondition ?? "(missing rule)"}`
-			: "Step is running, but complete_step is not currently allowed. Follow runtime gate above.";
-	}
-	if (state.stepStatus === "completed") {
-		return transitions.includes("advance_step")
-			? "Call planner_advance_step. Do not repeat the completed step."
-			: "Step is completed, but advance_step is not currently allowed. Follow runtime gate above.";
-	}
-	if (state.stepStatus === "failed") {
-		return transitions.includes("retry_step")
-			? "Fix the cause, then call planner_retry_step to retry the same step."
-			: "Step failed and cannot be retried until the blocking gate is resolved.";
-	}
-	return state.requiresUserDecision
-		? "Step is blocked and requires a user decision. Ask the user before continuing."
-		: "Step is blocked. Resolve the blocker or call planner_retry_step if policy allows it.";
 }
 
 function formatMemorySection(preflight: PlannerPreflightResult): string[] {

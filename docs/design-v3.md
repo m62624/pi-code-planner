@@ -788,6 +788,7 @@ Tool возвращает:
 - persisted state snapshot;
 - git/worktree reality;
 - memory/checkpoint status;
+- lifecycle decision;
 - next required action;
 - exact current step rule;
 - allowed planner wrappers;
@@ -806,6 +807,31 @@ Instruction bundle вставляет markdown content только для те�
 - дополнительные instruction keys текущего step: `memory`, `tdd`, `experiment`, `refactor`, `git`, `git-commit`.
 
 Memory indexes целиком в `planner_status` не вставляются. Вместо этого status возвращает exact paths и жёсткое правило: сначала inspect/retrieve memory, потом читать source code только если memory отсутствует, stale, недостаточна или требует verification.
+
+### Lifecycle manager
+
+`decidePlannerLifecycleNext(...)` — pure слой над preflight/state machine/wrapper policy. Он не читает файлы, не меняет state и не вызывает git. Его задача — превратить runtime facts в один model-facing next action.
+
+Lifecycle decision возвращает:
+
+- `action` — одно решение: `start_step`, `complete_step`, `advance_step`, `write_memory`, `sync_memory_checkpoint`, `inspect_recovery`, `compact_pending`, etc.
+- `requiredTool` — один tool, который модель должна вызвать следующим, если действие требует tool.
+- `requiredTransition` — state-machine transition, если действие является workflow transition.
+- `allowedTools` и `allowedTransitions` — полный список разрешённых wrapper tools/transitions для проверки.
+- `instructionKeys` — markdown instruction keys текущего маршрута.
+- `reason` — почему выбрано это действие.
+- `modelMessage` — короткая инструкция модели.
+
+Lifecycle manager нужен, чтобы модель не выводила следующий шаг из длинного markdown текста сама. Markdown объясняет *как* выполнять stage/step, а lifecycle decision говорит *что именно* разрешено вызвать следующим.
+
+Инварианты lifecycle manager:
+
+1. `require_recovery` всегда ведёт к `planner_recovery_inspect`.
+2. `require_user_decision` останавливает normal flow и требует user decision; recovery inspect можно использовать только для точного отчёта.
+3. `require_memory_update` не разрешает stage transition. Если memory stale — next tool `planner_memory_write_batch`; если memory clean и worktree clean — `planner_memory_sync_checkpoint`; если worktree dirty на memory boundary — recovery inspect.
+4. `require_compact` ведёт к `planner_complete_compact` только после фактического Pi compact boundary.
+5. Normal state machine flow выбирает transition строго по `stepStatus`: pending → start, running → complete/request compact, completed → advance, failed/blocked → retry или user decision.
+6. Lifecycle manager не заменяет wrapper policy: public tools всё равно обязаны заново пройти preflight/policy перед выполнением.
 
 Правило append:
 - если есть project append, модель учитывает `default + project append`;

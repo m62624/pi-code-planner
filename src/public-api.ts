@@ -231,6 +231,11 @@ export {
 	PLANNER_GIT_TOOL_NAMES,
 } from "./runtime/git-tools";
 export type {
+	PlannerLifecycleAction,
+	PlannerLifecycleDecision,
+} from "./runtime/lifecycle";
+export { decidePlannerLifecycleNext } from "./runtime/lifecycle";
+export type {
 	PlannerMemoryToolExecutionInput,
 	PlannerMemoryToolExecutionResult,
 	PlannerMemoryToolName,
