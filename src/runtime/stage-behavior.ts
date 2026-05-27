@@ -212,13 +212,13 @@ export const PLANNER_STAGE_BEHAVIOR = {
 	}),
 	write_project_patterns: behavior("discovery", "write_project_patterns", {
 		projectAccess: "planner_artifacts",
-		actions: ["write_artifacts", "write_memory"],
+		actions: ["write_artifacts"],
 		requiredArtifacts: ["discovery.md"],
 		updatedArtifacts: ["project_patterns.md"],
 		requiredGates: [],
-		expectedTools: ["planner_memory_write_batch"],
+		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "write_entries",
+		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	write_file_index: behavior("discovery", "write_file_index", {
@@ -515,7 +515,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["next_task_decided"],
 		expectedTools: ["planner_git_inspect"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "verify_and_sync",
+		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	write_final_summary: behavior("finalize", "write_final_summary", {

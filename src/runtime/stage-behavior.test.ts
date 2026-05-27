@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { getAllowedPlannerWrapperTools } from "../guard/tool-policy";
+import {
+	getAllowedPlannerWrapperTools,
+	PLANNER_WRAPPER_TOOLS,
+} from "../guard/tool-policy";
 import { PLANNER_STAGE_STEPS } from "../storage/schema";
 import {
 	checkPlannerStageBehaviorWrapperTool,
 	getPlannerStageStepBehavior,
 	PLANNER_STAGE_BEHAVIOR,
 } from "./stage-behavior";
+import { PLANNER_WORKFLOW_TOOL_NAMES } from "./workflow-tools";
 
 describe("planner stage behavior", () => {
 	it("has an exact behavior spec for every planner stage step", () => {
@@ -38,6 +42,16 @@ describe("planner stage behavior", () => {
 		).toMatchObject({
 			projectAccess: "read_only",
 			commitPolicy: "forbidden",
+			memoryPolicy: "not_required",
+		});
+		expect(
+			getPlannerStageStepBehavior({
+				stage: "discovery",
+				step: "write_project_patterns",
+			}),
+		).toMatchObject({
+			actions: ["write_artifacts"],
+			expectedTools: ["planner_status"],
 			memoryPolicy: "not_required",
 		});
 		expect(
@@ -118,6 +132,22 @@ describe("planner stage behavior", () => {
 				"planner_git_cleanup_managed_branches",
 			],
 		});
+	});
+
+	it("uses only known planner tools in expectedTools", () => {
+		const knownTools = new Set<string>([
+			...PLANNER_WRAPPER_TOOLS,
+			...PLANNER_WORKFLOW_TOOL_NAMES,
+		]);
+
+		for (const behavior of Object.values(PLANNER_STAGE_BEHAVIOR)) {
+			for (const tool of behavior.expectedTools) {
+				expect(
+					knownTools.has(tool),
+					`${behavior.stage}/${behavior.step} references unknown expected tool ${tool}`,
+				).toBe(true);
+			}
+		}
 	});
 
 	it("keeps behavior commit policy aligned with wrapper policy", () => {
