@@ -22,10 +22,10 @@ import {
 	syncStateAfterPlannerGitMutation,
 } from "./git-state-sync";
 import {
-	checkPlannerPreflightToolAllowed,
-	type PlannerPreflightResult,
-	runPlannerPreflight,
-} from "./preflight";
+	checkPlannerOrchestratorToolAllowed,
+	type PlannerOrchestratorResult,
+	runPlannerOrchestrator,
+} from "./orchestrator";
 
 export const PLANNER_GIT_TOOL_NAMES = [
 	"planner_git_inspect",
@@ -62,8 +62,13 @@ export interface PlannerGitToolExecutionResult {
 
 interface ReadyGitContext {
 	status: "ready";
-	preflight: PlannerPreflightResult & {
-		context: Extract<PlannerPreflightResult["context"], { status: "ready" }>;
+	orchestrator: PlannerOrchestratorResult & {
+		preflight: PlannerOrchestratorResult["preflight"] & {
+			context: Extract<
+				PlannerOrchestratorResult["preflight"]["context"],
+				{ status: "ready" }
+			>;
+		};
 	};
 	state: PlanStateRecord;
 	planId: string;
@@ -72,8 +77,8 @@ interface ReadyGitContext {
 export async function executePlannerGitTool(
 	input: PlannerGitToolExecutionInput,
 ): Promise<PlannerGitToolExecutionResult> {
-	const preflight = await runPlannerPreflight(input);
-	const ready = readyGitContext(preflight, input.toolName);
+	const orchestrator = await runPlannerOrchestrator(input);
+	const ready = readyGitContext(orchestrator, input.toolName);
 	if (ready.status === "blocked") {
 		return ready.result;
 	}
@@ -113,7 +118,7 @@ export async function executePlannerGitTool(
 }
 
 function readyGitContext(
-	preflight: PlannerPreflightResult,
+	orchestrator: PlannerOrchestratorResult,
 	toolName: PlannerGitToolName,
 ):
 	| ReadyGitContext
@@ -121,15 +126,17 @@ function readyGitContext(
 			status: "blocked";
 			result: PlannerGitToolExecutionResult;
 	  } {
-	if (preflight.context.status !== "ready") {
+	if (orchestrator.preflight.context.status !== "ready") {
 		return {
 			status: "blocked",
-			result: blocked(toolName, preflight.context.reason, { preflight }),
+			result: blocked(toolName, orchestrator.preflight.context.reason, {
+				orchestrator,
+			}),
 		};
 	}
-	const policy = checkPlannerPreflightToolAllowed({
-		preflight,
-		tool: toolName,
+	const policy = checkPlannerOrchestratorToolAllowed({
+		orchestrator,
+		toolName,
 	});
 	if (!policy.allow) {
 		return {
@@ -137,15 +144,15 @@ function readyGitContext(
 			result: blocked(
 				toolName,
 				policy.reason ?? `Planner git tool ${toolName} is blocked.`,
-				{ preflight, policy },
+				{ orchestrator, policy },
 			),
 		};
 	}
 	return {
 		status: "ready",
-		preflight: preflight as ReadyGitContext["preflight"],
-		state: preflight.context.state,
-		planId: preflight.context.activePlanId,
+		orchestrator: orchestrator as ReadyGitContext["orchestrator"],
+		state: orchestrator.preflight.context.state,
+		planId: orchestrator.preflight.context.activePlanId,
 	};
 }
 
@@ -201,7 +208,7 @@ async function commitGitTool(
 	});
 	await savePlanState(
 		input.fs,
-		ready.preflight.context.planPaths,
+		ready.orchestrator.preflight.context.planPaths,
 		synced.state,
 	);
 	return applied(
@@ -269,7 +276,7 @@ async function selectExperimentTool(
 	});
 	await savePlanState(
 		input.fs,
-		ready.preflight.context.planPaths,
+		ready.orchestrator.preflight.context.planPaths,
 		result.state,
 	);
 	return applied(input.toolName, `Planner selected experiment ${attemptId}.`, {
@@ -372,7 +379,7 @@ async function exportPlanTool(
 	});
 	await savePlanState(
 		input.fs,
-		ready.preflight.context.planPaths,
+		ready.orchestrator.preflight.context.planPaths,
 		result.state,
 	);
 	return applied(input.toolName, "Planner exported plan to output branch.", {
@@ -392,7 +399,11 @@ async function removeWorktreeTool(
 		force: booleanParam(input.params, "force") ?? false,
 	});
 	const state = { ...ready.state, worktreePath: null };
-	await savePlanState(input.fs, ready.preflight.context.planPaths, state);
+	await savePlanState(
+		input.fs,
+		ready.orchestrator.preflight.context.planPaths,
+		state,
+	);
 	return applied(input.toolName, "Planner worktree removed.", {
 		result,
 		state,
@@ -439,7 +450,11 @@ async function cleanupManagedBranchesTool(
 			taskToPlan: null,
 		},
 	};
-	await savePlanState(input.fs, ready.preflight.context.planPaths, state);
+	await savePlanState(
+		input.fs,
+		ready.orchestrator.preflight.context.planPaths,
+		state,
+	);
 	return applied(input.toolName, "Planner managed child branches cleaned up.", {
 		deletedBranches: managedChildBranches,
 		state,
@@ -471,7 +486,7 @@ async function runStateChangingGitOperation(input: {
 	});
 	await savePlanState(
 		input.input.fs,
-		input.ready.preflight.context.planPaths,
+		input.ready.orchestrator.preflight.context.planPaths,
 		state,
 	);
 	return applied(input.input.toolName, input.text, {

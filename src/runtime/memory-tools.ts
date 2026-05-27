@@ -16,10 +16,10 @@ import type { ProjectStoragePaths } from "../storage/paths";
 import { savePlanState } from "../storage/state-store";
 import { markMemoryCheckpointSynced } from "./git-state-sync";
 import {
-	checkPlannerPreflightToolAllowed,
-	type PlannerPreflightResult,
-	runPlannerPreflight,
-} from "./preflight";
+	checkPlannerOrchestratorToolAllowed,
+	type PlannerOrchestratorResult,
+	runPlannerOrchestrator,
+} from "./orchestrator";
 
 export const PLANNER_MEMORY_TOOL_NAMES = [
 	"planner_memory_inspect",
@@ -48,18 +48,25 @@ export interface PlannerMemoryToolExecutionResult {
 
 interface ReadyMemoryContext {
 	status: "ready";
-	preflight: PlannerPreflightResult & {
-		context: Extract<PlannerPreflightResult["context"], { status: "ready" }>;
+	orchestrator: PlannerOrchestratorResult & {
+		preflight: PlannerOrchestratorResult["preflight"] & {
+			context: Extract<
+				PlannerOrchestratorResult["preflight"]["context"],
+				{ status: "ready" }
+			>;
+		};
 	};
 	worktreePath: string;
-	memoryPaths: NonNullable<PlannerPreflightResult["memoryPaths"]>;
+	memoryPaths: NonNullable<
+		PlannerOrchestratorResult["preflight"]["memoryPaths"]
+	>;
 }
 
 export async function executePlannerMemoryTool(
 	input: PlannerMemoryToolExecutionInput,
 ): Promise<PlannerMemoryToolExecutionResult> {
-	const preflight = await runPlannerPreflight(input);
-	const ready = readyMemoryContext(preflight, input.toolName);
+	const orchestrator = await runPlannerOrchestrator(input);
+	const ready = readyMemoryContext(orchestrator, input.toolName);
 	if (ready.status === "blocked") {
 		return ready.result;
 	}
@@ -67,7 +74,7 @@ export async function executePlannerMemoryTool(
 	switch (input.toolName) {
 		case "planner_memory_inspect": {
 			const inspection =
-				preflight.memoryGate ??
+				orchestrator.preflight.memoryGate ??
 				(await inspectMemoryGate({
 					fs: input.fs,
 					git: input.git,
@@ -128,11 +135,11 @@ export async function executePlannerMemoryTool(
 			);
 		}
 		case "planner_memory_sync_checkpoint": {
-			if (preflight.gitReality?.isDirty) {
+			if (orchestrator.preflight.gitReality?.isDirty) {
 				return blocked(
 					input.toolName,
 					"Cannot sync planner memory checkpoint while the worktree is dirty. Commit planner changes first with planner_git_commit, then update and verify memory for the new HEAD.",
-					{ gitReality: preflight.gitReality },
+					{ gitReality: orchestrator.preflight.gitReality },
 				);
 			}
 			const inspection = await inspectMemoryGate({
@@ -148,10 +155,10 @@ export async function executePlannerMemoryTool(
 					{ inspection },
 				);
 			}
-			const head = preflight.gitReality?.headCommit;
+			const head = orchestrator.preflight.gitReality?.headCommit;
 			if (!head) {
 				return blocked(input.toolName, "Git HEAD is unavailable.", {
-					preflight,
+					orchestrator,
 				});
 			}
 			await writeMemoryCheckpoint(input.fs, ready.memoryPaths, head);
@@ -162,10 +169,14 @@ export async function executePlannerMemoryTool(
 				Object.keys(dirty.files),
 			);
 			const state = markMemoryCheckpointSynced({
-				state: ready.preflight.context.state,
+				state: ready.orchestrator.preflight.context.state,
 				headCommit: head,
 			});
-			await savePlanState(input.fs, ready.preflight.context.planPaths, state);
+			await savePlanState(
+				input.fs,
+				ready.orchestrator.preflight.context.planPaths,
+				state,
+			);
 			return applied(
 				input.toolName,
 				"Planner memory checkpoint synced. Normal planner flow may continue.",
@@ -176,7 +187,7 @@ export async function executePlannerMemoryTool(
 }
 
 function readyMemoryContext(
-	preflight: PlannerPreflightResult,
+	orchestrator: PlannerOrchestratorResult,
 	toolName: PlannerMemoryToolName,
 ):
 	| ReadyMemoryContext
@@ -184,15 +195,17 @@ function readyMemoryContext(
 			status: "blocked";
 			result: PlannerMemoryToolExecutionResult;
 	  } {
-	if (preflight.context.status !== "ready") {
+	if (orchestrator.preflight.context.status !== "ready") {
 		return {
 			status: "blocked",
-			result: blocked(toolName, preflight.context.reason, { preflight }),
+			result: blocked(toolName, orchestrator.preflight.context.reason, {
+				orchestrator,
+			}),
 		};
 	}
-	const policy = checkPlannerPreflightToolAllowed({
-		preflight,
-		tool: toolName,
+	const policy = checkPlannerOrchestratorToolAllowed({
+		orchestrator,
+		toolName,
 	});
 	if (!policy.allow) {
 		return {
@@ -200,33 +213,38 @@ function readyMemoryContext(
 			result: blocked(
 				toolName,
 				policy.reason ?? `Planner memory tool ${toolName} is blocked.`,
-				{ preflight, policy },
+				{ orchestrator, policy },
 			),
 		};
 	}
-	if (!preflight.context.state.worktreePath || !preflight.memoryPaths) {
+	if (
+		!orchestrator.preflight.context.state.worktreePath ||
+		!orchestrator.preflight.memoryPaths
+	) {
 		return {
 			status: "blocked",
 			result: blocked(
 				toolName,
 				"Planner worktree or memory paths are missing.",
 				{
-					preflight,
+					orchestrator,
 				},
 			),
 		};
 	}
 	return {
 		status: "ready",
-		preflight: preflight as ReadyMemoryContext["preflight"],
-		worktreePath: preflight.context.state.worktreePath,
-		memoryPaths: preflight.memoryPaths,
+		orchestrator: orchestrator as ReadyMemoryContext["orchestrator"],
+		worktreePath: orchestrator.preflight.context.state.worktreePath,
+		memoryPaths: orchestrator.preflight.memoryPaths,
 	};
 }
 
 async function refreshMemoryCheckpointHashes(
 	fs: PlannerFs,
-	memoryPaths: NonNullable<PlannerPreflightResult["memoryPaths"]>,
+	memoryPaths: NonNullable<
+		PlannerOrchestratorResult["preflight"]["memoryPaths"]
+	>,
 ): Promise<void> {
 	const checkpoint = await readMemoryCheckpoint(fs, memoryPaths);
 	await writeMemoryCheckpoint(fs, memoryPaths, checkpoint.commit);

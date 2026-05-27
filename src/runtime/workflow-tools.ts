@@ -1,7 +1,10 @@
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
-import { runPlannerPreflight } from "./preflight";
+import {
+	checkPlannerOrchestratorToolAllowed,
+	runPlannerOrchestrator,
+} from "./orchestrator";
 import {
 	applyPlannerStateTransition,
 	type PlannerStateTransition,
@@ -42,10 +45,34 @@ export async function executePlannerWorkflowTool(
 	input: PlannerWorkflowToolExecutionInput,
 ): Promise<PlannerWorkflowToolExecutionResult> {
 	const transition = workflowToolTransition(input.toolName, input.params);
-	const preflight = await runPlannerPreflight(input);
+	const orchestrator = await runPlannerOrchestrator(input);
+	const gate = checkPlannerOrchestratorToolAllowed({
+		orchestrator,
+		toolName: input.toolName,
+	});
+	if (!gate.allow) {
+		const state =
+			orchestrator.preflight.context.status === "ready"
+				? orchestrator.preflight.context.state
+				: null;
+		const result: PlannerStateTransitionResult = {
+			status: "blocked",
+			code: "runtime_blocked",
+			transition,
+			reason:
+				gate.reason ??
+				`Planner workflow tool ${input.toolName} is blocked by orchestrator.`,
+			state,
+		};
+		return {
+			text: formatWorkflowToolResult(result),
+			transition,
+			result,
+		};
+	}
 	const result = await applyPlannerStateTransition({
 		fs: input.fs,
-		preflight,
+		preflight: orchestrator.preflight,
 		transition,
 	});
 

@@ -3,9 +3,9 @@ import type { PlannerWrapperTool } from "../guard/tool-policy";
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
 import {
-	checkPlannerPreflightToolAllowed,
-	runPlannerPreflight,
-} from "./preflight";
+	checkPlannerOrchestratorToolAllowed,
+	runPlannerOrchestrator,
+} from "./orchestrator";
 import {
 	formatPlannerRecoveryInspection,
 	inspectPlannerRecovery,
@@ -45,10 +45,10 @@ export interface PlannerRecoveryToolExecutionResult {
 export async function executePlannerRecoveryTool(
 	input: PlannerRecoveryToolExecutionInput,
 ): Promise<PlannerRecoveryToolExecutionResult> {
-	const preflight = await runPlannerPreflight(input);
-	const policy = checkPlannerPreflightToolAllowed({
-		preflight,
-		tool: input.toolName,
+	const orchestrator = await runPlannerOrchestrator(input);
+	const policy = checkPlannerOrchestratorToolAllowed({
+		orchestrator,
+		toolName: input.toolName,
 	});
 	if (!policy.allow) {
 		return {
@@ -56,7 +56,10 @@ export async function executePlannerRecoveryTool(
 			toolName: input.toolName,
 			text:
 				policy.reason ?? `Planner recovery tool ${input.toolName} is blocked.`,
-			details: { reason: policy.reason ?? "blocked", preflight },
+			details: {
+				reason: policy.reason ?? "blocked",
+				preflight: orchestrator.preflight,
+			},
 		};
 	}
 
@@ -77,23 +80,32 @@ export async function executePlannerRecoveryTool(
 					status: "blocked",
 					toolName: input.toolName,
 					text: "Planner recovery resume requires targetStage and targetStep string parameters.",
-					details: { reason: "missing targetStage or targetStep", preflight },
+					details: {
+						reason: "missing targetStage or targetStep",
+						preflight: orchestrator.preflight,
+					},
 				};
 			}
-			if (preflight.context.status !== "ready" || !preflight.planPaths) {
+			if (
+				orchestrator.preflight.context.status !== "ready" ||
+				!orchestrator.preflight.planPaths
+			) {
 				return {
 					status: "blocked",
 					toolName: input.toolName,
 					text: "Planner recovery resume requires a ready active plan context.",
-					details: { reason: "active plan context is not ready", preflight },
+					details: {
+						reason: "active plan context is not ready",
+						preflight: orchestrator.preflight,
+					},
 				};
 			}
 			const result = await resumePlannerRecovery({
 				fs: input.fs,
 				git: input.git,
 				projectPaths: input.projectPaths,
-				planPaths: preflight.planPaths,
-				state: preflight.context.state,
+				planPaths: orchestrator.preflight.planPaths,
+				state: orchestrator.preflight.context.state,
 				target,
 			});
 			return {
