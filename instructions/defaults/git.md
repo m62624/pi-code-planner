@@ -54,6 +54,7 @@ The extension stores branch registry and merge targets in `state.json`. The mode
 
 - Do not run `git` through shell.
 - Do not use shell aliases, scripts, or indirect commands to bypass planner git wrappers.
+- During active planning, built-in write/edit calls may change project files only inside the active plan worktree and only during open execution steps.
 - Do not reset, force checkout, abort, delete, or discard changes without explicit user approval through recovery flow.
 
 ## manual-compact

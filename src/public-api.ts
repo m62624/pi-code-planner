@@ -57,6 +57,17 @@ export {
 	PLANNER_STATUS_TOOL_NAME,
 } from "./guard/git-watcher";
 export type {
+	PlannerBuiltinGuardDecision,
+	PlannerBuiltinGuardInput,
+	PlannerBuiltinGuardState,
+	PlannerBuiltinToolCall,
+} from "./guard/project-mutation";
+export {
+	checkPlannerBuiltinToolAllowed,
+	isFinalizeCheckCommand,
+	isReadOnlyShellCommand,
+} from "./guard/project-mutation";
+export type {
 	PlannerToolPolicyDecision,
 	PlannerWrapperTool,
 } from "./guard/tool-policy";

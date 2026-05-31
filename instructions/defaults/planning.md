@@ -46,6 +46,7 @@ At `planning/read_memory`, load context in this order:
 
 - Do not edit production files.
 - Do not write tests yet.
+- Built-in project write/edit and mutating shell commands remain blocked. Write only planner markdown artifacts.
 - Do not create task or experiment branches.
 - Do not reread the whole project unless bounded memory is insufficient.
 - Do not rely on chat memory; write durable facts to artifacts.

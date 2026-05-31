@@ -14,6 +14,13 @@ describe("raw git watcher", () => {
 			true,
 		);
 		expect(analyzeRawGitCommand("command git status")).toBe(true);
+		expect(analyzeRawGitCommand("/usr/bin/git status")).toBe(true);
+		expect(analyzeRawGitCommand("env HOME=/tmp git status")).toBe(true);
+		expect(analyzeRawGitCommand("env HOME=/tmp command git status")).toBe(true);
+		expect(analyzeRawGitCommand("sudo git status")).toBe(true);
+		expect(analyzeRawGitCommand("sh -c git status")).toBe(true);
+		expect(analyzeRawGitCommand("sh -lc 'git status'")).toBe(true);
+		expect(analyzeRawGitCommand("find . -exec git status")).toBe(true);
 	});
 
 	it("does not match non-git words or text mentions", () => {

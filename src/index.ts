@@ -7,12 +7,15 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { SCHEMA_VERSION } from "./constants";
 import { NodeGitRunner } from "./git/node-runner";
+import { PLANNER_STATUS_TOOL_NAME } from "./guard/git-watcher";
 import {
-	checkRawGitAllowed,
-	PLANNER_STATUS_TOOL_NAME,
-} from "./guard/git-watcher";
+	checkPlannerBuiltinToolAllowed,
+	type PlannerBuiltinGuardState,
+	type PlannerBuiltinToolCall,
+} from "./guard/project-mutation";
 import { syncBundledInstructionFiles } from "./instructions/defaults";
 import { createInstructionPaths } from "./instructions/paths";
+import { readActivePlanContext } from "./runtime/active-plan";
 import {
 	buildPlannerCompactInstructionBundle,
 	buildPlannerPostAutoCompactMessage,
@@ -71,10 +74,7 @@ import {
 } from "./session/handoff";
 import { createNodeFs } from "./storage/fs";
 import { resolveProjectStoragePaths } from "./storage/project-resolver";
-import {
-	ensureProjectRecord,
-	readProjectRecordIfExists,
-} from "./storage/project-store";
+import { ensureProjectRecord } from "./storage/project-store";
 import { saveWorktreeProjectIndex } from "./storage/worktree-index";
 
 export * from "./public-api";
@@ -212,7 +212,7 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 	const compactRuntime = createPlannerCompactRuntimeState();
 	registerPlannerCommands(pi);
 	registerPlannerTools(pi, compactRuntime);
-	registerRawGitGuard(pi);
+	registerPlannerBuiltinToolGuard(pi);
 	registerPlannerCompactEvents(pi, compactRuntime);
 	registerInstructionDefaultsSync(pi);
 }
@@ -750,15 +750,23 @@ async function maybeStartPlannerControlledCompact(input: {
 	};
 }
 
-function registerRawGitGuard(pi: ExtensionAPI): void {
+function registerPlannerBuiltinToolGuard(pi: ExtensionAPI): void {
 	pi.on("tool_call", async (event, ctx) => {
-		if (!isToolCallEventType("bash", event)) {
+		let tool: PlannerBuiltinToolCall;
+		if (isToolCallEventType("bash", event)) {
+			tool = { toolName: "bash", command: event.input.command };
+		} else if (isToolCallEventType("write", event)) {
+			tool = { toolName: "write", path: event.input.path };
+		} else if (isToolCallEventType("edit", event)) {
+			tool = { toolName: "edit", path: event.input.path };
+		} else {
 			return;
 		}
 
-		const state = await readActivePlannerState(ctx.cwd);
-		const decision = checkRawGitAllowed({
-			command: event.input.command,
+		const state = await readPlannerBuiltinGuardState(ctx.cwd);
+		const decision = checkPlannerBuiltinToolAllowed({
+			cwd: ctx.cwd,
+			tool,
 			state,
 		});
 
@@ -767,7 +775,7 @@ function registerRawGitGuard(pi: ExtensionAPI): void {
 				block: true,
 				reason:
 					decision.reason ??
-					"Raw git is blocked while pi-code-planner is active.",
+					"Built-in Pi tool is blocked while pi-code-planner is active.",
 			};
 		}
 	});
@@ -1023,22 +1031,38 @@ async function createRuntimeProjectPaths(cwd: string) {
 	});
 }
 
-async function readActivePlannerState(projectRoot: string): Promise<{
-	activePlanId: string | null;
-	active: boolean;
-}> {
+async function readPlannerBuiltinGuardState(
+	cwd: string,
+): Promise<PlannerBuiltinGuardState> {
 	try {
 		const fs = createNodeFs();
-		const paths = await resolveProjectStoragePaths({
+		const projectPaths = await resolveProjectStoragePaths({
 			fs,
 			agentDir: getAgentDir(),
-			cwd: projectRoot,
+			cwd,
 		});
-		const project = await readProjectRecordIfExists(fs, paths);
-		const activePlanId = project?.activePlanId ?? null;
-		return { activePlanId, active: activePlanId !== null };
+		const context = await readActivePlanContext({ fs, projectPaths });
+		if (context.status === "ready") {
+			return {
+				activePlanId: context.activePlanId,
+				active: true,
+				projectPaths,
+				planState: context.state,
+			};
+		}
+		return {
+			activePlanId: context.activePlanId,
+			active: context.activePlanId !== null,
+			projectPaths,
+			planState: null,
+		};
 	} catch {
-		return { activePlanId: null, active: false };
+		return {
+			activePlanId: null,
+			active: true,
+			projectPaths: null,
+			planState: null,
+		};
 	}
 }
 
