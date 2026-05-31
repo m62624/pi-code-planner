@@ -187,10 +187,26 @@ describe("instruction manager", () => {
 	it("loads repository markdown files as the bundled defaults", async () => {
 		const defaults = await loadBundledInstructionDefaults(createNodeFs());
 
-		expect(defaults.discovery.trim()).toBe("# discovery");
+		expect(defaults.discovery).toContain("# discovery");
+		expect(defaults.discovery).toContain("## Strict Step Order");
 		expect(defaults.memory).toContain(
 			"Memory is the compressed project knowledge base.",
 		);
+	});
+
+	it("keeps every repository default substantive and auto-compact aware", async () => {
+		const defaults = await loadBundledInstructionDefaults(createNodeFs());
+
+		for (const key of INSTRUCTION_KEYS) {
+			expect(
+				defaults[key].length,
+				`${key}.md should be substantive`,
+			).toBeGreaterThan(120);
+			expect(
+				getInstructionSection(defaults[key], "auto-compact"),
+				`${key}.md should define auto-compact recovery`,
+			).toMatchObject({ found: true });
+		}
 	});
 
 	it("syncs installed defaults from bundled markdown without overwriting append", async () => {

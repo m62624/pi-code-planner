@@ -228,10 +228,17 @@ plan → task → experiment-A → compact → experiment-B → compact → expe
   → task → merge → plan
 ```
 
-#### Compact всегда
-Compact происходит между каждой мини-задачей.
+#### Compact boundaries
+Compact происходит на явных границах контекста, а не после каждого технического подшага.
 
-Каждая ветка = одна задача = один compact. Без исключений.
+Плановые compact steps:
+- `discovery/compact_discovery` — после построения и проверки memory blob
+- `planning/compact_planning` — после готового общего плана и task artifacts
+- `execution/compact_experiment` — после каждой завершённой experiment-попытки
+- `execution/compact_task` — после merge завершённого task в plan branch
+- `finalize/compact_finalize` — перед user acceptance
+
+Каждая experiment-ветка даёт один compacted candidate summary. Каждый завершённый task даёт один compacted result. Внутренние технические шаги TDD не делают отдельный compact автоматически.
 
 #### Двухуровневая декомпозиция
 Level 1: атомарные функции — одна задача, ноль побочных эффектов.
@@ -287,7 +294,7 @@ Merge task → plan = готовая задача с полным кодом.
 5. Refactor: улучшение кода без изменения поведения
 6. Task branch merge → plan branch
 
-Каждая подстадия = compact перед следующей.
+Compact вызывается только на документированных boundaries: после каждого experiment, после merge каждого task в plan branch и перед переходом к user acceptance.
 
 Task boundary строгий:
 - task после merge в plan branch считается только compacted result;
@@ -303,6 +310,16 @@ Task boundary строгий:
 - После compact модель читает: task.md + memory blob
 - Model не читает весь проект — только compact + blob
 - Memory blob содержит: паттерны, сигнатуры, связи, индекс файлов
+
+После любого compact модель сначала вызывает `planner_status`. Нельзя продолжать работу по памяти из старого chat context.
+
+Reload policy:
+- после `compact_discovery`: читать `discovery.md`, `project_patterns.md`, memory indexes через bounded retrieval; затем строить `plan.md`
+- после `compact_planning`: перечитать полный `plan.md`, затем `task.md` выбранного task и релевантную memory
+- после `compact_experiment`: перечитать `task.md`, `tdd.md`, test/verify artifacts, summaries предыдущих attempts и релевантную memory; полный `plan.md` читать только если нужен integration context
+- после `compact_task`: перечитать полный `plan.md`, task status, решения и релевантную memory перед выбором следующего task
+- после `compact_finalize`: читать `final_summary.md`, verify artifacts и branch state перед показом результата user
+- после auto-compact в любом месте: вызвать `planner_status`, восстановить exact `stage/step`, прочитать перечисленные status artifacts; если scope мог измениться после recovery или change request, перечитать полный `plan.md`
 
 ---
 
@@ -1332,8 +1349,8 @@ Policy output:
 5. `start_experiments` — создать список попыток эксперимента и первый experiment branch.
 6. `run_experiment` — реализовать один подход в experiment branch.
 7. `summarize_experiment` — записать summary, git diff summary и результат проверки experiment. Отдельный `diff.md` artifact не создаётся: diff берётся через planner git wrapper.
-8. `compact_experiment` — выполнить compact boundary перед следующим experiment или selection.
-9. `select_experiment` — модель выбирает лучший `experimentId`; merge target берётся из `plans/<plan-id>/state.json`.
+8. `compact_experiment` — выполнить compact boundary перед решением о следующем experiment или selection.
+9. `select_experiment` — decision point: если task требует ещё одну отличающуюся попытку, вернуться в `start_experiments`; иначе модель выбирает лучший `experimentId`, а merge target берётся из `plans/<plan-id>/state.json`.
 10. `merge_best_experiment` — extension merge выбранный experiment branch в current task branch.
 11. `refactor_task` — улучшить код на task branch без изменения поведения.
 12. `run_final_tests` — прогнать финальные проверки task branch.

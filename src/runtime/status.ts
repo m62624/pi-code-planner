@@ -446,18 +446,24 @@ export const PLANNER_STEP_RULES = {
 		exitCondition:
 			"Compaction finished and resume context points back to planner_status.",
 		nextInstruction:
-			"Complete compact, then advance to select_experiment or start another experiment as directed by task instructions.",
+			"Complete compact, then advance to select_experiment. That decision step chooses another experiment or selected merge.",
 	}),
 	select_experiment: stepRule("execution", "select_experiment", {
-		objective: "Select the best experiment attempt.",
+		objective:
+			"Decide whether to run another distinct experiment or select the best completed attempt.",
 		requiredActions: [
-			"Compare attempt summaries and choose the best attempt id through planner_git_select_experiment.",
+			"Compare completed attempt summaries against task stop criteria.",
+			"If another distinct attempt is required, continue to execution/start_experiments.",
+			"If the attempt budget or stop criteria are satisfied, choose the best attempt id through planner_git_select_experiment and continue to merge_best_experiment.",
 		],
-		allowedNow: ["Read experiment summaries and select an experiment id."],
+		allowedNow: [
+			"Read experiment summaries, decide whether another attempt is required, and select an experiment id only when ready to merge.",
+		],
 		forbiddenNow: ["Do not specify merge source/target branches manually."],
-		exitCondition: "state.activeBranches.selectedExperiment is set.",
+		exitCondition:
+			"Either another experiment is explicitly requested or state.activeBranches.selectedExperiment is set.",
 		nextInstruction:
-			"Complete the step, then advance to merge_best_experiment.",
+			"Complete with explicit next target: execution/start_experiments or execution/merge_best_experiment.",
 	}),
 	merge_best_experiment: stepRule("execution", "merge_best_experiment", {
 		objective: "Merge the selected experiment into the task branch.",

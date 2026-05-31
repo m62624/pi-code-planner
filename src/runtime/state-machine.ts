@@ -106,6 +106,12 @@ export function getAllowedNextPlannerPositions(
 			{ stage: "finalize", step: "verify_plan_branch" },
 		];
 	}
+	if (input.stage === "execution" && input.step === "select_experiment") {
+		return [
+			{ stage: "execution", step: "start_experiments" },
+			{ stage: "execution", step: "merge_best_experiment" },
+		];
+	}
 	if (input.stage === "finalize" && input.step === "enter_done") {
 		return [{ stage: "done", step: "present_result" }];
 	}
