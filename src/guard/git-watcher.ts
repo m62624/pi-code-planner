@@ -62,48 +62,7 @@ function splitShellLikeSegments(command: string): string[] {
 }
 
 function segmentStartsWithGit(segment: string): boolean {
-	const tokens = segment.match(/[^\s]+/g) ?? [];
-	stripCommandPrefixes(tokens);
-	const executable = tokens[0]?.split("/").at(-1);
-	if (executable === "git") {
-		return true;
-	}
-	return (
-		executable !== undefined &&
-		["bash", "eval", "fish", "find", "sh", "xargs", "zsh"].includes(
-			executable,
-		) &&
-		tokens.slice(1).some(isGitToken)
-	);
-}
-
-function stripCommandPrefixes(tokens: string[]): void {
-	let changed = true;
-	while (changed) {
-		changed = false;
-		while (tokens[0] && /^[A-Za-z_][A-Za-z0-9_]*=\S+$/.test(tokens[0])) {
-			tokens.shift();
-			changed = true;
-		}
-		if (tokens[0] === "command") {
-			tokens.shift();
-			changed = true;
-		}
-		if (tokens[0] === "env" || tokens[0] === "sudo") {
-			tokens.shift();
-			while (
-				tokens[0] &&
-				(tokens[0].startsWith("-") ||
-					/^[A-Za-z_][A-Za-z0-9_]*=\S+$/.test(tokens[0]))
-			) {
-				tokens.shift();
-			}
-			changed = true;
-		}
-	}
-}
-
-function isGitToken(token: string): boolean {
-	const normalized = token.replace(/^[`"'([{]+|[`"',;)\]}]+$/g, "");
-	return normalized === "git" || normalized.endsWith("/git");
+	const withoutEnv = segment.replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*/, "");
+	const withoutCommandPrefix = withoutEnv.replace(/^command\s+/, "");
+	return /^git(?:\s|$)/.test(withoutCommandPrefix);
 }

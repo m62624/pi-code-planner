@@ -62,11 +62,7 @@ export type {
 	PlannerBuiltinGuardState,
 	PlannerBuiltinToolCall,
 } from "./guard/project-mutation";
-export {
-	checkPlannerBuiltinToolAllowed,
-	isFinalizeCheckCommand,
-	isReadOnlyShellCommand,
-} from "./guard/project-mutation";
+export { checkPlannerBuiltinToolAllowed } from "./guard/project-mutation";
 export type {
 	PlannerToolPolicyDecision,
 	PlannerWrapperTool,

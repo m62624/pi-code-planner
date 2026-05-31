@@ -34,7 +34,7 @@ Read the project broadly once, record evidence-backed understanding, and build c
 
 - Do not implement production code.
 - Do not write tests for the requested change yet.
-- Built-in project write/edit and mutating shell commands are blocked during discovery. Write only planner markdown artifacts and memory through planner tools.
+- Built-in project write/edit calls are blocked during discovery. Shell remains available for inspection, but raw git is forbidden.
 - Do not create tasks before project memory is written and verified.
 - Do not write memory JSONL or checkpoint files directly. Use planner memory tools.
 - Do not guess effects or relations. Record `unknown` when evidence is insufficient.

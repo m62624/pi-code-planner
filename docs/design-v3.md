@@ -963,27 +963,14 @@ Retry не создаёт новый global stage. Он остаётся вну�
 
 Если plan активен, extension проверяет прямые вызовы built-in `write`, `edit` и `bash` через PI `tool_call` hook:
 
-- `write/edit` project files разрешены только внутри active plan worktree
-- `write/edit` project files разрешены только на non-compact шагах `execution`, когда runtime gates открыты
-- запись в original checkout запрещена даже во время `execution`: рабочая область модели — plan worktree
-- произвольная запись вне worktree запрещена
-- planner markdown artifacts внутри persisted `plans/<activePlanId>/` storage разрешены отдельно, когда текущий gate допускает artifact update
-- авторские `tasks/<task-id>/task.json` и `tasks/<task-id>/experiments/<attempt-id>/experiment.json` разрешены как planner artifacts
-- прямое редактирование system JSON/JSONL state через built-in `write/edit` запрещено; для `project.json`, `plan.json`, `state.json`, memory indexes и checkpoints используются planner wrappers
-- при `requiresCompact`, `requiresMemoryUpdate`, `requiresUserDecision` или unavailable state mutation блокируется до разрешения gate
-- в `recovery` разрешена запись recovery markdown artifacts, но не project source mutation
+- `bash` полностью разрешён, кроме уже существующего запрета raw git
+- `write/edit` project files запрещены во время `init`, `discovery` и `planning`
+- `write/edit` planner artifacts вне project directory остаются разрешены, чтобы модель могла писать `plan.md`, `discovery.md`, task artifacts и summaries
+- после planning дополнительный built-in guard не классифицирует пути или роли файлов и не мешает `write/edit`
 
 Guard намеренно не пытается классифицировать файлы как `test`, `production`, `config` или `fixture`. Такая классификация не является переносимой между языками и проектами. TDD-порядок остаётся обязательным workflow contract, но проверяется через strict state machine, controlled diff review и checkpoint wrappers, а не через filename matching.
 
-Для `bash` действует coarse-grained политика:
-
-- raw git всегда запрещён при active plan
-- read-only inspection commands разрешены
-- на открытых non-compact шагах `execution` разрешены project commands, нужные для тестов, генерации и реализации
-- на `finalize` разрешены read-only inspection и известные check-команды
-- на остальных stage потенциально mutating shell commands блокируются
-
-Это API-level guard, а не OS sandbox. Extension блокирует прямые built-in вызовы модели и очевидные raw git shell forms, но не может доказать внутреннее поведение произвольного разрешённого скрипта. Поэтому execution prompts всё равно требуют работать только внутри active worktree и проверять controlled diff перед checkpoint.
+Безопасность произвольных shell-команд не является ответственностью planner. Её может задавать отдельное approval extension. Planner отвечает только за raw git guard и за запрет преждевременных project edits до execution.
 
 ### State/Git synchronization contract
 

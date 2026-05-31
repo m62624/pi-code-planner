@@ -57,7 +57,6 @@ Execute exactly one active task at a time through tests-first development, seque
 - A commit alone does not finish an atomic unit.
 - After every planner-controlled commit or merge, memory must be refreshed, verified, and checkpointed before normal flow continues.
 - Dirty worktree is allowed while implementing a running step, but checkpoint sync requires a clean worktree.
-- Project edits must stay inside the active plan worktree. Do not edit the original checkout or arbitrary external paths.
 - Built-in write/edit guards are intentionally coarse-grained: the planner does not infer file roles from names. Follow the TDD step order even when tests, fixtures, configuration, and production code share files.
 - Use `planner_status` after every wrapper result.
 - Raw git is forbidden.
