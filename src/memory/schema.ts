@@ -7,6 +7,16 @@ export type MemoryFileKind =
 	| "vendor"
 	| "unknown";
 
+export const MEMORY_FILE_KINDS = [
+	"source",
+	"test",
+	"config",
+	"docs",
+	"generated",
+	"vendor",
+	"unknown",
+] as const satisfies readonly MemoryFileKind[];
+
 export type MemoryFileStatus =
 	| "pending"
 	| "indexed"
@@ -14,6 +24,15 @@ export type MemoryFileStatus =
 	| "ignored"
 	| "missing"
 	| "failed";
+
+export const MEMORY_FILE_STATUSES = [
+	"pending",
+	"indexed",
+	"dirty",
+	"ignored",
+	"missing",
+	"failed",
+] as const satisfies readonly MemoryFileStatus[];
 
 export interface MemoryFileEntry {
 	path: string;
@@ -36,6 +55,19 @@ export type MemorySymbolKind =
 	| "test"
 	| "unknown";
 
+export const MEMORY_SYMBOL_KINDS = [
+	"function",
+	"method",
+	"type",
+	"class",
+	"trait",
+	"interface",
+	"module",
+	"constant",
+	"test",
+	"unknown",
+] as const satisfies readonly MemorySymbolKind[];
+
 export type MemorySymbolVisibility =
 	| "public"
 	| "package"
@@ -44,7 +76,23 @@ export type MemorySymbolVisibility =
 	| "test_only"
 	| "unknown";
 
+export const MEMORY_SYMBOL_VISIBILITIES = [
+	"public",
+	"package",
+	"crate",
+	"private",
+	"test_only",
+	"unknown",
+] as const satisfies readonly MemorySymbolVisibility[];
+
 export type MemorySymbolGlobalState = "none" | "reads" | "writes" | "unknown";
+
+export const MEMORY_SYMBOL_GLOBAL_STATES = [
+	"none",
+	"reads",
+	"writes",
+	"unknown",
+] as const satisfies readonly MemorySymbolGlobalState[];
 
 export interface MemorySymbolEffects {
 	reads: string[];
@@ -58,6 +106,13 @@ export type MemoryVerificationStatus =
 	| "stale"
 	| "missing"
 	| "unverified";
+
+export const MEMORY_VERIFICATION_STATUSES = [
+	"verified",
+	"stale",
+	"missing",
+	"unverified",
+] as const satisfies readonly MemoryVerificationStatus[];
 
 export interface MemorySymbolEntry {
 	id: string;
@@ -94,6 +149,23 @@ export type MemoryRelationKind =
 	| "depends_on"
 	| "exposes"
 	| "unknown";
+
+export const MEMORY_RELATION_KINDS = [
+	"calls",
+	"implements",
+	"extends",
+	"contains",
+	"returns",
+	"accepts",
+	"throws",
+	"reads",
+	"writes",
+	"tests",
+	"configures",
+	"depends_on",
+	"exposes",
+	"unknown",
+] as const satisfies readonly MemoryRelationKind[];
 
 export interface MemoryRelationEntry {
 	id: string;

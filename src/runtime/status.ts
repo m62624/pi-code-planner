@@ -7,7 +7,6 @@ import type {
 } from "../instructions/schema";
 import type { PlannerFs } from "../storage/fs";
 import type { PlannerStage, PlannerStep } from "../storage/schema";
-import { PLANNER_STAGE_STEPS } from "../storage/schema";
 import {
 	decidePlannerLifecycleNext,
 	type PlannerLifecycleDecision,
@@ -69,7 +68,7 @@ export const PLANNER_STEP_RULES = {
 		allowedNow: ["Use planner status and project/storage inspection only."],
 		forbiddenNow: ["Do not edit project files.", "Do not create tasks."],
 		exitCondition: "Project root and project id are known.",
-		nextInstruction: "Complete the step, then advance to check_git.",
+		nextInstruction: "Call planner_finish_step to open check_git.",
 	}),
 	check_git: stepRule("init", "check_git", {
 		objective: "Ensure the project has a git repository.",
@@ -85,7 +84,7 @@ export const PLANNER_STEP_RULES = {
 			"Do not read source for discovery yet.",
 		],
 		exitCondition: "Git repository availability is known.",
-		nextInstruction: "Complete the step, then advance to prepare_storage.",
+		nextInstruction: "Call planner_finish_step to open prepare_storage.",
 	}),
 	prepare_storage: stepRule("init", "prepare_storage", {
 		objective: "Prepare planner storage for the project.",
@@ -94,7 +93,7 @@ export const PLANNER_STEP_RULES = {
 		forbiddenNow: ["Do not edit source files.", "Do not create task branches."],
 		exitCondition: "Project storage paths and project.json are available.",
 		nextInstruction:
-			"Complete the step, then advance to choose_worktree_location.",
+			"Call planner_finish_step to open choose_worktree_location.",
 	}),
 	choose_worktree_location: stepRule("init", "choose_worktree_location", {
 		objective: "Choose the worktree location from settings.",
@@ -106,7 +105,7 @@ export const PLANNER_STEP_RULES = {
 			"Do not ask the model to invent a worktree path when settings already define it.",
 		],
 		exitCondition: "The plan worktree path is determined.",
-		nextInstruction: "Complete the step, then advance to create_plan_record.",
+		nextInstruction: "Call planner_finish_step to open create_plan_record.",
 	}),
 	create_plan_record: stepRule("init", "create_plan_record", {
 		objective: "Create the plan record and initial state.",
@@ -117,7 +116,7 @@ export const PLANNER_STEP_RULES = {
 		forbiddenNow: ["Do not start discovery before the plan record exists."],
 		exitCondition:
 			"Plan files exist and project.json references the active plan.",
-		nextInstruction: "Complete the step, then advance to create_plan_worktree.",
+		nextInstruction: "Call planner_finish_step to open create_plan_worktree.",
 	}),
 	create_plan_worktree: stepRule("init", "create_plan_worktree", {
 		objective: "Create one dedicated worktree for the whole plan.",
@@ -131,18 +130,50 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition:
 			"Plan worktree exists and state.worktreePath/currentBranch are set.",
-		nextInstruction: "Complete the step, then advance to enter_discovery.",
+		nextInstruction: "Call planner_finish_step to open enter_intake.",
 	}),
-	enter_discovery: stepRule("init", "enter_discovery", {
-		objective: "Move from bootstrap into discovery.",
-		requiredActions: ["Persist stage=discovery and step=read_project."],
+	enter_intake: stepRule("init", "enter_intake", {
+		objective: "Move from bootstrap into intake.",
+		requiredActions: ["Persist stage=intake and step=draft_goal."],
 		allowedNow: ["State transition only."],
 		forbiddenNow: [
 			"Do not read project source until discovery/read_project is active.",
 		],
-		exitCondition: "State points to discovery/read_project.",
+		exitCondition: "State points to intake/draft_goal.",
 		nextInstruction:
-			"Advance into discovery/read_project and call planner_status again.",
+			"Continue with intake/draft_goal and call planner_status again.",
+	}),
+	draft_goal: stepRule("intake", "draft_goal", {
+		objective: "Rewrite the raw user request as a precise reviewable goal.",
+		requiredActions: [
+			"Read request.md.",
+			"Write goal.md in your own words with outcome, assumptions, non-goals, constraints, and focused clarification questions.",
+			"Call planner_goal_submit with the full goal markdown.",
+		],
+		allowedNow: ["Use planner_goal_submit only after the draft is complete."],
+		forbiddenNow: [
+			"Do not inspect project source.",
+			"Do not infer implementation details from the request.",
+		],
+		exitCondition: "goal.md exists and the planner is waiting for user review.",
+		nextInstruction:
+			"Ask the user to review goal.md and approve or request revision.",
+	}),
+	await_goal_approval: stepRule("intake", "await_goal_approval", {
+		objective: "Wait for explicit user approval of the normalized goal.",
+		requiredActions: [
+			"Show the exact goal.md path and summarize the draft.",
+			"Ask whether the goal is approved or needs revision.",
+			"Call planner_goal_decide only after the user explicitly answers.",
+		],
+		allowedNow: ["Use planner_goal_decide with approve or revise."],
+		forbiddenNow: [
+			"Do not begin discovery before approval.",
+			"Do not infer approval from silence.",
+		],
+		exitCondition: "User explicitly approves the goal or requests a revision.",
+		nextInstruction:
+			"Approve enters discovery/read_project. Revise returns to intake/draft_goal.",
 	}),
 
 	read_project: stepRule("discovery", "read_project", {
@@ -161,8 +192,7 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition:
 			"Project structure, major files, dependencies, and conventions are understood enough to write memory.",
-		nextInstruction:
-			"Complete the step, then advance to write_project_patterns.",
+		nextInstruction: "Call planner_finish_step to open write_project_patterns.",
 	}),
 	write_project_patterns: stepRule("discovery", "write_project_patterns", {
 		objective: "Write project architecture and convention notes.",
@@ -173,21 +203,21 @@ export const PLANNER_STEP_RULES = {
 		forbiddenNow: ["Do not edit production code."],
 		exitCondition:
 			"project_patterns.md contains evidence-backed patterns and open questions.",
-		nextInstruction: "Complete the step, then advance to write_file_index.",
+		nextInstruction: "Call planner_finish_step to open write_file_index.",
 	}),
 	write_file_index: stepRule("discovery", "write_file_index", {
 		objective: "Index relevant project files.",
 		requiredActions: [
 			"Write memory file entries with path, kind, language, hash, status, and summary.",
 		],
-		allowedNow: ["Use planner_memory_write_batch for file entries."],
+		allowedNow: ["Use planner_memory_upsert_files for file entries."],
 		forbiddenNow: [
 			"Do not write memory JSONL directly.",
 			"Do not skip file hashes.",
 		],
 		exitCondition:
 			"Relevant files are indexed or explicitly marked ignored/unknown.",
-		nextInstruction: "Complete the step, then advance to write_symbols.",
+		nextInstruction: "Call planner_finish_step to open write_symbols.",
 	}),
 	write_symbols: stepRule("discovery", "write_symbols", {
 		objective: "Index symbols and signatures.",
@@ -195,13 +225,13 @@ export const PLANNER_STEP_RULES = {
 			"Write functions, methods, types, classes, modules, constants, and tests that matter for the plan.",
 			"Record signatures, summaries, anchors, visibility, verification status, and effects.",
 		],
-		allowedNow: ["Use planner_memory_write_batch for symbol entries."],
+		allowedNow: ["Use planner_memory_upsert_symbols for symbol entries."],
 		forbiddenNow: [
 			"Do not omit effects. Use unknown when evidence is insufficient.",
 		],
 		exitCondition:
 			"Relevant APIs have symbol entries with signatures and effect metadata.",
-		nextInstruction: "Complete the step, then advance to write_relations.",
+		nextInstruction: "Call planner_finish_step to open write_relations.",
 	}),
 	write_relations: stepRule("discovery", "write_relations", {
 		objective:
@@ -209,13 +239,13 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Write evidence-backed relation entries for calls, tests, configures, depends_on, exposes, reads, or writes.",
 		],
-		allowedNow: ["Use planner_memory_write_batch for relation entries."],
+		allowedNow: ["Use planner_memory_upsert_relations for relation entries."],
 		forbiddenNow: [
 			"Do not invent relations without evidence path/search text.",
 		],
 		exitCondition:
 			"Important symbol/file relations have evidence-backed entries.",
-		nextInstruction: "Complete the step, then advance to write_questions.",
+		nextInstruction: "Call planner_finish_step to open write_questions.",
 	}),
 	write_questions: stepRule("discovery", "write_questions", {
 		objective: "Record uncertainty before planning.",
@@ -225,7 +255,7 @@ export const PLANNER_STEP_RULES = {
 		allowedNow: ["Write planner question artifacts."],
 		forbiddenNow: ["Do not ask broad questions before collecting evidence."],
 		exitCondition: "Known blockers, uncertainty, and assumptions are recorded.",
-		nextInstruction: "Complete the step, then advance to verify_memory.",
+		nextInstruction: "Call planner_finish_step to open verify_memory.",
 	}),
 	verify_memory: stepRule("discovery", "verify_memory", {
 		objective: "Verify memory consistency against source files.",
@@ -240,7 +270,7 @@ export const PLANNER_STEP_RULES = {
 			"Do not sync checkpoint if memory is stale or worktree is dirty.",
 		],
 		exitCondition: "Memory is clean and checkpoint is synced to current HEAD.",
-		nextInstruction: "Complete the step, then advance to compact_discovery.",
+		nextInstruction: "Call planner_finish_step to open compact_discovery.",
 	}),
 	compact_discovery: stepRule("discovery", "compact_discovery", {
 		objective: "Create a compact boundary after discovery.",
@@ -253,7 +283,7 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition:
 			"Compaction finished and resume context points back to planner_status.",
-		nextInstruction: "Complete compact, then advance to enter_planning.",
+		nextInstruction: "Complete compact to open enter_planning.",
 	}),
 	enter_planning: stepRule("discovery", "enter_planning", {
 		objective: "Enter planning after verified discovery.",
@@ -262,7 +292,7 @@ export const PLANNER_STEP_RULES = {
 		forbiddenNow: ["Do not draft tasks until planning/read_memory is active."],
 		exitCondition: "State points to planning/read_memory.",
 		nextInstruction:
-			"Advance into planning/read_memory and call planner_status again.",
+			"Continue with planning/read_memory and call planner_status again.",
 	}),
 
 	read_memory: stepRule("planning", "read_memory", {
@@ -278,7 +308,7 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition:
 			"Relevant context for planning is loaded from memory and artifacts.",
-		nextInstruction: "Complete the step, then advance to draft_plan.",
+		nextInstruction: "Call planner_finish_step to open draft_plan.",
 	}),
 	draft_plan: stepRule("planning", "draft_plan", {
 		objective: "Draft an executable plan.",
@@ -288,7 +318,7 @@ export const PLANNER_STEP_RULES = {
 		allowedNow: ["Write planner artifacts."],
 		forbiddenNow: ["Do not implement code.", "Do not create task branches."],
 		exitCondition: "plan.md describes a coherent implementation route.",
-		nextInstruction: "Complete the step, then advance to split_tasks.",
+		nextInstruction: "Call planner_finish_step to open split_tasks.",
 	}),
 	split_tasks: stepRule("planning", "split_tasks", {
 		objective: "Split the plan into atomic tasks.",
@@ -298,7 +328,7 @@ export const PLANNER_STEP_RULES = {
 		allowedNow: ["Write planner artifacts and plan task records."],
 		forbiddenNow: ["Do not start TDD before task files exist."],
 		exitCondition: "Each task is atomic enough for one TDD loop.",
-		nextInstruction: "Complete the step, then advance to write_task_files.",
+		nextInstruction: "Call planner_finish_step to open write_task_files.",
 	}),
 	write_task_files: stepRule("planning", "write_task_files", {
 		objective: "Create task artifacts.",
@@ -308,7 +338,7 @@ export const PLANNER_STEP_RULES = {
 		allowedNow: ["Write task planner artifacts only."],
 		forbiddenNow: ["Do not write tests or production code yet."],
 		exitCondition: "Every planned task has its required files.",
-		nextInstruction: "Complete the step, then advance to verify_plan.",
+		nextInstruction: "Call planner_finish_step to open verify_plan.",
 	}),
 	verify_plan: stepRule("planning", "verify_plan", {
 		objective: "Verify the plan before execution.",
@@ -318,7 +348,7 @@ export const PLANNER_STEP_RULES = {
 		allowedNow: ["Read/write planner artifacts."],
 		forbiddenNow: ["Do not start execution while plan gaps remain."],
 		exitCondition: "Plan is executable without hidden broad tasks.",
-		nextInstruction: "Complete the step, then advance to compact_planning.",
+		nextInstruction: "Call planner_finish_step to open compact_planning.",
 	}),
 	compact_planning: stepRule("planning", "compact_planning", {
 		objective: "Create a compact boundary after planning.",
@@ -331,7 +361,7 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition:
 			"Compaction finished and resume context points back to planner_status.",
-		nextInstruction: "Complete compact, then advance to enter_execution.",
+		nextInstruction: "Complete compact to open enter_execution.",
 	}),
 	enter_execution: stepRule("planning", "enter_execution", {
 		objective: "Enter task execution.",
@@ -340,7 +370,7 @@ export const PLANNER_STEP_RULES = {
 		forbiddenNow: ["Do not start TDD until execution/prepare_task is active."],
 		exitCondition: "State points to execution/prepare_task.",
 		nextInstruction:
-			"Advance into execution/prepare_task and call planner_status again.",
+			"Continue with execution/prepare_task and call planner_status again.",
 	}),
 
 	prepare_task: stepRule("execution", "prepare_task", {
@@ -356,7 +386,7 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition:
 			"One active task and one current task branch are recorded in state.json.",
-		nextInstruction: "Complete the step, then advance to write_tdd_plan.",
+		nextInstruction: "Call planner_finish_step to open write_tdd_plan.",
 	}),
 	write_tdd_plan: stepRule("execution", "write_tdd_plan", {
 		objective: "Write the TDD plan before changing behavior.",
@@ -369,7 +399,7 @@ export const PLANNER_STEP_RULES = {
 		forbiddenNow: ["Do not change production behavior."],
 		exitCondition:
 			"tdd.md explains tests, mocks/fixtures, commands, edge cases, and expected failure.",
-		nextInstruction: "Complete the step, then advance to write_tests.",
+		nextInstruction: "Call planner_finish_step to open write_tests.",
 	}),
 	write_tests: stepRule("execution", "write_tests", {
 		objective:
@@ -381,7 +411,7 @@ export const PLANNER_STEP_RULES = {
 		forbiddenNow: ["Do not implement production behavior."],
 		exitCondition:
 			"Tests exist and are expected to fail or catch missing behavior.",
-		nextInstruction: "Complete the step, then advance to run_failing_tests.",
+		nextInstruction: "Call planner_finish_step to open run_failing_tests.",
 	}),
 	run_failing_tests: stepRule("execution", "run_failing_tests", {
 		objective: "Prove the tests guard the missing behavior.",
@@ -394,7 +424,7 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition:
 			"The failing/mock/contract signal is confirmed and documented.",
-		nextInstruction: "Complete the step, then advance to start_experiments.",
+		nextInstruction: "Call planner_finish_step to open start_experiments.",
 	}),
 	start_experiments: stepRule("execution", "start_experiments", {
 		objective: "Prepare experiment attempts for the active task.",
@@ -408,7 +438,7 @@ export const PLANNER_STEP_RULES = {
 			"Do not merge experiments before they are summarized and selected.",
 		],
 		exitCondition: "An active experiment branch and attempt id are recorded.",
-		nextInstruction: "Complete the step, then advance to run_experiment.",
+		nextInstruction: "Call planner_finish_step to open run_experiment.",
 	}),
 	run_experiment: stepRule("execution", "run_experiment", {
 		objective:
@@ -422,7 +452,7 @@ export const PLANNER_STEP_RULES = {
 		forbiddenNow: ["Do not merge the experiment or delete branches here."],
 		exitCondition:
 			"Experiment implementation is committed and memory checkpoint is synced for the experiment HEAD.",
-		nextInstruction: "Complete the step, then advance to summarize_experiment.",
+		nextInstruction: "Call planner_finish_step to open summarize_experiment.",
 	}),
 	summarize_experiment: stepRule("execution", "summarize_experiment", {
 		objective: "Summarize experiment evidence.",
@@ -434,7 +464,7 @@ export const PLANNER_STEP_RULES = {
 		],
 		forbiddenNow: ["Do not select an experiment without comparable evidence."],
 		exitCondition: "Experiment summary is complete enough for selection.",
-		nextInstruction: "Complete the step, then advance to compact_experiment.",
+		nextInstruction: "Call planner_finish_step to open compact_experiment.",
 	}),
 	compact_experiment: stepRule("execution", "compact_experiment", {
 		objective: "Compact the active experiment attempt.",
@@ -446,7 +476,7 @@ export const PLANNER_STEP_RULES = {
 		exitCondition:
 			"Compaction finished and resume context points back to planner_status.",
 		nextInstruction:
-			"Complete compact, then advance to select_experiment. That decision step chooses another experiment or selected merge.",
+			"Complete compact to open select_experiment. That decision step chooses another experiment or selected merge.",
 	}),
 	select_experiment: stepRule("execution", "select_experiment", {
 		objective:
@@ -479,7 +509,7 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition:
 			"Selected experiment is merged into task branch, experiment branches are cleaned, memory is synced.",
-		nextInstruction: "Complete the step, then advance to refactor_task.",
+		nextInstruction: "Call planner_finish_step to open refactor_task.",
 	}),
 	refactor_task: stepRule("execution", "refactor_task", {
 		objective: "Refactor the task branch without changing behavior.",
@@ -492,7 +522,7 @@ export const PLANNER_STEP_RULES = {
 		forbiddenNow: ["Do not add new task scope or behavior."],
 		exitCondition:
 			"Refactor is checked, committed if changed, and memory is synced.",
-		nextInstruction: "Complete the step, then advance to run_final_tests.",
+		nextInstruction: "Call planner_finish_step to open run_final_tests.",
 	}),
 	run_final_tests: stepRule("execution", "run_final_tests", {
 		objective: "Verify the completed task branch.",
@@ -506,7 +536,7 @@ export const PLANNER_STEP_RULES = {
 			"Do not merge task to plan while tests or memory are stale.",
 		],
 		exitCondition: "Final checks pass and memory checkpoint is synced.",
-		nextInstruction: "Complete the step, then advance to merge_task_to_plan.",
+		nextInstruction: "Call planner_finish_step to open merge_task_to_plan.",
 	}),
 	merge_task_to_plan: stepRule("execution", "merge_task_to_plan", {
 		objective: "Merge the completed task branch into the plan branch.",
@@ -522,7 +552,7 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition:
 			"Task branch is merged into plan branch, task branch is deleted, memory is synced.",
-		nextInstruction: "Complete the step, then advance to compact_task.",
+		nextInstruction: "Call planner_finish_step to open compact_task.",
 	}),
 	compact_task: stepRule("execution", "compact_task", {
 		objective: "Compact the completed task boundary.",
@@ -533,7 +563,7 @@ export const PLANNER_STEP_RULES = {
 		forbiddenNow: ["Do not edit task code while compact is required/pending."],
 		exitCondition:
 			"Compaction finished and resume context points back to planner_status.",
-		nextInstruction: "Complete compact, then advance to select_next_task.",
+		nextInstruction: "Complete compact to open select_next_task.",
 	}),
 	select_next_task: stepRule("execution", "select_next_task", {
 		objective: "Select the next task or finish execution.",
@@ -557,7 +587,7 @@ export const PLANNER_STEP_RULES = {
 		allowedNow: ["Run checks and inspect planner git state."],
 		forbiddenNow: ["Do not cleanup worktree before user review."],
 		exitCondition: "Plan branch is verified or risks are documented.",
-		nextInstruction: "Complete the step, then advance to write_final_summary.",
+		nextInstruction: "Call planner_finish_step to open write_final_summary.",
 	}),
 	write_final_summary: stepRule("finalize", "write_final_summary", {
 		objective: "Write final result summary for user review.",
@@ -567,7 +597,7 @@ export const PLANNER_STEP_RULES = {
 		allowedNow: ["Write final summary artifacts."],
 		forbiddenNow: ["Do not export/cleanup until user acceptance flow."],
 		exitCondition: "Final summary is ready for compact and user review.",
-		nextInstruction: "Complete the step, then advance to compact_finalize.",
+		nextInstruction: "Call planner_finish_step to open compact_finalize.",
 	}),
 	compact_finalize: stepRule("finalize", "compact_finalize", {
 		objective: "Compact before user acceptance.",
@@ -580,7 +610,7 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition:
 			"Compaction finished and resume context points back to planner_status.",
-		nextInstruction: "Complete compact, then advance to enter_done.",
+		nextInstruction: "Complete compact to open enter_done.",
 	}),
 	enter_done: stepRule("finalize", "enter_done", {
 		objective: "Enter the user acceptance stage.",
@@ -589,7 +619,7 @@ export const PLANNER_STEP_RULES = {
 		forbiddenNow: ["Do not cleanup plan files before done flow."],
 		exitCondition: "State points to done/present_result.",
 		nextInstruction:
-			"Advance into done/present_result and call planner_status again.",
+			"Continue with done/present_result and call planner_status again.",
 	}),
 
 	present_result: stepRule("done", "present_result", {
@@ -603,8 +633,7 @@ export const PLANNER_STEP_RULES = {
 			"Do not cleanup before user accepts.",
 		],
 		exitCondition: "User has enough information to accept or request changes.",
-		nextInstruction:
-			"Complete the step, then advance to await_user_acceptance.",
+		nextInstruction: "Call planner_finish_step to open await_user_acceptance.",
 	}),
 	await_user_acceptance: stepRule("done", "await_user_acceptance", {
 		objective: "Wait for explicit user decision.",
@@ -638,8 +667,7 @@ export const PLANNER_STEP_RULES = {
 		allowedNow: ["Use planner_git_export_plan_to_output as policy allows."],
 		forbiddenNow: ["Do not delete worktree before export succeeds."],
 		exitCondition: "Output branch target is prepared.",
-		nextInstruction:
-			"Complete the step, then advance to merge_or_export_result.",
+		nextInstruction: "Call planner_finish_step to open merge_or_export_result.",
 	}),
 	merge_or_export_result: stepRule("done", "merge_or_export_result", {
 		objective: "Export the plan branch result to the original repository.",
@@ -649,7 +677,7 @@ export const PLANNER_STEP_RULES = {
 		allowedNow: ["Use planner git export wrapper."],
 		forbiddenNow: ["Do not ask the model to choose arbitrary merge branches."],
 		exitCondition: "Output branch contains the accepted plan result.",
-		nextInstruction: "Complete the step, then advance to cleanup_worktree.",
+		nextInstruction: "Call planner_finish_step to open cleanup_worktree.",
 	}),
 	cleanup_worktree: stepRule("done", "cleanup_worktree", {
 		objective: "Remove temporary planner worktree and managed child branches.",
@@ -663,7 +691,7 @@ export const PLANNER_STEP_RULES = {
 			"Do not delete the protected plan branch through child branch cleanup.",
 		],
 		exitCondition: "Worktree and managed child branches are cleaned.",
-		nextInstruction: "Complete the step, then advance to mark_done.",
+		nextInstruction: "Call planner_finish_step to open mark_done.",
 	}),
 	mark_done: stepRule("done", "mark_done", {
 		objective: "Mark the plan finished in project storage.",
@@ -673,7 +701,7 @@ export const PLANNER_STEP_RULES = {
 		allowedNow: ["Planner storage update only."],
 		forbiddenNow: ["Do not leave activePlanId pointing to a cleaned plan."],
 		exitCondition: "Project storage no longer has this plan active.",
-		nextInstruction: "Complete the step, then advance to cleanup_plan_files.",
+		nextInstruction: "Call planner_finish_step to open cleanup_plan_files.",
 	}),
 	cleanup_plan_files: stepRule("done", "cleanup_plan_files", {
 		objective: "Remove completed plan files from planner storage.",
@@ -691,7 +719,7 @@ export const PLANNER_STEP_RULES = {
 		allowedNow: ["Recovery inspection only."],
 		forbiddenNow: ["Do not mutate git or project files."],
 		exitCondition: "Persisted state is loaded or missing files are identified.",
-		nextInstruction: "Complete the step, then advance to inspect_git.",
+		nextInstruction: "Call planner_finish_step to open inspect_git.",
 	}),
 	inspect_git: stepRule("recovery", "inspect_git", {
 		objective: "Inspect actual git/worktree reality.",
@@ -702,7 +730,7 @@ export const PLANNER_STEP_RULES = {
 		forbiddenNow: ["Do not run destructive repair."],
 		exitCondition: "Actual git reality is known.",
 		nextInstruction:
-			"Complete the step, then advance to compare_expected_actual.",
+			"Call planner_finish_step to open compare_expected_actual.",
 	}),
 	compare_expected_actual: stepRule("recovery", "compare_expected_actual", {
 		objective: "Compare actual git reality with state.json.",
@@ -712,7 +740,7 @@ export const PLANNER_STEP_RULES = {
 		allowedNow: ["Recovery analysis only."],
 		forbiddenNow: ["Do not repair before classification."],
 		exitCondition: "All mismatches are listed.",
-		nextInstruction: "Complete the step, then advance to classify_recovery.",
+		nextInstruction: "Call planner_finish_step to open classify_recovery.",
 	}),
 	classify_recovery: stepRule("recovery", "classify_recovery", {
 		objective: "Classify the recovery problem.",
@@ -723,7 +751,7 @@ export const PLANNER_STEP_RULES = {
 		forbiddenNow: ["Do not choose destructive repair automatically."],
 		exitCondition: "Recovery type and safe options are known.",
 		nextInstruction:
-			"Complete the step, then advance to ask_user_if_destructive.",
+			"Call planner_finish_step to open ask_user_if_destructive.",
 	}),
 	ask_user_if_destructive: stepRule("recovery", "ask_user_if_destructive", {
 		objective: "Ask the user before destructive repair.",
@@ -736,7 +764,7 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition:
 			"User decision is recorded or repair is confirmed non-destructive.",
-		nextInstruction: "Complete the step, then advance to repair_or_resume.",
+		nextInstruction: "Call planner_finish_step to open repair_or_resume.",
 	}),
 	repair_or_resume: stepRule("recovery", "repair_or_resume", {
 		objective: "Repair safely or resume normal flow.",
@@ -797,7 +825,10 @@ export async function buildPlannerStatusText(
 		behavior,
 		tools: preflight.decision.allowedTools,
 	});
-	const instructionBundle = await readInstructionBundle(input.fs, preflight);
+	const instructionBundle = await readCurrentStageInstruction(
+		input.fs,
+		preflight,
+	);
 
 	lines.push(
 		`- plan: ${preflight.context.activePlanId}`,
@@ -869,7 +900,7 @@ export async function buildPlannerStatusText(
 		"## Instruction Files To Read",
 		...formatInstructionRoutes(preflight),
 		"",
-		"## Instruction Bundle",
+		"## Current Stage Instruction",
 		...formatInstructionBundle(instructionBundle),
 		"",
 		"## Planner Artifacts",
@@ -877,12 +908,6 @@ export async function buildPlannerStatusText(
 		"",
 		"## Memory-First Rule",
 		"Inspect planner memory before broad source reads. Use project_patterns, file index, symbol index, relation index, and dirty state first. Read source files only when memory is missing, stale, insufficient, or must be verified for the current step.",
-		"",
-		"## Full State Machine Order",
-		...formatStateMachineOrder(),
-		"",
-		"## Global Invariants",
-		...formatNumbered(PLANNER_STATUS_INVARIANTS),
 	);
 
 	return lines.join("\n");
@@ -909,7 +934,7 @@ function stepRule(
 	return { stage, step, ...rule };
 }
 
-async function readInstructionBundle(
+async function readCurrentStageInstruction(
 	fs: PlannerFs,
 	preflight: PlannerPreflightResult,
 ): Promise<InstructionContent[]> {
@@ -918,7 +943,8 @@ async function readInstructionBundle(
 	}
 	const paths = createInstructionPaths(preflight.context.projectPaths);
 	const contents: InstructionContent[] = [];
-	for (const key of preflight.instructions.keys) {
+	const key = preflight.instructions.keys[0];
+	if (key) {
 		contents.push(await safeGetInstructionContent(fs, paths, key));
 	}
 	return contents;
@@ -956,8 +982,8 @@ function formatLifecycleNextAction(
 	rule: PlannerStepRule | null,
 ): string {
 	switch (decision.action) {
-		case "complete_step":
-			return `Complete the current step only after exit condition is true: ${rule?.exitCondition ?? "(missing rule)"}`;
+		case "finish_step":
+			return `Call planner_finish_step only after exit condition is true: ${rule?.exitCondition ?? "(missing rule)"}`;
 		case "start_step":
 			return `Call planner_start_step, then follow ${decision.stage}/${decision.step}: ${rule?.objective ?? "current step"}.`;
 		case "write_memory":
@@ -1049,6 +1075,8 @@ function formatPlannerArtifactLinks(
 	const state = preflight.context.state;
 	const lines = [
 		`- plan.md: ${planPaths.planMd}`,
+		`- request.md: ${planPaths.requestMd}`,
+		`- goal.md: ${planPaths.goalMd}`,
 		`- discovery.md: ${planPaths.discoveryMd}`,
 		`- questions.md: ${planPaths.questionsMd}`,
 		`- decisions.md: ${planPaths.decisionsMd}`,
@@ -1078,12 +1106,6 @@ function formatPlannerArtifactLinks(
 		}
 	}
 	return lines;
-}
-
-function formatStateMachineOrder(): string[] {
-	return Object.entries(PLANNER_STAGE_STEPS).map(
-		([stage, steps]) => `- ${stage}: ${steps.join(" -> ")}`,
-	);
 }
 
 function formatBullets(values: readonly string[]): string[] {

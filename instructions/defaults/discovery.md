@@ -11,15 +11,17 @@ Read the project broadly once, record evidence-backed understanding, and build c
    - For long files, read complete bounded chunks until the relevant file is fully understood before marking it indexed.
    - Record architecture facts, dependency versions, conventions, commands, risks, and uncertainty in `discovery.md`.
 2. `write_project_patterns`
-   - Write evidence-backed architecture and convention notes to `project_patterns.md`.
+   - Use `planner_memory_write_project_patterns` to write evidence-backed architecture and convention notes to the managed `memory/project_patterns.md`.
    - Include how the project is built, tested, formatted, and organized.
 3. `write_file_index`
-   - Use `planner_memory_write_batch` to index relevant files with hashes, language, kind, status, and concise summaries.
+   - Use `planner_memory_upsert_files` to index relevant files with language, kind, and concise summaries.
+   - The wrapper verifies each relative path and computes the current file hash. Do not invent hashes or status values.
 4. `write_symbols`
-   - Use `planner_memory_write_batch` to index relevant functions, methods, types, classes, modules, constants, tests, and public APIs.
-   - Store signatures, anchors, visibility, verification state, summary, and effects.
+   - Use `planner_memory_upsert_symbols` to index relevant functions, methods, types, classes, modules, constants, tests, and public APIs.
+   - Store the indexed file path, kind, name, signature, summary, and effects. The wrapper derives stable ids, language, common defaults, and verification from the indexed file hash.
 5. `write_relations`
-   - Use `planner_memory_write_batch` for evidence-backed relations such as calls, tests, depends_on, configures, exposes, reads, and writes.
+   - Use `planner_memory_upsert_relations` for evidence-backed relations such as calls, tests, depends_on, configures, exposes, reads, and writes.
+   - Use symbol ids returned by memory search. Relation ids are derived automatically when omitted.
 6. `write_questions`
    - Write focused unresolved questions and explicit assumptions to `questions.md`.
    - Ask the user only after collecting evidence.

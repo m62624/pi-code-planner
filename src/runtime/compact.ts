@@ -200,6 +200,8 @@ function artifactLines(preflight: PlannerPreflightResult): string[] {
 	}
 	const planPaths = preflight.context.planPaths;
 	const lines = [
+		`- request.md: ${planPaths.requestMd}`,
+		`- goal.md: ${planPaths.goalMd}`,
 		`- plan.md: ${planPaths.planMd}`,
 		`- discovery.md: ${planPaths.discoveryMd}`,
 		`- questions.md: ${planPaths.questionsMd}`,

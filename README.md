@@ -89,7 +89,7 @@ Optional explicit plan id:
 /planner-create --id focused-change Implement a focused project change
 ```
 
-If no id is provided, the extension generates a deterministic slug from the title and adds a numeric suffix when needed.
+If no id is provided, the extension generates a deterministic slug from the raw request and adds a numeric suffix when needed.
 
 Plan creation performs the bootstrap automatically:
 
@@ -101,7 +101,8 @@ resolve project
   -> create plan worktree
   -> persist state.json
   -> switch Pi into a worktree session
-  -> start discovery/read_project
+  -> save the raw request in request.md
+  -> start intake/draft_goal
 ```
 
 After switching sessions, the model should call:
@@ -110,13 +111,15 @@ After switching sessions, the model should call:
 planner_status
 ```
 
+The model must rewrite the raw request into `goal.md` in its own words, ask focused clarification questions, and wait for explicit user approval. Discovery remains blocked until the user approves the normalized goal.
+
 ## User Commands
 
 These are Pi slash commands for the user. They are not model tools.
 
 | Command | Purpose |
 | --- | --- |
-| `/planner-create [--id <plan-id>] <title>` | Create a plan, worktree, state files, and worktree Pi session. |
+| `/planner-create [--id <plan-id>] <request>` | Create a plan from a raw requested outcome, create its worktree and state files, and open the worktree Pi session. Without a request, prompt through the TUI. |
 | `/planner-switch [<plan-id>]` | Switch to another plan in the current project. Without an id, open the TUI picker. |
 | `/planner-rename [--id <plan-id>] <new-title>` | Rename a human-readable plan title without changing ids, branches, or paths. |
 | `/planner-delete [<plan-id>]` | Delete a selected inactive plan after confirmation. Without an id, open the TUI picker. |
@@ -135,7 +138,8 @@ When a plan is active, the model should call `planner_status` whenever it is uns
 - currently allowed planner wrapper tools
 - currently allowed state transitions
 - exact artifact paths
-- the relevant instruction bundle for the current stage and step
+- the full default markdown for the current stage
+- paths for supporting markdown and optional project/global append files
 - memory-first reminders
 
 The model should not infer the next workflow transition from chat history.
@@ -144,6 +148,10 @@ The model should not infer the next workflow transition from chat history.
 
 ```text
 init
+  -> intake
+      -> rewrite request as goal
+      -> ask focused questions
+      -> wait for explicit user approval
   -> discovery
   -> planning
   -> execution
@@ -168,7 +176,7 @@ recovery may interrupt normal flow when persisted state and git reality disagree
 
 ## Stage And Step Reference
 
-The state machine contains 56 explicit steps. Normal flow is ordered. A completed step must advance before the next one starts. Recovery is the only stage that can resume into a validated non-recovery position.
+The state machine contains 58 explicit steps. Normal linear flow uses `planner_finish_step` to atomically finish the current step and open the next pending step. Recovery is the only stage that can resume into a validated non-recovery position.
 
 ### `init`
 
@@ -182,7 +190,16 @@ Bootstrap is normally handled automatically by `/planner-create`.
 | `choose_worktree_location` | Resolve project-local or custom worktree settings. |
 | `create_plan_record` | Create plan records, state, markdown artifacts, and memory files. |
 | `create_plan_worktree` | Create one dedicated worktree for the entire plan. |
-| `enter_discovery` | Persist the transition into `discovery/read_project`. |
+| `enter_intake` | Persist the transition into `intake/draft_goal`. |
+
+### `intake`
+
+Intake turns the raw user request into an explicit, reviewable goal before the model reads project source.
+
+| Step | Purpose |
+| --- | --- |
+| `draft_goal` | Read `request.md`, rewrite the requested outcome in the model's own words, and record focused clarification questions in `goal.md`. |
+| `await_goal_approval` | Ask the user to approve or revise `goal.md`. Enter discovery only after explicit approval. |
 
 ### `discovery`
 
@@ -341,6 +358,13 @@ git write
 
 The model should read bounded memory first and reread source only when memory is missing, stale, insufficient, or requires verification.
 
+The public memory tools keep model input intentionally small:
+
+- file upsert receives relative path, kind, language, and summary; the extension reads the file and computes hash/status
+- symbol upsert receives path, kind, name, signature, summary, and effects; the extension derives stable id, language, common defaults, and verification
+- relation upsert receives symbol ids plus evidence; the extension derives a stable relation id when omitted
+- memory search returns bounded pages with cursors instead of dumping the full index
+
 ## Git Model
 
 Each plan owns one worktree. Tasks, experiments, and refactors are branches inside that worktree.
@@ -372,6 +396,7 @@ The extension intentionally keeps built-in tool guarding coarse-grained:
 | Stage | Project `write/edit` |
 | --- | --- |
 | `init` | blocked |
+| `intake` | blocked |
 | `discovery` | blocked |
 | `planning` | blocked |
 | `execution` | allowed |
@@ -402,6 +427,8 @@ getAgentDir()/extensions/pi-code-planner/
         <plan-id>/
           plan.json
           state.json
+          request.md
+          goal.md
           plan.md
           discovery.md
           questions.md
@@ -432,6 +459,8 @@ Important files:
 | `project.json` | Stable project identity, plan list, and active plan id. |
 | `plan.json` | Structured task list and progress for one plan. |
 | `state.json` | Crash-recoverable execution state for one plan. |
+| `request.md` | Exact raw requested outcome captured when the plan is created. |
+| `goal.md` | Model-normalized goal, assumptions, constraints, non-goals, and clarification questions approved by the user before discovery. |
 | `plan.md` | Human-readable plan context. |
 | `memory/*` | Compressed project context and freshness checkpoint data. |
 
@@ -516,6 +545,7 @@ Available instruction keys:
 
 ```text
 init
+intake
 discovery
 planning
 execution
@@ -551,10 +581,15 @@ Most users do not need to call these manually. They are registered for the model
 - `planner_status`
 - `planner_create_plan`
 
+### Goal Intake
+
+- `planner_goal_submit`
+- `planner_goal_decide`
+
 ### Workflow Transitions
 
 - `planner_start_step`
-- `planner_complete_step`
+- `planner_finish_step`
 - `planner_advance_step`
 - `planner_fail_step`
 - `planner_block_step`
@@ -568,7 +603,11 @@ Most users do not need to call these manually. They are registered for the model
 
 - `planner_memory_inspect`
 - `planner_memory_apply_freshness`
-- `planner_memory_write_batch`
+- `planner_memory_write_project_patterns`
+- `planner_memory_upsert_files`
+- `planner_memory_upsert_symbols`
+- `planner_memory_upsert_relations`
+- `planner_memory_search`
 - `planner_memory_verify`
 - `planner_memory_sync_checkpoint`
 

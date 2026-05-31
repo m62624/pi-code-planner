@@ -51,8 +51,8 @@ describe("planner stage behavior", () => {
 			}),
 		).toMatchObject({
 			actions: ["write_artifacts"],
-			expectedTools: ["planner_status"],
-			memoryPolicy: "not_required",
+			expectedTools: ["planner_memory_write_project_patterns"],
+			memoryPolicy: "write_entries",
 		});
 		expect(
 			getPlannerStageStepBehavior({
@@ -134,14 +134,14 @@ describe("planner stage behavior", () => {
 
 	it("shows enter steps as complete-then-advance workflow boundaries", () => {
 		for (const [stage, step] of [
-			["init", "enter_discovery"],
+			["init", "enter_intake"],
 			["discovery", "enter_planning"],
 			["planning", "enter_execution"],
 			["finalize", "enter_done"],
 		] as const) {
 			expect(getPlannerStageStepBehavior({ stage, step })).toMatchObject({
 				actions: ["state_transition"],
-				expectedTools: ["planner_complete_step", "planner_advance_step"],
+				expectedTools: ["planner_finish_step"],
 				commitPolicy: "forbidden",
 			});
 		}

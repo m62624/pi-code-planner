@@ -1,5 +1,5 @@
-import { isAbsolute, relative, resolve, sep } from "node:path";
-import type { ProjectStoragePaths } from "../storage/paths";
+import { basename, isAbsolute, relative, resolve, sep } from "node:path";
+import type { PlanStoragePaths, ProjectStoragePaths } from "../storage/paths";
 import type { PlannerStage, PlanStateRecord } from "../storage/schema";
 import {
 	checkRawGitAllowed,
@@ -14,6 +14,10 @@ export type PlannerBuiltinToolCall =
 
 export interface PlannerBuiltinGuardState extends GitWatcherState {
 	projectPaths: Pick<ProjectStoragePaths, "projectRoot"> | null;
+	planPaths?: Pick<
+		PlanStoragePaths,
+		"planDir" | "memoryDir" | "requestMd" | "goalMd"
+	> | null;
 	planState: Pick<PlanStateRecord, "stage" | "step" | "worktreePath"> | null;
 }
 
@@ -30,6 +34,7 @@ export interface PlannerBuiltinGuardDecision {
 
 const PROJECT_WRITE_BLOCKED_STAGES = new Set<PlannerStage>([
 	"init",
+	"intake",
 	"discovery",
 	"planning",
 ]);
@@ -52,6 +57,17 @@ export function checkPlannerBuiltinToolAllowed(
 		return blockProjectWrite(input.state, input.tool.toolName);
 	}
 
+	if (isProtectedPlannerArtifact(input.cwd, input.tool.path, input.state)) {
+		return {
+			allow: false,
+			reason: [
+				`Built-in Pi ${input.tool.toolName} cannot modify planner-managed goal or memory files directly.`,
+				"Use the exact planner wrapper reported by planner_status.",
+				`Call ${PLANNER_STATUS_TOOL_NAME} before continuing.`,
+			].join("\n"),
+		};
+	}
+
 	if (
 		PROJECT_WRITE_BLOCKED_STAGES.has(input.state.planState.stage) &&
 		isProjectPath(input.cwd, input.tool.path, input.state)
@@ -60,6 +76,22 @@ export function checkPlannerBuiltinToolAllowed(
 	}
 
 	return allow();
+}
+
+function isProtectedPlannerArtifact(
+	cwd: string,
+	path: string,
+	state: PlannerBuiltinGuardState,
+): boolean {
+	if (!state.planPaths) return false;
+	const target = isAbsolute(path) ? resolve(path) : resolve(cwd, path);
+	return (
+		isPathInside(state.planPaths.memoryDir, target) ||
+		target === resolve(state.planPaths.requestMd) ||
+		target === resolve(state.planPaths.goalMd) ||
+		(isPathInside(state.planPaths.planDir, target) &&
+			basename(target) === "project_patterns.md")
+	);
 }
 
 function isProjectPath(

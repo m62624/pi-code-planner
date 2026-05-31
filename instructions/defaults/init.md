@@ -4,7 +4,7 @@
 
 Initialize planner control before any project discovery or implementation work begins.
 
-The normal entry point is `planner_create_plan` or `/planner-create`. The extension performs init as an internal atomic bootstrap and should leave the persisted position at `discovery/read_project`. If `planner_status` exposes an init step, follow the exact step rule and do not skip ahead.
+The normal entry point is `planner_create_plan` or `/planner-create`. The extension performs init as an internal atomic bootstrap and should leave the persisted position at `intake/draft_goal`. If `planner_status` exposes an init step, follow the exact step rule and do not skip ahead.
 
 ## Required Discipline
 
@@ -14,7 +14,7 @@ The normal entry point is `planner_create_plan` or `/planner-create`. The extens
 4. Prepare project storage, settings, instruction files, plan artifacts, and memory files.
 5. Resolve the worktree location from effective settings. Do not invent a path.
 6. Create exactly one dedicated worktree for the whole plan.
-7. Enter `discovery/read_project`.
+7. Enter `intake/draft_goal`.
 
 ## Restrictions
 
@@ -27,8 +27,8 @@ The normal entry point is `planner_create_plan` or `/planner-create`. The extens
 
 ## Exit Condition
 
-Init is complete only when the plan record exists, the plan worktree exists, the active branch is recorded, and state points to `discovery/read_project`.
+Init is complete only when the plan record exists, the plan worktree exists, the active branch is recorded, and state points to `intake/draft_goal`.
 
 ## auto-compact
 
-An auto-compact during init does not authorize progress. Call `planner_status`, reload the exact persisted init step, and continue only with the wrapper reported by status. Do not begin discovery until state explicitly says `discovery/read_project`.
+An auto-compact during init does not authorize progress. Call `planner_status`, reload the exact persisted init step, and continue only with the wrapper reported by status. Do not inspect source until intake is approved and state explicitly says `discovery/read_project`.

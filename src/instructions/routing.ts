@@ -45,6 +45,8 @@ export function getInstructionKeysForPlannerStep(input: {
 				keys.push("git");
 			}
 			break;
+		case "intake":
+			break;
 		case "discovery":
 		case "planning":
 			keys.push("memory");

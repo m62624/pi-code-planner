@@ -1,87 +1,17 @@
 import type {
 	MemoryFileEntry,
-	MemoryFileKind,
-	MemoryFileStatus,
 	MemoryRelationEntry,
-	MemoryRelationKind,
 	MemorySymbolEntry,
-	MemorySymbolGlobalState,
-	MemorySymbolKind,
-	MemorySymbolVisibility,
-	MemoryVerificationStatus,
 } from "./schema";
-
-const FILE_KINDS = [
-	"source",
-	"test",
-	"config",
-	"docs",
-	"generated",
-	"vendor",
-	"unknown",
-] as const satisfies readonly MemoryFileKind[];
-
-const FILE_STATUSES = [
-	"pending",
-	"indexed",
-	"dirty",
-	"ignored",
-	"missing",
-	"failed",
-] as const satisfies readonly MemoryFileStatus[];
-
-const SYMBOL_KINDS = [
-	"function",
-	"method",
-	"type",
-	"class",
-	"trait",
-	"interface",
-	"module",
-	"constant",
-	"test",
-	"unknown",
-] as const satisfies readonly MemorySymbolKind[];
-
-const SYMBOL_VISIBILITIES = [
-	"public",
-	"package",
-	"crate",
-	"private",
-	"test_only",
-	"unknown",
-] as const satisfies readonly MemorySymbolVisibility[];
-
-const SYMBOL_GLOBAL_STATES = [
-	"none",
-	"reads",
-	"writes",
-	"unknown",
-] as const satisfies readonly MemorySymbolGlobalState[];
-
-const VERIFICATION_STATUSES = [
-	"verified",
-	"stale",
-	"missing",
-	"unverified",
-] as const satisfies readonly MemoryVerificationStatus[];
-
-const RELATION_KINDS = [
-	"calls",
-	"implements",
-	"extends",
-	"contains",
-	"returns",
-	"accepts",
-	"throws",
-	"reads",
-	"writes",
-	"tests",
-	"configures",
-	"depends_on",
-	"exposes",
-	"unknown",
-] as const satisfies readonly MemoryRelationKind[];
+import {
+	MEMORY_FILE_KINDS,
+	MEMORY_FILE_STATUSES,
+	MEMORY_RELATION_KINDS,
+	MEMORY_SYMBOL_GLOBAL_STATES,
+	MEMORY_SYMBOL_KINDS,
+	MEMORY_SYMBOL_VISIBILITIES,
+	MEMORY_VERIFICATION_STATUSES,
+} from "./schema";
 
 export interface MemoryValidationFailure {
 	reasons: string[];
@@ -100,10 +30,10 @@ export function validateMemoryFileEntry(
 	}
 
 	requiredString(value, "path", reasons);
-	requiredEnum(value, "kind", FILE_KINDS, reasons);
+	requiredEnum(value, "kind", MEMORY_FILE_KINDS, reasons);
 	requiredString(value, "language", reasons);
 	requiredString(value, "hash", reasons);
-	requiredEnum(value, "status", FILE_STATUSES, reasons);
+	requiredEnum(value, "status", MEMORY_FILE_STATUSES, reasons);
 	requiredString(value, "summary", reasons);
 	rejectUnsafePath(value.path, "path", reasons);
 
@@ -123,12 +53,12 @@ export function validateMemorySymbolEntry(
 	requiredString(value, "id", reasons);
 	requiredString(value, "path", reasons);
 	requiredString(value, "language", reasons);
-	requiredEnum(value, "kind", SYMBOL_KINDS, reasons);
+	requiredEnum(value, "kind", MEMORY_SYMBOL_KINDS, reasons);
 	requiredString(value, "name", reasons);
 	requiredString(value, "qualifiedName", reasons);
 	requiredString(value, "signature", reasons);
 	requiredString(value, "summary", reasons);
-	requiredEnum(value, "visibility", SYMBOL_VISIBILITIES, reasons);
+	requiredEnum(value, "visibility", MEMORY_SYMBOL_VISIBILITIES, reasons);
 	rejectUnsafePath(value.path, "path", reasons);
 
 	if (!isRecord(value.effects)) {
@@ -137,7 +67,12 @@ export function validateMemorySymbolEntry(
 		requiredStringArray(value.effects, "reads", reasons);
 		requiredStringArray(value.effects, "writes", reasons);
 		requiredStringArray(value.effects, "io", reasons);
-		requiredEnum(value.effects, "globalState", SYMBOL_GLOBAL_STATES, reasons);
+		requiredEnum(
+			value.effects,
+			"globalState",
+			MEMORY_SYMBOL_GLOBAL_STATES,
+			reasons,
+		);
 	}
 
 	if (!isRecord(value.anchor)) {
@@ -150,7 +85,12 @@ export function validateMemorySymbolEntry(
 		reasons.push("verification must be an object.");
 	} else {
 		requiredString(value.verification, "fileHash", reasons);
-		requiredEnum(value.verification, "status", VERIFICATION_STATUSES, reasons);
+		requiredEnum(
+			value.verification,
+			"status",
+			MEMORY_VERIFICATION_STATUSES,
+			reasons,
+		);
 	}
 
 	return reasons.length === 0
@@ -171,7 +111,7 @@ export function validateMemoryRelationEntry(
 	if (!(typeof value.to === "string" || value.to === null)) {
 		reasons.push("to must be a string or null.");
 	}
-	requiredEnum(value, "kind", RELATION_KINDS, reasons);
+	requiredEnum(value, "kind", MEMORY_RELATION_KINDS, reasons);
 	requiredString(value, "evidencePath", reasons);
 	requiredString(value, "evidenceSearchText", reasons);
 	rejectUnsafePath(value.evidencePath, "evidencePath", reasons);

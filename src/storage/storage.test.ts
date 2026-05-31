@@ -189,8 +189,9 @@ describe("plan state store", () => {
 				"choose_worktree_location",
 				"create_plan_record",
 				"create_plan_worktree",
-				"enter_discovery",
+				"enter_intake",
 			],
+			intake: ["draft_goal", "await_goal_approval"],
 			discovery: [
 				"read_project",
 				"write_project_patterns",
@@ -265,6 +266,7 @@ describe("plan state store", () => {
 			),
 		).toEqual({
 			init: 7,
+			intake: 2,
 			discovery: 9,
 			planning: 7,
 			execution: 15,

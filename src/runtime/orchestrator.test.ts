@@ -87,15 +87,15 @@ describe("planner lifecycle orchestrator", () => {
 
 		const decision = checkPlannerOrchestratorToolAllowed({
 			orchestrator: result,
-			toolName: "planner_complete_step",
+			toolName: "planner_finish_step",
 		});
 
 		expect(decision).toMatchObject({
 			allow: false,
-			toolName: "planner_complete_step",
+			toolName: "planner_finish_step",
 		});
 		expect(decision.reason).toContain(
-			"Planner tool planner_complete_step is blocked",
+			"Planner tool planner_finish_step is blocked",
 		);
 		expect(decision.reason).toContain("Allowed transitions: start_step");
 	});

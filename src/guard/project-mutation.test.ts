@@ -27,8 +27,8 @@ describe("planner built-in Pi tool guard", () => {
 		).toEqual({ allow: true, reason: null });
 	});
 
-	it("blocks project writes during init, discovery, and planning", () => {
-		for (const stage of ["init", "discovery", "planning"] as const) {
+	it("blocks project writes during init, intake, discovery, and planning", () => {
+		for (const stage of ["init", "intake", "discovery", "planning"] as const) {
 			expect(
 				decision({
 					toolName: "write",
@@ -56,6 +56,28 @@ describe("planner built-in Pi tool guard", () => {
 				state: activeState("discovery"),
 			}),
 		).toEqual({ allow: true, reason: null });
+	});
+
+	it("blocks direct writes to planner-managed goal and memory files", () => {
+		const state = activeState("intake");
+		state.planPaths = {
+			planDir: "/agent/extensions/pi-code-planner/projects/app/plans/plan-a",
+			memoryDir:
+				"/agent/extensions/pi-code-planner/projects/app/plans/plan-a/memory",
+			requestMd:
+				"/agent/extensions/pi-code-planner/projects/app/plans/plan-a/request.md",
+			goalMd:
+				"/agent/extensions/pi-code-planner/projects/app/plans/plan-a/goal.md",
+		};
+		for (const path of [
+			state.planPaths.goalMd,
+			`${state.planPaths.memoryDir}/symbols/index.jsonl`,
+			`${state.planPaths.planDir}/project_patterns.md`,
+		]) {
+			const result = decision({ toolName: "write", path, state });
+			expect(result.allow, path).toBe(false);
+			expect(result.reason).toContain("planner wrapper");
+		}
 	});
 
 	it("blocks write and edit when an active planner state cannot be loaded", () => {
@@ -127,6 +149,7 @@ describe("planner built-in Pi tool guard", () => {
 
 const ALL_STAGES: readonly PlannerStage[] = [
 	"init",
+	"intake",
 	"discovery",
 	"planning",
 	"execution",
@@ -185,6 +208,8 @@ function stepFor(stage: PlannerStage): PlanStateRecord["step"] {
 	switch (stage) {
 		case "init":
 			return "check_project";
+		case "intake":
+			return "draft_goal";
 		case "discovery":
 			return "read_project";
 		case "planning":

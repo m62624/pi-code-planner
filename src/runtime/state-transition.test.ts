@@ -105,7 +105,7 @@ describe("persisted planner state transition", () => {
 		const result = await applyPlannerStateTransition({
 			fs: setup.fs,
 			preflight: setup.preflight,
-			tool: "planner_memory_write_batch",
+			tool: "planner_memory_upsert_files",
 			transition: { type: "start_step" },
 		});
 
@@ -142,33 +142,22 @@ describe("persisted planner state transition", () => {
 		});
 	});
 
-	it("completes, advances, fails, blocks, and retries with durable state", async () => {
+	it("finishes, fails, blocks, and retries with durable state", async () => {
 		const setup = await createReadySetup({ stepStatus: "running" });
 
 		expect(
 			await applyPlannerStateTransition({
 				fs: setup.fs,
 				preflight: setup.preflight,
-				transition: { type: "complete_step" },
+				transition: { type: "finish_step" },
 			}),
 		).toMatchObject({ status: "applied" });
 
-		const completed = await readPlanState(setup.fs, setup.planPaths);
-		expect(completed).toMatchObject({
-			stepStatus: "completed",
-			nextStep: "check_git",
-		});
-
-		const advancedSetup = await withPreflight(setup, completed);
-		await applyPlannerStateTransition({
-			fs: setup.fs,
-			preflight: advancedSetup.preflight,
-			transition: { type: "advance_step" },
-		});
 		const advanced = await readPlanState(setup.fs, setup.planPaths);
 		expect(advanced).toMatchObject({
 			step: "check_git",
 			stepStatus: "pending",
+			nextStep: null,
 		});
 
 		const runningSetup = await withPreflight(setup, {
@@ -244,8 +233,9 @@ describe("persisted planner state transition", () => {
 		});
 
 		expect(await readPlanState(setup.fs, setup.planPaths)).toMatchObject({
-			stepStatus: "completed",
-			nextStep: "enter_planning",
+			step: "enter_planning",
+			stepStatus: "pending",
+			nextStep: null,
 			requiresCompact: false,
 		});
 	});

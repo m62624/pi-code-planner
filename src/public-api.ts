@@ -264,6 +264,15 @@ export {
 	PLANNER_GIT_TOOL_NAMES,
 } from "./runtime/git-tools";
 export type {
+	PlannerGoalToolExecutionInput,
+	PlannerGoalToolExecutionResult,
+	PlannerGoalToolName,
+} from "./runtime/goal-tools";
+export {
+	executePlannerGoalTool,
+	PLANNER_GOAL_TOOL_NAMES,
+} from "./runtime/goal-tools";
+export type {
 	PlannerLifecycleAction,
 	PlannerLifecycleDecision,
 } from "./runtime/lifecycle";
@@ -380,6 +389,7 @@ export {
 	completePlannerStep,
 	enterPlannerRecovery,
 	failPlannerStep,
+	finishPlannerStep,
 	getAllowedNextPlannerPositions,
 	getPlannerStepStage,
 	isBeforePlannerWorktreeStep,

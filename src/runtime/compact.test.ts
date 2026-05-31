@@ -53,6 +53,8 @@ describe("planner compact runtime", () => {
 		expect(bundle.text).toContain("- planId: plan-a");
 		expect(bundle.text).toContain("- stage: execution");
 		expect(bundle.text).toContain("- step: compact_task");
+		expect(bundle.text).toContain(setup.planPaths.requestMd);
+		expect(bundle.text).toContain(setup.planPaths.goalMd);
 		expect(bundle.text).toContain(setup.planPaths.planMd);
 		expect(bundle.text).toContain("Preserve task result and artifact links.");
 		expect(bundle.sections).toMatchObject([

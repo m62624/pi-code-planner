@@ -17,9 +17,11 @@ export type PlannerLifecycleAction =
 	| "write_memory"
 	| "sync_memory_checkpoint"
 	| "compact_pending"
+	| "draft_goal"
+	| "await_goal_decision"
 	| "start_step"
 	| "request_compact"
-	| "complete_step"
+	| "finish_step"
 	| "advance_step"
 	| "retry_step"
 	| "blocked_step";
@@ -135,11 +137,11 @@ function memoryDecision(
 	return {
 		...base,
 		action: "write_memory",
-		requiredTool: "planner_memory_write_batch",
+		requiredTool: "planner_memory_upsert_files",
 		requiredTransition: null,
 		reason: preflight.memoryGate.instruction,
 		modelMessage:
-			"Update affected planner memory entries with planner_memory_write_batch. Re-evaluate file summaries, symbols, relations, and effects before verification.",
+			"Update affected planner memory entries with planner_memory_upsert_files, planner_memory_upsert_symbols, and planner_memory_upsert_relations. Re-evaluate summaries, signatures, relations, and effects before verification.",
 	};
 }
 
@@ -161,6 +163,36 @@ function stateMachineDecision(
 	}
 
 	const state = preflight.context.state;
+	if (
+		state.stage === "intake" &&
+		state.step === "draft_goal" &&
+		state.stepStatus === "running"
+	) {
+		return {
+			...base,
+			action: "draft_goal",
+			requiredTool: "planner_goal_submit",
+			requiredTransition: null,
+			reason: "Draft the normalized user goal before discovery.",
+			modelMessage:
+				"Read request.md, write goal.md in your own words with focused questions, then call planner_goal_submit. Do not inspect project source.",
+		};
+	}
+	if (
+		state.stage === "intake" &&
+		state.step === "await_goal_approval" &&
+		state.stepStatus === "running"
+	) {
+		return {
+			...base,
+			action: "await_goal_decision",
+			requiredTool: "planner_goal_decide",
+			requiredTransition: null,
+			reason: "Wait for explicit user approval or revision feedback.",
+			modelMessage:
+				"Show the user goal.md and ask for explicit approval. Call planner_goal_decide only after the user answers approve or revise.",
+		};
+	}
 	switch (state.stepStatus) {
 		case "pending":
 			return transitionDecision({
@@ -187,13 +219,13 @@ function stateMachineDecision(
 					})
 				: transitionDecision({
 						base,
-						action: "complete_step",
-						transition: "complete_step",
-						tool: "planner_complete_step",
+						action: "finish_step",
+						transition: "finish_step",
+						tool: "planner_finish_step",
 						allowedTransitions,
 						reason: `Planner step is running: ${state.stage}/${state.step}.`,
 						modelMessage:
-							"Complete the current step only after its exit condition is true. Then call planner_complete_step.",
+							"Finish the current step only after its exit condition is true. Then call planner_finish_step. The next persisted step opens atomically.",
 					});
 		case "completed":
 			return transitionDecision({

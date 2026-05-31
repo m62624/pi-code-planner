@@ -99,6 +99,7 @@ describe("planner plan tools", () => {
 			toolName: "planner_create_plan",
 			params: {
 				planId: "API Audit",
+				request: "Audit why approval modes blocks a safe find command.",
 				title: "Audit approval modes",
 			},
 		});
@@ -125,9 +126,9 @@ describe("planner plan tools", () => {
 			tasks: [],
 		});
 		await expect(readPlanState(fs, planPaths)).resolves.toMatchObject({
-			stage: "discovery",
-			step: "read_project",
-			stepStatus: "pending",
+			stage: "intake",
+			step: "draft_goal",
+			stepStatus: "running",
 			activeBranches: {
 				base: "feature/base",
 				plan: "plan/api-audit",
@@ -141,6 +142,10 @@ describe("planner plan tools", () => {
 			commit: null,
 		});
 		expect(fs.snapshot()[planPaths.planMd]).toBe("");
+		expect(fs.snapshot()[planPaths.requestMd]).toBe(
+			"Audit why approval modes blocks a safe find command.\n",
+		);
+		expect(fs.snapshot()[planPaths.goalMd]).toBe("");
 		expect(fs.snapshot()[planPaths.discoveryMd]).toBe("");
 		expect(fs.snapshot()["/repo/app/.gitignore"]).toBe(
 			".pi/pi-code-planner/worktrees/\n",
@@ -186,6 +191,7 @@ describe("planner plan tools", () => {
 			toolName: "planner_create_plan",
 			params: {
 				planId: "plan-a",
+				request: "Create plan A.",
 				title: "Plan A",
 				baseBranch: "release/1",
 			},
@@ -216,6 +222,7 @@ describe("planner plan tools", () => {
 			toolName: "planner_create_plan",
 			params: {
 				planId: "plan-b",
+				request: "Create plan B.",
 				title: "Plan B",
 			},
 		});
@@ -241,6 +248,7 @@ describe("planner plan tools", () => {
 			toolName: "planner_create_plan",
 			params: {
 				planId: "plan-a",
+				request: "Create plan A.",
 				title: "Plan A",
 			},
 		});
@@ -278,6 +286,7 @@ describe("planner plan tools", () => {
 			toolName: "planner_create_plan",
 			params: {
 				planId: "plan-a",
+				request: "Create plan A.",
 				title: "Plan A",
 			},
 		});
@@ -326,6 +335,7 @@ describe("planner plan tools", () => {
 			toolName: "planner_create_plan",
 			params: {
 				planId: "plan-a",
+				request: "Create plan A.",
 				title: "Plan A",
 			},
 		});
@@ -363,6 +373,7 @@ describe("planner plan tools", () => {
 			toolName: "planner_create_plan",
 			params: {
 				planId: "plan-a",
+				request: "Create plan A.",
 				title: "Plan A",
 			},
 		});
@@ -376,11 +387,37 @@ describe("planner plan tools", () => {
 			toolName: "planner_create_plan",
 			params: {
 				planId: "plan-a",
+				request: "Create plan A again.",
 				title: "Plan A again",
 			},
 		});
 
 		expect(second.status).toBe("blocked");
 		expect(second.text).toContain("Planner plan already exists: plan-a");
+	});
+
+	it("generates a deterministic id from the raw request when planId is omitted", async () => {
+		const fs = new MockPlannerFs();
+		await seedInstructionDefaults(fs, BUNDLED_INSTRUCTION_DEFAULTS_DIR);
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+
+		const result = await executePlannerPlanTool({
+			fs,
+			git: new MockGitRunner(),
+			projectPaths,
+			toolName: "planner_create_plan",
+			params: {
+				request: "Audit safe find command",
+			},
+		});
+
+		expect(result.status).toBe("applied");
+		expect(result.text).toContain("Plan: audit-safe-find-command");
+		await expect(readProjectRecord(fs, projectPaths)).resolves.toMatchObject({
+			activePlanId: "audit-safe-find-command",
+		});
 	});
 });

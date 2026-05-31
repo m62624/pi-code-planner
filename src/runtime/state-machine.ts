@@ -91,8 +91,14 @@ export function getAllowedNextPlannerPositions(
 		return nextWithinStage(input);
 	}
 
-	if (input.stage === "init" && input.step === "enter_discovery") {
-		return [{ stage: "discovery", step: "read_project" }];
+	if (input.stage === "init" && input.step === "enter_intake") {
+		return [{ stage: "intake", step: "draft_goal" }];
+	}
+	if (input.stage === "intake" && input.step === "await_goal_approval") {
+		return [
+			{ stage: "intake", step: "draft_goal" },
+			{ stage: "discovery", step: "read_project" },
+		];
 	}
 	if (input.stage === "discovery" && input.step === "enter_planning") {
 		return [{ stage: "planning", step: "read_memory" }];
@@ -211,6 +217,13 @@ export function advancePlannerStep(state: PlanStateRecord): PlanStateRecord {
 	};
 }
 
+export function finishPlannerStep(
+	state: PlanStateRecord,
+	options: CompletePlannerStepOptions = {},
+): PlanStateRecord {
+	return advancePlannerStep(completePlannerStep(state, options));
+}
+
 export function failPlannerStep(
 	state: PlanStateRecord,
 	reason: string,
@@ -299,13 +312,13 @@ export function completePlannerCompact(
 		);
 	}
 	const next = selectNextPosition(state);
-	return {
+	return advancePlannerStep({
 		...state,
 		stepStatus: "completed",
 		nextStep: next?.step ?? null,
 		requiresCompact: false,
 		blockedReason: null,
-	};
+	});
 }
 
 export function enterPlannerRecovery(

@@ -55,6 +55,7 @@ describe("planner wrapper tool policy", () => {
 			"planner_status",
 			"planner_git_inspect",
 			"planner_git_merge_selected_experiment",
+			"planner_memory_search",
 		] satisfies PlannerWrapperTool[]);
 
 		expect(
@@ -66,6 +67,7 @@ describe("planner wrapper tool policy", () => {
 			"planner_status",
 			"planner_git_inspect",
 			"planner_git_merge_task_to_plan",
+			"planner_memory_search",
 		] satisfies PlannerWrapperTool[]);
 	});
 
@@ -78,6 +80,7 @@ describe("planner wrapper tool policy", () => {
 		expect(allowedTools).toEqual([
 			"planner_status",
 			"planner_git_inspect",
+			"planner_memory_search",
 		] satisfies PlannerWrapperTool[]);
 		expect(
 			checkPlannerWrapperAllowed({
@@ -130,7 +133,10 @@ describe("planner wrapper tool policy", () => {
 			"planner_git_inspect",
 			"planner_memory_inspect",
 			"planner_memory_apply_freshness",
-			"planner_memory_write_batch",
+			"planner_memory_upsert_files",
+			"planner_memory_upsert_symbols",
+			"planner_memory_upsert_relations",
+			"planner_memory_search",
 			"planner_memory_verify",
 			"planner_memory_sync_checkpoint",
 		] satisfies PlannerWrapperTool[]);
@@ -139,7 +145,7 @@ describe("planner wrapper tool policy", () => {
 
 	it("allows memory wrappers while memory update is required", () => {
 		const decision = checkPlannerWrapperAllowed({
-			tool: "planner_memory_write_batch",
+			tool: "planner_memory_upsert_files",
 			state: { ...baseState, requiresMemoryUpdate: true },
 		});
 

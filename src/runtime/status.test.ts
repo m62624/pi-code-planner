@@ -44,7 +44,6 @@ import { runPlannerPreflight } from "./preflight";
 import {
 	buildPlannerStatusText,
 	getPlannerStepRule,
-	PLANNER_STATUS_INVARIANTS,
 	PLANNER_STEP_RULES,
 } from "./status";
 
@@ -115,7 +114,7 @@ describe("planner status text", () => {
 		expect(text).toContain("- stage: execution");
 		expect(text).toContain("- step: write_tests");
 		expect(text).toContain(
-			"Complete the current step only after exit condition is true: Tests exist and are expected to fail or catch missing behavior.",
+			"Call planner_finish_step only after exit condition is true: Tests exist and are expected to fail or catch missing behavior.",
 		);
 		expect(text).toContain("## Current Step Rule");
 		expect(text).toContain(
@@ -129,20 +128,16 @@ describe("planner status text", () => {
 		expect(text).toContain(
 			"default: /agent/extensions/pi-code-planner/instructions/defaults/tdd.md",
 		);
-		expect(text).toContain("## Instruction Bundle");
+		expect(text).toContain("## Current Stage Instruction");
 		expect(text).toContain("Execution default body.");
-		expect(text).toContain("TDD default body.");
-		expect(text).toContain("Project TDD append.");
+		expect(text).not.toContain("TDD default body.");
+		expect(text).not.toContain("Project TDD append.");
 		expect(text).toContain("## Planner Artifacts");
 		expect(text).toContain("/plans/plan-a/tasks/task-1/tdd.md");
 		expect(text).toContain("## Memory-First Rule");
 		expect(text).toContain(setup.memoryPaths.symbolsIndexJsonl);
-		expect(text).toContain("## Full State Machine Order");
-		expect(text).toContain(
-			"execution: prepare_task -> write_tdd_plan -> write_tests",
-		);
-		expect(text).toContain("## Global Invariants");
-		expect(text).toContain(PLANNER_STATUS_INVARIANTS[0]);
+		expect(text).not.toContain("## Full State Machine Order");
+		expect(text).not.toContain("## Global Invariants");
 	});
 
 	it("surfaces memory update gates before normal step instructions", async () => {
@@ -173,8 +168,41 @@ describe("planner status text", () => {
 		expect(text).toContain(
 			"Update planner memory first: inspect/apply freshness, rewrite affected file/symbol/relation/effects entries",
 		);
-		expect(text).toContain("planner_memory_write_batch");
+		expect(text).toContain("planner_memory_upsert_files");
 		expect(text).toContain("memoryUpdateReason: external_commit");
+	});
+
+	it("directs the model to draft and submit goal.md before discovery reads", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createStatusSetup(fs, {
+			state: {
+				stage: "intake",
+				step: "draft_goal",
+				stepStatus: "running",
+			},
+		});
+		await syncInstructionFiles(fs, createInstructionPaths(setup.projectPaths), {
+			...TEST_INSTRUCTION_DEFAULTS,
+			intake: "# intake\nNormalize the request before reading source.\n",
+			discovery: "# discovery\nRead the project broadly.\n",
+		});
+
+		const preflight = await runPlannerPreflight({
+			fs,
+			git: new MockGitRunner(),
+			projectPaths: setup.projectPaths,
+		});
+		const text = await buildPlannerStatusText({ fs, preflight });
+
+		expect(text).toContain("- stage: intake");
+		expect(text).toContain("- step: draft_goal");
+		expect(text).toContain("- action: draft_goal");
+		expect(text).toContain("- requiredTool: planner_goal_submit");
+		expect(text).toContain("Do not inspect project source.");
+		expect(text).toContain("Normalize the request before reading source.");
+		expect(text).not.toContain("Read the project broadly.");
+		expect(text).toContain(setup.planPaths.requestMd);
+		expect(text).toContain(setup.planPaths.goalMd);
 	});
 });
 

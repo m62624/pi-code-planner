@@ -13,6 +13,7 @@ import {
 	completePlannerStep,
 	enterPlannerRecovery,
 	failPlannerStep,
+	finishPlannerStep,
 	getAllowedNextPlannerPositions,
 	getPlannerStepStage,
 	isPlannerStepInStage,
@@ -110,31 +111,55 @@ describe("planner state machine", () => {
 			completePlannerStep(
 				state({
 					stage: "init",
-					step: "enter_discovery",
+					step: "enter_intake",
 					stepStatus: "running",
 				}),
 			),
 		).toMatchObject({
 			stage: "init",
-			step: "enter_discovery",
+			step: "enter_intake",
 			stepStatus: "completed",
-			nextStep: "read_project",
+			nextStep: "draft_goal",
 		});
 
 		expect(
 			advancePlannerStep(
 				state({
 					stage: "init",
-					step: "enter_discovery",
+					step: "enter_intake",
 					stepStatus: "completed",
-					nextStep: "read_project",
+					nextStep: "draft_goal",
 				}),
 			),
 		).toMatchObject({
-			stage: "discovery",
-			step: "read_project",
+			stage: "intake",
+			step: "draft_goal",
 			stepStatus: "pending",
 		});
+	});
+
+	it("finishes a linear step atomically and opens the next pending step", () => {
+		expect(finishPlannerStep(state({ stepStatus: "running" }))).toMatchObject({
+			stage: "init",
+			step: "check_git",
+			stepStatus: "pending",
+			nextStep: null,
+		});
+	});
+
+	it("requires an explicit intake approval branch before discovery", () => {
+		const current = state({
+			stage: "intake",
+			step: "await_goal_approval",
+			stepStatus: "running",
+		});
+		expect(getAllowedNextPlannerPositions(current)).toEqual([
+			{ stage: "intake", step: "draft_goal" },
+			{ stage: "discovery", step: "read_project" },
+		]);
+		expect(() => completePlannerStep(current)).toThrowStateMachine(
+			"ambiguous_next_step",
+		);
 	});
 
 	it("requires an explicit allowed branch after select_next_task", () => {
@@ -298,9 +323,9 @@ describe("planner state machine", () => {
 
 		expect(completePlannerCompact(pendingCompact)).toMatchObject({
 			stage: "discovery",
-			step: "compact_discovery",
-			stepStatus: "completed",
-			nextStep: "enter_planning",
+			step: "enter_planning",
+			stepStatus: "pending",
+			nextStep: null,
 			requiresCompact: false,
 		});
 	});

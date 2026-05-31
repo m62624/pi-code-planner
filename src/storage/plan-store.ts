@@ -11,6 +11,8 @@ export async function initializePlanFiles(
 	await fs.mkdirp(paths.memoryDir);
 	await fs.mkdirp(paths.tasksDir);
 	await savePlanRecord(fs, paths, plan);
+	await ensureTextFile(fs, paths.requestMd);
+	await ensureTextFile(fs, paths.goalMd);
 	await ensureTextFile(fs, paths.planMd);
 	await ensureTextFile(fs, paths.discoveryMd);
 	await ensureTextFile(fs, paths.questionsMd);

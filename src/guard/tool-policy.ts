@@ -7,6 +7,8 @@ import type {
 export const PLANNER_WRAPPER_TOOLS = [
 	"planner_status",
 	"planner_create_plan",
+	"planner_goal_submit",
+	"planner_goal_decide",
 	"planner_git_inspect",
 	"planner_git_init",
 	"planner_git_commit",
@@ -22,7 +24,11 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_git_cleanup_managed_branches",
 	"planner_memory_inspect",
 	"planner_memory_apply_freshness",
-	"planner_memory_write_batch",
+	"planner_memory_write_project_patterns",
+	"planner_memory_upsert_files",
+	"planner_memory_upsert_symbols",
+	"planner_memory_upsert_relations",
+	"planner_memory_search",
 	"planner_memory_verify",
 	"planner_memory_sync_checkpoint",
 	"planner_recovery_inspect",
@@ -45,6 +51,15 @@ const ALWAYS_ALLOWED_TOOLS = [
 	"planner_status",
 ] as const satisfies readonly PlannerWrapperTool[];
 
+const MEMORY_SEARCH_STAGES = new Set<PlannerStage>([
+	"discovery",
+	"planning",
+	"execution",
+	"finalize",
+	"done",
+	"recovery",
+]);
+
 const STEP_ALLOWED_TOOLS = {
 	init: {
 		check_project: ["planner_git_inspect"],
@@ -53,14 +68,18 @@ const STEP_ALLOWED_TOOLS = {
 		choose_worktree_location: [],
 		create_plan_record: [],
 		create_plan_worktree: ["planner_git_inspect"],
-		enter_discovery: ["planner_git_inspect"],
+		enter_intake: ["planner_git_inspect"],
+	},
+	intake: {
+		draft_goal: ["planner_goal_submit"],
+		await_goal_approval: ["planner_goal_decide"],
 	},
 	discovery: {
 		read_project: ["planner_git_inspect"],
-		write_project_patterns: [],
-		write_file_index: ["planner_memory_write_batch"],
-		write_symbols: ["planner_memory_write_batch"],
-		write_relations: ["planner_memory_write_batch"],
+		write_project_patterns: ["planner_memory_write_project_patterns"],
+		write_file_index: ["planner_memory_upsert_files"],
+		write_symbols: ["planner_memory_upsert_symbols"],
+		write_relations: ["planner_memory_upsert_relations"],
 		write_questions: [],
 		verify_memory: [
 			"planner_memory_inspect",
@@ -71,7 +90,7 @@ const STEP_ALLOWED_TOOLS = {
 		enter_planning: [],
 	},
 	planning: {
-		read_memory: ["planner_memory_inspect"],
+		read_memory: ["planner_memory_inspect", "planner_memory_search"],
 		draft_plan: [],
 		split_tasks: [],
 		write_task_files: [],
@@ -177,7 +196,10 @@ export function getAllowedPlannerWrapperTools(
 			"planner_git_inspect",
 			"planner_memory_inspect",
 			"planner_memory_apply_freshness",
-			"planner_memory_write_batch",
+			"planner_memory_upsert_files",
+			"planner_memory_upsert_symbols",
+			"planner_memory_upsert_relations",
+			"planner_memory_search",
 			"planner_memory_verify",
 			"planner_memory_sync_checkpoint",
 		]);
@@ -191,7 +213,12 @@ export function getAllowedPlannerWrapperTools(
 		Record<PlannerStep, readonly PlannerWrapperTool[]>
 	> = STEP_ALLOWED_TOOLS[state.stage];
 	const stepRules = stageRules[state.step] ?? [];
-	return withAlwaysAllowed(stepRules);
+	return withAlwaysAllowed([
+		...stepRules,
+		...(MEMORY_SEARCH_STAGES.has(state.stage)
+			? (["planner_memory_search"] as const)
+			: []),
+	]);
 }
 
 export function checkPlannerWrapperAllowed(input: {

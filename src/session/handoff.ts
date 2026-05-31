@@ -62,7 +62,9 @@ export function buildPlannerHandoffPrompt(input: {
 		`Worktree: ${input.worktreePath}`,
 		"",
 		"Call planner_status now.",
-		"Then start discovery/read_project.",
+		"Draft the requested goal in goal.md using your own words.",
+		"Ask focused clarification questions and wait for explicit user approval.",
+		"Do not inspect project source before planner_status reports discovery/read_project.",
 		"Do not use raw git while the planner plan is active.",
 	].join("\n");
 }

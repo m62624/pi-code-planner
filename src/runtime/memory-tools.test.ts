@@ -17,8 +17,11 @@ import {
 	initializeMemoryFiles,
 	readFileIndex,
 	readMemoryDirtyState,
+	readProjectPatterns,
+	readRelationIndex,
 	readSymbolIndex,
 	upsertFileEntries,
+	upsertSymbolEntries,
 	writeMemoryCheckpoint,
 } from "../memory/manager";
 import { createMemoryStoragePaths } from "../memory/paths";
@@ -138,52 +141,70 @@ describe("planner memory tools", () => {
 			requiresMemoryUpdate: true,
 		});
 
-		const write = await executePlannerMemoryTool({
+		const writeFiles = await executePlannerMemoryTool({
 			fs,
 			git,
 			projectPaths: setup.projectPaths,
-			toolName: "planner_memory_write_batch",
+			toolName: "planner_memory_upsert_files",
 			params: {
 				files: [
 					{
 						path: "src/a.ts",
 						kind: "source",
 						language: "ts",
-						hash: hashOf("export const value = 2;\n"),
-						status: "indexed",
 						summary: "Exports value.",
 					},
 				],
+			},
+		});
+		expect(writeFiles.status).toBe("applied");
+		expect(writeFiles.text).toContain("Accepted: 1");
+		expect(await readFileIndex(fs, setup.memoryPaths)).toMatchObject([
+			{
+				path: "src/a.ts",
+				hash: hashOf("export const value = 2;\n"),
+				status: "indexed",
+			},
+		]);
+
+		const writeSymbols = await executePlannerMemoryTool({
+			fs,
+			git,
+			projectPaths: setup.projectPaths,
+			toolName: "planner_memory_upsert_symbols",
+			params: {
 				symbols: [
 					{
-						id: "sym_value",
 						path: "src/a.ts",
-						language: "ts",
 						name: "value",
-						qualifiedName: "value",
-						kind: "function",
+						kind: "constant",
 						signature: "value: number",
 						summary: "Exported value.",
-						visibility: "public",
 						effects: {
 							reads: [],
 							writes: [],
 							io: [],
 							globalState: "none",
 						},
-						anchor: { searchText: "value" },
-						verification: {
-							fileHash: hashOf("export const value = 2;\n"),
-							status: "verified",
-						},
 					},
 				],
 			},
 		});
-		expect(write.status).toBe("applied");
-		expect(write.text).toContain("Accepted: 2");
+		expect(writeSymbols.status).toBe("applied");
+		expect(writeSymbols.text).toContain("Accepted: 1");
 		expect(await readSymbolIndex(fs, setup.memoryPaths)).toMatchObject([
-			{ id: "sym_value", effects: { globalState: "none" } },
+			{
+				id: expect.stringMatching(/^sym_/),
+				language: "ts",
+				qualifiedName: "value",
+				visibility: "unknown",
+				effects: { globalState: "none" },
+				anchor: { searchText: "value: number" },
+				verification: {
+					fileHash: hashOf("export const value = 2;\n"),
+					status: "verified",
+				},
+			},
 		]);
 
 		const verify = await executePlannerMemoryTool({
@@ -232,7 +253,7 @@ describe("planner memory tools", () => {
 			fs,
 			git: new MockGitRunner({ files: ["src/a.ts"] }),
 			projectPaths: setup.projectPaths,
-			toolName: "planner_memory_write_batch",
+			toolName: "planner_memory_upsert_files",
 			params: { files: [] },
 		});
 
@@ -273,6 +294,204 @@ describe("planner memory tools", () => {
 			requiresMemoryUpdate: true,
 			memoryUpdateReason: "planner_commit",
 		});
+	});
+
+	it("writes project patterns only to the managed memory artifact", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createMemoryToolSetup(fs, {
+			state: {
+				stage: "discovery",
+				step: "write_project_patterns",
+				stepStatus: "running",
+			},
+			fileContent: "export const value = 1;\n",
+			indexedHash: hashOf("export const value = 1;\n"),
+			checkpointCommit: "abc123",
+		});
+
+		const result = await executePlannerMemoryTool({
+			fs,
+			git: new MockGitRunner({ files: ["src/a.ts"] }),
+			projectPaths: setup.projectPaths,
+			toolName: "planner_memory_write_project_patterns",
+			params: { content: "# Patterns\n\nUse Vitest." },
+		});
+
+		expect(result.status, result.text).toBe("applied");
+		await expect(readProjectPatterns(fs, setup.memoryPaths)).resolves.toBe(
+			"# Patterns\n\nUse Vitest.",
+		);
+		expect(
+			fs.snapshot()[join(setup.planPaths.planDir, "project_patterns.md")],
+		).toBeUndefined();
+	});
+
+	it("returns exact rejection reasons for invalid file entries", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createMemoryToolSetup(fs, {
+			state: {
+				stage: "discovery",
+				step: "write_file_index",
+				stepStatus: "running",
+			},
+			fileContent: "export const value = 1;\n",
+			indexedHash: hashOf("export const value = 1;\n"),
+			checkpointCommit: "abc123",
+		});
+
+		const result = await executePlannerMemoryTool({
+			fs,
+			git: new MockGitRunner({ files: ["src/a.ts"] }),
+			projectPaths: setup.projectPaths,
+			toolName: "planner_memory_upsert_files",
+			params: {
+				files: [
+					{
+						path: "src/a.ts",
+						kind: "module",
+						language: "ts",
+						summary: "Invalid kind on purpose.",
+					},
+				],
+			},
+		});
+
+		expect(result.status, result.text).toBe("applied");
+		expect(result.text).toContain("Rejected: 1");
+		expect(result.text).toContain("kind has unsupported value: module.");
+	});
+
+	it("requires symbols to reference a file indexed through the file wrapper first", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createMemoryToolSetup(fs, {
+			state: {
+				stage: "discovery",
+				step: "write_symbols",
+				stepStatus: "running",
+			},
+			fileContent: "export const value = 1;\n",
+			indexedHash: hashOf("export const value = 1;\n"),
+			checkpointCommit: "abc123",
+		});
+
+		const result = await executePlannerMemoryTool({
+			fs,
+			git: new MockGitRunner({ files: ["src/a.ts"] }),
+			projectPaths: setup.projectPaths,
+			toolName: "planner_memory_upsert_symbols",
+			params: {
+				symbols: [symbolEntry({ path: "src/missing.ts" })],
+			},
+		});
+
+		expect(result.status, result.text).toBe("applied");
+		expect(result.text).toContain("Rejected: 1");
+		expect(result.text).toContain("Call planner_memory_upsert_files first");
+	});
+
+	it("writes evidence-backed relations through the dedicated wrapper", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createMemoryToolSetup(fs, {
+			state: {
+				stage: "discovery",
+				step: "write_relations",
+				stepStatus: "running",
+			},
+			fileContent: "export const value = 1;\n",
+			indexedHash: hashOf("export const value = 1;\n"),
+			checkpointCommit: "abc123",
+		});
+		await upsertSymbolEntries(fs, setup.memoryPaths, [
+			{
+				...symbolEntry(),
+				verification: {
+					fileHash: hashOf("export const value = 1;\n"),
+					status: "verified",
+				},
+			},
+		]);
+		await writeMemoryCheckpoint(fs, setup.memoryPaths, "abc123");
+
+		const result = await executePlannerMemoryTool({
+			fs,
+			git: new MockGitRunner({ files: ["src/a.ts"] }),
+			projectPaths: setup.projectPaths,
+			toolName: "planner_memory_upsert_relations",
+			params: {
+				relations: [
+					{
+						from: "sym_value",
+						to: null,
+						kind: "exposes",
+						evidencePath: "src/a.ts",
+						evidenceSearchText: "value",
+					},
+				],
+			},
+		});
+
+		expect(result.status).toBe("applied");
+		expect(result.text).toContain("Accepted: 1");
+		await expect(
+			readRelationIndex(fs, setup.memoryPaths),
+		).resolves.toMatchObject([
+			{
+				id: expect.stringMatching(/^rel_/),
+				from: "sym_value",
+				kind: "exposes",
+			},
+		]);
+	});
+
+	it("exposes bounded memory retrieval instead of dumping the full index", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createMemoryToolSetup(fs, {
+			state: {
+				stage: "planning",
+				step: "read_memory",
+				stepStatus: "running",
+			},
+			fileContent: "export const value = 1;\n",
+			indexedHash: hashOf("export const value = 1;\n"),
+			checkpointCommit: "abc123",
+		});
+		await fs.writeText(
+			join("/repo/app/.pi/pi-code-planner/worktrees/plan-a", "src/b.ts"),
+			"export const other = 2;\n",
+		);
+		await upsertFileEntries(fs, setup.memoryPaths, [
+			{
+				path: "src/b.ts",
+				kind: "source",
+				language: "ts",
+				hash: hashOf("export const other = 2;\n"),
+				status: "indexed",
+				summary: "B",
+			},
+		]);
+		await writeMemoryCheckpoint(fs, setup.memoryPaths, "abc123");
+
+		const result = await executePlannerMemoryTool({
+			fs,
+			git: new MockGitRunner({ files: ["src/a.ts", "src/b.ts"] }),
+			projectPaths: setup.projectPaths,
+			toolName: "planner_memory_search",
+			params: { limits: { files: 1 } },
+		});
+
+		expect(result.status).toBe("applied");
+		const details = result.details as {
+			result: {
+				files: {
+					entries: unknown[];
+					totalMatched: number;
+					nextCursor: number | null;
+				};
+			};
+		};
+		expect(details.result.files.entries).toHaveLength(1);
+		expect(details.result.files.totalMatched).toBe(2);
+		expect(details.result.files.nextCursor).toBe(1);
 	});
 });
 
@@ -331,4 +550,25 @@ async function createMemoryToolSetup(
 
 function hashOf(value: string): string {
 	return createHash("sha256").update(value).digest("hex");
+}
+
+function symbolEntry(input: { path?: string } = {}) {
+	return {
+		id: "sym_value",
+		path: input.path ?? "src/a.ts",
+		language: "ts",
+		name: "value",
+		qualifiedName: "value",
+		kind: "constant" as const,
+		signature: "value: number",
+		summary: "Exported value.",
+		visibility: "public" as const,
+		effects: {
+			reads: [],
+			writes: [],
+			io: [],
+			globalState: "none" as const,
+		},
+		anchor: { searchText: "value" },
+	};
 }

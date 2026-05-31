@@ -49,7 +49,7 @@ After planner-controlled commit, merge, external commit, manual checkout, histor
 2. Use `planner_memory_inspect`.
 3. Use `planner_memory_apply_freshness` when instructed.
 4. Read only affected files and related memory entries.
-5. Rewrite affected files, symbols, relations, and effects with `planner_memory_write_batch`.
+5. Rewrite affected files with `planner_memory_upsert_files`, symbols and effects with `planner_memory_upsert_symbols`, and evidence-backed links with `planner_memory_upsert_relations`.
 6. Use `planner_memory_verify`.
 7. When worktree and memory are clean, use `planner_memory_sync_checkpoint`.
 

@@ -13,7 +13,7 @@ import {
 
 export const PLANNER_WORKFLOW_TOOL_NAMES = [
 	"planner_start_step",
-	"planner_complete_step",
+	"planner_finish_step",
 	"planner_advance_step",
 	"planner_fail_step",
 	"planner_block_step",
@@ -91,15 +91,15 @@ export function workflowToolTransition(
 	switch (toolName) {
 		case "planner_start_step":
 			return { type: "start_step" };
-		case "planner_complete_step": {
+		case "planner_finish_step": {
 			const nextStage = stringOrUndefined(object.nextStage);
 			const nextStep = stringOrUndefined(object.nextStep);
 			return nextStage && nextStep
 				? {
-						type: "complete_step",
+						type: "finish_step",
 						next: { stage: nextStage as never, step: nextStep as never },
 					}
-				: { type: "complete_step" };
+				: { type: "finish_step" };
 		}
 		case "planner_advance_step":
 			return { type: "advance_step" };

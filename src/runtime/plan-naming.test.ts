@@ -22,33 +22,33 @@ function projectWithPlans(planIds: string[]): ProjectRecord {
 }
 
 describe("planner plan naming", () => {
-	it("parses title-only command args", () => {
+	it("parses request-only command args", () => {
 		expect(parsePlannerCreateCommandArgs("Fix approval find command")).toEqual({
-			title: "Fix approval find command",
+			request: "Fix approval find command",
 		});
 	});
 
-	it("parses explicit id before the title", () => {
+	it("parses explicit id before the request", () => {
 		expect(
 			parsePlannerCreateCommandArgs(
 				"--id approval-find Fix approval find command",
 			),
 		).toEqual({
 			planId: "approval-find",
-			title: "Fix approval find command",
+			request: "Fix approval find command",
 		});
 	});
 
-	it("parses explicit id assignment and quoted title", () => {
+	it("parses explicit id assignment and quoted request", () => {
 		expect(
 			parsePlannerCreateCommandArgs('--id=approval-find "Fix find command"'),
 		).toEqual({
 			planId: "approval-find",
-			title: "Fix find command",
+			request: "Fix find command",
 		});
 	});
 
-	it("rejects missing title and malformed id flag", () => {
+	it("rejects missing request and malformed id flag", () => {
 		expect(parsePlannerCreateCommandArgs("")).toBeNull();
 		expect(parsePlannerCreateCommandArgs("--id")).toBeNull();
 		expect(parsePlannerCreateCommandArgs("--id plan-a")).toBeNull();
@@ -58,7 +58,7 @@ describe("planner plan naming", () => {
 		expect(
 			resolvePlannerPlanId({
 				requestedPlanId: "Approval Find!",
-				title: "Ignored",
+				request: "Ignored",
 				project: projectWithPlans(["approval-find"]),
 			}),
 		).toBe("approval-find");
@@ -68,16 +68,16 @@ describe("planner plan naming", () => {
 		expect(() =>
 			resolvePlannerPlanId({
 				requestedPlanId: "!!!",
-				title: "Valid title",
+				request: "Valid request",
 				project: projectWithPlans([]),
 			}),
 		).toThrow("Invalid planner id");
 	});
 
-	it("generates deterministic id from title", () => {
+	it("generates deterministic id from request", () => {
 		expect(
 			resolvePlannerPlanId({
-				title: "Fix approval find command",
+				request: "Fix approval find command",
 				project: projectWithPlans([]),
 			}),
 		).toBe("fix-approval-find-command");
@@ -86,7 +86,7 @@ describe("planner plan naming", () => {
 	it("adds numeric suffix when generated id already exists", () => {
 		expect(
 			resolvePlannerPlanId({
-				title: "Fix approval find command",
+				request: "Fix approval find command",
 				project: projectWithPlans([
 					"fix-approval-find-command",
 					"fix-approval-find-command-2",

@@ -76,7 +76,7 @@ export interface PlannerOrchestratorToolDecision {
 
 const WORKFLOW_TOOL_TRANSITIONS = {
 	planner_start_step: "start_step",
-	planner_complete_step: "complete_step",
+	planner_finish_step: "finish_step",
 	planner_advance_step: "advance_step",
 	planner_fail_step: "fail_step",
 	planner_block_step: "block_step",

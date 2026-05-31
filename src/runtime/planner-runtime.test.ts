@@ -217,7 +217,10 @@ describe("planner runtime reality evaluator", () => {
 			"planner_git_inspect",
 			"planner_memory_inspect",
 			"planner_memory_apply_freshness",
-			"planner_memory_write_batch",
+			"planner_memory_upsert_files",
+			"planner_memory_upsert_symbols",
+			"planner_memory_upsert_relations",
+			"planner_memory_search",
 			"planner_memory_verify",
 			"planner_memory_sync_checkpoint",
 		] satisfies PlannerWrapperTool[]);
@@ -348,6 +351,7 @@ describe("planner runtime reality evaluator", () => {
 			"planner_status",
 			"planner_git_inspect",
 			"planner_git_commit",
+			"planner_memory_search",
 		] satisfies PlannerWrapperTool[]);
 	});
 });

@@ -3,7 +3,7 @@ import type { ProjectRecord } from "../storage/schema";
 
 export interface PlannerCreateCommandArgs {
 	planId?: string;
-	title: string;
+	request: string;
 }
 
 export function parsePlannerCreateCommandArgs(
@@ -15,7 +15,7 @@ export function parsePlannerCreateCommandArgs(
 	}
 
 	let planId: string | undefined;
-	const titleParts: string[] = [];
+	const requestParts: string[] = [];
 	for (let index = 0; index < tokens.length; index += 1) {
 		const token = tokens[index];
 		if (token === "--id") {
@@ -35,16 +35,17 @@ export function parsePlannerCreateCommandArgs(
 			planId = value;
 			continue;
 		}
-		titleParts.push(token);
+		requestParts.push(token);
 	}
 
-	const title = titleParts.join(" ").trim();
-	return title.length > 0 ? { planId, title } : null;
+	const request = requestParts.join(" ").trim();
+	if (request.length === 0) return null;
+	return planId ? { planId, request } : { request };
 }
 
 export function resolvePlannerPlanId(input: {
 	requestedPlanId?: string;
-	title: string;
+	request: string;
 	project: ProjectRecord;
 }): string {
 	const requested = input.requestedPlanId
@@ -57,7 +58,7 @@ export function resolvePlannerPlanId(input: {
 		return requested;
 	}
 
-	const base = sanitizeIdPart(input.title) || "plan";
+	const base = sanitizeIdPart(input.request) || "plan";
 	const existing = new Set(input.project.plans.map((plan) => plan.planId));
 	if (!existing.has(base)) {
 		return base;
@@ -71,7 +72,7 @@ export function resolvePlannerPlanId(input: {
 	}
 
 	throw new Error(
-		`Unable to allocate unique planner id for title: ${input.title}`,
+		`Unable to allocate unique planner id for request: ${input.request}`,
 	);
 }
 

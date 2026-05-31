@@ -15,6 +15,14 @@ import {
 } from "./guard/project-mutation";
 import { syncBundledInstructionFiles } from "./instructions/defaults";
 import { createInstructionPaths } from "./instructions/paths";
+import {
+	MEMORY_FILE_KINDS,
+	MEMORY_RELATION_KINDS,
+	MEMORY_SYMBOL_GLOBAL_STATES,
+	MEMORY_SYMBOL_KINDS,
+	MEMORY_SYMBOL_VISIBILITIES,
+	MEMORY_VERIFICATION_STATUSES,
+} from "./memory/schema";
 import { readActivePlanContext } from "./runtime/active-plan";
 import {
 	buildPlannerCompactInstructionBundle,
@@ -31,6 +39,11 @@ import {
 	PLANNER_GIT_TOOL_NAMES,
 	type PlannerGitToolName,
 } from "./runtime/git-tools";
+import {
+	executePlannerGoalTool,
+	PLANNER_GOAL_TOOL_NAMES,
+	type PlannerGoalToolName,
+} from "./runtime/goal-tools";
 import {
 	executePlannerMemoryTool,
 	PLANNER_MEMORY_TOOL_NAMES,
@@ -93,10 +106,46 @@ const CREATE_PLAN_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {
 		planId: { type: "string" },
+		request: {
+			type: "string",
+			description:
+				"The user's raw requested outcome. Do not replace it with a short title.",
+		},
 		title: { type: "string" },
 		baseBranch: { type: "string" },
 	},
-	required: ["planId", "title"],
+	required: ["request"],
+	additionalProperties: false,
+} as const;
+
+const GOAL_SUBMIT_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		content: {
+			type: "string",
+			description:
+				"Full goal.md markdown in your own words: outcome, assumptions, non-goals, constraints, and focused clarification questions.",
+		},
+	},
+	required: ["content"],
+	additionalProperties: false,
+} as const;
+
+const GOAL_DECIDE_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		decision: {
+			type: "string",
+			enum: ["approve", "revise"],
+			description:
+				"Use approve only after the user explicitly approves goal.md. Use revise after explicit revision feedback.",
+		},
+		feedback: {
+			type: "string",
+			description: "User revision feedback when decision is revise.",
+		},
+	},
+	required: ["decision"],
 	additionalProperties: false,
 } as const;
 
@@ -146,12 +195,189 @@ const OPTIONAL_REASON_TOOL_PARAMETERS = {
 	additionalProperties: false,
 } as const;
 
-const MEMORY_BATCH_TOOL_PARAMETERS = {
+const MEMORY_PROJECT_PATTERNS_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {
-		files: { type: "array", items: { type: "object" } },
-		symbols: { type: "array", items: { type: "object" } },
-		relations: { type: "array", items: { type: "object" } },
+		content: {
+			type: "string",
+			description:
+				"Full project_patterns.md markdown with observed architecture, conventions, commands, dependencies, and uncertainty.",
+		},
+	},
+	required: ["content"],
+	additionalProperties: false,
+} as const;
+
+const MEMORY_FILES_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		files: {
+			type: "array",
+			description:
+				"Relevant project files. Use project-relative paths. The extension computes hash and indexed status automatically.",
+			items: {
+				type: "object",
+				properties: {
+					path: { type: "string", description: "Project-relative file path." },
+					kind: { type: "string", enum: MEMORY_FILE_KINDS },
+					language: { type: "string" },
+					summary: {
+						type: "string",
+						description: "Concise file responsibility.",
+					},
+				},
+				required: ["path", "kind", "language", "summary"],
+				additionalProperties: false,
+			},
+		},
+	},
+	required: ["files"],
+	additionalProperties: false,
+} as const;
+
+const MEMORY_SYMBOLS_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		symbols: {
+			type: "array",
+			description:
+				"Relevant symbols. Provide semantic fields only. The extension derives a stable id, file language, qualified name, anchor, visibility default, verification.fileHash, and verified status when omitted.",
+			items: {
+				type: "object",
+				properties: {
+					id: {
+						type: "string",
+						description: "Optional stable id override. Usually omit it.",
+					},
+					path: {
+						type: "string",
+						description: "Path already indexed by planner_memory_upsert_files.",
+					},
+					language: {
+						type: "string",
+						description:
+							"Optional override. Defaults to the indexed file language.",
+					},
+					kind: { type: "string", enum: MEMORY_SYMBOL_KINDS },
+					name: { type: "string" },
+					qualifiedName: {
+						type: "string",
+						description: "Optional. Defaults to name.",
+					},
+					signature: { type: "string" },
+					summary: { type: "string" },
+					visibility: {
+						type: "string",
+						enum: MEMORY_SYMBOL_VISIBILITIES,
+						description: "Optional. Defaults to unknown.",
+					},
+					effects: {
+						type: "object",
+						properties: {
+							reads: { type: "array", items: { type: "string" } },
+							writes: { type: "array", items: { type: "string" } },
+							io: { type: "array", items: { type: "string" } },
+							globalState: {
+								type: "string",
+								enum: MEMORY_SYMBOL_GLOBAL_STATES,
+							},
+						},
+						required: ["reads", "writes", "io", "globalState"],
+						additionalProperties: false,
+					},
+					anchorSearchText: {
+						type: "string",
+						description:
+							"Optional stable source text used to relocate the symbol. Defaults to signature.",
+					},
+				},
+				required: ["path", "kind", "name", "signature", "summary", "effects"],
+				additionalProperties: false,
+			},
+		},
+	},
+	required: ["symbols"],
+	additionalProperties: false,
+} as const;
+
+const MEMORY_RELATIONS_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		relations: {
+			type: "array",
+			description:
+				"Evidence-backed relations. from/to reference symbol ids; evidencePath must already be indexed.",
+			items: {
+				type: "object",
+				properties: {
+					id: {
+						type: "string",
+						description: "Optional stable id override. Usually omit it.",
+					},
+					from: { type: "string" },
+					to: { type: ["string", "null"] },
+					kind: { type: "string", enum: MEMORY_RELATION_KINDS },
+					evidencePath: { type: "string" },
+					evidenceSearchText: { type: "string" },
+				},
+				required: ["from", "to", "kind", "evidencePath", "evidenceSearchText"],
+				additionalProperties: false,
+			},
+		},
+	},
+	required: ["relations"],
+	additionalProperties: false,
+} as const;
+
+const MEMORY_SEARCH_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		query: { type: "string" },
+		cursor: {
+			type: "object",
+			properties: {
+				files: { type: "number" },
+				symbols: { type: "number" },
+				relations: { type: "number" },
+			},
+			additionalProperties: false,
+		},
+		limits: {
+			type: "object",
+			properties: {
+				files: { type: "number" },
+				symbols: { type: "number" },
+				relations: { type: "number" },
+			},
+			additionalProperties: false,
+		},
+		filters: {
+			type: "object",
+			properties: {
+				paths: { type: "array", items: { type: "string" } },
+				languages: { type: "array", items: { type: "string" } },
+				symbolKinds: {
+					type: "array",
+					items: { type: "string", enum: MEMORY_SYMBOL_KINDS },
+				},
+				relationKinds: {
+					type: "array",
+					items: { type: "string", enum: MEMORY_RELATION_KINDS },
+				},
+				globalState: {
+					type: "array",
+					items: { type: "string", enum: MEMORY_SYMBOL_GLOBAL_STATES },
+				},
+				verificationStatus: {
+					type: "array",
+					items: { type: "string", enum: MEMORY_VERIFICATION_STATUSES },
+				},
+				dirtyOnly: { type: "boolean" },
+			},
+			additionalProperties: false,
+		},
+		includeProjectPatterns: { type: "boolean" },
+		includeDirtyState: { type: "boolean" },
 	},
 	additionalProperties: false,
 } as const;
@@ -241,10 +467,19 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			"Create a planner plan, create its worktree, and switch Pi into the worktree session.",
 		handler: async (args, ctx) => {
 			await ctx.waitForIdle();
-			const parsed = parsePlannerCreateCommandArgs(args);
+			let parsed = parsePlannerCreateCommandArgs(args);
+			if (!parsed && args.trim().length === 0) {
+				const request = await ctx.ui.input(
+					"What do you want the planner to do?",
+					"Describe the requested outcome",
+				);
+				if (request?.trim()) {
+					parsed = { request: request.trim() };
+				}
+			}
 			if (!parsed) {
 				ctx.ui.notify(
-					"Usage: /planner-create [--id <plan-id>] <title>",
+					"Usage: /planner-create [--id <plan-id>] <request>",
 					"error",
 				);
 				return;
@@ -262,7 +497,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			try {
 				planId = resolvePlannerPlanId({
 					requestedPlanId: parsed.planId,
-					title: parsed.title,
+					request: parsed.request,
 					project,
 				});
 			} catch (error) {
@@ -276,7 +511,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				toolName: "planner_create_plan",
 				params: {
 					planId,
-					title: parsed.title,
+					request: parsed.request,
 				},
 			});
 
@@ -529,6 +764,30 @@ function registerPlannerTools(
 					params,
 				});
 
+				return {
+					content: [{ type: "text", text: result.text }],
+					details: result,
+				};
+			},
+		});
+	}
+
+	for (const toolName of PLANNER_GOAL_TOOL_NAMES) {
+		pi.registerTool({
+			name: toolName,
+			label: goalToolLabel(toolName),
+			description: goalToolDescription(toolName),
+			promptSnippet:
+				"Use planner goal tools during intake only. Draft goal.md before source reads and enter discovery only after explicit user approval.",
+			parameters: goalToolParameters(toolName) as never,
+			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const result = await executePlannerGoalTool({
+					fs: createNodeFs(),
+					git: new NodeGitRunner(),
+					projectPaths: await createRuntimeProjectPaths(ctx.cwd),
+					toolName,
+					params,
+				});
 				return {
 					content: [{ type: "text", text: result.text }],
 					details: result,
@@ -791,7 +1050,34 @@ function planToolLabel(toolName: PlannerPlanToolName): string {
 function planToolDescription(toolName: PlannerPlanToolName): string {
 	switch (toolName) {
 		case "planner_create_plan":
-			return "Create project storage, plan files, memory files, the plan branch/worktree, and activate discovery.";
+			return "Create project storage, plan files, memory files, and the plan branch/worktree. Starts intake so the model can draft goal.md before discovery.";
+	}
+}
+
+function goalToolLabel(toolName: PlannerGoalToolName): string {
+	switch (toolName) {
+		case "planner_goal_submit":
+			return "Planner Goal Submit";
+		case "planner_goal_decide":
+			return "Planner Goal Decide";
+	}
+}
+
+function goalToolDescription(toolName: PlannerGoalToolName): string {
+	switch (toolName) {
+		case "planner_goal_submit":
+			return "Write the normalized goal.md draft and wait for explicit user review. Does not allow discovery.";
+		case "planner_goal_decide":
+			return "Record explicit user approval or revision feedback for goal.md. Approval opens discovery; revision returns to goal drafting.";
+	}
+}
+
+function goalToolParameters(toolName: PlannerGoalToolName) {
+	switch (toolName) {
+		case "planner_goal_submit":
+			return GOAL_SUBMIT_TOOL_PARAMETERS;
+		case "planner_goal_decide":
+			return GOAL_DECIDE_TOOL_PARAMETERS;
 	}
 }
 
@@ -887,8 +1173,16 @@ function memoryToolLabel(toolName: PlannerMemoryToolName): string {
 			return "Planner Memory Inspect";
 		case "planner_memory_apply_freshness":
 			return "Planner Memory Apply Freshness";
-		case "planner_memory_write_batch":
-			return "Planner Memory Write Batch";
+		case "planner_memory_write_project_patterns":
+			return "Planner Memory Write Project Patterns";
+		case "planner_memory_upsert_files":
+			return "Planner Memory Upsert Files";
+		case "planner_memory_upsert_symbols":
+			return "Planner Memory Upsert Symbols";
+		case "planner_memory_upsert_relations":
+			return "Planner Memory Upsert Relations";
+		case "planner_memory_search":
+			return "Planner Memory Search";
 		case "planner_memory_verify":
 			return "Planner Memory Verify";
 		case "planner_memory_sync_checkpoint":
@@ -902,8 +1196,16 @@ function memoryToolDescription(toolName: PlannerMemoryToolName): string {
 			return "Inspect memory freshness and list affected files, symbols, relations, and required effect checks.";
 		case "planner_memory_apply_freshness":
 			return "Mark stale memory entries dirty or missing before the model rewrites affected memory.";
-		case "planner_memory_write_batch":
-			return "Write validated file, symbol, and relation memory entries.";
+		case "planner_memory_write_project_patterns":
+			return "Write project architecture and convention notes to the exact managed project_patterns.md path.";
+		case "planner_memory_upsert_files":
+			return "Write validated file memory entries. Hash and indexed status are computed automatically from project-relative paths.";
+		case "planner_memory_upsert_symbols":
+			return "Write validated symbol memory entries from compact semantic fields. Stable ids, defaults, verification hash, and status are computed automatically from indexed files.";
+		case "planner_memory_upsert_relations":
+			return "Write validated evidence-backed symbol relation entries. Stable relation ids are computed automatically when omitted.";
+		case "planner_memory_search":
+			return "Read bounded project patterns, files, symbols, relations, and dirty state with optional filters and cursors.";
 		case "planner_memory_verify":
 			return "Verify whether memory matches the current project snapshot.";
 		case "planner_memory_sync_checkpoint":
@@ -913,8 +1215,16 @@ function memoryToolDescription(toolName: PlannerMemoryToolName): string {
 
 function memoryToolParameters(toolName: PlannerMemoryToolName) {
 	switch (toolName) {
-		case "planner_memory_write_batch":
-			return MEMORY_BATCH_TOOL_PARAMETERS;
+		case "planner_memory_write_project_patterns":
+			return MEMORY_PROJECT_PATTERNS_TOOL_PARAMETERS;
+		case "planner_memory_upsert_files":
+			return MEMORY_FILES_TOOL_PARAMETERS;
+		case "planner_memory_upsert_symbols":
+			return MEMORY_SYMBOLS_TOOL_PARAMETERS;
+		case "planner_memory_upsert_relations":
+			return MEMORY_RELATIONS_TOOL_PARAMETERS;
+		case "planner_memory_search":
+			return MEMORY_SEARCH_TOOL_PARAMETERS;
 		case "planner_memory_apply_freshness":
 			return MEMORY_APPLY_FRESHNESS_TOOL_PARAMETERS;
 		case "planner_memory_inspect":
@@ -955,8 +1265,8 @@ function workflowToolLabel(toolName: PlannerWorkflowToolName): string {
 	switch (toolName) {
 		case "planner_start_step":
 			return "Planner Start Step";
-		case "planner_complete_step":
-			return "Planner Complete Step";
+		case "planner_finish_step":
+			return "Planner Finish Step";
 		case "planner_advance_step":
 			return "Planner Advance Step";
 		case "planner_fail_step":
@@ -980,8 +1290,8 @@ function workflowToolDescription(toolName: PlannerWorkflowToolName): string {
 	switch (toolName) {
 		case "planner_start_step":
 			return "Start the current pending planner step after planner_status says start_step is allowed.";
-		case "planner_complete_step":
-			return "Mark the current running planner step as completed and store its next step.";
+		case "planner_finish_step":
+			return "Finish the current running planner step and atomically open its recorded next step.";
 		case "planner_advance_step":
 			return "Move from a completed planner step to its recorded next step.";
 		case "planner_fail_step":
@@ -1003,7 +1313,7 @@ function workflowToolDescription(toolName: PlannerWorkflowToolName): string {
 
 function workflowToolParameters(toolName: PlannerWorkflowToolName) {
 	switch (toolName) {
-		case "planner_complete_step":
+		case "planner_finish_step":
 			return COMPLETE_STEP_TOOL_PARAMETERS;
 		case "planner_fail_step":
 			return REASON_TOOL_PARAMETERS;
@@ -1047,6 +1357,7 @@ async function readPlannerBuiltinGuardState(
 				activePlanId: context.activePlanId,
 				active: true,
 				projectPaths,
+				planPaths: context.planPaths,
 				planState: context.state,
 			};
 		}
@@ -1054,6 +1365,7 @@ async function readPlannerBuiltinGuardState(
 			activePlanId: context.activePlanId,
 			active: context.activePlanId !== null,
 			projectPaths,
+			planPaths: null,
 			planState: null,
 		};
 	} catch {
@@ -1061,6 +1373,7 @@ async function readPlannerBuiltinGuardState(
 			activePlanId: null,
 			active: true,
 			projectPaths: null,
+			planPaths: null,
 			planState: null,
 		};
 	}
@@ -1105,7 +1418,7 @@ async function resolveRenameCommandArgs(input: {
 }): Promise<{ planId?: string; title: string } | null> {
 	const parsed = parsePlannerCreateCommandArgs(input.args);
 	if (parsed) {
-		return parsed;
+		return { planId: parsed.planId, title: parsed.request };
 	}
 
 	const planId = await selectPlannerPlanId({

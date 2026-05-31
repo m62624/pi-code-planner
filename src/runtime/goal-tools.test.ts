@@ -1,0 +1,195 @@
+import { describe, expect, it } from "vitest";
+import type {
+	GitBranchInput,
+	GitCommitInput,
+	GitCreateBranchInput,
+	GitDeleteBranchInput,
+	GitMergeInput,
+	GitRepoInput,
+	GitRunner,
+	GitSwitchBranchInput,
+	GitWorktreeAddInput,
+	GitWorktreeRemoveInput,
+} from "../git/runner";
+import { initializeMemoryFiles } from "../memory/manager";
+import {
+	createPlanStoragePaths,
+	createProjectStoragePaths,
+} from "../storage/paths";
+import { initializePlanFiles } from "../storage/plan-store";
+import { ensureProjectRecord, setActivePlan } from "../storage/project-store";
+import { createInitialPlanState, createPlanRecord } from "../storage/schema";
+import { initializePlanState, readPlanState } from "../storage/state-store";
+import { MockPlannerFs } from "../test/mock-fs";
+import { executePlannerGoalTool } from "./goal-tools";
+
+class MockGitRunner implements GitRunner {
+	async init(_input: GitRepoInput): Promise<void> {}
+	async currentBranch(_input: GitRepoInput): Promise<string> {
+		return "plan/plan-a";
+	}
+	async headCommit(_input: GitRepoInput): Promise<string> {
+		return "abc123";
+	}
+	async statusPorcelain(_input: GitRepoInput): Promise<string> {
+		return "";
+	}
+	async diffStat(_input: GitRepoInput): Promise<string> {
+		return "";
+	}
+	async diffNameOnly(_input: GitRepoInput): Promise<string> {
+		return "";
+	}
+	async listProjectFiles(_input: GitRepoInput): Promise<string[]> {
+		return [];
+	}
+	async branchExists(_input: GitBranchInput): Promise<boolean> {
+		return true;
+	}
+	async createBranch(_input: GitCreateBranchInput): Promise<void> {}
+	async deleteBranch(_input: GitDeleteBranchInput): Promise<void> {}
+	async switchBranch(_input: GitSwitchBranchInput): Promise<void> {}
+	async stageAll(_input: GitRepoInput): Promise<void> {}
+	async commit(_input: GitCommitInput): Promise<void> {}
+	async merge(_input: GitMergeInput): Promise<void> {}
+	async worktreeAdd(_input: GitWorktreeAddInput): Promise<void> {}
+	async worktreeRemove(_input: GitWorktreeRemoveInput): Promise<void> {}
+}
+
+describe("planner goal tools", () => {
+	it("persists a model-written goal draft and waits for explicit user review", async () => {
+		const setup = await createGoalSetup();
+
+		const result = await executePlannerGoalTool({
+			...setup,
+			toolName: "planner_goal_submit",
+			params: { content: "# Goal\n\nAudit the safe find command." },
+		});
+
+		expect(result.status).toBe("applied");
+		expect(setup.fs.snapshot()[setup.planPaths.goalMd]).toBe(
+			"# Goal\n\nAudit the safe find command.\n",
+		);
+		await expect(
+			readPlanState(setup.fs, setup.planPaths),
+		).resolves.toMatchObject({
+			stage: "intake",
+			step: "await_goal_approval",
+			stepStatus: "running",
+		});
+		expect(result.text).toContain("explicitly approve");
+	});
+
+	it("enters discovery only after explicit approval", async () => {
+		const setup = await createGoalSetup({
+			stage: "intake",
+			step: "await_goal_approval",
+			stepStatus: "running",
+		});
+
+		const result = await executePlannerGoalTool({
+			...setup,
+			toolName: "planner_goal_decide",
+			params: { decision: "approve" },
+		});
+
+		expect(result.status).toBe("applied");
+		await expect(
+			readPlanState(setup.fs, setup.planPaths),
+		).resolves.toMatchObject({
+			stage: "discovery",
+			step: "read_project",
+			stepStatus: "pending",
+		});
+		expect(setup.fs.snapshot()[setup.planPaths.decisionsMd]).toContain(
+			"Goal approved by user.",
+		);
+	});
+
+	it("returns to goal drafting when the user requests a revision", async () => {
+		const setup = await createGoalSetup({
+			stage: "intake",
+			step: "await_goal_approval",
+			stepStatus: "running",
+		});
+
+		const result = await executePlannerGoalTool({
+			...setup,
+			toolName: "planner_goal_decide",
+			params: {
+				decision: "revise",
+				feedback: "Keep the fix limited to approval-modes.",
+			},
+		});
+
+		expect(result.status).toBe("applied");
+		await expect(
+			readPlanState(setup.fs, setup.planPaths),
+		).resolves.toMatchObject({
+			stage: "intake",
+			step: "draft_goal",
+			stepStatus: "running",
+		});
+		expect(setup.fs.snapshot()[setup.planPaths.decisionsMd]).toContain(
+			"Keep the fix limited to approval-modes.",
+		);
+	});
+
+	it("blocks goal submission outside intake", async () => {
+		const setup = await createGoalSetup({
+			stage: "discovery",
+			step: "read_project",
+			stepStatus: "running",
+		});
+
+		const result = await executePlannerGoalTool({
+			...setup,
+			toolName: "planner_goal_submit",
+			params: { content: "# Goal\n\nToo late." },
+		});
+
+		expect(result.status).toBe("blocked");
+	});
+});
+
+async function createGoalSetup(state: Record<string, unknown> = {}): Promise<{
+	fs: MockPlannerFs;
+	git: MockGitRunner;
+	projectPaths: ReturnType<typeof createProjectStoragePaths>;
+	planPaths: ReturnType<typeof createPlanStoragePaths>;
+}> {
+	const fs = new MockPlannerFs();
+	const projectPaths = createProjectStoragePaths({
+		agentDir: "/agent",
+		projectRoot: "/repo/app",
+	});
+	const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+	const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+	await ensureProjectRecord(fs, projectPaths);
+	await initializePlanFiles(
+		fs,
+		planPaths,
+		createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+	);
+	await initializeMemoryFiles(fs, planPaths);
+	await fs.mkdirp(worktreePath);
+	await fs.writeTextAtomic(
+		planPaths.requestMd,
+		"Audit the safe find command.\n",
+	);
+	await initializePlanState(fs, planPaths, {
+		...createInitialPlanState({
+			baseBranch: "main",
+			planBranch: "plan/plan-a",
+			worktreePath,
+		}),
+		stage: "intake",
+		step: "draft_goal",
+		stepStatus: "running",
+		currentBranch: "plan/plan-a",
+		lastCheckpointCommit: "abc123",
+		...state,
+	});
+	await setActivePlan(fs, projectPaths, "plan-a");
+	return { fs, git: new MockGitRunner(), projectPaths, planPaths };
+}

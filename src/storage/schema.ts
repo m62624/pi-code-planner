@@ -6,6 +6,7 @@ export type TaskStatus = "pending" | "active" | "done" | "blocked";
 
 export type PlannerStage =
 	| "init"
+	| "intake"
 	| "discovery"
 	| "planning"
 	| "execution"
@@ -20,7 +21,9 @@ export type InitStep =
 	| "choose_worktree_location"
 	| "create_plan_record"
 	| "create_plan_worktree"
-	| "enter_discovery";
+	| "enter_intake";
+
+export type IntakeStep = "draft_goal" | "await_goal_approval";
 
 export type DiscoveryStep =
 	| "read_project"
@@ -85,6 +88,7 @@ export type RecoveryStep =
 
 export type PlannerStep =
 	| InitStep
+	| IntakeStep
 	| DiscoveryStep
 	| PlanningStep
 	| ExecutionStep
@@ -100,8 +104,9 @@ export const PLANNER_STAGE_STEPS = {
 		"choose_worktree_location",
 		"create_plan_record",
 		"create_plan_worktree",
-		"enter_discovery",
+		"enter_intake",
 	],
+	intake: ["draft_goal", "await_goal_approval"],
 	discovery: [
 		"read_project",
 		"write_project_patterns",

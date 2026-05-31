@@ -29,6 +29,8 @@ export type PlannerBehaviorArtifact =
 	| "project.json"
 	| "plan.json"
 	| "state.json"
+	| "request.md"
+	| "goal.md"
 	| "plan.md"
 	| "discovery.md"
 	| "questions.md"
@@ -56,6 +58,7 @@ export type PlannerBehaviorGate =
 	| "worktree_location_selected"
 	| "plan_record_exists"
 	| "plan_worktree_exists"
+	| "goal_approved"
 	| "memory_indexed"
 	| "memory_verified"
 	| "memory_checkpoint_synced"
@@ -187,13 +190,35 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
-	enter_discovery: behavior("init", "enter_discovery", {
+	enter_intake: behavior("init", "enter_intake", {
 		projectAccess: "none",
 		actions: ["state_transition"],
 		requiredArtifacts: ["state.json"],
 		updatedArtifacts: ["state.json"],
 		requiredGates: ["plan_worktree_exists"],
-		expectedTools: ["planner_complete_step", "planner_advance_step"],
+		expectedTools: ["planner_finish_step"],
+		commitPolicy: "forbidden",
+		memoryPolicy: "not_required",
+		compactPolicy: "not_allowed",
+	}),
+	draft_goal: behavior("intake", "draft_goal", {
+		projectAccess: "planner_artifacts",
+		actions: ["write_artifacts", "ask_user"],
+		requiredArtifacts: ["request.md"],
+		updatedArtifacts: ["goal.md"],
+		requiredGates: ["plan_worktree_exists"],
+		expectedTools: ["planner_goal_submit"],
+		commitPolicy: "forbidden",
+		memoryPolicy: "not_required",
+		compactPolicy: "not_allowed",
+	}),
+	await_goal_approval: behavior("intake", "await_goal_approval", {
+		projectAccess: "user_communication",
+		actions: ["ask_user", "state_transition"],
+		requiredArtifacts: ["request.md", "goal.md"],
+		updatedArtifacts: ["decisions.md", "state.json"],
+		requiredGates: ["plan_worktree_exists"],
+		expectedTools: ["planner_goal_decide"],
 		commitPolicy: "forbidden",
 		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
@@ -202,7 +227,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 	read_project: behavior("discovery", "read_project", {
 		projectAccess: "read_only",
 		actions: ["inspect_project", "write_artifacts"],
-		requiredArtifacts: ["plan.md"],
+		requiredArtifacts: ["goal.md"],
 		updatedArtifacts: ["discovery.md"],
 		requiredGates: ["plan_worktree_exists"],
 		expectedTools: ["planner_status"],
@@ -216,9 +241,9 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["discovery.md"],
 		updatedArtifacts: ["project_patterns.md"],
 		requiredGates: [],
-		expectedTools: ["planner_status"],
+		expectedTools: ["planner_memory_write_project_patterns"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
+		memoryPolicy: "write_entries",
 		compactPolicy: "not_allowed",
 	}),
 	write_file_index: behavior("discovery", "write_file_index", {
@@ -227,7 +252,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["project_patterns.md"],
 		updatedArtifacts: ["memory/files/index.jsonl"],
 		requiredGates: [],
-		expectedTools: ["planner_memory_write_batch"],
+		expectedTools: ["planner_memory_upsert_files"],
 		commitPolicy: "forbidden",
 		memoryPolicy: "write_entries",
 		compactPolicy: "not_allowed",
@@ -238,7 +263,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["memory/files/index.jsonl"],
 		updatedArtifacts: ["memory/symbols/index.jsonl"],
 		requiredGates: [],
-		expectedTools: ["planner_memory_write_batch"],
+		expectedTools: ["planner_memory_upsert_symbols"],
 		commitPolicy: "forbidden",
 		memoryPolicy: "write_entries",
 		compactPolicy: "not_allowed",
@@ -249,7 +274,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["memory/symbols/index.jsonl"],
 		updatedArtifacts: ["memory/relations/index.jsonl"],
 		requiredGates: [],
-		expectedTools: ["planner_memory_write_batch"],
+		expectedTools: ["planner_memory_upsert_relations"],
 		commitPolicy: "forbidden",
 		memoryPolicy: "write_entries",
 		compactPolicy: "not_allowed",
@@ -409,7 +434,12 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["experiment.json", "tdd.md", "tests.md"],
 		updatedArtifacts: ["implementation.md", "memory/dirty.json"],
 		requiredGates: ["experiment_branch_ready"],
-		expectedTools: ["planner_git_commit", "planner_memory_write_batch"],
+		expectedTools: [
+			"planner_git_commit",
+			"planner_memory_upsert_files",
+			"planner_memory_upsert_symbols",
+			"planner_memory_upsert_relations",
+		],
 		commitPolicy: "required_if_dirty",
 		memoryPolicy: "sync_after_git",
 		compactPolicy: "not_allowed",
@@ -448,7 +478,9 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["experiment_selected"],
 		expectedTools: [
 			"planner_git_merge_selected_experiment",
-			"planner_memory_write_batch",
+			"planner_memory_upsert_files",
+			"planner_memory_upsert_symbols",
+			"planner_memory_upsert_relations",
 		],
 		commitPolicy: "forbidden",
 		memoryPolicy: "sync_after_git",
@@ -460,7 +492,12 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["implementation.md", "tests.md"],
 		updatedArtifacts: ["implementation.md", "verify.md", "memory/dirty.json"],
 		requiredGates: ["experiment_merged"],
-		expectedTools: ["planner_git_commit", "planner_memory_write_batch"],
+		expectedTools: [
+			"planner_git_commit",
+			"planner_memory_upsert_files",
+			"planner_memory_upsert_symbols",
+			"planner_memory_upsert_relations",
+		],
 		commitPolicy: "allowed_if_dirty",
 		memoryPolicy: "sync_after_git",
 		compactPolicy: "not_allowed",
@@ -484,7 +521,9 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["final_tests_passed", "memory_checkpoint_synced"],
 		expectedTools: [
 			"planner_git_merge_task_to_plan",
-			"planner_memory_write_batch",
+			"planner_memory_upsert_files",
+			"planner_memory_upsert_symbols",
+			"planner_memory_upsert_relations",
 		],
 		commitPolicy: "forbidden",
 		memoryPolicy: "sync_after_git",
@@ -501,7 +540,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["plan.md", "task.json", "verify.md"],
 		updatedArtifacts: ["state.json", "decisions.md"],
 		requiredGates: ["task_merged_to_plan"],
-		expectedTools: ["planner_complete_step"],
+		expectedTools: ["planner_finish_step"],
 		commitPolicy: "forbidden",
 		memoryPolicy: "read_first",
 		compactPolicy: "not_allowed",
@@ -554,7 +593,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["final_summary.md"],
 		updatedArtifacts: ["decisions.md"],
 		requiredGates: ["user_acceptance_required"],
-		expectedTools: ["planner_complete_step"],
+		expectedTools: ["planner_finish_step"],
 		commitPolicy: "forbidden",
 		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
@@ -565,7 +604,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["decisions.md"],
 		updatedArtifacts: ["plan.md", "decisions.md", "state.json"],
 		requiredGates: ["user_acceptance_required"],
-		expectedTools: ["planner_complete_step"],
+		expectedTools: ["planner_finish_step"],
 		commitPolicy: "forbidden",
 		memoryPolicy: "read_first",
 		compactPolicy: "not_allowed",
@@ -807,7 +846,7 @@ function enterBehavior(
 		requiredArtifacts: ["state.json"],
 		updatedArtifacts: ["state.json"],
 		requiredGates,
-		expectedTools: ["planner_complete_step", "planner_advance_step"],
+		expectedTools: ["planner_finish_step"],
 		commitPolicy: "forbidden",
 		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
@@ -845,13 +884,16 @@ function blockBehaviorTool(
 }
 
 function isMemoryReadTool(tool: PlannerWrapperTool): boolean {
-	return tool === "planner_memory_inspect";
+	return tool === "planner_memory_inspect" || tool === "planner_memory_search";
 }
 
 function isMemoryWriteTool(tool: PlannerWrapperTool): boolean {
 	return (
 		tool === "planner_memory_apply_freshness" ||
-		tool === "planner_memory_write_batch"
+		tool === "planner_memory_write_project_patterns" ||
+		tool === "planner_memory_upsert_files" ||
+		tool === "planner_memory_upsert_symbols" ||
+		tool === "planner_memory_upsert_relations"
 	);
 }
 

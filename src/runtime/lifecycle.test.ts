@@ -84,9 +84,9 @@ describe("planner lifecycle decision", () => {
 		});
 
 		expect(decidePlannerLifecycleNext(preflight)).toMatchObject({
-			action: "complete_step",
-			requiredTool: "planner_complete_step",
-			requiredTransition: "complete_step",
+			action: "finish_step",
+			requiredTool: "planner_finish_step",
+			requiredTransition: "finish_step",
 		});
 	});
 
@@ -152,7 +152,7 @@ describe("planner lifecycle decision", () => {
 
 		expect(decidePlannerLifecycleNext(preflight)).toMatchObject({
 			action: "write_memory",
-			requiredTool: "planner_memory_write_batch",
+			requiredTool: "planner_memory_upsert_files",
 			requiredTransition: null,
 			runtimeAction: "require_memory_update",
 		});

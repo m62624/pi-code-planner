@@ -7,7 +7,6 @@ import { initializeMemoryFiles } from "../memory/manager";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { WorktreeSettings } from "../settings/schema";
 import type { PlannerFs } from "../storage/fs";
-import { sanitizeIdPart } from "../storage/ids";
 import {
 	createPlanStoragePaths,
 	type ProjectStoragePaths,
@@ -33,6 +32,7 @@ import {
 	createProjectLocalWorktreeLocation,
 } from "../worktree/paths";
 import { inspectPlannerGitReality } from "./git-state-sync";
+import { resolvePlannerPlanId } from "./plan-naming";
 
 export const PLANNER_PLAN_TOOL_NAMES = ["planner_create_plan"] as const;
 
@@ -70,9 +70,14 @@ async function createPlanTool(
 	input: PlannerPlanToolExecutionInput,
 ): Promise<PlannerPlanToolExecutionResult> {
 	const params = asObject(input.params);
-	const planId = requiredPlanId(params);
-	const title = requiredString(params, "title");
+	const request = requiredString(params, "request");
+	const title = optionalString(params, "title") ?? request;
 	const project = await ensureProjectRecord(input.fs, input.projectPaths);
+	const planId = resolvePlannerPlanId({
+		requestedPlanId: optionalString(params, "planId") ?? undefined,
+		request,
+		project,
+	});
 	if (project.activePlanId) {
 		return blocked(
 			input.toolName,
@@ -142,13 +147,14 @@ async function createPlanTool(
 			planBranch,
 			worktreePath: worktreeLocation,
 		}),
-		stage: "discovery",
-		step: "read_project",
-		stepStatus: "pending",
+		stage: "intake",
+		step: "draft_goal",
+		stepStatus: "running",
 		currentBranch: reality.branch,
 		lastCheckpointCommit: reality.headCommit,
 	} as const;
 	await initializePlanFiles(input.fs, planPaths, plan);
+	await input.fs.writeTextAtomic(planPaths.requestMd, `${request.trim()}\n`);
 	await initializePlanState(input.fs, planPaths, state);
 	const memoryPaths = await initializeMemoryFiles(input.fs, planPaths);
 	await upsertProjectPlanSummary(input.fs, input.projectPaths, {
@@ -166,7 +172,7 @@ async function createPlanTool(
 			`Title: ${title}`,
 			`Base branch: ${baseBranch}`,
 			`Worktree: ${worktreeLocation}`,
-			"Next: switch/open Pi in the planner worktree session, call planner_status, then start discovery/read_project.",
+			"Next: switch/open Pi in the planner worktree session, call planner_status, draft goal.md in your own words, ask focused clarification questions, and wait for explicit user approval before discovery.",
 		].join("\n"),
 		{
 			project: nextProject,
@@ -206,15 +212,6 @@ async function safeCurrentBranch(
 	} catch {
 		return null;
 	}
-}
-
-function requiredPlanId(params: Record<string, unknown>): string {
-	const raw = requiredString(params, "planId");
-	const planId = sanitizeIdPart(raw);
-	if (planId.length === 0) {
-		throw new TypeError("Missing required string parameter: planId.");
-	}
-	return planId;
 }
 
 function requiredString(params: Record<string, unknown>, key: string): string {

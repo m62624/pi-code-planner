@@ -60,16 +60,16 @@ describe("planner workflow tools", () => {
 
 	it("maps complete_step optional next target for decision steps", () => {
 		expect(
-			transition("planner_complete_step", {
+			transition("planner_finish_step", {
 				nextStage: "finalize",
 				nextStep: "verify_plan_branch",
 			}),
 		).toEqual({
-			type: "complete_step",
+			type: "finish_step",
 			next: { stage: "finalize", step: "verify_plan_branch" },
 		});
-		expect(transition("planner_complete_step")).toEqual({
-			type: "complete_step",
+		expect(transition("planner_finish_step")).toEqual({
+			type: "finish_step",
 		});
 	});
 
