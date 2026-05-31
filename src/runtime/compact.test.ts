@@ -1,6 +1,5 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_INSTRUCTIONS } from "../instructions/defaults";
 import { syncInstructionFiles } from "../instructions/manager";
 import { createInstructionPaths } from "../instructions/paths";
 import { createMemoryStoragePaths } from "../memory/paths";
@@ -9,6 +8,7 @@ import {
 	createProjectStoragePaths,
 } from "../storage/paths";
 import { createInitialPlanState } from "../storage/schema";
+import { TEST_INSTRUCTION_DEFAULTS } from "../test/instruction-defaults";
 import { MockPlannerFs } from "../test/mock-fs";
 import {
 	buildPlannerCompactInstructionBundle,
@@ -132,7 +132,7 @@ async function createCompactSetup() {
 	} as unknown as PlannerPreflightResult;
 
 	await syncInstructionFiles(fs, createInstructionPaths(projectPaths), {
-		...DEFAULT_INSTRUCTIONS,
+		...TEST_INSTRUCTION_DEFAULTS,
 		execution: [
 			"# execution",
 			"",

@@ -1,8 +1,7 @@
 import { SCHEMA_VERSION } from "../constants";
 import { planBranchName } from "../git/branches";
 import type { GitRunner } from "../git/runner";
-import { DEFAULT_INSTRUCTIONS } from "../instructions/defaults";
-import { syncInstructionFiles } from "../instructions/manager";
+import { syncBundledInstructionFiles } from "../instructions/defaults";
 import { createInstructionPaths } from "../instructions/paths";
 import { initializeMemoryFiles } from "../memory/manager";
 import { loadEffectivePlannerSettings } from "../settings/manager";
@@ -110,10 +109,9 @@ async function createPlanTool(
 		worktree: settings.effective.worktree,
 	});
 
-	await syncInstructionFiles(
+	await syncBundledInstructionFiles(
 		input.fs,
 		createInstructionPaths(input.projectPaths),
-		DEFAULT_INSTRUCTIONS,
 	);
 	const worktree = await createPlanWorktree({
 		fs: input.fs,

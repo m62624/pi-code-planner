@@ -11,6 +11,7 @@ import type {
 	GitWorktreeAddInput,
 	GitWorktreeRemoveInput,
 } from "../git/runner";
+import { BUNDLED_INSTRUCTION_DEFAULTS_DIR } from "../instructions/defaults";
 import {
 	createInstructionPaths,
 	instructionFilePath,
@@ -26,6 +27,7 @@ import { readPlanRecord } from "../storage/plan-store";
 import { readProjectRecord, setActivePlan } from "../storage/project-store";
 import { readPlanState } from "../storage/state-store";
 import { createWorktreeProjectIndexPath } from "../storage/worktree-index";
+import { seedInstructionDefaults } from "../test/instruction-defaults";
 import { MockPlannerFs } from "../test/mock-fs";
 import { executePlannerPlanTool } from "./plan-tools";
 
@@ -84,6 +86,7 @@ class MockGitRunner implements GitRunner {
 describe("planner plan tools", () => {
 	it("creates project, plan, state, memory, instructions, and activates the plan", async () => {
 		const fs = new MockPlannerFs();
+		await seedInstructionDefaults(fs, BUNDLED_INSTRUCTION_DEFAULTS_DIR);
 		const projectPaths = createProjectStoragePaths({
 			agentDir: "/agent",
 			projectRoot: "/repo/app",
@@ -169,6 +172,7 @@ describe("planner plan tools", () => {
 
 	it("uses explicit baseBranch and blocks accidental overwrite of an active plan", async () => {
 		const fs = new MockPlannerFs();
+		await seedInstructionDefaults(fs, BUNDLED_INSTRUCTION_DEFAULTS_DIR);
 		const git = new MockGitRunner("ignored");
 		const projectPaths = createProjectStoragePaths({
 			agentDir: "/agent",
@@ -222,6 +226,7 @@ describe("planner plan tools", () => {
 
 	it("falls back to main when git branch inspection is unavailable", async () => {
 		const fs = new MockPlannerFs();
+		await seedInstructionDefaults(fs, BUNDLED_INSTRUCTION_DEFAULTS_DIR);
 		const projectPaths = createProjectStoragePaths({
 			agentDir: "/agent",
 			projectRoot: "/repo/app",
@@ -250,6 +255,7 @@ describe("planner plan tools", () => {
 
 	it("uses project settings custom worktree settings without adding a project-local gitignore rule", async () => {
 		const fs = new MockPlannerFs();
+		await seedInstructionDefaults(fs, BUNDLED_INSTRUCTION_DEFAULTS_DIR);
 		const git = new MockGitRunner("main");
 		const projectPaths = createProjectStoragePaths({
 			agentDir: "/agent",
@@ -297,6 +303,7 @@ describe("planner plan tools", () => {
 
 	it("uses global settings custom worktree settings when project settings are absent", async () => {
 		const fs = new MockPlannerFs();
+		await seedInstructionDefaults(fs, BUNDLED_INSTRUCTION_DEFAULTS_DIR);
 		const git = new MockGitRunner("main");
 		const projectPaths = createProjectStoragePaths({
 			agentDir: "/agent",
@@ -343,6 +350,7 @@ describe("planner plan tools", () => {
 
 	it("blocks creating an existing inactive plan instead of overwriting files", async () => {
 		const fs = new MockPlannerFs();
+		await seedInstructionDefaults(fs, BUNDLED_INSTRUCTION_DEFAULTS_DIR);
 		const projectPaths = createProjectStoragePaths({
 			agentDir: "/agent",
 			projectRoot: "/repo/app",

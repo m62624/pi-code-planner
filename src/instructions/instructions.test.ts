@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { createNodeFs } from "../storage/fs";
 import { createProjectStoragePaths } from "../storage/paths";
+import { TEST_INSTRUCTION_DEFAULTS } from "../test/instruction-defaults";
 import { MockPlannerFs } from "../test/mock-fs";
-import { DEFAULT_INSTRUCTIONS } from "./defaults";
+import {
+	loadBundledInstructionDefaults,
+	syncBundledInstructionFiles,
+} from "./defaults";
 import {
 	getInstructionContent,
 	getInstructionSection,
@@ -23,7 +28,11 @@ describe("instruction manager", () => {
 			}),
 		);
 
-		const result = await syncInstructionFiles(fs, paths, DEFAULT_INSTRUCTIONS);
+		const result = await syncInstructionFiles(
+			fs,
+			paths,
+			TEST_INSTRUCTION_DEFAULTS,
+		);
 
 		expect(result).toHaveLength(INSTRUCTION_KEYS.length);
 		expect(result.every((item) => item.defaultAction === "created")).toBe(true);
@@ -32,7 +41,7 @@ describe("instruction manager", () => {
 		);
 		for (const key of INSTRUCTION_KEYS) {
 			expect(fs.snapshot()[instructionFilePath(paths.defaultsDir, key)]).toBe(
-				DEFAULT_INSTRUCTIONS[key],
+				TEST_INSTRUCTION_DEFAULTS[key],
 			);
 			expect(
 				fs.snapshot()[instructionFilePath(paths.globalAppendDir, key)],
@@ -48,13 +57,13 @@ describe("instruction manager", () => {
 				projectRoot: "/repo/app",
 			}),
 		);
-		await syncInstructionFiles(fs, paths, DEFAULT_INSTRUCTIONS);
+		await syncInstructionFiles(fs, paths, TEST_INSTRUCTION_DEFAULTS);
 		await fs.writeTextAtomic(
 			instructionFilePath(paths.globalAppendDir, "discovery"),
 			"global notes\n",
 		);
 		const nextDefaults: InstructionDefaults = {
-			...DEFAULT_INSTRUCTIONS,
+			...TEST_INSTRUCTION_DEFAULTS,
 			discovery: "# discovery v2\n",
 		};
 
@@ -79,7 +88,7 @@ describe("instruction manager", () => {
 				projectRoot: "/repo/app",
 			}),
 		);
-		await syncInstructionFiles(fs, paths, DEFAULT_INSTRUCTIONS);
+		await syncInstructionFiles(fs, paths, TEST_INSTRUCTION_DEFAULTS);
 
 		const content = await getInstructionContent(fs, paths, "planning");
 
@@ -87,7 +96,7 @@ describe("instruction manager", () => {
 			key: "planning",
 			appendSource: "global",
 			appendPath: instructionFilePath(paths.globalAppendDir, "planning"),
-			content: DEFAULT_INSTRUCTIONS.planning,
+			content: TEST_INSTRUCTION_DEFAULTS.planning,
 		});
 	});
 
@@ -99,7 +108,7 @@ describe("instruction manager", () => {
 				projectRoot: "/repo/app",
 			}),
 		);
-		await syncInstructionFiles(fs, paths, DEFAULT_INSTRUCTIONS);
+		await syncInstructionFiles(fs, paths, TEST_INSTRUCTION_DEFAULTS);
 		await fs.writeTextAtomic(
 			instructionFilePath(paths.globalAppendDir, "tdd"),
 			"Use cargo test.\n",
@@ -119,7 +128,7 @@ describe("instruction manager", () => {
 				projectRoot: "/repo/app",
 			}),
 		);
-		await syncInstructionFiles(fs, paths, DEFAULT_INSTRUCTIONS);
+		await syncInstructionFiles(fs, paths, TEST_INSTRUCTION_DEFAULTS);
 		await fs.writeTextAtomic(
 			instructionFilePath(paths.globalAppendDir, "git-commit"),
 			"Global style.\n",
@@ -157,6 +166,62 @@ describe("instruction manager", () => {
 		expect(defaults["git-commit"]).toBe("# git-commit from md\n");
 	});
 
+	it("loads bundled defaults through the markdown directory loader", async () => {
+		const fs = new MockPlannerFs();
+		for (const key of INSTRUCTION_KEYS) {
+			await fs.writeTextAtomic(
+				`/repo/instructions/defaults/${key}.md`,
+				`# bundled ${key}\n`,
+			);
+		}
+
+		const defaults = await loadBundledInstructionDefaults(
+			fs,
+			"/repo/instructions/defaults",
+		);
+
+		expect(defaults.discovery).toBe("# bundled discovery\n");
+		expect(defaults.memory).toBe("# bundled memory\n");
+	});
+
+	it("loads repository markdown files as the bundled defaults", async () => {
+		const defaults = await loadBundledInstructionDefaults(createNodeFs());
+
+		expect(defaults.discovery.trim()).toBe("# discovery");
+		expect(defaults.memory).toContain(
+			"Memory is the compressed project knowledge base.",
+		);
+	});
+
+	it("syncs installed defaults from bundled markdown without overwriting append", async () => {
+		const fs = new MockPlannerFs();
+		const paths = createInstructionPaths(
+			createProjectStoragePaths({
+				agentDir: "/agent",
+				projectRoot: "/repo/app",
+			}),
+		);
+		for (const key of INSTRUCTION_KEYS) {
+			await fs.writeTextAtomic(
+				`/repo/instructions/defaults/${key}.md`,
+				`# bundled ${key}\n`,
+			);
+		}
+		await fs.writeTextAtomic(
+			instructionFilePath(paths.globalAppendDir, "discovery"),
+			"Keep global notes.\n",
+		);
+
+		await syncBundledInstructionFiles(fs, paths, "/repo/instructions/defaults");
+
+		expect(
+			fs.snapshot()[instructionFilePath(paths.defaultsDir, "discovery")],
+		).toBe("# bundled discovery\n");
+		expect(
+			fs.snapshot()[instructionFilePath(paths.globalAppendDir, "discovery")],
+		).toBe("Keep global notes.\n");
+	});
+
 	it("parses only level-two instruction sections", () => {
 		const sections = parseInstructionSections(
 			[
@@ -191,7 +256,7 @@ describe("instruction manager", () => {
 			}),
 		);
 		await syncInstructionFiles(fs, paths, {
-			...DEFAULT_INSTRUCTIONS,
+			...TEST_INSTRUCTION_DEFAULTS,
 			execution: [
 				"# execution",
 				"",

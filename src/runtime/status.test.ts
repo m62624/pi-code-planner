@@ -12,7 +12,6 @@ import type {
 	GitWorktreeAddInput,
 	GitWorktreeRemoveInput,
 } from "../git/runner";
-import { DEFAULT_INSTRUCTIONS } from "../instructions/defaults";
 import { syncInstructionFiles } from "../instructions/manager";
 import { createInstructionPaths } from "../instructions/paths";
 import {
@@ -39,6 +38,7 @@ import {
 	type PlanStateRecord,
 } from "../storage/schema";
 import { initializePlanState } from "../storage/state-store";
+import { TEST_INSTRUCTION_DEFAULTS } from "../test/instruction-defaults";
 import { MockPlannerFs } from "../test/mock-fs";
 import { runPlannerPreflight } from "./preflight";
 import {
@@ -89,7 +89,7 @@ describe("planner status text", () => {
 			},
 		});
 		await syncInstructionFiles(fs, createInstructionPaths(setup.projectPaths), {
-			...DEFAULT_INSTRUCTIONS,
+			...TEST_INSTRUCTION_DEFAULTS,
 			execution: "# execution\nExecution default body.\n",
 			tdd: "# tdd\nTDD default body.\n",
 			memory: "# memory\nMemory default body.\n",
@@ -158,7 +158,7 @@ describe("planner status text", () => {
 		await syncInstructionFiles(
 			fs,
 			createInstructionPaths(setup.projectPaths),
-			DEFAULT_INSTRUCTIONS,
+			TEST_INSTRUCTION_DEFAULTS,
 		);
 		await writeMemoryCheckpoint(fs, setup.memoryPaths, "old123");
 

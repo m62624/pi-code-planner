@@ -11,6 +11,8 @@ import {
 	checkRawGitAllowed,
 	PLANNER_STATUS_TOOL_NAME,
 } from "./guard/git-watcher";
+import { syncBundledInstructionFiles } from "./instructions/defaults";
+import { createInstructionPaths } from "./instructions/paths";
 import {
 	buildPlannerCompactInstructionBundle,
 	buildPlannerPostAutoCompactMessage,
@@ -212,6 +214,25 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 	registerPlannerTools(pi, compactRuntime);
 	registerRawGitGuard(pi);
 	registerPlannerCompactEvents(pi, compactRuntime);
+	registerInstructionDefaultsSync(pi);
+}
+
+function registerInstructionDefaultsSync(pi: ExtensionAPI): void {
+	pi.on("session_start", async (_event, ctx) => {
+		const fs = createNodeFs();
+		try {
+			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+			await syncBundledInstructionFiles(
+				fs,
+				createInstructionPaths(projectPaths),
+			);
+		} catch (error) {
+			ctx.ui.notify(
+				`pi-code-planner instruction sync failed: ${errorMessage(error)}`,
+				"warning",
+			);
+		}
+	});
 }
 
 function registerPlannerCommands(pi: ExtensionAPI): void {

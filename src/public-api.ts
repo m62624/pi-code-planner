@@ -66,7 +66,11 @@ export {
 	getAllowedPlannerWrapperTools,
 	PLANNER_WRAPPER_TOOLS,
 } from "./guard/tool-policy";
-export { DEFAULT_INSTRUCTIONS } from "./instructions/defaults";
+export {
+	BUNDLED_INSTRUCTION_DEFAULTS_DIR,
+	loadBundledInstructionDefaults,
+	syncBundledInstructionFiles,
+} from "./instructions/defaults";
 export {
 	getInstructionContent,
 	getInstructionSection,
