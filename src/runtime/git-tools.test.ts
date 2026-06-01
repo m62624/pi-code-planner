@@ -291,57 +291,6 @@ describe("planner git tools", () => {
 		expect(result.status).toBe("blocked");
 		expect(result.text).toContain("blocked");
 	});
-
-	it("cleans only managed child branches and never deletes the protected plan branch", async () => {
-		const fs = new MockPlannerFs();
-		const setup = await createGitToolSetup(fs, {
-			state: {
-				stage: "done",
-				step: "cleanup_worktree",
-				stepStatus: "running",
-				activeBranches: {
-					base: "main",
-					plan: "plan/plan-a",
-					currentTask: "task/plan-a/task-1",
-					currentExperiment: "experiment/plan-a/task-1/attempt-a",
-					selectedExperiment: "experiment/plan-a/task-1/attempt-a",
-				},
-			},
-		});
-		const git = new MockGitRunner();
-
-		const result = await executePlannerGitTool({
-			fs,
-			git,
-			projectPaths: setup.projectPaths,
-			toolName: "planner_git_cleanup_managed_branches",
-			params: { force: true },
-		});
-
-		expect(result.status).toBe("applied");
-		expect(git.calls.filter((call) => call.name === "deleteBranch")).toEqual([
-			{
-				name: "deleteBranch",
-				input: {
-					repoRoot: "/repo/app",
-					branch: "experiment/plan-a/task-1/attempt-a",
-					force: true,
-				},
-			},
-			{
-				name: "deleteBranch",
-				input: {
-					repoRoot: "/repo/app",
-					branch: "task/plan-a/task-1",
-					force: true,
-				},
-			},
-		]);
-		expect(git.calls).not.toContainEqual({
-			name: "deleteBranch",
-			input: { repoRoot: "/repo/app", branch: "plan/plan-a", force: true },
-		});
-	});
 });
 
 async function createGitToolSetup(

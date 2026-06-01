@@ -2,8 +2,6 @@ import {
 	createAndSwitchExperimentBranch,
 	createAndSwitchRefactorBranch,
 	createAndSwitchTaskBranch,
-	deleteManagedBranch,
-	exportPlanToOutputBranch,
 	mergeRefactorToTask,
 	mergeSelectedExperimentToTask,
 	mergeTaskToPlan,
@@ -15,7 +13,6 @@ import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
 import type { PlanStateRecord } from "../storage/schema";
 import { savePlanState } from "../storage/state-store";
-import { removePlanWorktree } from "../worktree/manager";
 import {
 	inspectPlannerGitReality,
 	runSyncedPlannerGitMutation,
@@ -38,9 +35,6 @@ export const PLANNER_GIT_TOOL_NAMES = [
 	"planner_git_create_refactor_branch",
 	"planner_git_merge_refactor_to_task",
 	"planner_git_merge_task_to_plan",
-	"planner_git_export_plan_to_output",
-	"planner_git_remove_plan_worktree",
-	"planner_git_cleanup_managed_branches",
 ] as const satisfies readonly PlannerWrapperTool[];
 
 export type PlannerGitToolName = (typeof PLANNER_GIT_TOOL_NAMES)[number];
@@ -105,12 +99,6 @@ export async function executePlannerGitTool(
 				return await mergeRefactorTool(input, ready);
 			case "planner_git_merge_task_to_plan":
 				return await mergeTaskTool(input, ready);
-			case "planner_git_export_plan_to_output":
-				return await exportPlanTool(input, ready);
-			case "planner_git_remove_plan_worktree":
-				return await removeWorktreeTool(input, ready);
-			case "planner_git_cleanup_managed_branches":
-				return await cleanupManagedBranchesTool(input, ready);
 		}
 	} catch (error) {
 		return blocked(input.toolName, errorMessage(error), { error });
@@ -366,101 +354,6 @@ async function mergeTaskTool(
 	});
 }
 
-async function exportPlanTool(
-	input: PlannerGitToolExecutionInput,
-	ready: ReadyGitContext,
-): Promise<PlannerGitToolExecutionResult> {
-	const result = await exportPlanToOutputBranch({
-		git: input.git,
-		state: ready.state,
-		projectRoot: input.projectPaths.projectRoot,
-		planId: ready.planId,
-		message: optionalMessage(input.params, "export planner result"),
-	});
-	await savePlanState(
-		input.fs,
-		ready.orchestrator.preflight.context.planPaths,
-		result.state,
-	);
-	return applied(input.toolName, "Planner exported plan to output branch.", {
-		state: result.state,
-	});
-}
-
-async function removeWorktreeTool(
-	input: PlannerGitToolExecutionInput,
-	ready: ReadyGitContext,
-): Promise<PlannerGitToolExecutionResult> {
-	const worktreePath = requireWorktreePath(ready.state);
-	const result = await removePlanWorktree({
-		git: input.git,
-		projectRoot: input.projectPaths.projectRoot,
-		worktreePath,
-		force: booleanParam(input.params, "force") ?? false,
-	});
-	const state = { ...ready.state, worktreePath: null };
-	await savePlanState(
-		input.fs,
-		ready.orchestrator.preflight.context.planPaths,
-		state,
-	);
-	return applied(input.toolName, "Planner worktree removed.", {
-		result,
-		state,
-	});
-}
-
-async function cleanupManagedBranchesTool(
-	input: PlannerGitToolExecutionInput,
-	ready: ReadyGitContext,
-): Promise<PlannerGitToolExecutionResult> {
-	const managedChildBranches = uniqueBranches([
-		ready.state.activeBranches.currentExperiment,
-		ready.state.activeBranches.selectedExperiment,
-		ready.state.activeBranches.currentTask,
-		...Object.values(ready.state.managedBranches.tasks).flatMap((registry) => [
-			registry.task,
-			...registry.experiments,
-			registry.selectedExperiment,
-			registry.refactor,
-		]),
-	]);
-	for (const branch of managedChildBranches) {
-		await deleteManagedBranch({
-			git: input.git,
-			repoRoot: input.projectPaths.projectRoot,
-			branch,
-			force: booleanParam(input.params, "force") ?? false,
-		});
-	}
-	const state = {
-		...ready.state,
-		activeTaskId: null,
-		activeExperimentId: null,
-		activeBranches: {
-			...ready.state.activeBranches,
-			currentTask: null,
-			currentExperiment: null,
-			selectedExperiment: null,
-		},
-		managedBranches: { ...ready.state.managedBranches, tasks: {} },
-		mergeTargets: {
-			...ready.state.mergeTargets,
-			experimentToTask: null,
-			taskToPlan: null,
-		},
-	};
-	await savePlanState(
-		input.fs,
-		ready.orchestrator.preflight.context.planPaths,
-		state,
-	);
-	return applied(input.toolName, "Planner managed child branches cleaned up.", {
-		deletedBranches: managedChildBranches,
-		state,
-	});
-}
-
 async function runStateChangingGitOperation(input: {
 	input: PlannerGitToolExecutionInput;
 	ready: ReadyGitContext;
@@ -518,21 +411,10 @@ function optionalMessage(params: unknown, fallback: string): string {
 		: fallback;
 }
 
-function booleanParam(params: unknown, key: string): boolean | undefined {
-	const value = asObject(params)[key];
-	return typeof value === "boolean" ? value : undefined;
-}
-
 function asObject(value: unknown): Record<string, unknown> {
 	return value && typeof value === "object"
 		? (value as Record<string, unknown>)
 		: {};
-}
-
-function uniqueBranches(values: readonly (string | null)[]): string[] {
-	return [
-		...new Set(values.filter((value): value is string => value !== null)),
-	];
 }
 
 function applied(

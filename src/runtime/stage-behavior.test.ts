@@ -150,7 +150,7 @@ describe("planner stage behavior", () => {
 		}
 	});
 
-	it("keeps done cleanup user-accepted and git-wrapper controlled", () => {
+	it("keeps done cleanup user-accepted and slash-command controlled", () => {
 		expect(
 			getPlannerStageStepBehavior({
 				stage: "done",
@@ -164,11 +164,8 @@ describe("planner stage behavior", () => {
 			getPlannerStageStepBehavior({ stage: "done", step: "cleanup_worktree" }),
 		).toMatchObject({
 			projectAccess: "none",
-			actions: ["planner_git", "cleanup"],
-			expectedTools: [
-				"planner_git_remove_plan_worktree",
-				"planner_git_cleanup_managed_branches",
-			],
+			actions: ["cleanup"],
+			expectedTools: ["planner_status"],
 		});
 	});
 

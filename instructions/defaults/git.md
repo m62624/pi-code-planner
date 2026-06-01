@@ -16,9 +16,8 @@ Use git as the planner consistency layer without allowing the model to manipulat
 - `planner_git_create_refactor_branch` creates the refactor branch when required.
 - `planner_git_merge_refactor_to_task` merges refactor result into current task.
 - `planner_git_merge_task_to_plan` merges current task into protected plan branch.
-- `planner_git_export_plan_to_output` exports accepted result to output branch.
-- `planner_git_remove_plan_worktree` removes the temporary plan worktree after acceptance.
-- `planner_git_cleanup_managed_branches` removes safe-to-delete managed child branches.
+
+Final export, worktree removal, temporary branch cleanup, planner artifact removal, and Pi JSONL session handoff are intentionally not model tools. After explicit user acceptance, ask the user to run `/planner-accept`.
 
 ## Branch Lifecycle
 

@@ -601,7 +601,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["final_summary.md"],
 		updatedArtifacts: ["decisions.md"],
 		requiredGates: ["user_acceptance_required"],
-		expectedTools: ["planner_finish_step"],
+		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
 		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
@@ -619,36 +619,33 @@ export const PLANNER_STAGE_BEHAVIOR = {
 	}),
 	prepare_output_branch: behavior("done", "prepare_output_branch", {
 		projectAccess: "none",
-		actions: ["planner_git"],
+		actions: ["cleanup"],
 		requiredArtifacts: ["final_summary.md"],
 		updatedArtifacts: ["state.json"],
 		requiredGates: ["user_acceptance_required"],
-		expectedTools: ["planner_git_export_plan_to_output"],
+		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
 		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	merge_or_export_result: behavior("done", "merge_or_export_result", {
 		projectAccess: "none",
-		actions: ["planner_git"],
+		actions: ["cleanup"],
 		requiredArtifacts: ["state.json"],
 		updatedArtifacts: ["state.json"],
 		requiredGates: ["output_branch_ready"],
-		expectedTools: ["planner_git_export_plan_to_output"],
+		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
 		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	cleanup_worktree: behavior("done", "cleanup_worktree", {
 		projectAccess: "none",
-		actions: ["planner_git", "cleanup"],
+		actions: ["cleanup"],
 		requiredArtifacts: ["state.json"],
 		updatedArtifacts: ["state.json"],
 		requiredGates: ["output_branch_ready"],
-		expectedTools: [
-			"planner_git_remove_plan_worktree",
-			"planner_git_cleanup_managed_branches",
-		],
+		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
 		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
@@ -940,9 +937,6 @@ function isStateChangingGitTool(tool: PlannerWrapperTool): boolean {
 		tool === "planner_git_merge_selected_experiment" ||
 		tool === "planner_git_create_refactor_branch" ||
 		tool === "planner_git_merge_refactor_to_task" ||
-		tool === "planner_git_merge_task_to_plan" ||
-		tool === "planner_git_export_plan_to_output" ||
-		tool === "planner_git_remove_plan_worktree" ||
-		tool === "planner_git_cleanup_managed_branches"
+		tool === "planner_git_merge_task_to_plan"
 	);
 }

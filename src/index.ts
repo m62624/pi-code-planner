@@ -23,6 +23,11 @@ import {
 	MEMORY_SYMBOL_VISIBILITIES,
 	MEMORY_VERIFICATION_STATUSES,
 } from "./memory/schema";
+import {
+	buildAcceptedPlanCompletionPrompt,
+	finalizeAcceptedPlan,
+	inspectAcceptedPlan,
+} from "./runtime/accepted-plan";
 import { readActivePlanContext } from "./runtime/active-plan";
 import {
 	buildPlannerCompactInstructionBundle,
@@ -425,14 +430,6 @@ const GIT_OPTIONAL_MESSAGE_TOOL_PARAMETERS = {
 	additionalProperties: false,
 } as const;
 
-const GIT_FORCE_TOOL_PARAMETERS = {
-	type: "object",
-	properties: {
-		force: { type: "boolean" },
-	},
-	additionalProperties: false,
-} as const;
-
 export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 	const compactRuntime = createPlannerCompactRuntimeState();
 	registerPlannerCommands(pi);
@@ -718,6 +715,107 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				},
 			});
 			notifyPlannerCommandResult(ctx, result);
+		},
+	});
+
+	pi.registerCommand("planner-accept", {
+		description:
+			"Accept the completed planner result, keep one output branch, clean temporary planner state, and return to the original project session.",
+		handler: async (_args, ctx) => {
+			await ctx.waitForIdle();
+			const fs = createNodeFs();
+			const agentDir = getAgentDir();
+			const projectPaths = await resolveProjectStoragePaths({
+				fs,
+				agentDir,
+				cwd: ctx.cwd,
+			});
+			const git = new NodeGitRunner();
+			let fallbackSession: Awaited<
+				ReturnType<typeof createPlannerHandoffSession>
+			> | null = null;
+			let acceptedPlanFinalized = false;
+
+			try {
+				const preview = await inspectAcceptedPlan({
+					fs,
+					git,
+					projectPaths,
+				});
+				const confirmed = await ctx.ui.confirm(
+					"Accept planner result?",
+					`Export ${preview.state.activeBranches.plan} to ${preview.outputBranch}, remove temporary planner files and worktree, and return to the original project session?`,
+				);
+				if (!confirmed) {
+					ctx.ui.notify("Planner acceptance cancelled.", "info");
+					return;
+				}
+
+				let deleteWorktreeSessions = true;
+				if (!preview.originalSessionExists) {
+					ctx.ui.notify(
+						"Original Pi JSONL session is missing. Planner will create a replacement project-root session before cleanup.",
+						"warning",
+					);
+					deleteWorktreeSessions = await ctx.ui.confirm(
+						"Delete completed worktree chat?",
+						"The original Pi JSONL session is missing. Delete the completed planner worktree chat history after switching to a replacement project-root session?",
+					);
+					fallbackSession = await createPlannerHandoffSession({
+						fs,
+						agentDir,
+						worktreePath: projectPaths.projectRoot,
+						parentSession: ctx.sessionManager.getSessionFile(),
+					});
+				}
+
+				const finalized = await finalizeAcceptedPlan({
+					fs,
+					git,
+					projectPaths,
+				});
+				acceptedPlanFinalized = true;
+				const targetSessionFile =
+					preview.originalSessionExists && preview.originalSessionFile
+						? preview.originalSessionFile
+						: fallbackSession?.sessionFile;
+				if (!targetSessionFile) {
+					throw new Error(
+						"Planner accepted the result but could not resolve a project session for handoff.",
+					);
+				}
+				await ctx.switchSession(targetSessionFile, {
+					withSession: async (replacementCtx) => {
+						if (fallbackSession) {
+							await removePlannerHandoffBootstrapFile(
+								fs,
+								fallbackSession.sessionFile,
+							);
+						}
+						if (deleteWorktreeSessions) {
+							await fs.removeDir(finalized.worktreeSessionDir);
+						}
+						await replacementCtx.sendUserMessage(
+							buildAcceptedPlanCompletionPrompt({
+								planId: finalized.planId,
+								outputBranch: finalized.outputBranch,
+								originalSessionMissing: !preview.originalSessionExists,
+								preservedWorktreeChatDir: deleteWorktreeSessions
+									? null
+									: finalized.worktreeSessionDir,
+							}),
+						);
+					},
+				});
+			} catch (error) {
+				if (fallbackSession && !acceptedPlanFinalized) {
+					await removePlannerHandoffBootstrapFile(
+						fs,
+						fallbackSession.sessionFile,
+					);
+				}
+				ctx.ui.notify(`Planner accept failed: ${errorMessage(error)}`, "error");
+			}
 		},
 	});
 }
@@ -1105,12 +1203,6 @@ function gitToolLabel(toolName: PlannerGitToolName): string {
 			return "Planner Git Merge Refactor To Task";
 		case "planner_git_merge_task_to_plan":
 			return "Planner Git Merge Task To Plan";
-		case "planner_git_export_plan_to_output":
-			return "Planner Git Export Plan To Output";
-		case "planner_git_remove_plan_worktree":
-			return "Planner Git Remove Plan Worktree";
-		case "planner_git_cleanup_managed_branches":
-			return "Planner Git Cleanup Managed Branches";
 	}
 }
 
@@ -1136,12 +1228,6 @@ function gitToolDescription(toolName: PlannerGitToolName): string {
 			return "Merge the refactor branch back into the current task branch.";
 		case "planner_git_merge_task_to_plan":
 			return "Merge the current task branch into the plan branch.";
-		case "planner_git_export_plan_to_output":
-			return "Export the completed plan branch to an output branch in the original repository.";
-		case "planner_git_remove_plan_worktree":
-			return "Remove the planner worktree during accepted done cleanup.";
-		case "planner_git_cleanup_managed_branches":
-			return "Delete planner-managed task/experiment branches; plan branch is protected.";
 	}
 }
 
@@ -1157,11 +1243,7 @@ function gitToolParameters(toolName: PlannerGitToolName) {
 		case "planner_git_merge_selected_experiment":
 		case "planner_git_merge_refactor_to_task":
 		case "planner_git_merge_task_to_plan":
-		case "planner_git_export_plan_to_output":
 			return GIT_OPTIONAL_MESSAGE_TOOL_PARAMETERS;
-		case "planner_git_remove_plan_worktree":
-		case "planner_git_cleanup_managed_branches":
-			return GIT_FORCE_TOOL_PARAMETERS;
 		case "planner_git_inspect":
 		case "planner_git_init":
 		case "planner_git_create_refactor_branch":

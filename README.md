@@ -141,6 +141,7 @@ These are Pi slash commands for the user. They are not model tools.
 | `/planner-rename [--id <plan-id>] <new-title>` | Rename a human-readable plan title without changing ids, branches, or paths. |
 | `/planner-delete [<plan-id>]` | Delete a selected inactive plan after confirmation. Without an id, open the TUI picker. |
 | `/planner-delete --force-active <plan-id>` | Explicit escape hatch: remove an active plan, its worktree, related planner files, and managed child branches. |
+| `/planner-accept` | After explicit approval at `done/await_user_acceptance`, export one output branch, remove temporary planner state, and return Pi to the original project session. |
 
 ## Core Model Rule
 
@@ -291,11 +292,11 @@ Done is an explicit user-decision stage, not just a terminal marker.
 | `present_result` | Present the verified result and output options. |
 | `await_user_acceptance` | Wait for explicit acceptance or a change request. |
 | `handle_change_request` | Record feedback and return to planning in the same worktree. |
-| `prepare_output_branch` | Prepare the output branch after acceptance. |
-| `merge_or_export_result` | Export the plan branch result through planner-controlled git. |
-| `cleanup_worktree` | Remove the temporary worktree and safe-to-delete child branches. |
-| `mark_done` | Clear active plan state and mark completion. |
-| `cleanup_plan_files` | Remove completed plan artifacts after cleanup. |
+| `prepare_output_branch` | Internal `/planner-accept` phase: prepare the output branch after acceptance. |
+| `merge_or_export_result` | Internal `/planner-accept` phase: export the plan branch result through planner-controlled git. |
+| `cleanup_worktree` | Internal `/planner-accept` phase: remove the temporary worktree and safe-to-delete child branches. |
+| `mark_done` | Internal `/planner-accept` phase: clear active plan state and mark completion. |
+| `cleanup_plan_files` | Internal `/planner-accept` phase: remove completed plan artifacts after cleanup. |
 
 ### `recovery`
 
@@ -431,8 +432,10 @@ Branch cleanup rules:
 - the selected experiment branch is removed after merge into task
 - the refactor branch is removed after merge into task
 - the task branch is removed after merge into plan
-- the protected plan branch is not removed by managed child cleanup
+- the protected plan branch is not removed by managed child cleanup during active work
 - worktree cleanup happens only after explicit user acceptance
+- `/planner-accept` exports `output/<plan-id>`, removes the temporary plan branch, worktree, artifacts, worktree index, and completed worktree chat, then returns Pi to the original project JSONL session
+- if the original JSONL session is missing, `/planner-accept` creates a replacement project-root session and asks whether the completed worktree chat should be removed
 
 When a planner plan is active, raw shell `git` commands are blocked. The model uses planner git wrapper tools instead. Non-git shell commands remain available.
 
@@ -689,9 +692,8 @@ Most users do not need to call these manually. They are registered for the model
 - `planner_git_create_refactor_branch`
 - `planner_git_merge_refactor_to_task`
 - `planner_git_merge_task_to_plan`
-- `planner_git_export_plan_to_output`
-- `planner_git_remove_plan_worktree`
-- `planner_git_cleanup_managed_branches`
+
+Final output export and cleanup are intentionally exposed only as the user slash command `/planner-accept`, because removing the active worktree must be coordinated with Pi JSONL session handoff.
 
 ### Recovery
 

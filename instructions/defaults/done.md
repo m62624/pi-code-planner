@@ -11,27 +11,32 @@ Present the verified plan result, wait for an explicit user decision, then eithe
 2. `await_user_acceptance`
    - Ask the user to accept the result or request changes.
    - Never decide on behalf of the user.
+   - If the user accepts, ask the user to run `/planner-accept`.
+   - `/planner-accept` atomically performs the remaining export, cleanup, and Pi session handoff. Do not try to reproduce that cleanup through model tools.
 3. `handle_change_request`
    - Record user feedback in durable artifacts.
    - Return to `planning/read_memory` in the same plan worktree and branch.
 4. `prepare_output_branch`
-   - After explicit acceptance, use planner git wrappers to prepare the output branch.
+   - Internal `/planner-accept` phase: prepare the output branch in the original repository.
 5. `merge_or_export_result`
-   - Export the plan branch result through the state-controlled wrapper.
+   - Internal `/planner-accept` phase: export the plan branch result.
 6. `cleanup_worktree`
-   - Remove the temporary worktree and safe-to-delete managed child branches.
+   - Internal `/planner-accept` phase: remove the temporary worktree and safe-to-delete managed child branches.
 7. `mark_done`
-   - Clear active plan state and mark the result complete.
+   - Internal `/planner-accept` phase: clear active plan state and mark the result complete.
 8. `cleanup_plan_files`
-   - Remove completed plan artifacts only after `mark_done`.
+   - Internal `/planner-accept` phase: remove completed plan artifacts only after `mark_done`.
 
 ## Acceptance Rules
 
 - No production edits are allowed in done.
 - Change requests preserve the worktree and return to planning.
 - Cleanup requires explicit acceptance.
-- The protected plan branch is never deleted by managed child cleanup.
-- After successful cleanup, the user keeps one output branch in the original repository and decides whether to merge, rebase, or delete it.
+- During normal work the protected plan branch is never deleted by managed child cleanup.
+- After successful `/planner-accept`, the temporary plan branch is removed because its result is already exported.
+- The user keeps exactly one output branch in the original repository and decides whether to merge, rebase, or delete it.
+- If the original Pi JSONL session exists, `/planner-accept` returns to it and removes the completed worktree chat.
+- If the original Pi JSONL session is missing, `/planner-accept` warns the user, creates a replacement project-root session, and asks whether to remove the completed worktree chat.
 - Raw git is forbidden.
 
 ## Change Request Reload
