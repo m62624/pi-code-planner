@@ -49,10 +49,15 @@ describe("planner plan naming", () => {
 		});
 	});
 
-	it("rejects missing request and malformed id flag", () => {
-		expect(parsePlannerCreateCommandArgs("")).toBeNull();
+	it("allows the multiline editor to collect a missing request", () => {
+		expect(parsePlannerCreateCommandArgs("")).toEqual({});
+		expect(parsePlannerCreateCommandArgs("--id plan-a")).toEqual({
+			planId: "plan-a",
+		});
+	});
+
+	it("rejects malformed id flag", () => {
 		expect(parsePlannerCreateCommandArgs("--id")).toBeNull();
-		expect(parsePlannerCreateCommandArgs("--id plan-a")).toBeNull();
 	});
 
 	it("uses sanitized explicit id when provided", () => {

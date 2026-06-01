@@ -3,7 +3,7 @@ import type { ProjectRecord } from "../storage/schema";
 
 export interface PlannerCreateCommandArgs {
 	planId?: string;
-	request: string;
+	request?: string;
 }
 
 const MAX_GENERATED_PLAN_ID_LENGTH = 48;
@@ -14,7 +14,7 @@ export function parsePlannerCreateCommandArgs(
 ): PlannerCreateCommandArgs | null {
 	const tokens = tokenizeCommandArgs(args);
 	if (tokens.length === 0) {
-		return null;
+		return {};
 	}
 
 	let planId: string | undefined;
@@ -42,8 +42,10 @@ export function parsePlannerCreateCommandArgs(
 	}
 
 	const request = requestParts.join(" ").trim();
-	if (request.length === 0) return null;
-	return planId ? { planId, request } : { request };
+	return {
+		...(planId ? { planId } : {}),
+		...(request.length > 0 ? { request } : {}),
+	};
 }
 
 export function resolvePlannerPlanId(input: {

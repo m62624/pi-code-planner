@@ -496,23 +496,26 @@ function registerInstructionDefaultsSync(pi: ExtensionAPI): void {
 function registerPlannerCommands(pi: ExtensionAPI): void {
 	pi.registerCommand("planner-create", {
 		description:
-			"Create a planner plan, create its worktree, and switch Pi into the worktree session.",
+			"Open a multiline planner request editor, then create a worktree plan. Optional: --id <plan-id>.",
 		handler: async (args, ctx) => {
 			await ctx.waitForIdle();
-			let parsed = parsePlannerCreateCommandArgs(args);
-			if (!parsed && args.trim().length === 0) {
-				const request = await ctx.ui.editor("Describe the planner request", "");
-				if (request?.trim()) {
-					parsed = { request: request.trim() };
-				}
-			}
+			const parsed = parsePlannerCreateCommandArgs(args);
 			if (!parsed) {
 				ctx.ui.notify(
-					"Usage: /planner-create [--id <plan-id>] <request>",
+					"Usage: /planner-create [--id <plan-id>] [initial request text]",
 					"error",
 				);
 				return;
 			}
+			const request = await ctx.ui.editor(
+				"Describe the requested outcome",
+				parsed.request ?? "",
+			);
+			if (!request?.trim()) {
+				ctx.ui.notify("Planner creation cancelled.", "info");
+				return;
+			}
+			const normalizedRequest = request.trim();
 
 			const fs = createNodeFs();
 			const agentDir = getAgentDir();
@@ -526,7 +529,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			try {
 				planId = resolvePlannerPlanId({
 					requestedPlanId: parsed.planId,
-					request: parsed.request,
+					request: normalizedRequest,
 					project,
 				});
 			} catch (error) {
@@ -540,7 +543,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				toolName: "planner_create_plan",
 				params: {
 					planId,
-					request: parsed.request,
+					request: normalizedRequest,
 				},
 			});
 
@@ -1618,7 +1621,7 @@ async function resolveRenameCommandArgs(input: {
 	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
 }): Promise<{ planId?: string; title: string } | null> {
 	const parsed = parsePlannerCreateCommandArgs(input.args);
-	if (parsed) {
+	if (parsed?.request) {
 		return { planId: parsed.planId, title: parsed.request };
 	}
 

@@ -93,19 +93,24 @@ pi install git:github.com/<account>/pi-code-planner
 Open Pi in the project you want to modify and run:
 
 ```text
-/planner-create Implement a focused project change
+/planner-create
 ```
+
+Pi opens a multiline editor for the requested outcome. Describe the complete goal
+there; the model will normalize it into `goal.md`, ask for approval, inspect the
+project, and ask evidence-based questions later during discovery.
 
 Optional explicit plan id:
 
 ```text
-/planner-create --id focused-change Implement a focused project change
+/planner-create --id focused-change
 ```
 
-If no id is provided, the extension generates a deterministic slug from the raw request and adds a numeric suffix when needed.
-If no request is provided, Pi opens a multiline editor for the requested outcome. The
-human-readable title is generated from the first non-empty request line and kept
-short; the full text remains in `request.md`.
+If no id is provided, the extension generates a deterministic slug from the raw
+request and adds a numeric suffix when needed. Inline text after the command is
+accepted only as an optional editor prefill. The human-readable title is generated
+from the first non-empty request line and kept short; the full text remains in
+`request.md`.
 
 Plan creation performs the bootstrap automatically:
 
@@ -139,7 +144,7 @@ These are Pi slash commands for the user. They are not model tools.
 
 | Command | Purpose |
 | --- | --- |
-| `/planner-create [--id <plan-id>] <request>` | Create a plan from a raw requested outcome, create its worktree and state files, and open the worktree Pi session. Without a request, open a multiline editor. |
+| `/planner-create [--id <plan-id>] [initial text]` | Open a multiline request editor, then create a plan, worktree, state files, and worktree Pi session. The optional id controls stable branch and folder naming; inline text is only an editor prefill. |
 | `/planner-switch [<plan-id>]` | Switch to another plan in the current project. Without an id, open the TUI picker. |
 | `/planner-rename [--id <plan-id>] <new-title>` | Rename a human-readable plan title without changing ids, branches, or paths. |
 | `/planner-delete [<plan-id>]` | Delete a selected inactive plan after confirmation. Without an id, open the TUI picker. |
