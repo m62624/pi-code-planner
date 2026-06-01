@@ -31,18 +31,21 @@ describe("planner stage behavior", () => {
 		expect(() =>
 			getPlannerStageStepBehavior({
 				stage: "planning",
-				step: "read_project",
+				step: "scan_project_structure",
 			}),
 		).toThrow("belongs to discovery");
 	});
 
 	it("keeps discovery as read/memory/artifact work without commits", () => {
 		expect(
-			getPlannerStageStepBehavior({ stage: "discovery", step: "read_project" }),
+			getPlannerStageStepBehavior({
+				stage: "discovery",
+				step: "scan_project_structure",
+			}),
 		).toMatchObject({
 			projectAccess: "read_only",
 			commitPolicy: "forbidden",
-			memoryPolicy: "not_required",
+			memoryPolicy: "write_entries",
 		});
 		expect(
 			getPlannerStageStepBehavior({
@@ -57,10 +60,10 @@ describe("planner stage behavior", () => {
 		expect(
 			getPlannerStageStepBehavior({
 				stage: "discovery",
-				step: "write_symbols",
+				step: "index_files_iteratively",
 			}),
 		).toMatchObject({
-			projectAccess: "planner_artifacts",
+			projectAccess: "read_only",
 			commitPolicy: "forbidden",
 			memoryPolicy: "write_entries",
 		});
@@ -233,9 +236,9 @@ describe("planner stage behavior", () => {
 			checkPlannerStageBehaviorWrapperTool({
 				behavior: getPlannerStageStepBehavior({
 					stage: "discovery",
-					step: "read_project",
+					step: "scan_project_structure",
 				}),
-				tool: "planner_memory_inspect",
+				tool: "planner_memory_sync_checkpoint",
 			}),
 		).toMatchObject({ allow: false });
 	});

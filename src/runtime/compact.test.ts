@@ -78,6 +78,8 @@ describe("planner compact runtime", () => {
 
 		expect(message).toContain(PLANNER_SYSTEM_INSTRUCTIONS_HEADER);
 		expect(message).toContain("Call planner_status now");
+		expect(message).toContain("activeIndexNextUnreadLine");
+		expect(message).toContain("Do not reread completed files");
 		expect(message).toContain("- planId: plan-a");
 		expect(message).toContain("- step: compact_task");
 		expect(message).toContain("Check git and memory before resuming.");

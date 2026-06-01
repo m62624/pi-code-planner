@@ -9,7 +9,8 @@ Turn the user's raw request into an explicit approved goal before reading projec
 1. `draft_goal`
    - Read `request.md`.
    - Write `goal.md` in your own words.
-   - Include the requested outcome, current assumptions, non-goals, constraints, and focused clarification questions.
+   - Include the requested outcome, current assumptions, non-goals, and constraints.
+   - Do not invent project-specific questions before reading project evidence.
    - Do not inspect project source.
 2. `await_goal_approval`
    - Show the user the exact `goal.md` path and a concise summary.
@@ -28,6 +29,8 @@ Turn the user's raw request into an explicit approved goal before reading projec
 ## Exit Condition
 
 Intake is complete only after `goal.md` reflects the user's intent and the user explicitly approves it.
+
+Evidence-based clarification questions belong to `discovery/write_questions`, after the model has indexed the project. Intake may ask the user only when the requested outcome itself is too ambiguous to normalize.
 
 ## auto-compact
 

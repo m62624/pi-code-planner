@@ -16,6 +16,7 @@ import type {
 	MemoryDirtyReason,
 	MemoryDirtyState,
 	MemoryFileEntry,
+	MemoryIndexingState,
 	MemoryRelationEntry,
 	MemorySymbolEntry,
 } from "./schema";
@@ -38,6 +39,9 @@ export async function initializeMemoryFiles(
 	await ensureText(fs, paths.filesIndexJsonl, "");
 	await ensureText(fs, paths.symbolsIndexJsonl, "");
 	await ensureText(fs, paths.relationsIndexJsonl, "");
+	if (!(await fs.exists(paths.indexingJson))) {
+		await writeJson(fs, paths.indexingJson, createEmptyMemoryIndexingState());
+	}
 	if (!(await fs.exists(paths.dirtyJson))) {
 		await writeJson(fs, paths.dirtyJson, createEmptyDirtyState());
 	}
@@ -294,6 +298,14 @@ export async function computeMemoryCheckpoint(
 
 function createEmptyDirtyState(): MemoryDirtyState {
 	return { files: {} };
+}
+
+export function createEmptyMemoryIndexingState(): MemoryIndexingState {
+	return {
+		mode: "idle",
+		activeFile: null,
+		files: [],
+	};
 }
 
 async function ensureText(

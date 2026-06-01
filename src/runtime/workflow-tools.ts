@@ -1,4 +1,10 @@
 import type { GitRunner } from "../git/runner";
+import { inspectMemoryGate } from "../memory/gate";
+import {
+	readMemoryIndexingState,
+	summarizeMemoryIndexing,
+} from "../memory/indexing";
+import { readMemoryCheckpoint } from "../memory/manager";
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
 import {
@@ -70,6 +76,29 @@ export async function executePlannerWorkflowTool(
 			result,
 		};
 	}
+	const exitBlock = await validateWorkflowExit({
+		...input,
+		orchestrator,
+		transition,
+	});
+	if (exitBlock) {
+		const state =
+			orchestrator.preflight.context.status === "ready"
+				? orchestrator.preflight.context.state
+				: null;
+		const result: PlannerStateTransitionResult = {
+			status: "blocked",
+			code: "runtime_blocked",
+			transition,
+			reason: exitBlock,
+			state,
+		};
+		return {
+			text: formatWorkflowToolResult(result),
+			transition,
+			result,
+		};
+	}
 	const result = await applyPlannerStateTransition({
 		fs: input.fs,
 		preflight: orchestrator.preflight,
@@ -81,6 +110,78 @@ export async function executePlannerWorkflowTool(
 		transition,
 		result,
 	};
+}
+
+async function validateWorkflowExit(input: {
+	fs: PlannerFs;
+	git: GitRunner;
+	orchestrator: Awaited<ReturnType<typeof runPlannerOrchestrator>>;
+	transition: PlannerStateTransition;
+}): Promise<string | null> {
+	if (
+		input.transition.type !== "finish_step" ||
+		input.orchestrator.preflight.context.status !== "ready"
+	) {
+		return null;
+	}
+	const { state } = input.orchestrator.preflight.context;
+	const memoryPaths = input.orchestrator.preflight.memoryPaths;
+	if (!memoryPaths) {
+		return null;
+	}
+	if (state.stage === "discovery" && state.step === "scan_project_structure") {
+		const indexing = await readMemoryIndexingState(input.fs, memoryPaths);
+		return indexing.mode === "initial_discovery"
+			? null
+			: "Project structure scan is incomplete. Call planner_memory_scan_project before finishing discovery/scan_project_structure.";
+	}
+	if (state.stage === "discovery" && state.step === "index_files_iteratively") {
+		const summary = summarizeMemoryIndexing(
+			await readMemoryIndexingState(input.fs, memoryPaths),
+		);
+		return summary.complete
+			? null
+			: [
+					"Iterative memory indexing is incomplete.",
+					`Active file: ${summary.activeFile ?? "(none)"}.`,
+					`Pending=${summary.pending}, reading=${summary.reading}, verifying=${summary.verifying}, failed=${summary.failed}.`,
+					"Call planner_memory_index_status and continue the exact active file.",
+				].join("\n");
+	}
+	if (state.stage === "discovery" && state.step === "verify_memory") {
+		const summary = summarizeMemoryIndexing(
+			await readMemoryIndexingState(input.fs, memoryPaths),
+		);
+		if (!summary.complete) {
+			return [
+				"Memory verification boundary cannot finish while iterative indexing is incomplete.",
+				`Active file: ${summary.activeFile ?? "(none)"}.`,
+				`Pending=${summary.pending}, reading=${summary.reading}, verifying=${summary.verifying}, failed=${summary.failed}.`,
+				"Call planner_memory_index_status and finish the exact active file first.",
+			].join("\n");
+		}
+		if (!state.worktreePath) {
+			return "Planner worktree path is missing.";
+		}
+		const inspection = await inspectMemoryGate({
+			fs: input.fs,
+			git: input.git,
+			repoRoot: state.worktreePath,
+			memoryPaths,
+		});
+		const checkpoint = await readMemoryCheckpoint(input.fs, memoryPaths);
+		const head = input.orchestrator.preflight.gitReality?.headCommit;
+		if (!inspection.clean || checkpoint.commit !== head) {
+			return [
+				"Memory verification boundary is not complete.",
+				`Memory clean: ${String(inspection.clean)}.`,
+				`Checkpoint commit: ${checkpoint.commit ?? "(none)"}.`,
+				`Current HEAD: ${head ?? "(none)"}.`,
+				"Use planner_memory_verify and planner_memory_sync_checkpoint before finishing discovery/verify_memory.",
+			].join("\n");
+		}
+	}
+	return null;
 }
 
 export function workflowToolTransition(

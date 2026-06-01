@@ -95,6 +95,7 @@ export function buildPlannerCompactInstructions(input: {
 		"",
 		"Create a compact summary for pi-code-planner continuation.",
 		"Preserve planner state, artifact paths, git/memory gates, completed work, open risks, and the exact next required planner action.",
+		"Preserve memory indexing mode, active indexing file, and exact next unread line when a durable indexing queue is in progress.",
 		"Do not mark any planner step complete unless state.json already says it is complete.",
 		"After compaction, continuation must call planner_status before choosing any next action.",
 		"",
@@ -143,6 +144,7 @@ export function buildPlannerPostAutoCompactMessage(input: {
 		"Do not continue from memory or from the previous chat state.",
 		"Call planner_status now and follow the exact reported stage, step, allowed wrappers, memory gate, and recovery gate.",
 		"If planner_status reports stale memory, update planner memory before continuing.",
+		"If planner_status reports an active memory indexing file, resume that file from activeIndexNextUnreadLine. Do not reread completed files or claim another file.",
 		"If planner_status reports recovery, use recovery tools and ask the user before destructive repair.",
 		"Do not use raw git. Use planner git wrappers only.",
 		"",
@@ -214,6 +216,7 @@ function artifactLines(preflight: PlannerPreflightResult): string[] {
 			`- memory files: ${preflight.memoryPaths.filesIndexJsonl}`,
 			`- memory symbols: ${preflight.memoryPaths.symbolsIndexJsonl}`,
 			`- memory relations: ${preflight.memoryPaths.relationsIndexJsonl}`,
+			`- memory indexing progress: ${preflight.memoryPaths.indexingJson}`,
 		);
 	}
 	return lines;

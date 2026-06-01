@@ -105,7 +105,7 @@ describe("persisted planner state transition", () => {
 		const result = await applyPlannerStateTransition({
 			fs: setup.fs,
 			preflight: setup.preflight,
-			tool: "planner_memory_upsert_files",
+			tool: "planner_memory_scan_project",
 			transition: { type: "start_step" },
 		});
 
@@ -122,7 +122,7 @@ describe("persisted planner state transition", () => {
 	it("returns state machine errors without saving invalid transitions", async () => {
 		const setup = await createReadySetup({
 			stepStatus: "completed",
-			nextStep: "write_symbols",
+			nextStep: "index_files_iteratively",
 		});
 
 		const result = await applyPlannerStateTransition({
@@ -138,7 +138,7 @@ describe("persisted planner state transition", () => {
 		});
 		expect(await readPlanState(setup.fs, setup.planPaths)).toMatchObject({
 			step: "check_project",
-			nextStep: "write_symbols",
+			nextStep: "index_files_iteratively",
 		});
 	});
 

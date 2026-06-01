@@ -97,7 +97,7 @@ export function getAllowedNextPlannerPositions(
 	if (input.stage === "intake" && input.step === "await_goal_approval") {
 		return [
 			{ stage: "intake", step: "draft_goal" },
-			{ stage: "discovery", step: "read_project" },
+			{ stage: "discovery", step: "scan_project_structure" },
 		];
 	}
 	if (input.stage === "discovery" && input.step === "enter_planning") {

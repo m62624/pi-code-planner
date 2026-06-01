@@ -39,6 +39,7 @@ export type PlannerBehaviorArtifact =
 	| "memory/files/index.jsonl"
 	| "memory/symbols/index.jsonl"
 	| "memory/relations/index.jsonl"
+	| "memory/indexing.json"
 	| "memory/dirty.json"
 	| "memory/latest-checkpoint.json"
 	| "task.json"
@@ -171,6 +172,8 @@ export const PLANNER_STAGE_BEHAVIOR = {
 			"memory/files/index.jsonl",
 			"memory/symbols/index.jsonl",
 			"memory/relations/index.jsonl",
+			"memory/indexing.json",
+			"memory/dirty.json",
 			"memory/latest-checkpoint.json",
 		],
 		requiredGates: ["worktree_location_selected"],
@@ -224,15 +227,42 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		compactPolicy: "not_allowed",
 	}),
 
-	read_project: behavior("discovery", "read_project", {
+	scan_project_structure: behavior("discovery", "scan_project_structure", {
 		projectAccess: "read_only",
-		actions: ["inspect_project", "write_artifacts"],
+		actions: ["inspect_project", "write_memory"],
 		requiredArtifacts: ["goal.md"],
-		updatedArtifacts: ["discovery.md"],
+		updatedArtifacts: ["memory/indexing.json"],
 		requiredGates: ["plan_worktree_exists"],
-		expectedTools: ["planner_status"],
+		expectedTools: [
+			"planner_memory_scan_project",
+			"planner_memory_index_status",
+		],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
+		memoryPolicy: "write_entries",
+		compactPolicy: "not_allowed",
+	}),
+	index_files_iteratively: behavior("discovery", "index_files_iteratively", {
+		projectAccess: "read_only",
+		actions: ["inspect_project", "write_memory"],
+		requiredArtifacts: ["memory/indexing.json"],
+		updatedArtifacts: [
+			"memory/indexing.json",
+			"memory/files/index.jsonl",
+			"memory/symbols/index.jsonl",
+		],
+		requiredGates: [],
+		expectedTools: [
+			"planner_memory_index_status",
+			"planner_memory_next_file",
+			"planner_memory_read_chunk",
+			"planner_memory_upsert_active_file",
+			"planner_memory_upsert_symbols",
+			"planner_memory_verify_active_file",
+			"planner_memory_complete_active_file",
+			"planner_memory_ignore_active_file",
+		],
+		commitPolicy: "forbidden",
+		memoryPolicy: "write_entries",
 		compactPolicy: "not_allowed",
 	}),
 	write_project_patterns: behavior("discovery", "write_project_patterns", {
@@ -242,28 +272,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		updatedArtifacts: ["project_patterns.md"],
 		requiredGates: [],
 		expectedTools: ["planner_memory_write_project_patterns"],
-		commitPolicy: "forbidden",
-		memoryPolicy: "write_entries",
-		compactPolicy: "not_allowed",
-	}),
-	write_file_index: behavior("discovery", "write_file_index", {
-		projectAccess: "planner_artifacts",
-		actions: ["write_memory"],
-		requiredArtifacts: ["project_patterns.md"],
-		updatedArtifacts: ["memory/files/index.jsonl"],
-		requiredGates: [],
-		expectedTools: ["planner_memory_upsert_files"],
-		commitPolicy: "forbidden",
-		memoryPolicy: "write_entries",
-		compactPolicy: "not_allowed",
-	}),
-	write_symbols: behavior("discovery", "write_symbols", {
-		projectAccess: "planner_artifacts",
-		actions: ["write_memory"],
-		requiredArtifacts: ["memory/files/index.jsonl"],
-		updatedArtifacts: ["memory/symbols/index.jsonl"],
-		requiredGates: [],
-		expectedTools: ["planner_memory_upsert_symbols"],
 		commitPolicy: "forbidden",
 		memoryPolicy: "write_entries",
 		compactPolicy: "not_allowed",
@@ -436,7 +444,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["experiment_branch_ready"],
 		expectedTools: [
 			"planner_git_commit",
-			"planner_memory_upsert_files",
+			"planner_memory_scan_project",
 			"planner_memory_upsert_symbols",
 			"planner_memory_upsert_relations",
 		],
@@ -478,7 +486,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["experiment_selected"],
 		expectedTools: [
 			"planner_git_merge_selected_experiment",
-			"planner_memory_upsert_files",
+			"planner_memory_scan_project",
 			"planner_memory_upsert_symbols",
 			"planner_memory_upsert_relations",
 		],
@@ -494,7 +502,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["experiment_merged"],
 		expectedTools: [
 			"planner_git_commit",
-			"planner_memory_upsert_files",
+			"planner_memory_scan_project",
 			"planner_memory_upsert_symbols",
 			"planner_memory_upsert_relations",
 		],
@@ -521,7 +529,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["final_tests_passed", "memory_checkpoint_synced"],
 		expectedTools: [
 			"planner_git_merge_task_to_plan",
-			"planner_memory_upsert_files",
+			"planner_memory_scan_project",
 			"planner_memory_upsert_symbols",
 			"planner_memory_upsert_relations",
 		],
@@ -704,6 +712,9 @@ export function getPlannerStageStepBehavior(input: {
 	step: PlannerStep;
 }): PlannerStageStepBehavior {
 	const behavior = PLANNER_STAGE_BEHAVIOR[input.step];
+	if (!behavior) {
+		throw new Error(`Unknown planner behavior step: ${input.step}.`);
+	}
 	if (behavior.stage !== input.stage) {
 		throw new Error(
 			`Planner behavior mismatch: ${input.stage}/${input.step} belongs to ${behavior.stage}.`,
@@ -884,15 +895,25 @@ function blockBehaviorTool(
 }
 
 function isMemoryReadTool(tool: PlannerWrapperTool): boolean {
-	return tool === "planner_memory_inspect" || tool === "planner_memory_search";
+	return (
+		tool === "planner_memory_inspect" ||
+		tool === "planner_memory_search" ||
+		tool === "planner_memory_index_status"
+	);
 }
 
 function isMemoryWriteTool(tool: PlannerWrapperTool): boolean {
 	return (
 		tool === "planner_memory_apply_freshness" ||
+		tool === "planner_memory_scan_project" ||
+		tool === "planner_memory_next_file" ||
+		tool === "planner_memory_read_chunk" ||
+		tool === "planner_memory_upsert_active_file" ||
 		tool === "planner_memory_write_project_patterns" ||
-		tool === "planner_memory_upsert_files" ||
 		tool === "planner_memory_upsert_symbols" ||
+		tool === "planner_memory_verify_active_file" ||
+		tool === "planner_memory_complete_active_file" ||
+		tool === "planner_memory_ignore_active_file" ||
 		tool === "planner_memory_upsert_relations"
 	);
 }

@@ -100,7 +100,7 @@ describe("planner state machine", () => {
 			advancePlannerStep(
 				state({
 					stepStatus: "completed",
-					nextStep: "write_symbols",
+					nextStep: "index_files_iteratively",
 				}),
 			),
 		).toThrowStateMachine("invalid_next_step");
@@ -155,7 +155,7 @@ describe("planner state machine", () => {
 		});
 		expect(getAllowedNextPlannerPositions(current)).toEqual([
 			{ stage: "intake", step: "draft_goal" },
-			{ stage: "discovery", step: "read_project" },
+			{ stage: "discovery", step: "scan_project_structure" },
 		]);
 		expect(() => completePlannerStep(current)).toThrowStateMachine(
 			"ambiguous_next_step",

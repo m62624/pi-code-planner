@@ -418,7 +418,7 @@ describe("planner preflight orchestrator", () => {
 		expect(
 			checkPlannerPreflightToolAllowed({
 				preflight: result,
-				tool: "planner_memory_upsert_files",
+				tool: "planner_memory_scan_project",
 			}).allow,
 		).toBe(true);
 	});
@@ -497,7 +497,7 @@ async function createActivePlan(
 			worktreePath,
 		}),
 		stage: "discovery",
-		step: "read_project",
+		step: "scan_project_structure",
 		stepStatus: "running",
 		currentBranch: "plan/plan-a",
 		lastCheckpointCommit: "abc123",

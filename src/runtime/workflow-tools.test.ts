@@ -12,6 +12,7 @@ import type {
 	GitWorktreeAddInput,
 	GitWorktreeRemoveInput,
 } from "../git/runner";
+import { writeMemoryIndexingState } from "../memory/indexing";
 import {
 	initializeMemoryFiles,
 	upsertFileEntries,
@@ -50,11 +51,11 @@ describe("planner workflow tools", () => {
 		expect(
 			transition("planner_resume_after_recovery", {
 				targetStage: "discovery",
-				targetStep: "read_project",
+				targetStep: "scan_project_structure",
 			}),
 		).toEqual({
 			type: "resume_after_recovery",
-			target: { stage: "discovery", step: "read_project" },
+			target: { stage: "discovery", step: "scan_project_structure" },
 		});
 	});
 
@@ -128,6 +129,90 @@ describe("planner workflow tools", () => {
 			step: "check_project",
 			stepStatus: "running",
 		});
+	});
+
+	it("blocks discovery scan completion until a durable indexing queue exists", async () => {
+		const setup = await createWorkflowSetup({
+			stage: "discovery",
+			step: "scan_project_structure",
+			stepStatus: "running",
+		});
+
+		const result = await executePlannerWorkflowTool({
+			fs: setup.fs,
+			git: new MockGitRunner(),
+			projectPaths: setup.projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+
+		expect(result.result).toMatchObject({
+			status: "blocked",
+			code: "runtime_blocked",
+		});
+		expect(result.text).toContain("planner_memory_scan_project");
+	});
+
+	it("blocks iterative discovery completion while an active file is incomplete", async () => {
+		const setup = await createWorkflowSetup({
+			stage: "discovery",
+			step: "index_files_iteratively",
+			stepStatus: "running",
+		});
+		await writeMemoryIndexingState(setup.fs, setup.memoryPaths, {
+			mode: "initial_discovery",
+			activeFile: "src/a.ts",
+			files: [
+				{
+					path: "src/a.ts",
+					hash: "hash-a",
+					status: "reading",
+					lineCount: 10,
+					nextUnreadLine: 5,
+					candidateSymbolIds: [],
+					verificationPassed: false,
+					failureReason: null,
+				},
+			],
+		});
+
+		const result = await executePlannerWorkflowTool({
+			fs: setup.fs,
+			git: new MockGitRunner(),
+			projectPaths: setup.projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+
+		expect(result.result).toMatchObject({
+			status: "blocked",
+			code: "runtime_blocked",
+		});
+		expect(result.text).toContain("Active file: src/a.ts");
+		expect(result.text).toContain("reading=1");
+	});
+
+	it("blocks the discovery verification boundary while the durable queue is incomplete", async () => {
+		const setup = await createWorkflowSetup({
+			stage: "discovery",
+			step: "verify_memory",
+			stepStatus: "running",
+		});
+
+		const result = await executePlannerWorkflowTool({
+			fs: setup.fs,
+			git: new MockGitRunner(),
+			projectPaths: setup.projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+
+		expect(result.result).toMatchObject({
+			status: "blocked",
+			code: "runtime_blocked",
+		});
+		expect(result.text).toContain("iterative indexing is incomplete");
+		expect(result.text).toContain("planner_memory_index_status");
 	});
 });
 
@@ -210,5 +295,5 @@ async function createWorkflowSetup(statePatch: Partial<PlanStateRecord> = {}) {
 	]);
 	await writeMemoryCheckpoint(fs, memoryPaths, "abc123");
 	await setActivePlan(fs, projectPaths, "plan-a");
-	return { fs, projectPaths, planPaths };
+	return { fs, projectPaths, planPaths, memoryPaths };
 }

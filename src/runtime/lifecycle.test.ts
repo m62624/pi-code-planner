@@ -110,7 +110,7 @@ describe("planner lifecycle decision", () => {
 		const preflight = readyPreflight({
 			state: state({
 				stage: "discovery",
-				step: "read_project",
+				step: "scan_project_structure",
 				stepStatus: "completed",
 				nextStep: "write_project_patterns",
 			}),
@@ -152,7 +152,7 @@ describe("planner lifecycle decision", () => {
 
 		expect(decidePlannerLifecycleNext(preflight)).toMatchObject({
 			action: "write_memory",
-			requiredTool: "planner_memory_upsert_files",
+			requiredTool: "planner_memory_scan_project",
 			requiredTransition: null,
 			runtimeAction: "require_memory_update",
 		});
@@ -277,7 +277,7 @@ function state(input: Partial<PlanStateRecord> = {}): PlanStateRecord {
 			worktreePath: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
 		}),
 		stage: "discovery",
-		step: "read_project",
+		step: "scan_project_structure",
 		stepStatus: "pending",
 		currentBranch: "plan/plan-a",
 		lastCheckpointCommit: "abc123",

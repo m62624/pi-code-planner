@@ -172,7 +172,7 @@ async function createPlanTool(
 			`Title: ${title}`,
 			`Base branch: ${baseBranch}`,
 			`Worktree: ${worktreeLocation}`,
-			"Next: switch/open Pi in the planner worktree session, call planner_status, draft goal.md in your own words, ask focused clarification questions, and wait for explicit user approval before discovery.",
+			"Next: switch/open Pi in the planner worktree session, call planner_status, draft goal.md in your own words, and wait for explicit user approval before discovery. Ask evidence-based clarification questions only after discovery.",
 		].join("\n"),
 		{
 			project: nextProject,

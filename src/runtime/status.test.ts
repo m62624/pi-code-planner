@@ -14,6 +14,7 @@ import type {
 } from "../git/runner";
 import { syncInstructionFiles } from "../instructions/manager";
 import { createInstructionPaths } from "../instructions/paths";
+import { writeMemoryIndexingState } from "../memory/indexing";
 import {
 	initializeMemoryFiles,
 	upsertFileEntries,
@@ -65,7 +66,7 @@ describe("planner status text", () => {
 
 	it("rejects a step rule request with the wrong stage", () => {
 		expect(() =>
-			getPlannerStepRule({ stage: "planning", step: "read_project" }),
+			getPlannerStepRule({ stage: "planning", step: "scan_project_structure" }),
 		).toThrow("belongs to discovery");
 	});
 
@@ -168,7 +169,7 @@ describe("planner status text", () => {
 		expect(text).toContain(
 			"Update planner memory first: inspect/apply freshness, rewrite affected file/symbol/relation/effects entries",
 		);
-		expect(text).toContain("planner_memory_upsert_files");
+		expect(text).toContain("planner_memory_scan_project");
 		expect(text).toContain("memoryUpdateReason: external_commit");
 	});
 
@@ -203,6 +204,50 @@ describe("planner status text", () => {
 		expect(text).not.toContain("Read the project broadly.");
 		expect(text).toContain(setup.planPaths.requestMd);
 		expect(text).toContain(setup.planPaths.goalMd);
+	});
+
+	it("reports the exact active file line after compact during iterative discovery", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createStatusSetup(fs, {
+			state: {
+				stage: "discovery",
+				step: "index_files_iteratively",
+				stepStatus: "running",
+			},
+		});
+		await syncInstructionFiles(
+			fs,
+			createInstructionPaths(setup.projectPaths),
+			TEST_INSTRUCTION_DEFAULTS,
+		);
+		await writeMemoryIndexingState(fs, setup.memoryPaths, {
+			mode: "initial_discovery",
+			activeFile: "src/large.ts",
+			files: [
+				{
+					path: "src/large.ts",
+					hash: "hash-large",
+					status: "reading",
+					lineCount: 900,
+					nextUnreadLine: 401,
+					candidateSymbolIds: [],
+					verificationPassed: false,
+					failureReason: null,
+				},
+			],
+		});
+
+		const preflight = await runPlannerPreflight({
+			fs,
+			git: new MockGitRunner(),
+			projectPaths: setup.projectPaths,
+		});
+		const text = await buildPlannerStatusText({ fs, preflight });
+
+		expect(text).toContain("- activeIndexFile: src/large.ts");
+		expect(text).toContain("- activeIndexNextUnreadLine: 401");
+		expect(text).toContain("- activeIndexLineCount: 900");
+		expect(text).toContain("Do not reread completed files after compact.");
 	});
 });
 
@@ -282,7 +327,7 @@ async function createStatusSetup(
 			worktreePath,
 		}),
 		stage: "discovery",
-		step: "read_project",
+		step: "scan_project_structure",
 		stepStatus: "running",
 		currentBranch: "plan/plan-a",
 		lastCheckpointCommit: "abc123",

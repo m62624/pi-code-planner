@@ -287,14 +287,17 @@ describe("planner recovery inspection", () => {
 			git: new MockGitRunner(),
 			projectPaths: setup.projectPaths,
 			toolName: "planner_recovery_resume",
-			params: { targetStage: "discovery", targetStep: "read_project" },
+			params: {
+				targetStage: "discovery",
+				targetStep: "scan_project_structure",
+			},
 		});
 
 		expect(result.status).toBe("applied");
 		expect(result.text).toContain("Planner recovery resumed");
 		expect(await readPlanState(fs, setup.planPaths)).toMatchObject({
 			stage: "discovery",
-			step: "read_project",
+			step: "scan_project_structure",
 			stepStatus: "pending",
 			broken: false,
 			requiresUserDecision: false,
@@ -321,7 +324,10 @@ describe("planner recovery inspection", () => {
 			git: new MockGitRunner({ branch: "main" }),
 			projectPaths: setup.projectPaths,
 			toolName: "planner_recovery_resume",
-			params: { targetStage: "discovery", targetStep: "read_project" },
+			params: {
+				targetStage: "discovery",
+				targetStep: "scan_project_structure",
+			},
 		});
 
 		expect(result.status).toBe("blocked");
@@ -348,7 +354,7 @@ describe("planner recovery inspection", () => {
 			git: new MockGitRunner(),
 			projectPaths: setup.projectPaths,
 			toolName: "planner_recovery_resume",
-			params: { targetStage: "done", targetStep: "read_project" },
+			params: { targetStage: "done", targetStep: "scan_project_structure" },
 		});
 
 		expect(result.status).toBe("blocked");
@@ -378,13 +384,16 @@ describe("planner recovery inspection", () => {
 			git: new MockGitRunner({ head: "new-head" }),
 			projectPaths: setup.projectPaths,
 			toolName: "planner_recovery_resume",
-			params: { targetStage: "discovery", targetStep: "read_project" },
+			params: {
+				targetStage: "discovery",
+				targetStep: "scan_project_structure",
+			},
 		});
 
 		expect(result.status).toBe("applied");
 		expect(await readPlanState(fs, setup.planPaths)).toMatchObject({
 			stage: "discovery",
-			step: "read_project",
+			step: "scan_project_structure",
 			stepStatus: "pending",
 			broken: false,
 			requiresUserDecision: false,
@@ -480,7 +489,7 @@ async function createRecoverySetup(
 			worktreePath,
 		}),
 		stage: "discovery",
-		step: "read_project",
+		step: "scan_project_structure",
 		stepStatus: "running",
 		currentBranch: "plan/plan-a",
 		lastCheckpointCommit: "abc123",

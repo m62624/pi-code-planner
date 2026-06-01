@@ -1,11 +1,23 @@
 import { createHash } from "node:crypto";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join } from "node:path";
 import type { GitRunner } from "../git/runner";
 import {
 	applyMemoryGateFreshness,
 	inspectMemoryGate,
 	type MemoryGateInspection,
 } from "../memory/gate";
+import {
+	addActiveMemoryCandidateSymbols,
+	claimNextMemoryIndexingFile,
+	completeActiveMemoryFile,
+	ignoreActiveMemoryFile,
+	readActiveMemoryFileChunk,
+	readMemoryIndexingState,
+	scanMemoryIndexingQueue,
+	summarizeMemoryIndexing,
+	upsertActiveMemoryFile,
+	verifyActiveMemoryFile,
+} from "../memory/indexing";
 import {
 	clearMemoryDirty,
 	readFileIndex,
@@ -15,6 +27,7 @@ import {
 	writeProjectPatterns,
 } from "../memory/manager";
 import { retrieveMemoryContext } from "../memory/retrieval";
+import { MEMORY_FILE_KINDS, type MemoryFileKind } from "../memory/schema";
 import type {
 	MemoryBatchRejectedEntry,
 	MemoryBatchWriteResult,
@@ -33,9 +46,16 @@ import {
 export const PLANNER_MEMORY_TOOL_NAMES = [
 	"planner_memory_inspect",
 	"planner_memory_apply_freshness",
+	"planner_memory_scan_project",
+	"planner_memory_index_status",
+	"planner_memory_next_file",
+	"planner_memory_read_chunk",
+	"planner_memory_upsert_active_file",
 	"planner_memory_write_project_patterns",
-	"planner_memory_upsert_files",
 	"planner_memory_upsert_symbols",
+	"planner_memory_verify_active_file",
+	"planner_memory_complete_active_file",
+	"planner_memory_ignore_active_file",
 	"planner_memory_upsert_relations",
 	"planner_memory_search",
 	"planner_memory_verify",
@@ -84,188 +104,355 @@ export async function executePlannerMemoryTool(
 		return ready.result;
 	}
 
-	switch (input.toolName) {
-		case "planner_memory_inspect": {
-			const inspection =
-				orchestrator.preflight.memoryGate ??
-				(await inspectMemoryGate({
+	try {
+		switch (input.toolName) {
+			case "planner_memory_inspect": {
+				const inspection =
+					orchestrator.preflight.memoryGate ??
+					(await inspectMemoryGate({
+						fs: input.fs,
+						git: input.git,
+						repoRoot: ready.worktreePath,
+						memoryPaths: ready.memoryPaths,
+					}));
+				return applied(input.toolName, formatMemoryInspection(inspection), {
+					inspection,
+				});
+			}
+			case "planner_memory_apply_freshness": {
+				const inspection = await applyMemoryGateFreshness({
 					fs: input.fs,
 					git: input.git,
 					repoRoot: ready.worktreePath,
 					memoryPaths: ready.memoryPaths,
-				}));
-			return applied(input.toolName, formatMemoryInspection(inspection), {
-				inspection,
-			});
-		}
-		case "planner_memory_apply_freshness": {
-			const inspection = await applyMemoryGateFreshness({
-				fs: input.fs,
-				git: input.git,
-				repoRoot: ready.worktreePath,
-				memoryPaths: ready.memoryPaths,
-				detectedAt: nowIso(input.params),
-			});
-			await refreshMemoryCheckpointHashes(input.fs, ready.memoryPaths);
-			return applied(input.toolName, formatMemoryInspection(inspection), {
-				inspection,
-			});
-		}
-		case "planner_memory_write_project_patterns": {
-			const params = asObject(input.params);
-			const content = requiredString(params, "content");
-			await writeProjectPatterns(input.fs, ready.memoryPaths, content);
-			return applied(
-				input.toolName,
-				[
-					"Planner project patterns written.",
-					`Artifact: ${ready.memoryPaths.projectPatternsMd}`,
-					"Call planner_status before choosing the next planner action.",
-				].join("\n"),
-				{ projectPatternsMd: ready.memoryPaths.projectPatternsMd },
-			);
-		}
-		case "planner_memory_upsert_files": {
-			const params = asObject(input.params);
-			const prepared = await prepareFileEntries({
-				fs: input.fs,
-				worktreePath: ready.worktreePath,
-				files: arrayOrUndefined(params.files) ?? [],
-			});
-			const result = await writeMemoryBatchWithReferences({
-				fs: input.fs,
-				paths: ready.memoryPaths,
-				files: prepared.entries,
-			});
-			appendRejected(result, prepared.rejected);
-			await refreshMemoryCheckpointHashes(input.fs, ready.memoryPaths);
-			return applied(input.toolName, formatMemoryWriteResult("file", result), {
-				result,
-			});
-		}
-		case "planner_memory_upsert_symbols": {
-			const params = asObject(input.params);
-			const prepared = await prepareSymbolEntries({
-				fs: input.fs,
-				paths: ready.memoryPaths,
-				symbols: arrayOrUndefined(params.symbols) ?? [],
-			});
-			const result = await writeMemoryBatchWithReferences({
-				fs: input.fs,
-				paths: ready.memoryPaths,
-				symbols: prepared.entries,
-			});
-			appendRejected(result, prepared.rejected);
-			await refreshMemoryCheckpointHashes(input.fs, ready.memoryPaths);
-			return applied(
-				input.toolName,
-				formatMemoryWriteResult("symbol", result),
-				{ result },
-			);
-		}
-		case "planner_memory_upsert_relations": {
-			const params = asObject(input.params);
-			const result = await writeMemoryBatchWithReferences({
-				fs: input.fs,
-				paths: ready.memoryPaths,
-				relations: prepareRelationEntries(
-					arrayOrUndefined(params.relations) ?? [],
-				),
-			});
-			await refreshMemoryCheckpointHashes(input.fs, ready.memoryPaths);
-			return applied(
-				input.toolName,
-				formatMemoryWriteResult("relation", result),
-				{ result },
-			);
-		}
-		case "planner_memory_search": {
-			const params = asObject(input.params);
-			const result = await retrieveMemoryContext({
-				fs: input.fs,
-				paths: ready.memoryPaths,
-				query: optionalString(params, "query"),
-				cursor: objectOrUndefined(params.cursor),
-				limits: objectOrUndefined(params.limits),
-				filters: objectOrUndefined(params.filters),
-				includeProjectPatterns: booleanOrUndefined(
-					params.includeProjectPatterns,
-				),
-				includeDirtyState: booleanOrUndefined(params.includeDirtyState),
-			});
-			return applied(
-				input.toolName,
-				[
-					"Planner bounded memory search result.",
-					JSON.stringify(result, null, 2),
-				].join("\n"),
-				{ result },
-			);
-		}
-		case "planner_memory_verify": {
-			const inspection = await inspectMemoryGate({
-				fs: input.fs,
-				git: input.git,
-				repoRoot: ready.worktreePath,
-				memoryPaths: ready.memoryPaths,
-			});
-			return applied(
-				input.toolName,
-				inspection.clean
-					? "Planner memory is fresh. Call planner_memory_sync_checkpoint to clear the memory gate."
-					: formatMemoryInspection(inspection),
-				{ inspection },
-			);
-		}
-		case "planner_memory_sync_checkpoint": {
-			if (orchestrator.preflight.gitReality?.isDirty) {
-				return blocked(
+					detectedAt: nowIso(input.params),
+				});
+				await refreshMemoryCheckpointHashes(input.fs, ready.memoryPaths);
+				return applied(input.toolName, formatMemoryInspection(inspection), {
+					inspection,
+				});
+			}
+			case "planner_memory_scan_project": {
+				const inspection =
+					orchestrator.preflight.memoryGate ??
+					(await inspectMemoryGate({
+						fs: input.fs,
+						git: input.git,
+						repoRoot: ready.worktreePath,
+						memoryPaths: ready.memoryPaths,
+					}));
+				const mode = ready.orchestrator.preflight.context.state
+					.requiresMemoryUpdate
+					? "refresh"
+					: "initial_discovery";
+				const state = await scanMemoryIndexingQueue({
+					fs: input.fs,
+					git: input.git,
+					repoRoot: ready.worktreePath,
+					paths: ready.memoryPaths,
+					mode,
+					onlyPaths:
+						mode === "refresh"
+							? inspection.freshness.filesToReindex
+							: undefined,
+				});
+				return applied(input.toolName, formatMemoryIndexingState(state), {
+					state,
+					summary: summarizeMemoryIndexing(state),
+				});
+			}
+			case "planner_memory_index_status": {
+				const state = await readMemoryIndexingState(
+					input.fs,
+					ready.memoryPaths,
+				);
+				return applied(input.toolName, formatMemoryIndexingState(state), {
+					state,
+					summary: summarizeMemoryIndexing(state),
+				});
+			}
+			case "planner_memory_next_file": {
+				const file = await claimNextMemoryIndexingFile(
+					input.fs,
+					ready.memoryPaths,
+				);
+				const state = await readMemoryIndexingState(
+					input.fs,
+					ready.memoryPaths,
+				);
+				return applied(
 					input.toolName,
-					"Cannot sync planner memory checkpoint while the worktree is dirty. Commit planner changes first with planner_git_commit, then update and verify memory for the new HEAD.",
-					{ gitReality: orchestrator.preflight.gitReality },
+					file
+						? [
+								`Planner memory active file: ${file.path}.`,
+								`Lines: ${file.lineCount}. Continue from line ${file.nextUnreadLine}.`,
+								"Call planner_memory_read_chunk. Do not read another file until this file is verified and completed.",
+							].join("\n")
+						: formatMemoryIndexingState(state),
+					{ file, state, summary: summarizeMemoryIndexing(state) },
 				);
 			}
-			const inspection = await inspectMemoryGate({
-				fs: input.fs,
-				git: input.git,
-				repoRoot: ready.worktreePath,
-				memoryPaths: ready.memoryPaths,
-			});
-			if (!inspection.clean) {
-				return blocked(
+			case "planner_memory_read_chunk": {
+				const params = asObject(input.params);
+				const chunk = await readActiveMemoryFileChunk({
+					fs: input.fs,
+					repoRoot: ready.worktreePath,
+					paths: ready.memoryPaths,
+					maxLines: numberOrUndefined(params.maxLines),
+				});
+				return applied(
 					input.toolName,
-					"Memory is still stale. Update file, symbol, relation, and effects entries before syncing checkpoint.",
+					[
+						`Planner memory source chunk: ${chunk.path}.`,
+						`Lines ${chunk.startLine}-${chunk.endLine} of ${chunk.lineCount}.`,
+						`Next unread line: ${chunk.nextUnreadLine}.`,
+						`EOF: ${String(chunk.eof)}.`,
+						"",
+						chunk.content || "(empty file)",
+					].join("\n"),
+					{ chunk },
+				);
+			}
+			case "planner_memory_upsert_active_file": {
+				const params = asObject(input.params);
+				const file = await upsertActiveMemoryFile({
+					fs: input.fs,
+					repoRoot: ready.worktreePath,
+					paths: ready.memoryPaths,
+					kind: requiredMemoryFileKind(params, "kind"),
+					language: requiredString(params, "language"),
+					summary: requiredString(params, "summary"),
+				});
+				await refreshMemoryCheckpointHashes(input.fs, ready.memoryPaths);
+				return applied(
+					input.toolName,
+					[
+						`Planner memory file metadata recorded: ${file.path}.`,
+						"Record reusable symbols in batches of at most 5 with planner_memory_upsert_symbols.",
+						"When symbol extraction is complete, call planner_memory_verify_active_file.",
+					].join("\n"),
+					{ file },
+				);
+			}
+			case "planner_memory_write_project_patterns": {
+				const params = asObject(input.params);
+				const content = requiredString(params, "content");
+				await writeProjectPatterns(input.fs, ready.memoryPaths, content);
+				return applied(
+					input.toolName,
+					[
+						"Planner project patterns written.",
+						`Artifact: ${ready.memoryPaths.projectPatternsMd}`,
+						"Call planner_status before choosing the next planner action.",
+					].join("\n"),
+					{ projectPatternsMd: ready.memoryPaths.projectPatternsMd },
+				);
+			}
+			case "planner_memory_upsert_symbols": {
+				const params = asObject(input.params);
+				const symbols = limitedArray(params.symbols, "symbols");
+				const prepared = await prepareSymbolEntries({
+					fs: input.fs,
+					paths: ready.memoryPaths,
+					worktreePath: ready.worktreePath,
+					symbols,
+				});
+				const result = await writeMemoryBatchWithReferences({
+					fs: input.fs,
+					paths: ready.memoryPaths,
+					symbols: prepared.entries,
+				});
+				appendRejected(result, prepared.rejected);
+				if (result.accepted.symbols.length > 0) {
+					await addActiveMemoryCandidateSymbols({
+						fs: input.fs,
+						paths: ready.memoryPaths,
+						symbols: result.accepted.symbols,
+					});
+				}
+				await refreshMemoryCheckpointHashes(input.fs, ready.memoryPaths);
+				return applied(
+					input.toolName,
+					formatMemoryWriteResult("symbol", result),
+					{ result },
+				);
+			}
+			case "planner_memory_verify_active_file": {
+				const file = await verifyActiveMemoryFile({
+					fs: input.fs,
+					repoRoot: ready.worktreePath,
+					paths: ready.memoryPaths,
+				});
+				return applied(
+					input.toolName,
+					[
+						`Planner memory active file verified: ${file.path}.`,
+						"Call planner_memory_complete_active_file before claiming another file.",
+					].join("\n"),
+					{ file },
+				);
+			}
+			case "planner_memory_complete_active_file": {
+				const state = await completeActiveMemoryFile({
+					fs: input.fs,
+					repoRoot: ready.worktreePath,
+					paths: ready.memoryPaths,
+				});
+				await refreshMemoryCheckpointHashes(input.fs, ready.memoryPaths);
+				return applied(input.toolName, formatMemoryIndexingState(state), {
+					state,
+					summary: summarizeMemoryIndexing(state),
+				});
+			}
+			case "planner_memory_ignore_active_file": {
+				const params = asObject(input.params);
+				const state = await ignoreActiveMemoryFile({
+					fs: input.fs,
+					repoRoot: ready.worktreePath,
+					paths: ready.memoryPaths,
+					kind: requiredMemoryFileKind(params, "kind"),
+					language: requiredString(params, "language"),
+					summary: requiredString(params, "summary"),
+				});
+				await refreshMemoryCheckpointHashes(input.fs, ready.memoryPaths);
+				return applied(input.toolName, formatMemoryIndexingState(state), {
+					state,
+					summary: summarizeMemoryIndexing(state),
+				});
+			}
+			case "planner_memory_upsert_relations": {
+				const params = asObject(input.params);
+				const relations = limitedArray(params.relations, "relations");
+				const result = await writeMemoryBatchWithReferences({
+					fs: input.fs,
+					paths: ready.memoryPaths,
+					relations: await prepareRelationEntries({
+						fs: input.fs,
+						worktreePath: ready.worktreePath,
+						relations,
+					}),
+				});
+				await refreshMemoryCheckpointHashes(input.fs, ready.memoryPaths);
+				return applied(
+					input.toolName,
+					formatMemoryWriteResult("relation", result),
+					{ result },
+				);
+			}
+			case "planner_memory_search": {
+				const params = asObject(input.params);
+				const result = await retrieveMemoryContext({
+					fs: input.fs,
+					paths: ready.memoryPaths,
+					query: optionalString(params, "query"),
+					cursor: objectOrUndefined(params.cursor),
+					limits: objectOrUndefined(params.limits),
+					filters: objectOrUndefined(params.filters),
+					includeProjectPatterns: booleanOrUndefined(
+						params.includeProjectPatterns,
+					),
+					includeDirtyState: booleanOrUndefined(params.includeDirtyState),
+				});
+				return applied(
+					input.toolName,
+					[
+						"Planner bounded memory search result.",
+						JSON.stringify(result, null, 2),
+					].join("\n"),
+					{ result },
+				);
+			}
+			case "planner_memory_verify": {
+				const indexingBlock = await incompleteIndexingQueueReason(
+					input.fs,
+					ready.memoryPaths,
+				);
+				if (indexingBlock) {
+					return blocked(input.toolName, indexingBlock, {
+						indexing: await readMemoryIndexingState(
+							input.fs,
+							ready.memoryPaths,
+						),
+					});
+				}
+				const inspection = await inspectMemoryGate({
+					fs: input.fs,
+					git: input.git,
+					repoRoot: ready.worktreePath,
+					memoryPaths: ready.memoryPaths,
+				});
+				return applied(
+					input.toolName,
+					inspection.clean
+						? "Planner memory is fresh. Call planner_memory_sync_checkpoint to clear the memory gate."
+						: formatMemoryInspection(inspection),
 					{ inspection },
 				);
 			}
-			const head = orchestrator.preflight.gitReality?.headCommit;
-			if (!head) {
-				return blocked(input.toolName, "Git HEAD is unavailable.", {
-					orchestrator,
+			case "planner_memory_sync_checkpoint": {
+				if (orchestrator.preflight.gitReality?.isDirty) {
+					return blocked(
+						input.toolName,
+						"Cannot sync planner memory checkpoint while the worktree is dirty. Commit planner changes first with planner_git_commit, then update and verify memory for the new HEAD.",
+						{ gitReality: orchestrator.preflight.gitReality },
+					);
+				}
+				const indexingBlock = await incompleteIndexingQueueReason(
+					input.fs,
+					ready.memoryPaths,
+				);
+				if (indexingBlock) {
+					return blocked(input.toolName, indexingBlock, {
+						indexing: await readMemoryIndexingState(
+							input.fs,
+							ready.memoryPaths,
+						),
+					});
+				}
+				const inspection = await inspectMemoryGate({
+					fs: input.fs,
+					git: input.git,
+					repoRoot: ready.worktreePath,
+					memoryPaths: ready.memoryPaths,
 				});
+				if (!inspection.clean) {
+					return blocked(
+						input.toolName,
+						"Memory is still stale. Update file, symbol, relation, and effects entries before syncing checkpoint.",
+						{ inspection },
+					);
+				}
+				const head = orchestrator.preflight.gitReality?.headCommit;
+				if (!head) {
+					return blocked(input.toolName, "Git HEAD is unavailable.", {
+						orchestrator,
+					});
+				}
+				await writeMemoryCheckpoint(input.fs, ready.memoryPaths, head);
+				const dirty = await readMemoryDirtyState(input.fs, ready.memoryPaths);
+				await clearMemoryDirty(
+					input.fs,
+					ready.memoryPaths,
+					Object.keys(dirty.files),
+				);
+				const state = markMemoryCheckpointSynced({
+					state: ready.orchestrator.preflight.context.state,
+					headCommit: head,
+				});
+				await savePlanState(
+					input.fs,
+					ready.orchestrator.preflight.context.planPaths,
+					state,
+				);
+				return applied(
+					input.toolName,
+					"Planner memory checkpoint synced. Normal planner flow may continue.",
+					{ checkpointCommit: head, state },
+				);
 			}
-			await writeMemoryCheckpoint(input.fs, ready.memoryPaths, head);
-			const dirty = await readMemoryDirtyState(input.fs, ready.memoryPaths);
-			await clearMemoryDirty(
-				input.fs,
-				ready.memoryPaths,
-				Object.keys(dirty.files),
-			);
-			const state = markMemoryCheckpointSynced({
-				state: ready.orchestrator.preflight.context.state,
-				headCommit: head,
-			});
-			await savePlanState(
-				input.fs,
-				ready.orchestrator.preflight.context.planPaths,
-				state,
-			);
-			return applied(
-				input.toolName,
-				"Planner memory checkpoint synced. Normal planner flow may continue.",
-				{ checkpointCommit: head, state },
-			);
 		}
+	} catch (error) {
+		return blocked(input.toolName, errorMessage(error), { error });
 	}
 }
 
@@ -323,6 +510,24 @@ function readyMemoryContext(
 	};
 }
 
+async function incompleteIndexingQueueReason(
+	fs: PlannerFs,
+	memoryPaths: NonNullable<
+		PlannerOrchestratorResult["preflight"]["memoryPaths"]
+	>,
+): Promise<string | null> {
+	const state = await readMemoryIndexingState(fs, memoryPaths);
+	const summary = summarizeMemoryIndexing(state);
+	if (summary.complete) {
+		return null;
+	}
+	return [
+		"Planner memory indexing queue is incomplete. Global verification and checkpoint sync are blocked.",
+		`Mode=${summary.mode}; active=${summary.activeFile ?? "(none)"}; pending=${summary.pending}; reading=${summary.reading}; verifying=${summary.verifying}; failed=${summary.failed}.`,
+		"Call planner_memory_index_status and finish the exact active file before global verification.",
+	].join("\n");
+}
+
 async function refreshMemoryCheckpointHashes(
 	fs: PlannerFs,
 	memoryPaths: NonNullable<
@@ -345,51 +550,10 @@ function formatMemoryInspection(inspection: MemoryGateInspection): string {
 	].join("\n");
 }
 
-async function prepareFileEntries(input: {
-	fs: PlannerFs;
-	worktreePath: string;
-	files: readonly unknown[];
-}): Promise<{
-	entries: unknown[];
-	rejected: MemoryBatchRejectedEntry[];
-}> {
-	const entries: unknown[] = [];
-	const rejected: MemoryBatchRejectedEntry[] = [];
-	for (const [index, value] of input.files.entries()) {
-		const entry = asObject(value);
-		const path = optionalString(entry, "path");
-		if (!path || !isSafeRelativePath(input.worktreePath, path)) {
-			rejected.push({
-				kind: "file",
-				index,
-				id: path ?? null,
-				reasons: ["path must be a safe project-relative file path."],
-			});
-			continue;
-		}
-		try {
-			const content = await input.fs.readText(join(input.worktreePath, path));
-			entries.push({
-				...entry,
-				path,
-				hash: hashText(content),
-				status: "indexed",
-			});
-		} catch (error) {
-			rejected.push({
-				kind: "file",
-				index,
-				id: path,
-				reasons: [`Cannot read project file: ${errorMessage(error)}`],
-			});
-		}
-	}
-	return { entries, rejected };
-}
-
 async function prepareSymbolEntries(input: {
 	fs: PlannerFs;
 	paths: NonNullable<PlannerOrchestratorResult["preflight"]["memoryPaths"]>;
+	worktreePath: string;
 	symbols: readonly unknown[];
 }): Promise<{
 	entries: unknown[];
@@ -401,19 +565,38 @@ async function prepareSymbolEntries(input: {
 			entry,
 		]),
 	);
+	const indexing = await readMemoryIndexingState(input.fs, input.paths);
+	const activeFile = indexing.activeFile
+		? indexing.files.find((entry) => entry.path === indexing.activeFile)
+		: null;
 	const entries: unknown[] = [];
 	const rejected: MemoryBatchRejectedEntry[] = [];
 	for (const [index, value] of input.symbols.entries()) {
 		const entry = asObject(value);
 		const path = optionalString(entry, "path");
 		const file = path ? indexedFiles.get(path) : null;
+		if (
+			!activeFile ||
+			activeFile.status !== "verifying" ||
+			path !== activeFile.path
+		) {
+			rejected.push({
+				kind: "symbol",
+				index,
+				id: optionalString(entry, "id") ?? null,
+				reasons: [
+					"Symbol path must match the active verifying file. Claim, fully read, and record one active file before writing its symbols.",
+				],
+			});
+			continue;
+		}
 		if (!path || !file) {
 			rejected.push({
 				kind: "symbol",
 				index,
 				id: optionalString(entry, "id") ?? null,
 				reasons: [
-					"Symbol path must reference an indexed file. Call planner_memory_upsert_files first.",
+					"Symbol path must reference an indexed active file. Call planner_memory_upsert_active_file first.",
 				],
 			});
 			continue;
@@ -423,6 +606,22 @@ async function prepareSymbolEntries(input: {
 		const kind = optionalString(entry, "kind") ?? "unknown";
 		const signature = optionalString(entry, "signature") ?? "";
 		const anchor = asObject(entry.anchor);
+		const anchorSearchText =
+			optionalString(anchor, "searchText") ??
+			optionalString(entry, "anchorSearchText") ??
+			(signature || name);
+		const content = await input.fs.readText(join(input.worktreePath, path));
+		if (!anchorSearchText || !content.includes(anchorSearchText)) {
+			rejected.push({
+				kind: "symbol",
+				index,
+				id: optionalString(entry, "id") ?? null,
+				reasons: [
+					"Symbol anchorSearchText must be a non-empty exact substring of the indexed source file.",
+				],
+			});
+			continue;
+		}
 		entries.push({
 			id:
 				optionalString(entry, "id") ??
@@ -437,10 +636,7 @@ async function prepareSymbolEntries(input: {
 			visibility: optionalString(entry, "visibility") ?? "unknown",
 			effects: entry.effects,
 			anchor: {
-				searchText:
-					optionalString(anchor, "searchText") ??
-					optionalString(entry, "anchorSearchText") ??
-					(signature || name),
+				searchText: anchorSearchText,
 			},
 			verification: { fileHash: file.hash, status: "verified" },
 		});
@@ -448,8 +644,13 @@ async function prepareSymbolEntries(input: {
 	return { entries, rejected };
 }
 
-function prepareRelationEntries(relations: readonly unknown[]): unknown[] {
-	return relations.map((value) => {
+async function prepareRelationEntries(input: {
+	fs: PlannerFs;
+	worktreePath: string;
+	relations: readonly unknown[];
+}): Promise<unknown[]> {
+	const prepared: unknown[] = [];
+	for (const value of input.relations) {
 		const entry = asObject(value);
 		const from = optionalString(entry, "from") ?? "";
 		const to = entry.to === null ? null : (optionalString(entry, "to") ?? "");
@@ -457,7 +658,24 @@ function prepareRelationEntries(relations: readonly unknown[]): unknown[] {
 		const evidencePath = optionalString(entry, "evidencePath") ?? "";
 		const evidenceSearchText =
 			optionalString(entry, "evidenceSearchText") ?? "";
-		return {
+		if (
+			!evidencePath ||
+			isAbsolute(evidencePath) ||
+			evidencePath.split(/[\\/]/).includes("..")
+		) {
+			throw new TypeError(
+				"Relation evidencePath must be a safe project-relative path.",
+			);
+		}
+		const content = await input.fs.readText(
+			join(input.worktreePath, evidencePath),
+		);
+		if (!evidenceSearchText || !content.includes(evidenceSearchText)) {
+			throw new TypeError(
+				`Relation evidenceSearchText must be an exact substring of ${evidencePath}.`,
+			);
+		}
+		prepared.push({
 			id:
 				optionalString(entry, "id") ??
 				stableMemoryId("rel", [
@@ -472,8 +690,32 @@ function prepareRelationEntries(relations: readonly unknown[]): unknown[] {
 			kind,
 			evidencePath,
 			evidenceSearchText,
-		};
-	});
+		});
+	}
+	return prepared;
+}
+
+function formatMemoryIndexingState(
+	state: Awaited<ReturnType<typeof readMemoryIndexingState>>,
+): string {
+	const summary = summarizeMemoryIndexing(state);
+	const active = state.activeFile
+		? state.files.find((entry) => entry.path === state.activeFile)
+		: null;
+	return [
+		"Planner memory indexing status.",
+		`Mode: ${summary.mode}.`,
+		`Files: total=${summary.total}, pending=${summary.pending}, reading=${summary.reading}, verifying=${summary.verifying}, indexed=${summary.indexed}, ignored=${summary.ignored}, missing=${summary.missing}, failed=${summary.failed}.`,
+		`Complete: ${String(summary.complete)}.`,
+		active
+			? `Active file: ${active.path}; next unread line=${active.nextUnreadLine}; line count=${active.lineCount}; verification passed=${String(active.verificationPassed)}.`
+			: "Active file: (none).",
+		summary.complete
+			? "File indexing queue is complete. Call planner_status before continuing."
+			: active
+				? "Continue the active file. Do not claim or read a different file."
+				: "Call planner_memory_next_file.",
+	].join("\n");
 }
 
 function formatMemoryWriteResult(
@@ -520,18 +762,6 @@ function stableMemoryId(
 	return `${prefix}_${hashText(JSON.stringify(parts)).slice(0, 16)}`;
 }
 
-function isSafeRelativePath(root: string, path: string): boolean {
-	if (isAbsolute(path)) return false;
-	const target = resolve(root, path);
-	const fromRoot = relative(resolve(root), target);
-	return (
-		fromRoot !== ".." &&
-		!fromRoot.startsWith("../") &&
-		!fromRoot.startsWith("..\\") &&
-		!isAbsolute(fromRoot)
-	);
-}
-
 function applied(
 	toolName: PlannerMemoryToolName,
 	text: string,
@@ -552,10 +782,6 @@ function asObject(value: unknown): Record<string, unknown> {
 	return value && typeof value === "object"
 		? (value as Record<string, unknown>)
 		: {};
-}
-
-function arrayOrUndefined(value: unknown): readonly unknown[] | undefined {
-	return Array.isArray(value) ? value : undefined;
 }
 
 function objectOrUndefined<T extends object>(value: unknown): T | undefined {
@@ -584,6 +810,31 @@ function requiredString(params: Record<string, unknown>, key: string): string {
 
 function booleanOrUndefined(value: unknown): boolean | undefined {
 	return typeof value === "boolean" ? value : undefined;
+}
+
+function numberOrUndefined(value: unknown): number | undefined {
+	return typeof value === "number" ? value : undefined;
+}
+
+function limitedArray(value: unknown, key: string): readonly unknown[] {
+	if (!Array.isArray(value)) {
+		throw new TypeError(`${key} must be an array.`);
+	}
+	if (value.length > 5) {
+		throw new TypeError(`${key} accepts at most 5 entries per call.`);
+	}
+	return value;
+}
+
+function requiredMemoryFileKind(
+	params: Record<string, unknown>,
+	key: string,
+): MemoryFileKind {
+	const value = requiredString(params, key);
+	if (!MEMORY_FILE_KINDS.includes(value as MemoryFileKind)) {
+		throw new TypeError(`${key} has unsupported value: ${value}.`);
+	}
+	return value as MemoryFileKind;
 }
 
 function errorMessage(error: unknown): string {

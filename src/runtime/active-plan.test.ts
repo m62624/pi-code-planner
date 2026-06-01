@@ -129,19 +129,19 @@ describe("active plan runtime context", () => {
 			update: (state) => ({
 				...state,
 				stage: "discovery",
-				step: "read_project",
+				step: "scan_project_structure",
 				stepStatus: "running",
 			}),
 		});
 
 		expect(updated.state).toMatchObject({
 			stage: "discovery",
-			step: "read_project",
+			step: "scan_project_structure",
 			stepStatus: "running",
 		});
 		await expect(readPlanState(fs, planPaths)).resolves.toMatchObject({
 			stage: "discovery",
-			step: "read_project",
+			step: "scan_project_structure",
 			stepStatus: "running",
 		});
 	});

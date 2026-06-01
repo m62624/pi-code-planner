@@ -133,8 +133,15 @@ describe("planner wrapper tool policy", () => {
 			"planner_git_inspect",
 			"planner_memory_inspect",
 			"planner_memory_apply_freshness",
-			"planner_memory_upsert_files",
+			"planner_memory_scan_project",
+			"planner_memory_index_status",
+			"planner_memory_next_file",
+			"planner_memory_read_chunk",
+			"planner_memory_upsert_active_file",
 			"planner_memory_upsert_symbols",
+			"planner_memory_verify_active_file",
+			"planner_memory_complete_active_file",
+			"planner_memory_ignore_active_file",
 			"planner_memory_upsert_relations",
 			"planner_memory_search",
 			"planner_memory_verify",
@@ -145,7 +152,7 @@ describe("planner wrapper tool policy", () => {
 
 	it("allows memory wrappers while memory update is required", () => {
 		const decision = checkPlannerWrapperAllowed({
-			tool: "planner_memory_upsert_files",
+			tool: "planner_memory_scan_project",
 			state: { ...baseState, requiresMemoryUpdate: true },
 		});
 

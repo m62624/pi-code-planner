@@ -137,11 +137,11 @@ function memoryDecision(
 	return {
 		...base,
 		action: "write_memory",
-		requiredTool: "planner_memory_upsert_files",
+		requiredTool: "planner_memory_scan_project",
 		requiredTransition: null,
 		reason: preflight.memoryGate.instruction,
 		modelMessage:
-			"Update affected planner memory entries with planner_memory_upsert_files, planner_memory_upsert_symbols, and planner_memory_upsert_relations. Re-evaluate summaries, signatures, relations, and effects before verification.",
+			"Call planner_memory_scan_project to build a refresh queue. Process exactly one changed file at a time through next_file, read_chunk, upsert_active_file, symbol batches, verify_active_file, and complete_active_file. Then refresh evidence-backed relations, verify memory, and sync checkpoint.",
 	};
 }
 
@@ -175,7 +175,7 @@ function stateMachineDecision(
 			requiredTransition: null,
 			reason: "Draft the normalized user goal before discovery.",
 			modelMessage:
-				"Read request.md, write goal.md in your own words with focused questions, then call planner_goal_submit. Do not inspect project source.",
+				"Read request.md, write goal.md in your own words, then call planner_goal_submit. Do not inspect project source. Evidence-based clarification questions belong after discovery.",
 		};
 	}
 	if (

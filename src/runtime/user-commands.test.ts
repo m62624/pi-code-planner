@@ -146,7 +146,7 @@ async function createPlanFixture(
 			worktreePath: input.worktreePath,
 		}),
 		stage: "discovery",
-		step: "read_project",
+		step: "scan_project_structure",
 		stepStatus: "pending",
 		currentBranch: `plan/${planId}`,
 		activeBranches: {
@@ -242,7 +242,9 @@ describe("planner user commands", () => {
 		});
 
 		expect(result.status).toBe("applied");
-		expect(result.text).toContain("* plan-a [active] discovery/read_project");
+		expect(result.text).toContain(
+			"* plan-a [active] discovery/scan_project_structure",
+		);
 		expect(result.text).toContain("plan-b");
 		expect(result.text).toContain("missing state.json");
 	});

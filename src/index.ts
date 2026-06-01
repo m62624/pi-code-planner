@@ -124,7 +124,7 @@ const GOAL_SUBMIT_TOOL_PARAMETERS = {
 		content: {
 			type: "string",
 			description:
-				"Full goal.md markdown in your own words: outcome, assumptions, non-goals, constraints, and focused clarification questions.",
+				"Full goal.md markdown in your own words: outcome, assumptions, non-goals, and constraints. Evidence-based clarification questions are collected after discovery.",
 		},
 	},
 	required: ["content"],
@@ -208,30 +208,30 @@ const MEMORY_PROJECT_PATTERNS_TOOL_PARAMETERS = {
 	additionalProperties: false,
 } as const;
 
-const MEMORY_FILES_TOOL_PARAMETERS = {
+const MEMORY_READ_CHUNK_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {
-		files: {
-			type: "array",
+		maxLines: {
+			type: "number",
 			description:
-				"Relevant project files. Use project-relative paths. The extension computes hash and indexed status automatically.",
-			items: {
-				type: "object",
-				properties: {
-					path: { type: "string", description: "Project-relative file path." },
-					kind: { type: "string", enum: MEMORY_FILE_KINDS },
-					language: { type: "string" },
-					summary: {
-						type: "string",
-						description: "Concise file responsibility.",
-					},
-				},
-				required: ["path", "kind", "language", "summary"],
-				additionalProperties: false,
-			},
+				"Optional bounded line count. Defaults to 200 and is capped at 400.",
 		},
 	},
-	required: ["files"],
+	additionalProperties: false,
+} as const;
+
+const MEMORY_ACTIVE_FILE_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		kind: { type: "string", enum: MEMORY_FILE_KINDS },
+		language: { type: "string" },
+		summary: {
+			type: "string",
+			description:
+				"Concise responsibility or explicit reason why the active file is intentionally ignored.",
+		},
+	},
+	required: ["kind", "language", "summary"],
 	additionalProperties: false,
 } as const;
 
@@ -241,7 +241,7 @@ const MEMORY_SYMBOLS_TOOL_PARAMETERS = {
 		symbols: {
 			type: "array",
 			description:
-				"Relevant symbols. Provide semantic fields only. The extension derives a stable id, file language, qualified name, anchor, visibility default, verification.fileHash, and verified status when omitted.",
+				"At most 5 reusable symbols from the current active file. Provide semantic fields only. The extension derives a stable id, file language, qualified name, anchor, visibility default, verification.fileHash, and verified status when omitted.",
 			items: {
 				type: "object",
 				properties: {
@@ -251,7 +251,8 @@ const MEMORY_SYMBOLS_TOOL_PARAMETERS = {
 					},
 					path: {
 						type: "string",
-						description: "Path already indexed by planner_memory_upsert_files.",
+						description:
+							"Current active file path already recorded by planner_memory_upsert_active_file.",
 					},
 					language: {
 						type: "string",
@@ -844,7 +845,7 @@ function registerPlannerTools(
 			label: memoryToolLabel(toolName),
 			description: memoryToolDescription(toolName),
 			promptSnippet:
-				"Use planner memory tools when planner_status reports require_memory_update or the current stage asks you to write/verify memory.",
+				"Use planner memory tools when planner_status requires indexing or refresh. Process one active file at a time: scan queue, claim file, read bounded chunks to EOF, upsert file metadata, upsert at most 5 symbols per call, verify, complete, then claim the next file. After compact, call planner_status and resume the persisted next unread line.",
 			parameters: memoryToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const result = await executePlannerMemoryTool({
@@ -1173,12 +1174,26 @@ function memoryToolLabel(toolName: PlannerMemoryToolName): string {
 			return "Planner Memory Inspect";
 		case "planner_memory_apply_freshness":
 			return "Planner Memory Apply Freshness";
+		case "planner_memory_scan_project":
+			return "Planner Memory Scan Project";
+		case "planner_memory_index_status":
+			return "Planner Memory Index Status";
+		case "planner_memory_next_file":
+			return "Planner Memory Next File";
+		case "planner_memory_read_chunk":
+			return "Planner Memory Read Chunk";
+		case "planner_memory_upsert_active_file":
+			return "Planner Memory Upsert Active File";
 		case "planner_memory_write_project_patterns":
 			return "Planner Memory Write Project Patterns";
-		case "planner_memory_upsert_files":
-			return "Planner Memory Upsert Files";
 		case "planner_memory_upsert_symbols":
 			return "Planner Memory Upsert Symbols";
+		case "planner_memory_verify_active_file":
+			return "Planner Memory Verify Active File";
+		case "planner_memory_complete_active_file":
+			return "Planner Memory Complete Active File";
+		case "planner_memory_ignore_active_file":
+			return "Planner Memory Ignore Active File";
 		case "planner_memory_upsert_relations":
 			return "Planner Memory Upsert Relations";
 		case "planner_memory_search":
@@ -1196,12 +1211,26 @@ function memoryToolDescription(toolName: PlannerMemoryToolName): string {
 			return "Inspect memory freshness and list affected files, symbols, relations, and required effect checks.";
 		case "planner_memory_apply_freshness":
 			return "Mark stale memory entries dirty or missing before the model rewrites affected memory.";
+		case "planner_memory_scan_project":
+			return "Build or resume the durable project file indexing queue. Refresh mode includes only stale files.";
+		case "planner_memory_index_status":
+			return "Show durable file indexing progress, active file, and the exact next unread line.";
+		case "planner_memory_next_file":
+			return "Claim exactly one pending project file for memory indexing.";
+		case "planner_memory_read_chunk":
+			return "Read the next bounded source chunk from the active file and persist the next unread line.";
+		case "planner_memory_upsert_active_file":
+			return "Record metadata for the fully-read active file before extracting reusable symbols.";
 		case "planner_memory_write_project_patterns":
 			return "Write project architecture and convention notes to the exact managed project_patterns.md path.";
-		case "planner_memory_upsert_files":
-			return "Write validated file memory entries. Hash and indexed status are computed automatically from project-relative paths.";
 		case "planner_memory_upsert_symbols":
-			return "Write validated symbol memory entries from compact semantic fields. Stable ids, defaults, verification hash, and status are computed automatically from indexed files.";
+			return "Write at most 5 validated reusable symbols for the active file. Exact source anchors, stable ids, verification hashes, and effects are checked.";
+		case "planner_memory_verify_active_file":
+			return "Verify that the active file was fully read and every candidate symbol anchor still exists at the scanned hash.";
+		case "planner_memory_complete_active_file":
+			return "Recheck and finalize the verified active file, then clear it so the next file can be claimed.";
+		case "planner_memory_ignore_active_file":
+			return "Explicitly mark an intentionally excluded active file as ignored with a durable summary.";
 		case "planner_memory_upsert_relations":
 			return "Write validated evidence-backed symbol relation entries. Stable relation ids are computed automatically when omitted.";
 		case "planner_memory_search":
@@ -1217,8 +1246,11 @@ function memoryToolParameters(toolName: PlannerMemoryToolName) {
 	switch (toolName) {
 		case "planner_memory_write_project_patterns":
 			return MEMORY_PROJECT_PATTERNS_TOOL_PARAMETERS;
-		case "planner_memory_upsert_files":
-			return MEMORY_FILES_TOOL_PARAMETERS;
+		case "planner_memory_read_chunk":
+			return MEMORY_READ_CHUNK_TOOL_PARAMETERS;
+		case "planner_memory_upsert_active_file":
+		case "planner_memory_ignore_active_file":
+			return MEMORY_ACTIVE_FILE_TOOL_PARAMETERS;
 		case "planner_memory_upsert_symbols":
 			return MEMORY_SYMBOLS_TOOL_PARAMETERS;
 		case "planner_memory_upsert_relations":
@@ -1228,6 +1260,11 @@ function memoryToolParameters(toolName: PlannerMemoryToolName) {
 		case "planner_memory_apply_freshness":
 			return MEMORY_APPLY_FRESHNESS_TOOL_PARAMETERS;
 		case "planner_memory_inspect":
+		case "planner_memory_scan_project":
+		case "planner_memory_index_status":
+		case "planner_memory_next_file":
+		case "planner_memory_verify_active_file":
+		case "planner_memory_complete_active_file":
 		case "planner_memory_verify":
 		case "planner_memory_sync_checkpoint":
 			return EMPTY_TOOL_PARAMETERS;

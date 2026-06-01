@@ -60,7 +60,7 @@ function plan(
 		status: input.status ?? "active",
 		active: input.active ?? false,
 		stage: input.stage ?? "discovery",
-		step: input.step ?? "read_project",
+		step: input.step ?? "scan_project_structure",
 		worktreePath: input.worktreePath ?? `/worktrees/${input.planId}`,
 		broken: input.broken ?? false,
 		reason: input.reason ?? null,

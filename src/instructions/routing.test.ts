@@ -10,7 +10,10 @@ import {
 describe("instruction routing", () => {
 	it("maps broad stages to stage and supporting instruction keys", () => {
 		expect(keys("init", "check_git")).toEqual(["init", "git"]);
-		expect(keys("discovery", "write_symbols")).toEqual(["discovery", "memory"]);
+		expect(keys("discovery", "index_files_iteratively")).toEqual([
+			"discovery",
+			"memory",
+		]);
 		expect(keys("planning", "draft_plan")).toEqual(["planning", "memory"]);
 		expect(keys("finalize", "verify_plan_branch")).toEqual(["finalize", "git"]);
 		expect(keys("done", "await_user_acceptance")).toEqual(["done"]);

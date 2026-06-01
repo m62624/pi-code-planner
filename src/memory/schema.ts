@@ -207,3 +207,31 @@ export interface MemoryCheckpointVerification {
 	actual: MemoryCheckpoint;
 	mismatches: string[];
 }
+
+export type MemoryIndexingMode = "idle" | "initial_discovery" | "refresh";
+
+export type MemoryIndexingFileStatus =
+	| "pending"
+	| "reading"
+	| "verifying"
+	| "indexed"
+	| "ignored"
+	| "missing"
+	| "failed";
+
+export interface MemoryIndexingFileEntry {
+	path: string;
+	hash: string | null;
+	status: MemoryIndexingFileStatus;
+	lineCount: number;
+	nextUnreadLine: number;
+	candidateSymbolIds: string[];
+	verificationPassed: boolean;
+	failureReason: string | null;
+}
+
+export interface MemoryIndexingState {
+	mode: MemoryIndexingMode;
+	activeFile: string | null;
+	files: MemoryIndexingFileEntry[];
+}

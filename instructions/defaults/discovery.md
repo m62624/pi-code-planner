@@ -2,58 +2,64 @@
 
 ## Purpose
 
-Read the project broadly once, record evidence-backed understanding, and build compressed project memory. Discovery is the expensive context-loading stage. Later stages must prefer memory over rereading the whole codebase.
+Build durable compressed project memory before planning or implementation. Discovery is intentionally strict: enumerate the project once, then inspect exactly one queued file at a time. Never rely on chat history as indexing state.
 
 ## Strict Step Order
 
-1. `read_project`
-   - Read the project structure, manifests, relevant configuration, source files, tests, and existing documentation.
-   - For long files, read complete bounded chunks until the relevant file is fully understood before marking it indexed.
-   - Record architecture facts, dependency versions, conventions, commands, risks, and uncertainty in `discovery.md`.
-2. `write_project_patterns`
-   - Use `planner_memory_write_project_patterns` to write evidence-backed architecture and convention notes to the managed `memory/project_patterns.md`.
-   - Include how the project is built, tested, formatted, and organized.
-3. `write_file_index`
-   - Use `planner_memory_upsert_files` to index relevant files with language, kind, and concise summaries.
-   - The wrapper verifies each relative path and computes the current file hash. Do not invent hashes or status values.
-4. `write_symbols`
-   - Use `planner_memory_upsert_symbols` to index relevant functions, methods, types, classes, modules, constants, tests, and public APIs.
-   - Store the indexed file path, kind, name, signature, summary, and effects. The wrapper derives stable ids, language, common defaults, and verification from the indexed file hash.
-5. `write_relations`
-   - Use `planner_memory_upsert_relations` for evidence-backed relations such as calls, tests, depends_on, configures, exposes, reads, and writes.
-   - Use symbol ids returned by memory search. Relation ids are derived automatically when omitted.
-6. `write_questions`
-   - Write focused unresolved questions and explicit assumptions to `questions.md`.
-   - Ask the user only after collecting evidence.
-7. `verify_memory`
-   - Use planner memory tools to inspect, verify, and sync the memory checkpoint to current HEAD.
-8. `compact_discovery`
+1. `scan_project_structure`
+   - Call `planner_memory_scan_project`.
+   - The extension enumerates tracked and untracked non-ignored project files through git and writes `memory/indexing.json`.
+   - Call `planner_memory_index_status` and inspect the durable queue summary.
+   - Do not manually invent a file list and do not begin broad source reading before the queue exists.
+2. `index_files_iteratively`
+   - Call `planner_memory_index_status`.
+   - If there is no active file, call `planner_memory_next_file`.
+   - Read only the active file through `planner_memory_read_chunk`. The wrapper persists `nextUnreadLine`, so long files resume from the exact unread line after compact.
+   - Continue reading chunks until `EOF: true`.
+   - Call `planner_memory_upsert_active_file` with file kind, language, and a concise responsibility summary.
+   - Extract reusable functions, methods, traits, interfaces, types, classes, modules, constants, tests, and other language-specific APIs from the active file.
+   - Record symbols with `planner_memory_upsert_symbols` in batches of at most 5. Every symbol requires a signature, concise semantic summary, exact `anchorSearchText`, and effects.
+   - Effects must state reads, writes, IO, and global-state behavior. Use `globalState: "unknown"` when evidence is insufficient.
+   - Before verification, compare your extracted symbol list against every chunk read from the active file. Check language-specific reusable behavior such as trait or interface methods, implementations, inherited behavior, private reusable helpers, tests, and hidden side effects. The wrapper validates mechanical evidence; you validate semantics.
+   - Call `planner_memory_verify_active_file`. The wrapper checks that the file was fully read, its hash did not change, and every candidate anchor still exists in source.
+   - Call `planner_memory_complete_active_file`. The wrapper rechecks the file, removes stale symbols and relations from earlier versions, and clears the active file.
+   - Repeat until `planner_memory_index_status` reports `Complete: true`.
+   - Use `planner_memory_ignore_active_file` only for intentionally excluded generated, vendor, or non-semantic files. Provide an explicit durable summary.
+3. `write_project_patterns`
+   - Use `planner_memory_write_project_patterns` to write evidence-backed architecture, conventions, dependency versions, build commands, test commands, formatting commands, risks, and uncertainty.
+4. `write_relations`
+   - Use `planner_memory_upsert_relations` in batches of at most 5 for evidence-backed relations such as calls, implements, extends, tests, configures, depends_on, exposes, reads, and writes.
+   - Relation evidence must contain a project-relative file path and an exact source substring.
+   - Relationships may be recorded after file indexing because cross-file meaning is clearer when reusable symbols are already available.
+   - Review the completed symbol index before leaving this step. Add only important reusable relations; record uncertainty instead of inventing a link.
+5. `write_questions`
+   - Write evidence-based unresolved questions and explicit assumptions to `questions.md`.
+   - Ask the user only after collecting project evidence. Do not ask speculative implementation questions during intake.
+6. `verify_memory`
+   - Use `planner_memory_inspect`, `planner_memory_verify`, and `planner_memory_sync_checkpoint`.
+   - Do not finish the step until hashes, anchors, relation evidence, effects, and the checkpoint are consistent with current HEAD.
+7. `compact_discovery`
    - Request planner-controlled compact only after memory is clean and checkpointed.
-9. `enter_planning`
+8. `enter_planning`
    - Advance to `planning/read_memory`.
 
 ## Restrictions
 
-- Do not implement production code.
-- Do not write tests for the requested change yet.
-- Built-in project write/edit calls are blocked during discovery. Shell remains available for inspection, but raw git is forbidden.
-- Do not create tasks before project memory is written and verified.
-- Do not write memory JSONL or checkpoint files directly. Use planner memory tools.
+- Do not implement production code or tests for the requested change.
+- Do not read multiple queued source files in parallel.
+- Do not reread completed files after compact.
+- Do not write JSONL, `indexing.json`, dirty state, or checkpoint files directly.
 - Do not guess effects or relations. Record `unknown` when evidence is insufficient.
 - Do not use raw git.
 
-## Full-Project Read Rule
-
-Broad project reading is expected during `discovery/read_project`. After discovery compact, broad rereads are forbidden unless memory is stale, incomplete, or insufficient for a specific question.
-
 ## Exit Condition
 
-Discovery is complete only when project patterns, files, symbols, relations, questions, and effects are recorded; memory verification passes; checkpoint is synced; and the discovery compact boundary finishes.
+Discovery is complete only when the durable file queue is complete, reusable symbols and effects are verified file-by-file, evidence-backed relations and project patterns are written, questions are recorded, memory verification passes, the checkpoint is synced, and the discovery compact boundary finishes.
 
 ## manual-compact
 
-Preserve the user goal, discovery summary, architecture patterns, dependency versions, test/build commands, open questions, memory checkpoint status, and paths to all memory indexes. After compaction, call `planner_status`, read `discovery.md`, read `project_patterns.md`, inspect bounded memory, then enter planning. Do not reread the whole project by default.
+Preserve the user goal, durable indexing mode, active file, exact next unread line, completed file count, pending file count, failed files, project patterns, dependency versions, commands, open questions, memory checkpoint status, and paths to all memory indexes. After compaction, call `planner_status` and continue the exact persisted step. Do not reread completed files.
 
 ## auto-compact
 
-Call `planner_status` immediately. Resume the exact stored discovery step. If discovery indexing is incomplete, continue from the persisted artifact and memory state instead of restarting broad reads from scratch. If status reports stale memory, update only affected entries before continuing.
+Call `planner_status` immediately. If discovery indexing is incomplete, read `memory/indexing.json` through planner status or `planner_memory_index_status`, continue the active file from `nextUnreadLine`, and do not restart discovery. If status reports stale memory, process only the refresh queue.

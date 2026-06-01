@@ -118,6 +118,26 @@ export {
 	inspectMemoryGate,
 	MEMORY_GATE_REQUIRED_CHECKS,
 } from "./memory/gate";
+export type {
+	MemoryIndexingReadChunk,
+	MemoryIndexingSummary,
+} from "./memory/indexing";
+export {
+	addActiveMemoryCandidateSymbols,
+	claimNextMemoryIndexingFile,
+	completeActiveMemoryFile,
+	DEFAULT_MEMORY_CHUNK_LINES,
+	ignoreActiveMemoryFile,
+	isMemoryIndexingComplete,
+	MAX_MEMORY_CHUNK_LINES,
+	readActiveMemoryFileChunk,
+	readMemoryIndexingState,
+	scanMemoryIndexingQueue,
+	summarizeMemoryIndexing,
+	upsertActiveMemoryFile,
+	verifyActiveMemoryFile,
+	writeMemoryIndexingState,
+} from "./memory/indexing";
 export type { JsonlValidator } from "./memory/jsonl";
 export {
 	PlannerJsonlError,
@@ -129,6 +149,7 @@ export {
 export {
 	clearMemoryDirty,
 	computeMemoryCheckpoint,
+	createEmptyMemoryIndexingState,
 	initializeMemoryFiles,
 	markMemoryDirty,
 	readFileIndex,
@@ -174,6 +195,10 @@ export type {
 	MemoryFileEntry,
 	MemoryFileKind,
 	MemoryFileStatus,
+	MemoryIndexingFileEntry,
+	MemoryIndexingFileStatus,
+	MemoryIndexingMode,
+	MemoryIndexingState,
 	MemoryRelationEntry,
 	MemoryRelationKind,
 	MemorySymbolEffects,

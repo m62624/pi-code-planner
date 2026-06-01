@@ -5,6 +5,10 @@ import type {
 	InstructionContent,
 	InstructionKey,
 } from "../instructions/schema";
+import {
+	readMemoryIndexingState,
+	summarizeMemoryIndexing,
+} from "../memory/indexing";
 import type { PlannerFs } from "../storage/fs";
 import type { PlannerStage, PlannerStep } from "../storage/schema";
 import {
@@ -137,7 +141,7 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: ["Persist stage=intake and step=draft_goal."],
 		allowedNow: ["State transition only."],
 		forbiddenNow: [
-			"Do not read project source until discovery/read_project is active.",
+			"Do not read project source until discovery/scan_project_structure is active.",
 		],
 		exitCondition: "State points to intake/draft_goal.",
 		nextInstruction:
@@ -147,7 +151,7 @@ export const PLANNER_STEP_RULES = {
 		objective: "Rewrite the raw user request as a precise reviewable goal.",
 		requiredActions: [
 			"Read request.md.",
-			"Write goal.md in your own words with outcome, assumptions, non-goals, constraints, and focused clarification questions.",
+			"Write goal.md in your own words with outcome, assumptions, non-goals, and constraints.",
 			"Call planner_goal_submit with the full goal markdown.",
 		],
 		allowedNow: ["Use planner_goal_submit only after the draft is complete."],
@@ -173,26 +177,53 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition: "User explicitly approves the goal or requests a revision.",
 		nextInstruction:
-			"Approve enters discovery/read_project. Revise returns to intake/draft_goal.",
+			"Approve enters discovery/scan_project_structure. Revise returns to intake/draft_goal.",
 	}),
 
-	read_project: stepRule("discovery", "read_project", {
-		objective: "Read the project broadly enough to build compressed memory.",
+	scan_project_structure: stepRule("discovery", "scan_project_structure", {
+		objective: "Create the durable file indexing queue from project structure.",
 		requiredActions: [
-			"Inspect project structure and relevant files.",
-			"Read complete files or complete chunks before indexing them.",
-			"Record evidence in planner artifacts instead of relying on chat history.",
+			"Call planner_memory_scan_project before reading source files.",
+			"Inspect the returned queue summary.",
+			"Do not manually invent the project file list.",
 		],
 		allowedNow: [
-			"Read project files and run read-only discovery commands that are not raw git.",
+			"Use planner_memory_scan_project and planner_memory_index_status.",
 		],
 		forbiddenNow: [
 			"Do not implement code.",
-			"Do not create tasks before memory is written.",
+			"Do not read source files before the durable queue exists.",
 		],
 		exitCondition:
-			"Project structure, major files, dependencies, and conventions are understood enough to write memory.",
-		nextInstruction: "Call planner_finish_step to open write_project_patterns.",
+			"memory/indexing.json contains the current project file queue.",
+		nextInstruction:
+			"Call planner_finish_step to open index_files_iteratively.",
+	}),
+	index_files_iteratively: stepRule("discovery", "index_files_iteratively", {
+		objective:
+			"Read, summarize, extract reusable symbols from, verify, and complete exactly one queued file at a time.",
+		requiredActions: [
+			"Call planner_memory_index_status.",
+			"Claim one file with planner_memory_next_file.",
+			"Read it only through planner_memory_read_chunk until EOF; long-file progress is persisted by line number.",
+			"Record file metadata with planner_memory_upsert_active_file.",
+			"Record reusable symbols and mandatory effects in batches of at most 5 with planner_memory_upsert_symbols.",
+			"Verify anchors and hashes with planner_memory_verify_active_file.",
+			"Complete the active file with planner_memory_complete_active_file, then repeat.",
+		],
+		allowedNow: [
+			"Use iterative planner memory wrappers for the active file only.",
+			"Use planner_memory_ignore_active_file only for an intentionally excluded file with an explicit summary.",
+		],
+		forbiddenNow: [
+			"Do not read or index multiple source files in parallel.",
+			"Do not reread completed files after compact.",
+			"Do not write memory JSONL directly.",
+		],
+		exitCondition:
+			"Every queued file is indexed, ignored, or missing; no active, pending, reading, verifying, or failed file remains.",
+		nextInstruction:
+			"Call planner_finish_step to open write_project_patterns only after planner_memory_index_status says Complete: true.",
 	}),
 	write_project_patterns: stepRule("discovery", "write_project_patterns", {
 		objective: "Write project architecture and convention notes.",
@@ -203,34 +234,6 @@ export const PLANNER_STEP_RULES = {
 		forbiddenNow: ["Do not edit production code."],
 		exitCondition:
 			"project_patterns.md contains evidence-backed patterns and open questions.",
-		nextInstruction: "Call planner_finish_step to open write_file_index.",
-	}),
-	write_file_index: stepRule("discovery", "write_file_index", {
-		objective: "Index relevant project files.",
-		requiredActions: [
-			"Write memory file entries with path, kind, language, hash, status, and summary.",
-		],
-		allowedNow: ["Use planner_memory_upsert_files for file entries."],
-		forbiddenNow: [
-			"Do not write memory JSONL directly.",
-			"Do not skip file hashes.",
-		],
-		exitCondition:
-			"Relevant files are indexed or explicitly marked ignored/unknown.",
-		nextInstruction: "Call planner_finish_step to open write_symbols.",
-	}),
-	write_symbols: stepRule("discovery", "write_symbols", {
-		objective: "Index symbols and signatures.",
-		requiredActions: [
-			"Write functions, methods, types, classes, modules, constants, and tests that matter for the plan.",
-			"Record signatures, summaries, anchors, visibility, verification status, and effects.",
-		],
-		allowedNow: ["Use planner_memory_upsert_symbols for symbol entries."],
-		forbiddenNow: [
-			"Do not omit effects. Use unknown when evidence is insufficient.",
-		],
-		exitCondition:
-			"Relevant APIs have symbol entries with signatures and effect metadata.",
 		nextInstruction: "Call planner_finish_step to open write_relations.",
 	}),
 	write_relations: stepRule("discovery", "write_relations", {
@@ -829,6 +832,7 @@ export async function buildPlannerStatusText(
 		input.fs,
 		preflight,
 	);
+	const memorySection = await formatMemorySection(input.fs, preflight);
 
 	lines.push(
 		`- plan: ${preflight.context.activePlanId}`,
@@ -859,7 +863,7 @@ export async function buildPlannerStatusText(
 		`- mergeTargets: ${JSON.stringify(state.mergeTargets)}`,
 		"",
 		"## Memory",
-		...formatMemorySection(preflight),
+		...memorySection,
 		"",
 		"## Lifecycle Decision",
 		...formatLifecycleDecision(lifecycle),
@@ -907,7 +911,7 @@ export async function buildPlannerStatusText(
 		...formatPlannerArtifactLinks(preflight),
 		"",
 		"## Memory-First Rule",
-		"Inspect planner memory before broad source reads. Use project_patterns, file index, symbol index, relation index, and dirty state first. Read source files only when memory is missing, stale, insufficient, or must be verified for the current step.",
+		"During discovery/index_files_iteratively or a required refresh queue, read only the active queued file through planner_memory_read_chunk and resume from activeIndexNextUnreadLine after compact. Outside initial indexing, inspect project_patterns, file index, symbol index, relation index, and dirty state before broad source reads. Read source only when memory is missing, stale, insufficient, or must be verified for the current step.",
 	);
 
 	return lines.join("\n");
@@ -918,6 +922,9 @@ export function getPlannerStepRule(input: {
 	step: PlannerStep;
 }): PlannerStepRule {
 	const rule = PLANNER_STEP_RULES[input.step];
+	if (!rule) {
+		throw new Error(`Unknown planner step rule: ${input.step}.`);
+	}
 	if (rule.stage !== input.stage) {
 		throw new Error(
 			`Planner step rule mismatch: ${input.stage}/${input.step} belongs to ${rule.stage}.`,
@@ -995,7 +1002,10 @@ function formatLifecycleNextAction(
 	}
 }
 
-function formatMemorySection(preflight: PlannerPreflightResult): string[] {
+async function formatMemorySection(
+	fs: PlannerFs,
+	preflight: PlannerPreflightResult,
+): Promise<string[]> {
 	const lines: string[] = [];
 	if (!preflight.memoryPaths) {
 		lines.push(
@@ -1008,6 +1018,7 @@ function formatMemorySection(preflight: PlannerPreflightResult): string[] {
 		`- files index: ${preflight.memoryPaths.filesIndexJsonl}`,
 		`- symbols index: ${preflight.memoryPaths.symbolsIndexJsonl}`,
 		`- relations index: ${preflight.memoryPaths.relationsIndexJsonl}`,
+		`- indexing state: ${preflight.memoryPaths.indexingJson}`,
 		`- dirty state: ${preflight.memoryPaths.dirtyJson}`,
 		`- checkpoint: ${preflight.memoryPaths.latestCheckpointJson}`,
 		`- checkpointValid: ${preflight.memoryCheckpoint ? String(preflight.memoryCheckpoint.valid) : "(unavailable)"}`,
@@ -1023,6 +1034,19 @@ function formatMemorySection(preflight: PlannerPreflightResult): string[] {
 	} else {
 		lines.push("- memoryFreshness: not inspected for this step/gate");
 	}
+	const indexing = await readMemoryIndexingState(fs, preflight.memoryPaths);
+	const summary = summarizeMemoryIndexing(indexing);
+	const active = indexing.activeFile
+		? indexing.files.find((entry) => entry.path === indexing.activeFile)
+		: null;
+	lines.push(
+		`- indexingMode: ${summary.mode}`,
+		`- indexingComplete: ${String(summary.complete)}`,
+		`- indexingFiles: total=${summary.total}, pending=${summary.pending}, reading=${summary.reading}, verifying=${summary.verifying}, indexed=${summary.indexed}, ignored=${summary.ignored}, missing=${summary.missing}, failed=${summary.failed}`,
+		`- activeIndexFile: ${active?.path ?? "(none)"}`,
+		`- activeIndexNextUnreadLine: ${active?.nextUnreadLine ?? "(none)"}`,
+		`- activeIndexLineCount: ${active?.lineCount ?? "(none)"}`,
+	);
 	return lines;
 }
 

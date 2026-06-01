@@ -63,8 +63,8 @@ export function buildPlannerHandoffPrompt(input: {
 		"",
 		"Call planner_status now.",
 		"Draft the requested goal in goal.md using your own words.",
-		"Ask focused clarification questions and wait for explicit user approval.",
-		"Do not inspect project source before planner_status reports discovery/read_project.",
+		"Wait for explicit user approval. Ask evidence-based clarification questions only after discovery.",
+		"Do not inspect project source before planner_status reports discovery/scan_project_structure.",
 		"Do not use raw git while the planner plan is active.",
 	].join("\n");
 }

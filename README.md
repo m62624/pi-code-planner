@@ -111,7 +111,7 @@ After switching sessions, the model should call:
 planner_status
 ```
 
-The model must rewrite the raw request into `goal.md` in its own words, ask focused clarification questions, and wait for explicit user approval. Discovery remains blocked until the user approves the normalized goal.
+The model must rewrite the raw request into `goal.md` in its own words and wait for explicit user approval. Discovery remains blocked until the user approves the normalized goal. Project-specific clarification questions are collected after discovery has produced evidence.
 
 ## User Commands
 
@@ -150,9 +150,11 @@ The model should not infer the next workflow transition from chat history.
 init
   -> intake
       -> rewrite request as goal
-      -> ask focused questions
       -> wait for explicit user approval
   -> discovery
+      -> enumerate project files
+      -> index exactly one file at a time
+      -> ask evidence-based questions
   -> planning
   -> execution
       -> task
@@ -176,7 +178,7 @@ recovery may interrupt normal flow when persisted state and git reality disagree
 
 ## Stage And Step Reference
 
-The state machine contains 58 explicit steps. Normal linear flow uses `planner_finish_step` to atomically finish the current step and open the next pending step. Recovery is the only stage that can resume into a validated non-recovery position.
+The state machine contains 57 explicit steps. Normal linear flow uses `planner_finish_step` to atomically finish the current step and open the next pending step. Recovery is the only stage that can resume into a validated non-recovery position.
 
 ### `init`
 
@@ -198,19 +200,18 @@ Intake turns the raw user request into an explicit, reviewable goal before the m
 
 | Step | Purpose |
 | --- | --- |
-| `draft_goal` | Read `request.md`, rewrite the requested outcome in the model's own words, and record focused clarification questions in `goal.md`. |
+| `draft_goal` | Read `request.md`, rewrite the requested outcome in the model's own words, and record assumptions, constraints, and non-goals in `goal.md`. |
 | `await_goal_approval` | Ask the user to approve or revise `goal.md`. Enter discovery only after explicit approval. |
 
 ### `discovery`
 
-Discovery is the broad project-read stage. It builds compressed memory before implementation.
+Discovery builds durable compressed project memory before implementation. The model never treats chat history as indexing state: it follows a persisted queue and completes one file before claiming another.
 
 | Step | Purpose |
 | --- | --- |
-| `read_project` | Read the project structure, source, tests, manifests, and relevant documentation. |
-| `write_project_patterns` | Persist architecture, dependency, testing, and convention notes. |
-| `write_file_index` | Index relevant files with hashes and concise summaries. |
-| `write_symbols` | Record signatures, anchors, visibility, summaries, and effects. |
+| `scan_project_structure` | Enumerate tracked and untracked non-ignored files through the wrapper and persist `memory/indexing.json`. |
+| `index_files_iteratively` | Claim one file, read bounded chunks to EOF, record metadata and reusable symbols, mechanically verify hash and anchors, complete it, then claim the next file. |
+| `write_project_patterns` | Persist architecture, dependency, testing, and convention notes after file indexing. |
 | `write_relations` | Record evidence-backed relationships between files and symbols. |
 | `write_questions` | Persist focused questions, uncertainty, and assumptions. |
 | `verify_memory` | Verify memory freshness and sync the initial checkpoint. |
@@ -329,12 +330,15 @@ Compaction is intentional and artifact-driven. The extension does not compact af
 
 Pi auto-compaction is also tracked. After planned or automatic compaction, the extension sends a system-style continuation message that instructs the model to call `planner_status` and reload exact persisted artifacts.
 
+If auto-compaction interrupts file indexing, `planner_status` reports the active file and exact next unread line. The model resumes that file instead of rereading completed files or restarting discovery.
+
 ## Project Memory
 
 The memory layer is a compressed project index for context-limited models. It avoids repeatedly loading the entire repository.
 
 Memory stores:
 
+- a durable file-indexing queue with active file, hash, line count, exact next unread line, candidate symbols, and verification state
 - file paths, hashes, languages, kinds, statuses, and summaries
 - symbol signatures and anchors
 - symbol visibility and verification status
@@ -343,14 +347,36 @@ Memory stores:
 
 Effects matter because a function can keep the same signature while starting to read environment variables, mutate global state, use filesystem or network I/O, depend on time or randomness, or call another side-effectful function.
 
-Memory is updated after planner-controlled commits and merges:
+Initial discovery and later refreshes use the same strict file-by-file loop:
+
+```text
+scan project structure
+  -> persist memory/indexing.json
+  -> claim one file
+  -> read bounded chunks to EOF
+  -> persist file metadata
+  -> persist reusable symbols in batches of at most 5
+  -> verify current hash and exact anchors
+  -> complete the file
+  -> repeat
+  -> record evidence-backed relations
+  -> verify memory
+  -> sync checkpoint
+```
+
+Long files survive compact boundaries because each chunk persists `nextUnreadLine`. The model is responsible for language semantics such as Rust traits, Go interfaces, inherited behavior, private reusable helpers, and hidden side effects. The wrapper is responsible for mechanical checks such as hashes, anchors, queue order, and checkpoint freshness.
+
+The persisted queue is validated whenever it is read. Corrupted cursors, duplicate files, missing hashes, unsupported statuses, or inconsistent active-file state block progress instead of silently restarting indexing.
+
+Memory refresh is mandatory after planner-controlled commits and merges:
 
 ```text
 git write
   -> detect new HEAD
   -> build file-hash snapshot
   -> mark stale files and related symbols
-  -> update affected memory entries
+  -> build a refresh queue for affected files
+  -> process each affected file through the strict loop
   -> verify freshness
   -> sync checkpoint
   -> continue workflow
@@ -360,9 +386,13 @@ The model should read bounded memory first and reread source only when memory is
 
 The public memory tools keep model input intentionally small:
 
-- file upsert receives relative path, kind, language, and summary; the extension reads the file and computes hash/status
-- symbol upsert receives path, kind, name, signature, summary, and effects; the extension derives stable id, language, common defaults, and verification
-- relation upsert receives symbol ids plus evidence; the extension derives a stable relation id when omitted
+- queue scanning enumerates git-visible project files and persists durable progress
+- chunk reading returns a bounded line-numbered section and advances the persisted cursor
+- active-file upsert receives kind, language, and summary only after EOF
+- symbol upsert receives at most 5 reusable symbols for the active file; every symbol requires exact anchor evidence and effects
+- active-file verification checks current hash, full-read state, file metadata, symbol hashes, and anchors before completion
+- global verification and checkpoint sync remain blocked until the durable queue has no active, pending, reading, verifying, or failed file
+- relation upsert receives at most 5 links plus exact evidence; the extension derives a stable relation id when omitted
 - memory search returns bounded pages with cursors instead of dumping the full index
 
 ## Git Model
@@ -435,9 +465,12 @@ getAgentDir()/extensions/pi-code-planner/
           decisions.md
           memory/
             project_patterns.md
+            indexing.json
             files/index.jsonl
             symbols/index.jsonl
             relations/index.jsonl
+            dirty.json
+            checkpoints/latest.json
           tasks/
             <task-id>/
               task.json
@@ -460,8 +493,9 @@ Important files:
 | `plan.json` | Structured task list and progress for one plan. |
 | `state.json` | Crash-recoverable execution state for one plan. |
 | `request.md` | Exact raw requested outcome captured when the plan is created. |
-| `goal.md` | Model-normalized goal, assumptions, constraints, non-goals, and clarification questions approved by the user before discovery. |
+| `goal.md` | Model-normalized goal, assumptions, constraints, and non-goals approved by the user before discovery. |
 | `plan.md` | Human-readable plan context. |
+| `memory/indexing.json` | Crash-recoverable file queue with one active file and its exact next unread line. |
 | `memory/*` | Compressed project context and freshness checkpoint data. |
 
 ## Worktree Settings
@@ -603,9 +637,16 @@ Most users do not need to call these manually. They are registered for the model
 
 - `planner_memory_inspect`
 - `planner_memory_apply_freshness`
+- `planner_memory_scan_project`
+- `planner_memory_index_status`
+- `planner_memory_next_file`
+- `planner_memory_read_chunk`
+- `planner_memory_upsert_active_file`
 - `planner_memory_write_project_patterns`
-- `planner_memory_upsert_files`
 - `planner_memory_upsert_symbols`
+- `planner_memory_verify_active_file`
+- `planner_memory_complete_active_file`
+- `planner_memory_ignore_active_file`
 - `planner_memory_upsert_relations`
 - `planner_memory_search`
 - `planner_memory_verify`

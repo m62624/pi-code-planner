@@ -98,7 +98,7 @@ describe("planner goal tools", () => {
 			readPlanState(setup.fs, setup.planPaths),
 		).resolves.toMatchObject({
 			stage: "discovery",
-			step: "read_project",
+			step: "scan_project_structure",
 			stepStatus: "pending",
 		});
 		expect(setup.fs.snapshot()[setup.planPaths.decisionsMd]).toContain(
@@ -138,7 +138,7 @@ describe("planner goal tools", () => {
 	it("blocks goal submission outside intake", async () => {
 		const setup = await createGoalSetup({
 			stage: "discovery",
-			step: "read_project",
+			step: "scan_project_structure",
 			stepStatus: "running",
 		});
 

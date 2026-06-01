@@ -10,6 +10,7 @@ export interface MemoryStoragePaths {
 	symbolsIndexJsonl: string;
 	relationsDir: string;
 	relationsIndexJsonl: string;
+	indexingJson: string;
 	dirtyJson: string;
 	checkpointsDir: string;
 	latestCheckpointJson: string;
@@ -27,6 +28,7 @@ export function createMemoryStoragePaths(
 		symbolsIndexJsonl: join(planPaths.memoryDir, "symbols", "index.jsonl"),
 		relationsDir: join(planPaths.memoryDir, "relations"),
 		relationsIndexJsonl: join(planPaths.memoryDir, "relations", "index.jsonl"),
+		indexingJson: join(planPaths.memoryDir, "indexing.json"),
 		dirtyJson: join(planPaths.memoryDir, "dirty.json"),
 		checkpointsDir: join(planPaths.memoryDir, "checkpoints"),
 		latestCheckpointJson: join(

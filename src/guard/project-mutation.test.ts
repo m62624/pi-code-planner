@@ -211,7 +211,7 @@ function stepFor(stage: PlannerStage): PlanStateRecord["step"] {
 		case "intake":
 			return "draft_goal";
 		case "discovery":
-			return "read_project";
+			return "scan_project_structure";
 		case "planning":
 			return "draft_plan";
 		case "execution":

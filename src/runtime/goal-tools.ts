@@ -88,7 +88,7 @@ export async function executePlannerGoalTool(
 	const completed = completePlannerStep(state, {
 		next:
 			decision === "approve"
-				? { stage: "discovery", step: "read_project" }
+				? { stage: "discovery", step: "scan_project_structure" }
 				: { stage: "intake", step: "draft_goal" },
 	});
 	const next = advancePlannerStep(completed);
@@ -97,7 +97,7 @@ export async function executePlannerGoalTool(
 	return applied(
 		input.toolName,
 		decision === "approve"
-			? "Planner goal approved. Discovery is now available. Call planner_status, then start discovery/read_project."
+			? "Planner goal approved. Discovery is now available. Call planner_status, then start discovery/scan_project_structure."
 			: "Planner goal needs revision. Read request.md, apply the user's feedback, and call planner_goal_submit with the revised goal.md.",
 		{ decision, feedback, state: resumed },
 	);
