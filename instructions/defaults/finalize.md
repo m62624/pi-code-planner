@@ -8,7 +8,7 @@ Verify the complete plan branch as one integrated result, write a durable user-f
 
 1. `verify_plan_branch`
    - Inspect planner git state and confirm that all required tasks were merged.
-   - Run project-level checks defined by project instructions and task evidence.
+   - Run project-level checks defined by project instructions and task evidence from the worktree path reported by `planner_status`.
    - Record failures, residual risks, and any checks that cannot run locally.
 2. `write_final_summary`
    - Write `final_summary.md`.
@@ -21,6 +21,7 @@ Verify the complete plan branch as one integrated result, write a durable user-f
 ## Restrictions
 
 - Do not introduce new production behavior during finalize.
+- Do not run tests, builds, linters, formatters, or project-specific checks from the original checkout. Use the planner worktree as shell cwd.
 - Do not cleanup the worktree or plan files.
 - Do not export the plan result before explicit user acceptance.
 - Do not use raw git.

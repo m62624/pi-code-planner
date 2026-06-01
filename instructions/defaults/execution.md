@@ -60,6 +60,8 @@ Execute exactly one active task at a time through tests-first development, seque
 - Dirty worktree is allowed while implementing a running step, but checkpoint sync requires a clean worktree.
 - Built-in project write/edit calls are enabled only during `write_tests`, `run_experiment`, and `refactor_task`. The planner does not infer file roles from names, so tests, fixtures, harness wiring, configuration, and production code may share files. Follow the exact step purpose.
 - Never edit the original checkout while a planner worktree is active. Continue inside the worktree session reported by `planner_status`.
+- Run every project command from the worktree path reported by `planner_status`. This includes focused tests, full tests, builds, type checks, linters, formatters, generators, package scripts, compilers, and project-specific verification commands, regardless of language or tooling.
+- Before recording a successful check, confirm that its shell cwd was the planner worktree, not the original checkout.
 - Use `planner_status` after every wrapper result.
 - Raw git is forbidden.
 - The model chooses task id and experiment id only. It never invents merge source or target branches.

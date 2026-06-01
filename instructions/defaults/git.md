@@ -32,6 +32,17 @@ base branch
 
 The extension stores branch registry and merge targets in `state.json`. The model chooses ids only. It never chooses merge source or target branch names manually.
 
+## Worktree Command Invariant
+
+While a planner plan is active, the persisted worktree path reported by `planner_status` is the only project working directory.
+
+- Run every project-scoped shell command from the reported worktree path, regardless of language, package manager, build system, or script runner.
+- This includes tests, builds, type checks, linters, formatters, code generators, dependency inspection, package scripts, compiler commands, and project-specific verification commands.
+- Examples such as `npm test`, `cargo test`, `go test ./...`, `mvn test`, `make`, or custom scripts are only examples. The invariant applies to every project command.
+- Never run project checks from the original checkout while a planner plan is active.
+- If the current shell cwd is unclear, call `planner_status`, read the exact worktree path, and execute the command with that path as cwd.
+- Planner artifact reads and writes still use the artifact paths reported by `planner_status`.
+
 ## Checkpoint Rules
 
 - Commit only through `planner_git_commit`.

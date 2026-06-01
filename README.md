@@ -439,6 +439,11 @@ The public memory tools keep model input intentionally small:
 
 Each plan owns one worktree. Tasks, experiments, and refactors are branches inside that worktree.
 
+While a plan is active, every project-scoped shell command must run from the
+worktree path reported by `planner_status`. This applies to tests, builds,
+linters, formatters, generators, package scripts, compilers, and custom
+verification commands regardless of the project's language or toolchain.
+
 ```text
 base branch
   -> plan/<plan-id>

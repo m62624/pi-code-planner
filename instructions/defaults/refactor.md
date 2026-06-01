@@ -10,7 +10,7 @@ Improve the selected task implementation after the best experiment has been merg
 2. Inspect the current task-branch diff through planner wrappers.
 3. Identify concrete refactor opportunities that reduce complexity or better match project conventions.
 4. Apply only behavior-preserving changes.
-5. Run focused tests after each meaningful refactor group.
+5. Run focused tests from the worktree path reported by `planner_status` after each meaningful refactor group.
 6. Commit through planner wrappers if files changed.
 7. Refresh affected memory entries, including effects.
 8. Verify and sync memory checkpoint.
@@ -21,6 +21,7 @@ Improve the selected task implementation after the best experiment has been merg
 - Do not weaken tests to make refactor pass.
 - Do not change public API unless the active task explicitly requires it.
 - Do not perform speculative cleanup outside the active task.
+- Do not run project tests, builds, formatters, or other verification commands from the original checkout. Use the planner worktree as shell cwd.
 - If a behavior change is required, stop and return to planning or create a new task.
 - Do not use raw git.
 

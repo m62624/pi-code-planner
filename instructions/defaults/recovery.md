@@ -24,6 +24,7 @@ Recovery is inspection-first. It must never perform destructive repair without e
 ## Recovery Rules
 
 - Use `planner_recovery_inspect` before proposing action.
+- Until recovery confirms the persisted worktree path, do not run project tests, builds, generators, or verification commands. After resume, run them only from the worktree path reported by `planner_status`.
 - Do not run raw git.
 - Do not hide external changes.
 - A stale memory blob is not a reason to reset git. Refresh memory instead.

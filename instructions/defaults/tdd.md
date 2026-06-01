@@ -21,6 +21,8 @@ Use strict tests-first development for every execution task. Production implemen
 
 ## Test Signal Rules
 
+- Run every test, build, and verification command from the worktree path reported by `planner_status`. Never run project checks from the original checkout while a planner plan is active.
+- The rule is toolchain-independent: use the project's actual commands, whether they are package scripts, compiler commands, task runners, or custom scripts.
 - Prefer a real failing test when the missing behavior can execute locally.
 - Use a mock test when the external dependency is unavailable or unsafe to invoke.
 - Use a contract test when the critical behavior is an interface, schema, command construction, or integration boundary.
@@ -38,6 +40,7 @@ Use strict tests-first development for every execution task. Production implemen
 
 Record:
 - exact commands run
+- worktree cwd used for each command
 - expected and actual result
 - failing signal before implementation
 - passing signal after implementation

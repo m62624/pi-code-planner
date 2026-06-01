@@ -49,6 +49,7 @@ Build durable compressed project memory before planning or implementation. Disco
 ## Restrictions
 
 - Do not implement production code or tests for the requested change.
+- When inspecting project structure, manifests, dependency versions, or available project commands, run every project-scoped shell command from the worktree path reported by `planner_status`, never from the original checkout.
 - Do not read multiple queued source files in parallel.
 - Do not reread completed files after compact.
 - Do not write JSONL, `indexing.json`, dirty state, or checkpoint files directly.
