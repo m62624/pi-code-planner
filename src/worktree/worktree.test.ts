@@ -14,7 +14,11 @@ import type {
 import { PROJECT_WORKTREES_IGNORE_RULE } from "../project-local/gitignore";
 import { createProjectStoragePaths } from "../storage/paths";
 import { MockPlannerFs } from "../test/mock-fs";
-import { createPlanWorktree, removePlanWorktree } from "./manager";
+import {
+	createPlanWorktree,
+	removePlanWorktree,
+	WORKTREE_GITIGNORE_COMMIT_MESSAGE,
+} from "./manager";
 import {
 	createCustomWorktreeLocation,
 	createProjectLocalWorktreeLocation,
@@ -24,6 +28,11 @@ import {
 class MockGitRunner implements GitRunner {
 	readonly added: GitWorktreeAddInput[] = [];
 	readonly removed: GitWorktreeRemoveInput[] = [];
+	readonly staged: GitRepoInput[] = [];
+	readonly commits: GitCommitInput[] = [];
+	readonly statusChecks: GitRepoInput[] = [];
+
+	constructor(private readonly statusResponses: string[] = []) {}
 
 	async init(_input: GitRepoInput): Promise<void> {}
 	async currentBranch(_input: GitRepoInput): Promise<string> {
@@ -32,8 +41,9 @@ class MockGitRunner implements GitRunner {
 	async headCommit(_input: GitRepoInput): Promise<string> {
 		return "abc123";
 	}
-	async statusPorcelain(_input: GitRepoInput): Promise<string> {
-		return "";
+	async statusPorcelain(input: GitRepoInput): Promise<string> {
+		this.statusChecks.push(input);
+		return this.statusResponses.shift() ?? "";
 	}
 	async diffStat(_input: GitRepoInput): Promise<string> {
 		return "";
@@ -50,8 +60,12 @@ class MockGitRunner implements GitRunner {
 	async createBranch(_input: GitCreateBranchInput): Promise<void> {}
 	async deleteBranch(_input: GitDeleteBranchInput): Promise<void> {}
 	async switchBranch(_input: GitSwitchBranchInput): Promise<void> {}
-	async stageAll(_input: GitRepoInput): Promise<void> {}
-	async commit(_input: GitCommitInput): Promise<void> {}
+	async stageAll(input: GitRepoInput): Promise<void> {
+		this.staged.push(input);
+	}
+	async commit(input: GitCommitInput): Promise<void> {
+		this.commits.push(input);
+	}
 	async merge(_input: GitMergeInput): Promise<void> {}
 
 	async worktreeAdd(input: GitWorktreeAddInput): Promise<void> {
@@ -112,7 +126,7 @@ describe("worktree paths", () => {
 });
 
 describe("worktree manager", () => {
-	it("creates project-local worktree and prepares .gitignore", async () => {
+	it("creates project-local worktree and commits its .gitignore bootstrap", async () => {
 		const fs = new MockPlannerFs();
 		const git = new MockGitRunner();
 		const paths = createProjectStoragePaths({
@@ -131,7 +145,14 @@ describe("worktree manager", () => {
 		});
 
 		expect(result.gitignore?.action).toBe("created");
-		expect(fs.snapshot()["/repo/app/.gitignore"]).toBe(
+		expect(result.localExclude?.action).toBe("created");
+		expect(result.bootstrapCommit).toBe(WORKTREE_GITIGNORE_COMMIT_MESSAGE);
+		expect(
+			fs.snapshot()[
+				"/repo/app/.pi/pi-code-planner/worktrees/plan-a/.gitignore"
+			],
+		).toBe(`${PROJECT_WORKTREES_IGNORE_RULE}\n`);
+		expect(fs.snapshot()["/repo/app/.git/info/exclude"]).toBe(
 			`${PROJECT_WORKTREES_IGNORE_RULE}\n`,
 		);
 		expect(git.added).toEqual([
@@ -140,6 +161,25 @@ describe("worktree manager", () => {
 				path: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
 				branch: "plan/plan-a",
 				fromRef: "main",
+			},
+		]);
+		expect(git.staged).toEqual([
+			{
+				repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
+			},
+		]);
+		expect(git.commits).toEqual([
+			{
+				repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
+				message: WORKTREE_GITIGNORE_COMMIT_MESSAGE,
+			},
+		]);
+		expect(git.statusChecks).toEqual([
+			{
+				repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
+			},
+			{
+				repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
 			},
 		]);
 	});
@@ -166,6 +206,8 @@ describe("worktree manager", () => {
 		});
 
 		expect(result.gitignore).toBeNull();
+		expect(result.localExclude).toBeNull();
+		expect(result.bootstrapCommit).toBeNull();
 		expect(await fs.exists("/repo/app/.gitignore")).toBe(false);
 		expect(git.added).toEqual([
 			{
@@ -175,6 +217,84 @@ describe("worktree manager", () => {
 				fromRef: null,
 			},
 		]);
+	});
+
+	it("does not create a bootstrap commit when the plan branch already has the rule", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const paths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const location = createProjectLocalWorktreeLocation(paths, "plan-a");
+		await fs.writeTextAtomic(
+			`${location.path}/.gitignore`,
+			`${PROJECT_WORKTREES_IGNORE_RULE}\n`,
+		);
+
+		const result = await createPlanWorktree({
+			fs,
+			git,
+			projectPaths: paths,
+			worktreePath: location.path,
+			branch: "plan/plan-a",
+			fromRef: "main",
+		});
+
+		expect(result.gitignore?.action).toBe("unchanged");
+		expect(result.bootstrapCommit).toBeNull();
+		expect(git.staged).toEqual([]);
+		expect(git.commits).toEqual([]);
+	});
+
+	it("commits the bootstrap when the rule is appended to an existing .gitignore", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const paths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const location = createProjectLocalWorktreeLocation(paths, "plan-a");
+		await fs.writeTextAtomic(`${location.path}/.gitignore`, "dist/\n");
+
+		const result = await createPlanWorktree({
+			fs,
+			git,
+			projectPaths: paths,
+			worktreePath: location.path,
+			branch: "plan/plan-a",
+			fromRef: "main",
+		});
+
+		expect(result.gitignore?.action).toBe("appended");
+		expect(result.bootstrapCommit).toBe(WORKTREE_GITIGNORE_COMMIT_MESSAGE);
+		expect(fs.snapshot()[`${location.path}/.gitignore`]).toBe(
+			`dist/\n${PROJECT_WORKTREES_IGNORE_RULE}\n`,
+		);
+		expect(git.commits).toHaveLength(1);
+	});
+
+	it("refuses to bootstrap an unexpectedly dirty new worktree", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner([" M generated.txt\n"]);
+		const paths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const location = createProjectLocalWorktreeLocation(paths, "plan-a");
+
+		await expect(
+			createPlanWorktree({
+				fs,
+				git,
+				projectPaths: paths,
+				worktreePath: location.path,
+				branch: "plan/plan-a",
+				fromRef: "main",
+			}),
+		).rejects.toThrow("unexpectedly dirty before bootstrap");
+		expect(git.staged).toEqual([]);
+		expect(git.commits).toEqual([]);
 	});
 
 	it("removes worktree through runner without deleting plan files itself", async () => {

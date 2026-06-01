@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MockPlannerFs } from "../test/mock-fs";
 import {
 	ensureProjectWorktreesIgnored,
+	ensureProjectWorktreesLocallyExcluded,
 	hasExactWorktreesIgnoreRule,
 	PROJECT_WORKTREES_IGNORE_RULE,
 } from "./gitignore";
@@ -31,6 +32,21 @@ describe("project worktree gitignore rule", () => {
 		expect(result.action).toBe("appended");
 		expect(fs.snapshot()["/repo/app/.gitignore"]).toBe(
 			"node_modules/\ndist/\n.pi/pi-code-planner/worktrees/\n",
+		);
+	});
+
+	it("writes the same exact rule to the repository-local exclude file", async () => {
+		const fs = new MockPlannerFs();
+
+		const result = await ensureProjectWorktreesLocallyExcluded(fs, "/repo/app");
+
+		expect(result).toEqual({
+			path: "/repo/app/.git/info/exclude",
+			rule: PROJECT_WORKTREES_IGNORE_RULE,
+			action: "created",
+		});
+		expect(fs.snapshot()["/repo/app/.git/info/exclude"]).toBe(
+			".pi/pi-code-planner/worktrees/\n",
 		);
 	});
 

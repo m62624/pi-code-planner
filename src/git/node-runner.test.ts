@@ -11,6 +11,7 @@ import {
 	buildGitInitArgs,
 	buildGitListProjectFilesArgs,
 	buildGitMergeArgs,
+	buildGitPathArgs,
 	buildGitStageAllArgs,
 	buildGitStatusPorcelainArgs,
 	buildGitSwitchBranchArgs,
@@ -55,6 +56,9 @@ describe("node git runner command args", () => {
 			"diff",
 			"--name-only",
 		]);
+		expect(
+			buildGitPathArgs({ repoRoot: "/repo/app", path: "info/exclude" }),
+		).toEqual(["-C", "/repo/app", "rev-parse", "--git-path", "info/exclude"]);
 		expect(buildGitListProjectFilesArgs({ repoRoot: "/repo/app" })).toEqual([
 			"-C",
 			"/repo/app",

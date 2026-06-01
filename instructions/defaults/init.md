@@ -14,6 +14,8 @@ The normal entry point is `planner_create_plan` or `/planner-create`. The extens
 4. Prepare project storage, settings, instruction files, plan artifacts, and memory files.
 5. Resolve the worktree location from effective settings. Do not invent a path.
 6. Create exactly one dedicated worktree for the whole plan.
+   - For a project-local worktree, the extension writes a repository-local exclude rule for the original checkout.
+   - If the plan branch `.gitignore` rule is created or appended, the extension commits it immediately on the plan branch before normal planner work begins.
 7. Enter `intake/draft_goal`.
 
 ## Restrictions

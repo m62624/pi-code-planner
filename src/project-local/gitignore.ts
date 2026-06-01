@@ -14,7 +14,21 @@ export async function ensureProjectWorktreesIgnored(
 	fs: PlannerFs,
 	projectRoot: string,
 ): Promise<GitignoreWorktreeRuleResult> {
-	const path = join(projectRoot, ".gitignore");
+	return await ensureWorktreesIgnoreRule(fs, join(projectRoot, ".gitignore"));
+}
+
+export async function ensureProjectWorktreesLocallyExcluded(
+	fs: PlannerFs,
+	projectRoot: string,
+	excludePath = join(projectRoot, ".git", "info", "exclude"),
+): Promise<GitignoreWorktreeRuleResult> {
+	return await ensureWorktreesIgnoreRule(fs, excludePath);
+}
+
+async function ensureWorktreesIgnoreRule(
+	fs: PlannerFs,
+	path: string,
+): Promise<GitignoreWorktreeRuleResult> {
 	if (!(await fs.exists(path))) {
 		await fs.writeTextAtomic(path, `${PROJECT_WORKTREES_IGNORE_RULE}\n`);
 		return { path, rule: PROJECT_WORKTREES_IGNORE_RULE, action: "created" };

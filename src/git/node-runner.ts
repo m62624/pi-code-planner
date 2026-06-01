@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { isAbsolute, resolve } from "node:path";
 import { promisify } from "node:util";
 import type {
 	GitBranchInput,
@@ -6,6 +7,7 @@ import type {
 	GitCreateBranchInput,
 	GitDeleteBranchInput,
 	GitMergeInput,
+	GitPathInput,
 	GitRepoInput,
 	GitRunner,
 	GitSwitchBranchInput,
@@ -49,6 +51,11 @@ export class NodeGitRunner implements GitRunner {
 
 	async diffNameOnly(input: GitRepoInput): Promise<string> {
 		return await runGitCommandOutput(buildGitDiffNameOnlyArgs(input));
+	}
+
+	async resolveGitPath(input: GitPathInput): Promise<string> {
+		const path = await runGitCommandOutput(buildGitPathArgs(input));
+		return isAbsolute(path) ? path : resolve(input.repoRoot, path);
 	}
 
 	async listProjectFiles(input: GitRepoInput): Promise<string[]> {
@@ -122,6 +129,10 @@ export function buildGitDiffStatArgs(input: GitRepoInput): string[] {
 
 export function buildGitDiffNameOnlyArgs(input: GitRepoInput): string[] {
 	return ["-C", input.repoRoot, "diff", "--name-only"];
+}
+
+export function buildGitPathArgs(input: GitPathInput): string[] {
+	return ["-C", input.repoRoot, "rev-parse", "--git-path", input.path];
 }
 
 export function buildGitListProjectFilesArgs(input: GitRepoInput): string[] {

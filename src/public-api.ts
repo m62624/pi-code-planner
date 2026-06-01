@@ -17,6 +17,7 @@ export {
 	buildGitHeadCommitArgs,
 	buildGitInitArgs,
 	buildGitMergeArgs,
+	buildGitPathArgs,
 	buildGitStageAllArgs,
 	buildGitStatusPorcelainArgs,
 	buildGitSwitchBranchArgs,
@@ -43,6 +44,7 @@ export type {
 	GitCreateBranchInput,
 	GitDeleteBranchInput,
 	GitMergeInput,
+	GitPathInput,
 	GitRepoInput,
 	GitRunner,
 	GitSwitchBranchInput,
@@ -237,6 +239,7 @@ export {
 export type { GitignoreWorktreeRuleResult } from "./project-local/gitignore";
 export {
 	ensureProjectWorktreesIgnored,
+	ensureProjectWorktreesLocallyExcluded,
 	hasExactWorktreesIgnoreRule,
 	PROJECT_WORKTREES_IGNORE_RULE,
 } from "./project-local/gitignore";
@@ -567,7 +570,11 @@ export type {
 	RemovePlanWorktreeInput,
 	RemovePlanWorktreeResult,
 } from "./worktree/manager";
-export { createPlanWorktree, removePlanWorktree } from "./worktree/manager";
+export {
+	createPlanWorktree,
+	removePlanWorktree,
+	WORKTREE_GITIGNORE_COMMIT_MESSAGE,
+} from "./worktree/manager";
 export type { WorktreeLocation, WorktreeLocationKind } from "./worktree/paths";
 export {
 	createCustomWorktreeLocation,

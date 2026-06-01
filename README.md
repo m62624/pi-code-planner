@@ -112,6 +112,8 @@ resolve project
   -> prepare planner storage
   -> create plan branch
   -> create plan worktree
+  -> locally exclude nested worktrees from the base checkout
+  -> commit the tracked worktree ignore rule on the plan branch when needed
   -> persist state.json
   -> write a valid Pi session JSONL header with the worktree cwd
   -> switch Pi into a worktree session
@@ -556,13 +558,25 @@ Custom path:
 <root>/<project-id>/<plan-id>
 ```
 
-When project-local worktrees are used, the extension adds this exact rule to `.gitignore` if needed:
+When project-local worktrees are used, the extension adds this exact rule to the
+plan branch `.gitignore` if needed:
 
 ```text
 .pi/pi-code-planner/worktrees/
 ```
 
 It does not ignore the entire `.pi/` directory.
+
+The extension immediately commits a created or appended tracked rule on the new
+plan branch with:
+
+```text
+chore: ignore pi-code-planner worktrees
+```
+
+It also writes the same rule to the original checkout `.git/info/exclude`.
+That repository-local exclude keeps the base checkout clean while the nested
+worktree exists without changing the user's base branch.
 
 ## Instruction Customization
 

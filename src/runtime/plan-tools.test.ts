@@ -35,6 +35,7 @@ class MockGitRunner implements GitRunner {
 	failCurrentBranch = false;
 	readonly calls: Array<{ name: string; input: unknown }> = [];
 	private branch: string;
+	private head = "abc123";
 
 	constructor(branch = "main") {
 		this.branch = branch;
@@ -52,7 +53,7 @@ class MockGitRunner implements GitRunner {
 	}
 	async headCommit(input: GitRepoInput): Promise<string> {
 		this.calls.push({ name: "headCommit", input });
-		return "abc123";
+		return this.head;
 	}
 	async statusPorcelain(input: GitRepoInput): Promise<string> {
 		this.calls.push({ name: "statusPorcelain", input });
@@ -73,8 +74,13 @@ class MockGitRunner implements GitRunner {
 	async createBranch(_input: GitCreateBranchInput): Promise<void> {}
 	async deleteBranch(_input: GitDeleteBranchInput): Promise<void> {}
 	async switchBranch(_input: GitSwitchBranchInput): Promise<void> {}
-	async stageAll(_input: GitRepoInput): Promise<void> {}
-	async commit(_input: GitCommitInput): Promise<void> {}
+	async stageAll(input: GitRepoInput): Promise<void> {
+		this.calls.push({ name: "stageAll", input });
+	}
+	async commit(input: GitCommitInput): Promise<void> {
+		this.calls.push({ name: "commit", input });
+		this.head = "bootstrap456";
+	}
 	async merge(_input: GitMergeInput): Promise<void> {}
 	async worktreeAdd(input: GitWorktreeAddInput): Promise<void> {
 		this.calls.push({ name: "worktreeAdd", input });
@@ -135,7 +141,7 @@ describe("planner plan tools", () => {
 			},
 			worktreePath: "/repo/app/.pi/pi-code-planner/worktrees/api-audit",
 			currentBranch: "plan/api-audit",
-			lastCheckpointCommit: "abc123",
+			lastCheckpointCommit: "bootstrap456",
 			requiresMemoryUpdate: false,
 		});
 		await expect(readMemoryCheckpoint(fs, memoryPaths)).resolves.toMatchObject({
@@ -147,7 +153,12 @@ describe("planner plan tools", () => {
 		);
 		expect(fs.snapshot()[planPaths.goalMd]).toBe("");
 		expect(fs.snapshot()[planPaths.discoveryMd]).toBe("");
-		expect(fs.snapshot()["/repo/app/.gitignore"]).toBe(
+		expect(
+			fs.snapshot()[
+				"/repo/app/.pi/pi-code-planner/worktrees/api-audit/.gitignore"
+			],
+		).toBe(".pi/pi-code-planner/worktrees/\n");
+		expect(fs.snapshot()["/repo/app/.git/info/exclude"]).toBe(
 			".pi/pi-code-planner/worktrees/\n",
 		);
 		await expect(

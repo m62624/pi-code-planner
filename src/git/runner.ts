@@ -15,6 +15,10 @@ export interface GitRepoInput {
 	repoRoot: string;
 }
 
+export interface GitPathInput extends GitRepoInput {
+	path: string;
+}
+
 export interface GitBranchInput {
 	repoRoot: string;
 	branch: string;
@@ -50,6 +54,7 @@ export interface GitRunner {
 	statusPorcelain(input: GitRepoInput): Promise<string>;
 	diffStat(input: GitRepoInput): Promise<string>;
 	diffNameOnly(input: GitRepoInput): Promise<string>;
+	resolveGitPath?(input: GitPathInput): Promise<string>;
 	listProjectFiles(input: GitRepoInput): Promise<string[]>;
 	branchExists(input: GitBranchInput): Promise<boolean>;
 	createBranch(input: GitCreateBranchInput): Promise<void>;
