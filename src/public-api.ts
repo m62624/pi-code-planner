@@ -338,6 +338,7 @@ export {
 } from "./runtime/orchestrator-gate";
 export type { PlannerCreateCommandArgs } from "./runtime/plan-naming";
 export {
+	createPlannerPlanTitle,
 	parsePlannerCreateCommandArgs,
 	resolvePlannerPlanId,
 } from "./runtime/plan-naming";
@@ -367,6 +368,15 @@ export {
 	formatPlannerPreflightStatus,
 	runPlannerPreflight,
 } from "./runtime/preflight";
+export type {
+	PlannerQuestionToolExecutionInput,
+	PlannerQuestionToolExecutionResult,
+	PlannerQuestionToolName,
+} from "./runtime/question-tools";
+export {
+	executePlannerQuestionTool,
+	PLANNER_QUESTION_TOOL_NAMES,
+} from "./runtime/question-tools";
 export type {
 	PlannerRecoveryBranchInspection,
 	PlannerRecoveryInspection,
@@ -423,6 +433,7 @@ export {
 	getAllowedNextPlannerPositions,
 	getPlannerStepStage,
 	isBeforePlannerWorktreeStep,
+	isPlannerCompactEnabled,
 	isPlannerStepInStage,
 	PlannerStateMachineError,
 	requestPlannerCompact,
@@ -528,6 +539,7 @@ export type {
 	InitStep,
 	MemoryUpdateReason,
 	MergeTargets,
+	PlannerCompactBoundaries,
 	PlannerStage,
 	PlannerStep,
 	PlanningStep,

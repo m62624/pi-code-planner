@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SCHEMA_VERSION } from "../constants";
 import type { ProjectRecord } from "../storage/schema";
 import {
+	createPlannerPlanTitle,
 	parsePlannerCreateCommandArgs,
 	resolvePlannerPlanId,
 } from "./plan-naming";
@@ -93,5 +94,18 @@ describe("planner plan naming", () => {
 				]),
 			}),
 		).toBe("fix-approval-find-command-3");
+	});
+
+	it("keeps generated ids and titles bounded for multiline requests", () => {
+		const request = `${"Implement a carefully described planner improvement ".repeat(4)}\nwith details`;
+
+		expect(
+			resolvePlannerPlanId({
+				request,
+				project: projectWithPlans([]),
+			}).length,
+		).toBeLessThanOrEqual(48);
+		expect(createPlannerPlanTitle(request)).toHaveLength(80);
+		expect(createPlannerPlanTitle(request)).toMatch(/\.\.\.$/);
 	});
 });

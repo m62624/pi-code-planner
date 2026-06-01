@@ -9,6 +9,8 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_create_plan",
 	"planner_goal_submit",
 	"planner_goal_decide",
+	"planner_questions_submit",
+	"planner_questions_resolve",
 	"planner_git_inspect",
 	"planner_git_init",
 	"planner_git_commit",
@@ -96,7 +98,7 @@ const STEP_ALLOWED_TOOLS = {
 		],
 		write_project_patterns: ["planner_memory_write_project_patterns"],
 		write_relations: ["planner_memory_upsert_relations"],
-		write_questions: [],
+		write_questions: ["planner_questions_submit", "planner_questions_resolve"],
 		verify_memory: [
 			"planner_memory_inspect",
 			"planner_memory_verify",

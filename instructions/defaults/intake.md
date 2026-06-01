@@ -13,7 +13,8 @@ Turn the user's raw request into an explicit approved goal before reading projec
    - Do not invent project-specific questions before reading project evidence.
    - Do not inspect project source.
 2. `await_goal_approval`
-   - Show the user the exact `goal.md` path and a concise summary.
+   - Show the user the full generated `goal.md` content. The `planner_goal_submit` result includes it for review.
+   - Explain that `plan.md` is intentionally written later, during `planning/draft_plan`, after discovery memory and evidence-based questions are complete.
    - Ask whether the goal is approved or needs revision.
    - If revision is requested, update `goal.md` and ask again.
    - Enter discovery only after explicit approval.

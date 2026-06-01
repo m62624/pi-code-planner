@@ -110,6 +110,7 @@ export function buildPlannerCompactInstructions(input: {
 		`- currentBranch: ${state?.currentBranch ?? "(none)"}`,
 		`- lastCheckpointCommit: ${state?.lastCheckpointCommit ?? "(none)"}`,
 		`- requiresMemoryUpdate: ${String(state?.requiresMemoryUpdate ?? false)}`,
+		`- compactBoundaries: ${JSON.stringify(state?.compactBoundaries ?? null)}`,
 		`- requiresCompact: ${String(state?.requiresCompact ?? false)}`,
 		"",
 		"## Runtime Gate",

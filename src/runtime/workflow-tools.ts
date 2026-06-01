@@ -190,6 +190,18 @@ async function validateWorkflowExit(input: {
 			].join("\n");
 		}
 	}
+	if (state.stage === "discovery" && state.step === "write_questions") {
+		const artifactBlock = await requireNonEmptyArtifact(
+			input.fs,
+			input.orchestrator.preflight.context.planPaths.questionsMd,
+		);
+		return (
+			artifactBlock ??
+			(state.questionsResolved
+				? null
+				: "Discovery questions are still unresolved. Show them to the user verbatim, wait for answers, and call planner_questions_resolve before finishing discovery/write_questions.")
+		);
+	}
 	if (state.stage !== "execution") {
 		return null;
 	}

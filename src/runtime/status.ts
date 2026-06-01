@@ -251,13 +251,19 @@ export const PLANNER_STEP_RULES = {
 		nextInstruction: "Call planner_finish_step to open write_questions.",
 	}),
 	write_questions: stepRule("discovery", "write_questions", {
-		objective: "Record uncertainty before planning.",
+		objective: "Resolve evidence-based user questions before planning.",
 		requiredActions: [
-			"Write focused questions and assumptions into questions.md.",
+			"Call planner_questions_submit with focused questions and assumptions for questions.md.",
+			"If open questions exist, show the returned questions to the user verbatim and wait for answers.",
+			"Call planner_questions_resolve with explicit user answers before finishing this step.",
+			"If there are no unresolved questions, submit an explicit no-questions artifact with hasOpenQuestions=false.",
 		],
-		allowedNow: ["Write planner question artifacts."],
+		allowedNow: [
+			"Write planner question artifacts and ask the user questions.",
+		],
 		forbiddenNow: ["Do not ask broad questions before collecting evidence."],
-		exitCondition: "Known blockers, uncertainty, and assumptions are recorded.",
+		exitCondition:
+			"questions.md is non-empty and every answer required before planning is recorded in decisions.md.",
 		nextInstruction: "Call planner_finish_step to open verify_memory.",
 	}),
 	verify_memory: stepRule("discovery", "verify_memory", {
@@ -849,8 +855,11 @@ export async function buildPlannerStatusText(
 		`- nextStep: ${state.nextStep ?? "(none)"}`,
 		`- activeTaskId: ${state.activeTaskId ?? "(none)"}`,
 		`- activeExperimentId: ${state.activeExperimentId ?? "(none)"}`,
+		`- questionsSubmitted: ${String(state.questionsSubmitted)}`,
+		`- questionsResolved: ${String(state.questionsResolved)}`,
 		`- requiresMemoryUpdate: ${String(state.requiresMemoryUpdate)}`,
 		`- memoryUpdateReason: ${state.memoryUpdateReason ?? "(none)"}`,
+		`- compactBoundaries: ${JSON.stringify(state.compactBoundaries)}`,
 		`- requiresCompact: ${String(state.requiresCompact)}`,
 		`- requiresUserDecision: ${String(state.requiresUserDecision)}`,
 		`- broken: ${String(state.broken)}`,
@@ -996,7 +1005,9 @@ function formatLifecycleNextAction(
 ): string {
 	switch (decision.action) {
 		case "finish_step":
-			return `Call planner_finish_step only after exit condition is true: ${rule?.exitCondition ?? "(missing rule)"}`;
+			return decision.requiredTool === "planner_finish_step"
+				? `Call planner_finish_step only after exit condition is true: ${rule?.exitCondition ?? "(missing rule)"}`
+				: decision.modelMessage;
 		case "start_step":
 			return `Call planner_start_step, then follow ${decision.stage}/${decision.step}: ${rule?.objective ?? "current step"}.`;
 		case "write_memory":

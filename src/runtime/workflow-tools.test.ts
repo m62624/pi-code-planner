@@ -215,6 +215,69 @@ describe("planner workflow tools", () => {
 		expect(result.text).toContain("planner_memory_index_status");
 	});
 
+	it("blocks discovery questions completion while questions.md is empty", async () => {
+		const setup = await createWorkflowSetup({
+			stage: "discovery",
+			step: "write_questions",
+			stepStatus: "running",
+		});
+
+		const result = await finishStep(setup);
+
+		expect(result.result).toMatchObject({
+			status: "blocked",
+			code: "runtime_blocked",
+		});
+		expect(result.text).toContain("/questions.md");
+	});
+
+	it("blocks discovery questions completion until submitted questions are resolved", async () => {
+		const setup = await createWorkflowSetup({
+			stage: "discovery",
+			step: "write_questions",
+			stepStatus: "running",
+			questionsSubmitted: true,
+			questionsResolved: false,
+		});
+		await setup.fs.writeText(
+			setup.planPaths.questionsMd,
+			"# Questions\n\n1. Which behavior should remain compatible?\n",
+		);
+
+		const result = await finishStep(setup);
+
+		expect(result.result).toMatchObject({
+			status: "blocked",
+			code: "runtime_blocked",
+		});
+		expect(result.text).toContain("planner_questions_resolve");
+	});
+
+	it("finishes discovery questions only after the persisted question gate is resolved", async () => {
+		const setup = await createWorkflowSetup({
+			stage: "discovery",
+			step: "write_questions",
+			stepStatus: "running",
+			questionsSubmitted: true,
+			questionsResolved: true,
+		});
+		await setup.fs.writeText(
+			setup.planPaths.questionsMd,
+			"# Questions\n\nNo unresolved questions remain.\n",
+		);
+
+		const result = await finishStep(setup);
+
+		expect(result.result).toMatchObject({ status: "applied" });
+		await expect(
+			readPlanState(setup.fs, setup.planPaths),
+		).resolves.toMatchObject({
+			stage: "discovery",
+			step: "verify_memory",
+			stepStatus: "pending",
+		});
+	});
+
 	it("blocks task preparation completion until a task branch is active", async () => {
 		const setup = await createWorkflowSetup({
 			stage: "execution",

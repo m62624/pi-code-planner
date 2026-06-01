@@ -293,7 +293,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["discovery.md", "memory/relations/index.jsonl"],
 		updatedArtifacts: ["questions.md"],
 		requiredGates: ["memory_indexed"],
-		expectedTools: ["planner_status"],
+		expectedTools: ["planner_questions_submit", "planner_questions_resolve"],
 		commitPolicy: "forbidden",
 		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",

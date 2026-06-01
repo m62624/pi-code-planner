@@ -143,6 +143,11 @@ describe("planner plan tools", () => {
 			currentBranch: "plan/api-audit",
 			lastCheckpointCommit: "bootstrap456",
 			requiresMemoryUpdate: false,
+			compactBoundaries: {
+				stage: true,
+				task: false,
+				experiment: false,
+			},
 		});
 		await expect(readMemoryCheckpoint(fs, memoryPaths)).resolves.toMatchObject({
 			commit: null,

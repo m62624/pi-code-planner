@@ -11,6 +11,7 @@ import {
 	enterPlannerRecovery,
 	failPlannerStep,
 	finishPlannerStep,
+	isPlannerCompactEnabled,
 	type PlannerPosition,
 	PlannerStateMachineError,
 	requestPlannerCompact,
@@ -162,7 +163,7 @@ export function getAllowedPlannerStateTransitionTypes(
 		case "pending":
 			return ["start_step", "block_step", "enter_recovery"];
 		case "running":
-			return state.step.startsWith("compact_")
+			return state.step.startsWith("compact_") && isPlannerCompactEnabled(state)
 				? ["request_compact", "fail_step", "block_step", "enter_recovery"]
 				: ["finish_step", "fail_step", "block_step", "enter_recovery"];
 		case "completed":

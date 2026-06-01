@@ -106,6 +106,54 @@ describe("planner lifecycle decision", () => {
 		});
 	});
 
+	it("skips a disabled task compact boundary without invoking Pi compact", () => {
+		const preflight = readyPreflight({
+			state: state({
+				stage: "execution",
+				step: "compact_task",
+				stepStatus: "running",
+			}),
+		});
+
+		expect(decidePlannerLifecycleNext(preflight)).toMatchObject({
+			action: "finish_step",
+			requiredTool: "planner_finish_step",
+			requiredTransition: "finish_step",
+		});
+	});
+
+	it("requires question submission before discovery questions can finish", () => {
+		const preflight = readyPreflight({
+			state: state({
+				stage: "discovery",
+				step: "write_questions",
+				stepStatus: "running",
+			}),
+		});
+
+		expect(decidePlannerLifecycleNext(preflight)).toMatchObject({
+			requiredTool: "planner_questions_submit",
+			requiredTransition: null,
+		});
+	});
+
+	it("requires explicit answers after open discovery questions are submitted", () => {
+		const preflight = readyPreflight({
+			state: state({
+				stage: "discovery",
+				step: "write_questions",
+				stepStatus: "running",
+				questionsSubmitted: true,
+				questionsResolved: false,
+			}),
+		});
+
+		expect(decidePlannerLifecycleNext(preflight)).toMatchObject({
+			requiredTool: "planner_questions_resolve",
+			requiredTransition: null,
+		});
+	});
+
 	it("advances completed steps without repeating them", () => {
 		const preflight = readyPreflight({
 			state: state({

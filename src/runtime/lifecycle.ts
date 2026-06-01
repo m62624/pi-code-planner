@@ -3,6 +3,7 @@ import type { InstructionKey } from "../instructions/schema";
 import type { PlannerStage, PlannerStep, StepStatus } from "../storage/schema";
 import type { PlannerRuntimeAction } from "./planner-runtime";
 import type { PlannerPreflightResult } from "./preflight";
+import { isPlannerCompactEnabled } from "./state-machine";
 import {
 	getAllowedPlannerStateTransitionTypes,
 	type PlannerStateTransitionType,
@@ -193,6 +194,27 @@ function stateMachineDecision(
 				"Show the user goal.md and ask for explicit approval. Call planner_goal_decide only after the user answers approve or revise.",
 		};
 	}
+	if (
+		state.stage === "discovery" &&
+		state.step === "write_questions" &&
+		state.stepStatus === "running" &&
+		!state.questionsResolved
+	) {
+		return {
+			...base,
+			action: "finish_step",
+			requiredTool: state.questionsSubmitted
+				? "planner_questions_resolve"
+				: "planner_questions_submit",
+			requiredTransition: null,
+			reason: state.questionsSubmitted
+				? "Discovery questions were submitted and require explicit user answers."
+				: "Discovery questions must be submitted before planning.",
+			modelMessage: state.questionsSubmitted
+				? "Show the submitted discovery questions to the user verbatim. Wait for explicit answers, then call planner_questions_resolve. Do not continue to planning yet."
+				: "Call planner_questions_submit with evidence-based questions and assumptions. Use hasOpenQuestions=false only when the artifact explicitly states that no unresolved questions remain.",
+		};
+	}
 	switch (state.stepStatus) {
 		case "pending":
 			return transitionDecision({
@@ -206,7 +228,7 @@ function stateMachineDecision(
 					"Call planner_start_step. After it starts, follow the current step rule and instruction files.",
 			});
 		case "running":
-			return state.step.startsWith("compact_")
+			return state.step.startsWith("compact_") && isPlannerCompactEnabled(state)
 				? transitionDecision({
 						base,
 						action: "request_compact",
@@ -224,8 +246,9 @@ function stateMachineDecision(
 						tool: "planner_finish_step",
 						allowedTransitions,
 						reason: `Planner step is running: ${state.stage}/${state.step}.`,
-						modelMessage:
-							"Finish the current step only after its exit condition is true. Then call planner_finish_step. The next persisted step opens atomically.",
+						modelMessage: state.step.startsWith("compact_")
+							? "This compact boundary is disabled in state.json. Call planner_finish_step to skip the real Pi compact while preserving the state-machine checkpoint."
+							: "Finish the current step only after its exit condition is true. Then call planner_finish_step. The next persisted step opens atomically.",
 					});
 		case "completed":
 			return transitionDecision({

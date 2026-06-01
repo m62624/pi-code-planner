@@ -67,6 +67,11 @@ import {
 } from "./runtime/plan-tools";
 import { runPlannerPreflight } from "./runtime/preflight";
 import {
+	executePlannerQuestionTool,
+	PLANNER_QUESTION_TOOL_NAMES,
+	type PlannerQuestionToolName,
+} from "./runtime/question-tools";
+import {
 	executePlannerRecoveryTool,
 	PLANNER_RECOVERY_TOOL_NAMES,
 	type PlannerRecoveryToolName,
@@ -149,6 +154,37 @@ const GOAL_DECIDE_TOOL_PARAMETERS = {
 		},
 	},
 	required: ["decision"],
+	additionalProperties: false,
+} as const;
+
+const QUESTIONS_SUBMIT_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		content: {
+			type: "string",
+			description:
+				"Full questions.md markdown. Include evidence-based questions and explicit assumptions, or state explicitly that no unresolved questions remain.",
+		},
+		hasOpenQuestions: {
+			type: "boolean",
+			description:
+				"True when the user must answer questions before discovery can continue.",
+		},
+	},
+	required: ["content", "hasOpenQuestions"],
+	additionalProperties: false,
+} as const;
+
+const QUESTIONS_RESOLVE_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		answers: {
+			type: "string",
+			description:
+				"The user's answers in durable markdown form. Call only after the user explicitly answers.",
+		},
+	},
+	required: ["answers"],
 	additionalProperties: false,
 } as const;
 
@@ -465,10 +501,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			await ctx.waitForIdle();
 			let parsed = parsePlannerCreateCommandArgs(args);
 			if (!parsed && args.trim().length === 0) {
-				const request = await ctx.ui.input(
-					"What do you want the planner to do?",
-					"Describe the requested outcome",
-				);
+				const request = await ctx.ui.editor("Describe the planner request", "");
 				if (request?.trim()) {
 					parsed = { request: request.trim() };
 				}
@@ -552,7 +585,6 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			});
 			await ctx.switchSession(session.sessionFile, {
 				withSession: async (replacementCtx) => {
-					await removePlannerHandoffBootstrapFile(fs, session.sessionFile);
 					await replacementCtx.sendUserMessage(
 						buildPlannerHandoffPrompt({ planId: createdPlanId, worktreePath }),
 					);
@@ -638,7 +670,6 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			});
 			await ctx.switchSession(session.sessionFile, {
 				withSession: async (replacementCtx) => {
-					await removePlannerHandoffBootstrapFile(fs, session.sessionFile);
 					await replacementCtx.sendUserMessage(
 						buildPlannerResumePrompt({
 							planId,
@@ -686,7 +717,6 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				});
 				await ctx.switchSession(session.sessionFile, {
 					withSession: async (replacementCtx) => {
-						await removePlannerHandoffBootstrapFile(fs, session.sessionFile);
 						const result = await executePlannerUserCommand({
 							fs,
 							git: new NodeGitRunner(),
@@ -787,9 +817,9 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				await ctx.switchSession(targetSessionFile, {
 					withSession: async (replacementCtx) => {
 						if (fallbackSession) {
-							await removePlannerHandoffBootstrapFile(
-								fs,
-								fallbackSession.sessionFile,
+							ctx.ui.notify(
+								"Original Pi JSONL session was missing. Planner resumed in a replacement project-root session.",
+								"warning",
 							);
 						}
 						if (deleteWorktreeSessions) {
@@ -882,6 +912,30 @@ function registerPlannerTools(
 			parameters: goalToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const result = await executePlannerGoalTool({
+					fs: createNodeFs(),
+					git: new NodeGitRunner(),
+					projectPaths: await createRuntimeProjectPaths(ctx.cwd),
+					toolName,
+					params,
+				});
+				return {
+					content: [{ type: "text", text: result.text }],
+					details: result,
+				};
+			},
+		});
+	}
+
+	for (const toolName of PLANNER_QUESTION_TOOL_NAMES) {
+		pi.registerTool({
+			name: toolName,
+			label: questionToolLabel(toolName),
+			description: questionToolDescription(toolName),
+			promptSnippet:
+				"Use planner question tools during discovery/write_questions. Save evidence-based questions, show open questions to the user verbatim, wait for answers, then resolve them before continuing.",
+			parameters: questionToolParameters(toolName) as never,
+			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const result = await executePlannerQuestionTool({
 					fs: createNodeFs(),
 					git: new NodeGitRunner(),
 					projectPaths: await createRuntimeProjectPaths(ctx.cwd),
@@ -1178,6 +1232,33 @@ function goalToolParameters(toolName: PlannerGoalToolName) {
 			return GOAL_SUBMIT_TOOL_PARAMETERS;
 		case "planner_goal_decide":
 			return GOAL_DECIDE_TOOL_PARAMETERS;
+	}
+}
+
+function questionToolLabel(toolName: PlannerQuestionToolName): string {
+	switch (toolName) {
+		case "planner_questions_submit":
+			return "Planner Questions Submit";
+		case "planner_questions_resolve":
+			return "Planner Questions Resolve";
+	}
+}
+
+function questionToolDescription(toolName: PlannerQuestionToolName): string {
+	switch (toolName) {
+		case "planner_questions_submit":
+			return "Write evidence-based discovery questions or explicitly record that none remain. Open questions must be shown to the user.";
+		case "planner_questions_resolve":
+			return "Persist explicit user answers for discovery questions before planning can continue.";
+	}
+}
+
+function questionToolParameters(toolName: PlannerQuestionToolName) {
+	switch (toolName) {
+		case "planner_questions_submit":
+			return QUESTIONS_SUBMIT_TOOL_PARAMETERS;
+		case "planner_questions_resolve":
+			return QUESTIONS_RESOLVE_TOOL_PARAMETERS;
 	}
 }
 

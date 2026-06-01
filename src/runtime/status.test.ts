@@ -206,6 +206,36 @@ describe("planner status text", () => {
 		expect(text).toContain(setup.planPaths.goalMd);
 	});
 
+	it("directs the model to submit and resolve discovery questions before planning", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createStatusSetup(fs, {
+			state: {
+				stage: "discovery",
+				step: "write_questions",
+				stepStatus: "running",
+				questionsSubmitted: true,
+				questionsResolved: false,
+			},
+		});
+		await syncInstructionFiles(
+			fs,
+			createInstructionPaths(setup.projectPaths),
+			TEST_INSTRUCTION_DEFAULTS,
+		);
+
+		const preflight = await runPlannerPreflight({
+			fs,
+			git: new MockGitRunner(),
+			projectPaths: setup.projectPaths,
+		});
+		const text = await buildPlannerStatusText({ fs, preflight });
+
+		expect(text).toContain("- questionsSubmitted: true");
+		expect(text).toContain("- questionsResolved: false");
+		expect(text).toContain("- requiredTool: planner_questions_resolve");
+		expect(text).toContain("Wait for explicit answers");
+	});
+
 	it("reports the exact active file line after compact during iterative discovery", async () => {
 		const fs = new MockPlannerFs();
 		const setup = await createStatusSetup(fs, {

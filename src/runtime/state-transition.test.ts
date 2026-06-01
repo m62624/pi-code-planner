@@ -240,6 +240,28 @@ describe("persisted planner state transition", () => {
 		});
 	});
 
+	it("finishes a disabled task compact checkpoint without requesting Pi compact", async () => {
+		const setup = await createReadySetup({
+			stage: "execution",
+			step: "compact_task",
+			stepStatus: "running",
+		});
+
+		const result = await applyPlannerStateTransition({
+			fs: setup.fs,
+			preflight: setup.preflight,
+			transition: { type: "finish_step" },
+		});
+
+		expect(result).toMatchObject({ status: "applied" });
+		expect(await readPlanState(setup.fs, setup.planPaths)).toMatchObject({
+			stage: "execution",
+			step: "select_next_task",
+			stepStatus: "pending",
+			requiresCompact: false,
+		});
+	});
+
 	it("persists recovery enter and resume from recovery-gated preflight", async () => {
 		const setup = await createReadySetup({
 			stage: "execution",

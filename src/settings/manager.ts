@@ -15,6 +15,7 @@ export interface EffectivePlannerSettings {
 	project: PlannerSettingsFile | null;
 	effective: PlannerSettings;
 	worktreeSource: "project" | "global" | "default";
+	compactSource: "project" | "global" | "default";
 }
 
 export async function loadEffectivePlannerSettings(input: {
@@ -43,13 +44,24 @@ export async function loadEffectivePlannerSettings(input: {
 			: "default";
 	const worktree =
 		project?.worktree ?? global.worktree ?? DEFAULT_PLANNER_SETTINGS.worktree;
+	const compactSource = project?.compact
+		? "project"
+		: global.compact
+			? "global"
+			: "default";
+	const compact = {
+		...DEFAULT_PLANNER_SETTINGS.compact,
+		...(global.compact ?? {}),
+		...(project?.compact ?? {}),
+	};
 
 	return {
 		paths,
 		global,
 		project,
-		effective: { worktree },
+		effective: { worktree, compact },
 		worktreeSource,
+		compactSource,
 	};
 }
 
@@ -75,6 +87,33 @@ function normalizeSettingsFile(
 		...(record.worktree === undefined
 			? {}
 			: { worktree: normalizeWorktreeSettings(record.worktree, path) }),
+		...(record.compact === undefined
+			? {}
+			: { compact: normalizeCompactSettings(record.compact, path) }),
+	};
+}
+
+function normalizeCompactSettings(
+	value: unknown,
+	path: string,
+): PlannerSettingsFile["compact"] {
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		throw new TypeError(`Planner compact settings must be an object: ${path}`);
+	}
+	const record = value as Record<string, unknown>;
+	for (const key of ["stage", "task", "experiment"] as const) {
+		if (record[key] !== undefined && typeof record[key] !== "boolean") {
+			throw new TypeError(
+				`Planner compact setting ${key} must be boolean: ${path}`,
+			);
+		}
+	}
+	return {
+		...(typeof record.stage === "boolean" ? { stage: record.stage } : {}),
+		...(typeof record.task === "boolean" ? { task: record.task } : {}),
+		...(typeof record.experiment === "boolean"
+			? { experiment: record.experiment }
+			: {}),
 	};
 }
 

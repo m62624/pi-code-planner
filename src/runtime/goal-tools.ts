@@ -69,6 +69,10 @@ export async function executePlannerGoalTool(
 			[
 				"Planner goal draft saved.",
 				`Goal artifact: ${planPaths.goalMd}`,
+				"",
+				"## Goal Draft For User Review",
+				content.trim(),
+				"",
 				"Ask the user to review the goal and explicitly approve it or request revision.",
 				"After the user answers, call planner_goal_decide.",
 			].join("\n"),

@@ -74,6 +74,8 @@ export function buildPlannerHandoffPrompt(input: {
 		"",
 		"Call planner_status now.",
 		"Draft the requested goal in goal.md using your own words.",
+		"Show the full goal draft to the user and wait for explicit approval.",
+		"Do not write plan.md yet. plan.md is written later during planning/draft_plan after discovery memory and questions are complete.",
 		"Wait for explicit user approval. Ask evidence-based clarification questions only after discovery.",
 		"Do not inspect project source before planner_status reports discovery/scan_project_structure.",
 		"Do not use raw git while the planner plan is active.",

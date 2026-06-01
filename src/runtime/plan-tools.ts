@@ -32,7 +32,7 @@ import {
 	createProjectLocalWorktreeLocation,
 } from "../worktree/paths";
 import { inspectPlannerGitReality } from "./git-state-sync";
-import { resolvePlannerPlanId } from "./plan-naming";
+import { createPlannerPlanTitle, resolvePlannerPlanId } from "./plan-naming";
 
 export const PLANNER_PLAN_TOOL_NAMES = ["planner_create_plan"] as const;
 
@@ -71,7 +71,8 @@ async function createPlanTool(
 ): Promise<PlannerPlanToolExecutionResult> {
 	const params = asObject(input.params);
 	const request = requiredString(params, "request");
-	const title = optionalString(params, "title") ?? request;
+	const title =
+		optionalString(params, "title") ?? createPlannerPlanTitle(request);
 	const project = await ensureProjectRecord(input.fs, input.projectPaths);
 	const planId = resolvePlannerPlanId({
 		requestedPlanId: optionalString(params, "planId") ?? undefined,
@@ -146,6 +147,7 @@ async function createPlanTool(
 			baseBranch,
 			planBranch,
 			worktreePath: worktreeLocation,
+			compactBoundaries: settings.effective.compact,
 		}),
 		stage: "intake",
 		step: "draft_goal",

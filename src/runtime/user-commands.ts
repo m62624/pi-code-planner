@@ -183,6 +183,7 @@ async function switchPlan(
 			{
 				project,
 				target,
+				worktreePath: target.state?.worktreePath ?? null,
 			},
 		);
 	}

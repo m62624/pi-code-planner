@@ -33,7 +33,10 @@ Build durable compressed project memory before planning or implementation. Disco
    - Relationships may be recorded after file indexing because cross-file meaning is clearer when reusable symbols are already available.
    - Review the completed symbol index before leaving this step. Add only important reusable relations; record uncertainty instead of inventing a link.
 5. `write_questions`
-   - Write evidence-based unresolved questions and explicit assumptions to `questions.md`.
+   - Call `planner_questions_submit` with evidence-based unresolved questions and explicit assumptions for `questions.md`.
+   - If unresolved questions exist, the tool returns the exact text to show the user verbatim. Wait for answers before leaving this step.
+   - Call `planner_questions_resolve` with the user's explicit answers. The wrapper records answers in `decisions.md` and marks the persisted question gate resolved.
+   - If no questions remain, call `planner_questions_submit` with `hasOpenQuestions: false` and say so explicitly in the content; the artifact must not remain empty.
    - Ask the user only after collecting project evidence. Do not ask speculative implementation questions during intake.
 6. `verify_memory`
    - Use `planner_memory_inspect`, `planner_memory_verify`, and `planner_memory_sync_checkpoint`.
@@ -54,7 +57,7 @@ Build durable compressed project memory before planning or implementation. Disco
 
 ## Exit Condition
 
-Discovery is complete only when the durable file queue is complete, reusable symbols and effects are verified file-by-file, evidence-backed relations and project patterns are written, questions are recorded, memory verification passes, the checkpoint is synced, and the discovery compact boundary finishes.
+Discovery is complete only when the durable file queue is complete, reusable symbols and effects are verified file-by-file, evidence-backed relations and project patterns are written, required user questions are answered or explicitly absent, memory verification passes, the checkpoint is synced, and the configured discovery compact boundary finishes.
 
 ## manual-compact
 

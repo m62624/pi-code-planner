@@ -6,6 +6,9 @@ export interface PlannerCreateCommandArgs {
 	request: string;
 }
 
+const MAX_GENERATED_PLAN_ID_LENGTH = 48;
+const MAX_GENERATED_PLAN_TITLE_LENGTH = 80;
+
 export function parsePlannerCreateCommandArgs(
 	args: string,
 ): PlannerCreateCommandArgs | null {
@@ -58,7 +61,9 @@ export function resolvePlannerPlanId(input: {
 		return requested;
 	}
 
-	const base = sanitizeIdPart(input.request) || "plan";
+	const base =
+		sanitizeIdPart(input.request).slice(0, MAX_GENERATED_PLAN_ID_LENGTH) ||
+		"plan";
 	const existing = new Set(input.project.plans.map((plan) => plan.planId));
 	if (!existing.has(base)) {
 		return base;
@@ -74,6 +79,17 @@ export function resolvePlannerPlanId(input: {
 	throw new Error(
 		`Unable to allocate unique planner id for request: ${input.request}`,
 	);
+}
+
+export function createPlannerPlanTitle(request: string): string {
+	const firstLine =
+		request
+			.split(/\r?\n/)
+			.map((line) => line.trim())
+			.find(Boolean) ?? "Planner task";
+	return firstLine.length <= MAX_GENERATED_PLAN_TITLE_LENGTH
+		? firstLine
+		: `${firstLine.slice(0, MAX_GENERATED_PLAN_TITLE_LENGTH - 3).trimEnd()}...`;
 }
 
 function tokenizeCommandArgs(args: string): string[] {

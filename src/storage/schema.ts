@@ -237,6 +237,12 @@ export interface ManagedBranchRegistry {
 	tasks: Record<string, ManagedTaskBranchRegistry>;
 }
 
+export interface PlannerCompactBoundaries {
+	stage: boolean;
+	task: boolean;
+	experiment: boolean;
+}
+
 export interface PlanStateRecord {
 	schemaVersion: typeof SCHEMA_VERSION;
 	stage: PlannerStage;
@@ -253,6 +259,9 @@ export interface PlanStateRecord {
 	lastCheckpointCommit: string | null;
 	requiresMemoryUpdate: boolean;
 	memoryUpdateReason: MemoryUpdateReason | null;
+	questionsSubmitted: boolean;
+	questionsResolved: boolean;
+	compactBoundaries: PlannerCompactBoundaries;
 	requiresCompact: boolean;
 	requiresUserDecision: boolean;
 	broken: boolean;
@@ -294,6 +303,7 @@ export function createInitialPlanState(input: {
 	baseBranch: string;
 	planBranch: string;
 	worktreePath?: string | null;
+	compactBoundaries?: PlannerCompactBoundaries;
 }): PlanStateRecord {
 	return {
 		schemaVersion: SCHEMA_VERSION,
@@ -321,6 +331,13 @@ export function createInitialPlanState(input: {
 		lastCheckpointCommit: null,
 		requiresMemoryUpdate: false,
 		memoryUpdateReason: null,
+		questionsSubmitted: false,
+		questionsResolved: false,
+		compactBoundaries: input.compactBoundaries ?? {
+			stage: true,
+			task: false,
+			experiment: false,
+		},
 		requiresCompact: false,
 		requiresUserDecision: false,
 		broken: false,

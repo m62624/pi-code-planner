@@ -321,6 +321,25 @@ describe("planner user commands", () => {
 		});
 	});
 
+	it("returns worktreePath when switching to the already active plan", async () => {
+		const { fs, git, projectPaths } = await createProjectFixture({
+			activePlanId: "plan-a",
+		});
+
+		const result = await executePlannerUserCommand({
+			fs,
+			git,
+			projectPaths,
+			commandName: "planner_switch",
+			params: { planId: "plan-a" },
+		});
+
+		expect(result.status).toBe("applied");
+		expect(result.details).toMatchObject({
+			worktreePath: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
+		});
+	});
+
 	it("blocks switching away from a dirty active plan", async () => {
 		const { fs, git, projectPaths } = await createProjectFixture({
 			activePlanId: "plan-a",

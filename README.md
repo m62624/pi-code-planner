@@ -103,6 +103,9 @@ Optional explicit plan id:
 ```
 
 If no id is provided, the extension generates a deterministic slug from the raw request and adds a numeric suffix when needed.
+If no request is provided, Pi opens a multiline editor for the requested outcome. The
+human-readable title is generated from the first non-empty request line and kept
+short; the full text remains in `request.md`.
 
 Plan creation performs the bootstrap automatically:
 
@@ -117,7 +120,7 @@ resolve project
   -> persist state.json
   -> write a valid Pi session JSONL header with the worktree cwd
   -> switch Pi into a worktree session
-  -> remove the bootstrap header so Pi persists the rebound session normally
+  -> keep the JSONL header so Pi --resume can discover the worktree session
   -> save the raw request in request.md
   -> start intake/draft_goal
 ```
@@ -136,7 +139,7 @@ These are Pi slash commands for the user. They are not model tools.
 
 | Command | Purpose |
 | --- | --- |
-| `/planner-create [--id <plan-id>] <request>` | Create a plan from a raw requested outcome, create its worktree and state files, and open the worktree Pi session. Without a request, prompt through the TUI. |
+| `/planner-create [--id <plan-id>] <request>` | Create a plan from a raw requested outcome, create its worktree and state files, and open the worktree Pi session. Without a request, open a multiline editor. |
 | `/planner-switch [<plan-id>]` | Switch to another plan in the current project. Without an id, open the TUI picker. |
 | `/planner-rename [--id <plan-id>] <new-title>` | Rename a human-readable plan title without changing ids, branches, or paths. |
 | `/planner-delete [<plan-id>]` | Delete a selected inactive plan after confirmation. Without an id, open the TUI picker. |
@@ -338,6 +341,20 @@ The model can create multiple candidate experiments when different approaches ar
 
 Compaction is intentional and artifact-driven. The extension does not compact after every technical action.
 
+Compact steps remain explicit state-machine checkpoints even when a real Pi compact is disabled. The default performs stage-level compaction and skips the slower per-task and per-experiment compaction calls:
+
+```json
+{
+  "compact": {
+    "stage": true,
+    "task": false,
+    "experiment": false
+  }
+}
+```
+
+Global or project settings may override any compact boundary independently. Skipped boundaries still advance through their persisted `compact_*` step, so recovery remains deterministic.
+
 | Boundary | Reason |
 | --- | --- |
 | `discovery/compact_discovery` | Preserve project understanding and compressed memory. |
@@ -510,7 +527,9 @@ Important files:
 | `state.json` | Crash-recoverable execution state for one plan. |
 | `request.md` | Exact raw requested outcome captured when the plan is created. |
 | `goal.md` | Model-normalized goal, assumptions, constraints, and non-goals approved by the user before discovery. |
-| `plan.md` | Human-readable plan context. |
+| `plan.md` | Human-readable implementation plan written after discovery and question resolution. |
+| `questions.md` | Evidence-based discovery questions and their resolution state. |
+| `decisions.md` | User answers and durable planning decisions. |
 | `memory/indexing.json` | Crash-recoverable file queue with one active file and its exact next unread line. |
 | `memory/*` | Compressed project context and freshness checkpoint data. |
 
@@ -534,6 +553,11 @@ Default project-local worktree:
 {
   "worktree": {
     "mode": "project-local"
+  },
+  "compact": {
+    "stage": true,
+    "task": false,
+    "experiment": false
   }
 }
 ```
@@ -699,6 +723,11 @@ Final output export and cleanup are intentionally exposed only as the user slash
 
 - `planner_recovery_inspect`
 - `planner_recovery_resume`
+
+### Discovery Questions
+
+- `planner_questions_submit`
+- `planner_questions_resolve`
 
 ## Recovery Behavior
 

@@ -67,6 +67,26 @@ const COMPACT_STEPS = new Set<PlannerStep>([
 
 const STEP_TO_STAGE = buildStepToStageMap();
 
+export function isPlannerCompactEnabled(state: PlanStateRecord): boolean {
+	const boundaries = state.compactBoundaries ?? {
+		stage: true,
+		task: false,
+		experiment: false,
+	};
+	switch (state.step) {
+		case "compact_experiment":
+			return boundaries.experiment;
+		case "compact_task":
+			return boundaries.task;
+		case "compact_discovery":
+		case "compact_planning":
+		case "compact_finalize":
+			return boundaries.stage;
+		default:
+			return false;
+	}
+}
+
 export function getPlannerStepStage(step: PlannerStep): PlannerStage {
 	const stage = STEP_TO_STAGE.get(step);
 	if (!stage) {
