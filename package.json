@@ -1,5 +1,5 @@
 {
-	"name": "pi-planner",
+	"name": "pi-code-planner",
 	"version": "0.1.0",
 	"description": "Disk-first planning and git guardrails for Pi local-model workflows",
 	"keywords": [

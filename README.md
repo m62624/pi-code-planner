@@ -46,6 +46,16 @@ The TypeScript layers, mock tests, state machine, tools, instruction sync, and P
 
 Known limitation: recovery currently provides inspection and non-destructive resume. Destructive recovery actions such as reset, forced checkout, or discarding dirty changes are intentionally not exposed as model tools.
 
+## Installation
+
+Install the extension directly from GitHub:
+
+```bash
+pi install git:github.com/m62624/pi-code-planner
+```
+
+Then open Pi in the project directory where you want to use the planner.
+
 ## Requirements
 
 - Pi Code
@@ -57,22 +67,25 @@ The extension is model-agnostic, but it is specifically designed for local-model
 
 ## Development Setup
 
-Install dependencies:
+Clone this repository, or your own fork, when you want to modify the extension locally:
 
 ```bash
+git clone https://github.com/m62624/pi-code-planner.git
+cd pi-code-planner
 npm install
+npm run build
 ```
 
-Run Pi with the local extension:
+Run Pi with the extension loaded directly from the local working tree:
 
 ```bash
 pi -e ./src/index.ts
 ```
 
-Pi packages can also be loaded through Pi's normal package installation flow after the repository is published or shared:
+To install a modified fork through Pi instead, use the fork repository:
 
 ```bash
-pi install git:<repository-url>
+pi install git:github.com/<account>/pi-code-planner
 ```
 
 ## Start A Plan
