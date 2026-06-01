@@ -9,8 +9,7 @@ import type { ProjectStoragePaths } from "../storage/paths";
 import type { PlannerPreflightResult } from "./preflight";
 
 export const PLANNER_COMPACT_MARKER = "[PI-CODE-PLANNER COMPACT INSTRUCTIONS]";
-export const PLANNER_SYSTEM_INSTRUCTIONS_HEADER =
-	"[PI-CODE-PLANNER SYSTEM INSTRUCTIONS]";
+export const PLANNER_SYSTEM_INSTRUCTIONS_HEADER = "[SYSTEM_INSTRUCTIONS]";
 
 export interface PlannerCompactRuntimeState {
 	plannerControlledCompactInFlight: boolean;
@@ -36,6 +35,8 @@ export interface PlannerCompactInstructionSection {
 	defaultPath: string;
 	appendPath: string | null;
 }
+
+export type PlannerPostCompactDelivery = "immediate" | "followUp";
 
 export function createPlannerCompactRuntimeState(): PlannerCompactRuntimeState {
 	return { plannerControlledCompactInFlight: false };
@@ -124,7 +125,7 @@ export function buildPlannerCompactInstructions(input: {
 	].join("\n");
 }
 
-export function buildPlannerPostAutoCompactMessage(input: {
+export function buildPlannerPostCompactMessage(input: {
 	preflight: PlannerPreflightResult;
 	sections: readonly PlannerCompactInstructionSection[];
 }): string {
@@ -140,9 +141,11 @@ export function buildPlannerPostAutoCompactMessage(input: {
 	return [
 		PLANNER_SYSTEM_INSTRUCTIONS_HEADER,
 		"",
-		"Pi auto-compaction or an unplanned compaction has completed while pi-code-planner is active.",
+		"A Pi compaction boundary has completed while pi-code-planner is active.",
 		"Do not continue from memory or from the previous chat state.",
-		"Call planner_status now and follow the exact reported stage, step, allowed wrappers, memory gate, and recovery gate.",
+		"Call planner_status immediately before using any other tool. Follow the exact reported stage, step, allowed wrappers, memory gate, and recovery gate.",
+		"Use bounded planner memory before reading project source. Start with planner_memory_search when planner_status allows it.",
+		"Read project source only when bounded memory is missing, stale, insufficient for the exact current action, or requires verification. State the missing detail before reading source.",
 		"If planner_status reports stale memory, update planner memory before continuing.",
 		"If planner_status reports an active memory indexing file, resume that file from activeIndexNextUnreadLine. Do not reread completed files or claim another file.",
 		"If planner_status reports recovery, use recovery tools and ask the user before destructive repair.",
@@ -159,6 +162,23 @@ export function buildPlannerPostAutoCompactMessage(input: {
 		"## Auto-Compact Instruction Sections",
 		...sectionLines(input.sections),
 	].join("\n");
+}
+
+export function enqueuePlannerPostCompactMessage(input: {
+	message: string;
+	isIdle: boolean;
+	hasPendingMessages: boolean;
+	sendUserMessage: (
+		message: string,
+		options?: { deliverAs: "followUp" },
+	) => void;
+}): PlannerPostCompactDelivery {
+	if (input.isIdle && !input.hasPendingMessages) {
+		input.sendUserMessage(input.message);
+		return "immediate";
+	}
+	input.sendUserMessage(input.message, { deliverAs: "followUp" });
+	return "followUp";
 }
 
 export async function collectAutoCompactInstructionSections(input: {

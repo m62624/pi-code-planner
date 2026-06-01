@@ -409,11 +409,12 @@ export const PLANNER_STEP_RULES = {
 			"Write failing/mock/contract tests before production implementation.",
 		requiredActions: [
 			"Write tests, fixtures, mocks, and required test harness wiring for the active task.",
+			"Record tests in tests.md. If project files changed, commit through planner_git_commit, refresh memory, verify it, and sync checkpoint before continuing.",
 		],
 		allowedNow: ["Edit test files and necessary test integration files."],
 		forbiddenNow: ["Do not implement production behavior."],
 		exitCondition:
-			"Tests exist and are expected to fail or catch missing behavior.",
+			"tests.md records the tests, project files are clean and checkpointed, and tests are expected to fail or catch missing behavior.",
 		nextInstruction: "Call planner_finish_step to open run_failing_tests.",
 	}),
 	run_failing_tests: stepRule("execution", "run_failing_tests", {

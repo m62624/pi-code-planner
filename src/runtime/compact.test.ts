@@ -12,11 +12,12 @@ import { TEST_INSTRUCTION_DEFAULTS } from "../test/instruction-defaults";
 import { MockPlannerFs } from "../test/mock-fs";
 import {
 	buildPlannerCompactInstructionBundle,
-	buildPlannerPostAutoCompactMessage,
+	buildPlannerPostCompactMessage,
 	clearPlannerControlledCompact,
 	collectAutoCompactInstructionSections,
 	consumePlannerControlledCompact,
 	createPlannerCompactRuntimeState,
+	enqueuePlannerPostCompactMessage,
 	markPlannerControlledCompactStarted,
 	PLANNER_COMPACT_MARKER,
 	PLANNER_SYSTEM_INSTRUCTIONS_HEADER,
@@ -24,7 +25,7 @@ import {
 import type { PlannerPreflightResult } from "./preflight";
 
 describe("planner compact runtime", () => {
-	it("tracks planner-controlled compact so auto compact handlers can skip follow-up", () => {
+	it("tracks planner-controlled compact so the event handler can clear the marker", () => {
 		const state = createPlannerCompactRuntimeState();
 
 		expect(consumePlannerControlledCompact(state)).toBe(false);
@@ -71,18 +72,90 @@ describe("planner compact runtime", () => {
 			preflight: setup.preflight,
 		});
 
-		const message = buildPlannerPostAutoCompactMessage({
+		const message = buildPlannerPostCompactMessage({
 			preflight: setup.preflight,
 			sections,
 		});
 
 		expect(message).toContain(PLANNER_SYSTEM_INSTRUCTIONS_HEADER);
-		expect(message).toContain("Call planner_status now");
+		expect(message.startsWith("[SYSTEM_INSTRUCTIONS]")).toBe(true);
+		expect(message).toContain("Call planner_status immediately");
+		expect(message).toContain("planner_memory_search");
+		expect(message).toContain("State the missing detail before reading source");
 		expect(message).toContain("activeIndexNextUnreadLine");
 		expect(message).toContain("Do not reread completed files");
 		expect(message).toContain("- planId: plan-a");
 		expect(message).toContain("- step: compact_task");
 		expect(message).toContain("Check git and memory before resuming.");
+	});
+
+	it("queues post-compact instructions behind pending user messages", () => {
+		const calls: Array<{
+			message: string;
+			options?: { deliverAs: "followUp" };
+		}> = [];
+
+		expect(
+			enqueuePlannerPostCompactMessage({
+				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
+				isIdle: true,
+				hasPendingMessages: true,
+				sendUserMessage(message, options) {
+					calls.push({ message, options });
+				},
+			}),
+		).toBe("followUp");
+		expect(calls).toEqual([
+			{
+				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
+				options: { deliverAs: "followUp" },
+			},
+		]);
+	});
+
+	it("starts post-compact instructions immediately only when Pi is idle and the queue is empty", () => {
+		const calls: Array<{
+			message: string;
+			options?: { deliverAs: "followUp" };
+		}> = [];
+
+		expect(
+			enqueuePlannerPostCompactMessage({
+				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
+				isIdle: true,
+				hasPendingMessages: false,
+				sendUserMessage(message, options) {
+					calls.push({ message, options });
+				},
+			}),
+		).toBe("immediate");
+		expect(calls).toEqual([
+			{ message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status." },
+		]);
+	});
+
+	it("queues post-compact instructions while Pi is still processing", () => {
+		const calls: Array<{
+			message: string;
+			options?: { deliverAs: "followUp" };
+		}> = [];
+
+		expect(
+			enqueuePlannerPostCompactMessage({
+				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
+				isIdle: false,
+				hasPendingMessages: false,
+				sendUserMessage(message, options) {
+					calls.push({ message, options });
+				},
+			}),
+		).toBe("followUp");
+		expect(calls).toEqual([
+			{
+				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
+				options: { deliverAs: "followUp" },
+			},
+		]);
 	});
 });
 

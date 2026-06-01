@@ -95,30 +95,57 @@ describe("planner built-in Pi tool guard", () => {
 		).toBe(false);
 	});
 
-	it("allows write and edit after planning without classifying file roles", () => {
-		for (const stage of [
-			"execution",
-			"finalize",
-			"done",
-			"recovery",
+	it("allows write and edit only in execution steps that permit project changes", () => {
+		for (const step of [
+			"write_tests",
+			"run_experiment",
+			"refactor_task",
 		] as const) {
 			expect(
 				decision({
 					toolName: "edit",
 					path: "src/a.rs",
-					state: activeState(stage),
+					state: activeExecutionState(step),
 				}),
-				`${stage} should allow project edits`,
-			).toEqual({ allow: true, reason: null });
-			expect(
-				decision({
-					toolName: "write",
-					path: "/tmp/custom-output.txt",
-					state: activeState(stage),
-				}),
-				`${stage} should not classify external paths`,
+				`${step} should allow project edits`,
 			).toEqual({ allow: true, reason: null });
 		}
+	});
+
+	it("blocks write and edit in read-only execution, finalize, done, and recovery steps", () => {
+		for (const state of [
+			activeExecutionState("prepare_task"),
+			activeExecutionState("write_tdd_plan"),
+			activeExecutionState("run_failing_tests"),
+			activeState("finalize"),
+			activeState("done"),
+			activeState("recovery"),
+		]) {
+			expect(
+				decision({ toolName: "edit", path: "src/a.rs", state }).allow,
+			).toBe(false);
+		}
+	});
+
+	it("allows external writes without classifying unrelated paths", () => {
+		expect(
+			decision({
+				toolName: "write",
+				path: "/tmp/custom-output.txt",
+				state: activeState("discovery"),
+			}),
+		).toEqual({ allow: true, reason: null });
+	});
+
+	it("blocks original checkout edits even during an implementation step", () => {
+		const result = decision({
+			toolName: "edit",
+			path: "/repo/app/src/a.rs",
+			state: activeExecutionState("run_experiment"),
+		});
+
+		expect(result.allow).toBe(false);
+		expect(result.reason).toContain("original checkout");
 	});
 
 	it("allows every non-git shell command at every planner stage", () => {
@@ -202,6 +229,25 @@ function activeState(stage: PlannerStage): PlannerBuiltinGuardState {
 			step: stepFor(stage),
 		},
 	};
+}
+
+function activeExecutionState(
+	step: Extract<
+		PlanStateRecord["step"],
+		| "prepare_task"
+		| "write_tdd_plan"
+		| "write_tests"
+		| "run_failing_tests"
+		| "run_experiment"
+		| "refactor_task"
+	>,
+): PlannerBuiltinGuardState {
+	const state = activeState("execution");
+	if (!state.planState) {
+		throw new Error("Expected active planner state.");
+	}
+	state.planState.step = step;
+	return state;
 }
 
 function stepFor(stage: PlannerStage): PlanStateRecord["step"] {

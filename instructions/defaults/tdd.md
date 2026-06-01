@@ -14,7 +14,7 @@ Use strict tests-first development for every execution task. Production implemen
    - fixtures and mocks
    - focused test commands
    - expected failure or contract signal before implementation
-3. During `write_tests`, write tests and required test harness wiring only.
+3. During `write_tests`, write tests and required test harness wiring only. Record them in `tests.md`. If project files changed, commit through `planner_git_commit`, refresh memory file-by-file, verify it, and sync checkpoint before continuing.
 4. During `run_failing_tests`, execute focused checks and record evidence in verify artifacts.
 5. Begin production edits only during `run_experiment`.
 6. During `run_final_tests`, rerun focused tests and required broader integration checks.

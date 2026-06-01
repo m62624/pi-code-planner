@@ -214,22 +214,132 @@ describe("planner workflow tools", () => {
 		expect(result.text).toContain("iterative indexing is incomplete");
 		expect(result.text).toContain("planner_memory_index_status");
 	});
+
+	it("blocks task preparation completion until a task branch is active", async () => {
+		const setup = await createWorkflowSetup({
+			stage: "execution",
+			step: "prepare_task",
+			stepStatus: "running",
+		});
+
+		const result = await finishStep(setup);
+
+		expect(result.result).toMatchObject({
+			status: "blocked",
+			code: "runtime_blocked",
+		});
+		expect(result.text).toContain("planner_git_create_task_branch");
+	});
+
+	it("blocks TDD plan completion while tdd.md is empty", async () => {
+		const setup = await createWorkflowSetup({
+			stage: "execution",
+			step: "write_tdd_plan",
+			stepStatus: "running",
+			activeTaskId: "task-1",
+			activeBranches: {
+				base: "main",
+				plan: "plan/plan-a",
+				currentTask: "plan/plan-a",
+				currentExperiment: null,
+				selectedExperiment: null,
+			},
+			managedBranches: {
+				tasks: {
+					"task-1": {
+						task: "plan/plan-a",
+						experiments: [],
+						selectedExperiment: null,
+						refactor: null,
+					},
+				},
+			},
+		});
+
+		const result = await finishStep(setup);
+
+		expect(result.result).toMatchObject({
+			status: "blocked",
+			code: "runtime_blocked",
+		});
+		expect(result.text).toContain("/tasks/task-1/tdd.md");
+	});
+
+	it("blocks experiment execution until an experiment branch is active", async () => {
+		const setup = await createWorkflowSetup({
+			stage: "execution",
+			step: "start_experiments",
+			stepStatus: "running",
+			activeTaskId: "task-1",
+		});
+
+		const result = await finishStep(setup);
+
+		expect(result.result).toMatchObject({
+			status: "blocked",
+			code: "runtime_blocked",
+		});
+		expect(result.text).toContain("planner_git_create_experiment_branch");
+	});
+
+	it("blocks experiment setup until test edits are committed and checkpointed", async () => {
+		const setup = await createWorkflowSetup({
+			stage: "execution",
+			step: "write_tests",
+			stepStatus: "running",
+			activeTaskId: "task-1",
+		});
+		await setup.fs.writeText(
+			join(setup.planPaths.tasksDir, "task-1", "tests.md"),
+			"# Tests\n\n- src/a.test.ts\n",
+		);
+
+		const result = await finishStep(
+			setup,
+			new MockGitRunner("plan/plan-a", "abc123", " M src/a.test.ts\n"),
+		);
+
+		expect(result.result).toMatchObject({
+			status: "blocked",
+			code: "runtime_blocked",
+		});
+		expect(result.text).toContain("refresh affected memory");
+	});
 });
+
+async function finishStep(
+	setup: Awaited<ReturnType<typeof createWorkflowSetup>>,
+	git: GitRunner = new MockGitRunner(),
+) {
+	return await executePlannerWorkflowTool({
+		fs: setup.fs,
+		git,
+		projectPaths: setup.projectPaths,
+		toolName: "planner_finish_step",
+		params: {},
+	});
+}
 
 function transition(toolName: PlannerWorkflowToolName, params: unknown = {}) {
 	return workflowToolTransition(toolName, params);
 }
 
 class MockGitRunner implements GitRunner {
+	constructor(
+		private readonly branch = "plan/plan-a",
+		private readonly head = "abc123",
+		private readonly status = "",
+	) {}
+
 	async init(_input: GitRepoInput): Promise<void> {}
 	async currentBranch(_input: GitRepoInput): Promise<string> {
-		return "plan/plan-a";
+		return this.branch;
 	}
 	async headCommit(_input: GitRepoInput): Promise<string> {
-		return "abc123";
+		return this.head;
 	}
 	async statusPorcelain(_input: GitRepoInput): Promise<string> {
-		return "";
+		return this.status;
 	}
 	async diffStat(_input: GitRepoInput): Promise<string> {
 		return "";

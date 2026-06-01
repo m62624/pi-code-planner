@@ -54,7 +54,8 @@ The extension stores branch registry and merge targets in `state.json`. The mode
 
 - Do not run `git` through shell.
 - Do not use shell aliases, scripts, or indirect commands to bypass planner git wrappers.
-- During init, discovery, and planning, built-in write/edit calls must not change project files. After planning, the state-machine instructions control the workflow without filename classification.
+- Built-in project write/edit calls are enabled only for the exact execution steps reported by `planner_status`: `write_tests`, `run_experiment`, and `refactor_task`. The planner does not infer file roles from names.
+- Never edit the original checkout while a planner worktree is active. All project changes belong in the persisted worktree path.
 - Do not reset, force checkout, abort, delete, or discard changes without explicit user approval through recovery flow.
 
 ## manual-compact

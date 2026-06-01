@@ -1,6 +1,7 @@
 import { basename, isAbsolute, relative, resolve, sep } from "node:path";
+import { getPlannerStageStepBehavior } from "../runtime/stage-behavior";
 import type { PlanStoragePaths, ProjectStoragePaths } from "../storage/paths";
-import type { PlannerStage, PlanStateRecord } from "../storage/schema";
+import type { PlanStateRecord } from "../storage/schema";
 import {
 	checkRawGitAllowed,
 	type GitWatcherDecision,
@@ -32,13 +33,6 @@ export interface PlannerBuiltinGuardDecision {
 	reason: string | null;
 }
 
-const PROJECT_WRITE_BLOCKED_STAGES = new Set<PlannerStage>([
-	"init",
-	"intake",
-	"discovery",
-	"planning",
-]);
-
 export function checkPlannerBuiltinToolAllowed(
 	input: PlannerBuiltinGuardInput,
 ): PlannerBuiltinGuardDecision {
@@ -68,14 +62,49 @@ export function checkPlannerBuiltinToolAllowed(
 		};
 	}
 
+	if (isOriginalCheckoutPath(input.cwd, input.tool.path, input.state)) {
+		return {
+			allow: false,
+			reason: [
+				`Built-in Pi ${input.tool.toolName} cannot modify the original checkout while a planner worktree is active.`,
+				`Planner worktree: ${input.state.planState.worktreePath ?? "(missing)"}.`,
+				`Call ${PLANNER_STATUS_TOOL_NAME} and continue inside the planner worktree session.`,
+			].join("\n"),
+		};
+	}
+
+	const behavior = getPlannerStageStepBehavior(input.state.planState);
 	if (
-		PROJECT_WRITE_BLOCKED_STAGES.has(input.state.planState.stage) &&
+		!allowsProjectWrite(behavior.projectAccess) &&
 		isProjectPath(input.cwd, input.tool.path, input.state)
 	) {
 		return blockProjectWrite(input.state, input.tool.toolName);
 	}
 
 	return allow();
+}
+
+function isOriginalCheckoutPath(
+	cwd: string,
+	path: string,
+	state: PlannerBuiltinGuardState,
+): boolean {
+	if (!state.projectPaths?.projectRoot || !state.planState?.worktreePath) {
+		return false;
+	}
+	const target = isAbsolute(path) ? resolve(path) : resolve(cwd, path);
+	return (
+		isPathInside(state.projectPaths.projectRoot, target) &&
+		!isPathInside(state.planState.worktreePath, target)
+	);
+}
+
+function allowsProjectWrite(
+	projectAccess: ReturnType<
+		typeof getPlannerStageStepBehavior
+	>["projectAccess"],
+): boolean {
+	return projectAccess === "test_edits" || projectAccess === "production_edits";
 }
 
 function isProtectedPlannerArtifact(
@@ -127,7 +156,7 @@ function blockProjectWrite(
 			`Built-in Pi ${toolName} cannot modify project files during ${position}.`,
 			`Active planner plan: ${state.activePlanId ?? "(unknown)"}.`,
 			"",
-			"Project writes become available after discovery and planning are complete.",
+			"Project writes are allowed only in the exact execution steps reported by planner_status.",
 			"Planner artifacts outside the project directory remain writable.",
 			`Call ${PLANNER_STATUS_TOOL_NAME} and follow the current stage instruction.`,
 		].join("\n"),

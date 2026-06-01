@@ -113,7 +113,9 @@ resolve project
   -> create plan branch
   -> create plan worktree
   -> persist state.json
+  -> write a valid Pi session JSONL header with the worktree cwd
   -> switch Pi into a worktree session
+  -> remove the bootstrap header so Pi persists the rebound session normally
   -> save the raw request in request.md
   -> start intake/draft_goal
 ```
@@ -341,7 +343,7 @@ Compaction is intentional and artifact-driven. The extension does not compact af
 | `execution/compact_task` | Preserve one merged atomic task before selecting the next task. |
 | `finalize/compact_finalize` | Preserve final verification before user acceptance. |
 
-Pi auto-compaction is also tracked. After planned or automatic compaction, the extension sends a system-style continuation message that instructs the model to call `planner_status` and reload exact persisted artifacts.
+Pi auto-compaction is also tracked. After every planned, manual, or automatic compaction while a plan is active, the extension sends a `[SYSTEM_INSTRUCTIONS]` continuation message that instructs the model to call `planner_status` and reload exact persisted artifacts. If Pi already has queued user input, the continuation is appended as `followUp` instead of replacing the queue.
 
 If auto-compaction interrupts file indexing, `planner_status` reports the active file and exact next unread line. The model resumes that file instead of rereading completed files or restarting discovery.
 
@@ -434,22 +436,18 @@ When a planner plan is active, raw shell `git` commands are blocked. The model u
 
 ## Built-In Pi Tool Guard
 
-The extension intentionally keeps built-in tool guarding coarse-grained:
+The extension guards built-in project `write/edit` by exact state-machine position:
 
-| Stage | Project `write/edit` |
+| Position | Project `write/edit` |
 | --- | --- |
-| `init` | blocked |
-| `intake` | blocked |
-| `discovery` | blocked |
-| `planning` | blocked |
-| `execution` | allowed |
-| `finalize` | allowed |
-| `done` | allowed |
-| `recovery` | allowed |
+| `execution/write_tests` | allowed for tests, fixtures, mocks, and harness wiring |
+| `execution/run_experiment` | allowed for one implementation candidate |
+| `execution/refactor_task` | allowed for behavior-preserving refactor |
+| every other step | blocked for project files |
 
-Planner artifacts outside the project directory remain writable during discovery and planning.
+Planner artifacts outside the project directory remain writable where the current step allows artifact work. Writes to the original checkout are blocked while a planner worktree is active, even during implementation.
 
-The extension does not try to classify files as tests, production code, fixtures, configuration, or documentation. File roles differ across languages and projects. It also does not maintain an allowlist of shell commands. Shell safety can be handled by a separate approval extension.
+The extension does not infer file roles from names. Tests may live beside production code and harness setup may require configuration edits. It also does not maintain an allowlist of shell commands. Shell safety can be handled by a separate approval extension.
 
 ## Storage Layout
 

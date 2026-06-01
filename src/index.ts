@@ -26,11 +26,12 @@ import {
 import { readActivePlanContext } from "./runtime/active-plan";
 import {
 	buildPlannerCompactInstructionBundle,
-	buildPlannerPostAutoCompactMessage,
+	buildPlannerPostCompactMessage,
 	clearPlannerControlledCompact,
 	collectAutoCompactInstructionSections,
 	consumePlannerControlledCompact,
 	createPlannerCompactRuntimeState,
+	enqueuePlannerPostCompactMessage,
 	markPlannerControlledCompactStarted,
 	type PlannerCompactRuntimeState,
 } from "./runtime/compact";
@@ -84,6 +85,7 @@ import {
 	buildPlannerHandoffPrompt,
 	buildPlannerResumePrompt,
 	createPlannerHandoffSession,
+	removePlannerHandoffBootstrapFile,
 } from "./session/handoff";
 import { createNodeFs } from "./storage/fs";
 import { resolveProjectStoragePaths } from "./storage/project-resolver";
@@ -97,10 +99,6 @@ const EMPTY_TOOL_PARAMETERS = {
 	properties: {},
 	additionalProperties: false,
 } as const;
-
-type PlannerSwitchSessionOptionsWithCwdOverride = NonNullable<
-	Parameters<ExtensionCommandContext["switchSession"]>[1]
-> & { cwdOverride: string };
 
 const CREATE_PLAN_TOOL_PARAMETERS = {
 	type: "object",
@@ -553,15 +551,16 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				fs,
 				agentDir,
 				worktreePath,
+				parentSession: originalSessionFile,
 			});
 			await ctx.switchSession(session.sessionFile, {
-				cwdOverride: worktreePath,
 				withSession: async (replacementCtx) => {
+					await removePlannerHandoffBootstrapFile(fs, session.sessionFile);
 					await replacementCtx.sendUserMessage(
 						buildPlannerHandoffPrompt({ planId: createdPlanId, worktreePath }),
 					);
 				},
-			} as PlannerSwitchSessionOptionsWithCwdOverride);
+			});
 		},
 	});
 
@@ -638,10 +637,11 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				fs,
 				agentDir,
 				worktreePath,
+				parentSession: ctx.sessionManager.getSessionFile(),
 			});
 			await ctx.switchSession(session.sessionFile, {
-				cwdOverride: worktreePath,
 				withSession: async (replacementCtx) => {
+					await removePlannerHandoffBootstrapFile(fs, session.sessionFile);
 					await replacementCtx.sendUserMessage(
 						buildPlannerResumePrompt({
 							planId,
@@ -649,7 +649,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 						}),
 					);
 				},
-			} as PlannerSwitchSessionOptionsWithCwdOverride);
+			});
 		},
 	});
 
@@ -685,10 +685,11 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					fs,
 					agentDir,
 					worktreePath: handoffCwd,
+					parentSession: ctx.sessionManager.getSessionFile(),
 				});
 				await ctx.switchSession(session.sessionFile, {
-					cwdOverride: handoffCwd,
 					withSession: async (replacementCtx) => {
+						await removePlannerHandoffBootstrapFile(fs, session.sessionFile);
 						const result = await executePlannerUserCommand({
 							fs,
 							git: new NodeGitRunner(),
@@ -702,7 +703,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 						});
 						notifyPlannerCommandResult(replacementCtx, result);
 					},
-				} as PlannerSwitchSessionOptionsWithCwdOverride);
+				});
 				return;
 			}
 
@@ -920,9 +921,7 @@ function registerPlannerCompactEvents(
 	compactRuntime: PlannerCompactRuntimeState,
 ): void {
 	pi.on("session_compact", async (_event, ctx) => {
-		if (consumePlannerControlledCompact(compactRuntime)) {
-			return;
-		}
+		consumePlannerControlledCompact(compactRuntime);
 
 		const fs = createNodeFs();
 		let projectPaths: Awaited<ReturnType<typeof resolveProjectStoragePaths>>;
@@ -950,12 +949,14 @@ function registerPlannerCompactEvents(
 			projectPaths,
 			preflight,
 		});
-		const message = buildPlannerPostAutoCompactMessage({ preflight, sections });
-		if (ctx.isIdle() && !ctx.hasPendingMessages()) {
-			pi.sendUserMessage(message);
-			return;
-		}
-		pi.sendUserMessage(message, { deliverAs: "followUp" });
+		const message = buildPlannerPostCompactMessage({ preflight, sections });
+		enqueuePlannerPostCompactMessage({
+			message,
+			isIdle: ctx.isIdle(),
+			hasPendingMessages: ctx.hasPendingMessages(),
+			sendUserMessage: (content, options) =>
+				pi.sendUserMessage(content, options),
+		});
 	});
 }
 

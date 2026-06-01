@@ -254,15 +254,17 @@ export type {
 	PlannerCompactInstructionBundle,
 	PlannerCompactInstructionSection,
 	PlannerCompactRuntimeState,
+	PlannerPostCompactDelivery,
 } from "./runtime/compact";
 export {
 	buildPlannerCompactInstructionBundle,
 	buildPlannerCompactInstructions,
-	buildPlannerPostAutoCompactMessage,
+	buildPlannerPostCompactMessage,
 	clearPlannerControlledCompact,
 	collectAutoCompactInstructionSections,
 	consumePlannerControlledCompact,
 	createPlannerCompactRuntimeState,
+	enqueuePlannerPostCompactMessage,
 	markPlannerControlledCompactStarted,
 	PLANNER_COMPACT_MARKER,
 	PLANNER_SYSTEM_INSTRUCTIONS_HEADER,
@@ -469,6 +471,7 @@ export {
 	buildPlannerResumePrompt,
 	createPiSessionDir,
 	createPlannerHandoffSession,
+	removePlannerHandoffBootstrapFile,
 } from "./session/handoff";
 export type { EffectivePlannerSettings } from "./settings/manager";
 export {

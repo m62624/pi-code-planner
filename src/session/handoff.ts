@@ -14,12 +14,14 @@ export interface PiSessionHeader {
 	id: string;
 	timestamp: string;
 	cwd: string;
+	parentSession?: string;
 }
 
 export async function createPlannerHandoffSession(input: {
 	fs: PlannerFs;
 	agentDir: string;
 	worktreePath: string;
+	parentSession?: string | null;
 	now?: Date;
 	sessionId?: string;
 }): Promise<PlannerHandoffSession> {
@@ -39,10 +41,19 @@ export async function createPlannerHandoffSession(input: {
 		id: sessionId,
 		timestamp,
 		cwd: input.worktreePath,
+		...(input.parentSession ? { parentSession: input.parentSession } : {}),
 	};
 
 	await input.fs.mkdirp(sessionDir);
+	await input.fs.writeTextAtomic(sessionFile, `${JSON.stringify(header)}\n`);
 	return { sessionDir, sessionFile, header };
+}
+
+export async function removePlannerHandoffBootstrapFile(
+	fs: PlannerFs,
+	sessionFile: string,
+): Promise<void> {
+	await fs.removeFile(sessionFile);
 }
 
 export function createPiSessionDir(input: {

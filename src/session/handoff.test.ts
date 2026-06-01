@@ -5,16 +5,18 @@ import {
 	buildPlannerResumePrompt,
 	createPiSessionDir,
 	createPlannerHandoffSession,
+	removePlannerHandoffBootstrapFile,
 } from "./handoff";
 
 describe("planner session handoff", () => {
-	it("reserves a Pi session jsonl path for the worktree cwd", async () => {
+	it("writes a valid Pi session jsonl header for the worktree cwd", async () => {
 		const fs = new MockPlannerFs();
 
 		const session = await createPlannerHandoffSession({
 			fs,
 			agentDir: "/agent",
 			worktreePath: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
+			parentSession: "/agent/sessions/original.jsonl",
 			now: new Date("2026-05-25T06:00:00.000Z"),
 			sessionId: "session-1",
 		});
@@ -31,11 +33,17 @@ describe("planner session handoff", () => {
 			id: "session-1",
 			timestamp: "2026-05-25T06:00:00.000Z",
 			cwd: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
+			parentSession: "/agent/sessions/original.jsonl",
 		});
+		expect(fs.snapshot()[session.sessionFile]).toBe(
+			`${JSON.stringify(session.header)}\n`,
+		);
+
+		await removePlannerHandoffBootstrapFile(fs, session.sessionFile);
 		expect(fs.snapshot()[session.sessionFile]).toBeUndefined();
 	});
 
-	it("keeps the header shape Pi will write after switchSession", async () => {
+	it("omits the optional parent session when no origin exists", async () => {
 		const fs = new MockPlannerFs();
 
 		const session = await createPlannerHandoffSession({

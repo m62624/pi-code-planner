@@ -21,6 +21,7 @@ Execute exactly one active task at a time through tests-first development, seque
    - Define test strategy, mocks, fixtures, checks, edge cases, and expected failing signal.
 3. `write_tests`
    - Write failing, mock, or contract tests before production implementation.
+   - Record `tests.md`. If project files changed, commit through planner git, refresh memory, verify it, and sync checkpoint before experiments.
 4. `run_failing_tests`
    - Run focused checks and prove that tests detect the missing behavior.
 5. `start_experiments`
@@ -57,7 +58,8 @@ Execute exactly one active task at a time through tests-first development, seque
 - A commit alone does not finish an atomic unit.
 - After every planner-controlled commit or merge, memory must be refreshed, verified, and checkpointed before normal flow continues.
 - Dirty worktree is allowed while implementing a running step, but checkpoint sync requires a clean worktree.
-- Built-in write/edit guards are intentionally coarse-grained: the planner does not infer file roles from names. Follow the TDD step order even when tests, fixtures, configuration, and production code share files.
+- Built-in project write/edit calls are enabled only during `write_tests`, `run_experiment`, and `refactor_task`. The planner does not infer file roles from names, so tests, fixtures, harness wiring, configuration, and production code may share files. Follow the exact step purpose.
+- Never edit the original checkout while a planner worktree is active. Continue inside the worktree session reported by `planner_status`.
 - Use `planner_status` after every wrapper result.
 - Raw git is forbidden.
 - The model chooses task id and experiment id only. It never invents merge source or target branches.
