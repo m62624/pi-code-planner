@@ -134,16 +134,12 @@ The model restates the user's request before reading source code.
 
 ### `discovery`
 
-The model builds durable project memory before implementation.
+The model becomes familiar with the project before implementation without indexing the whole repository.
 
 | Step | Purpose |
 | --- | --- |
-| `scan_project_structure` | Build a bounded mechanical project map, search Git-visible files on CPU, then persist only the smallest useful indexing queue. |
-| `index_files_iteratively` | Read exactly one selected file at a time in bounded chunks, record reusable symbols, verify anchors, then continue. |
-| `write_project_patterns` | Record architecture, dependencies, conventions, and test patterns. |
-| `write_relations` | Record evidence-backed relations between files and symbols. |
+| `scan_project_structure` | Build a bounded mechanical project map, search Git-visible files on CPU, read only useful files, and summarize findings in `discovery.md`. |
 | `write_questions` | Ask focused questions after evidence is collected. |
-| `verify_memory` | Verify hashes, signatures, relations, and the initial checkpoint. |
 | `compact_discovery` | Compact broad discovery context when enabled. |
 | `enter_planning` | Move into plan construction. |
 
@@ -151,7 +147,7 @@ The model builds durable project memory before implementation.
 
 | Step | Purpose |
 | --- | --- |
-| `read_memory` | Reconstruct context from bounded project memory. |
+| `read_memory` | Reconstruct context from `discovery.md`, task artifacts, bounded project map, and focused search. |
 | `draft_plan` | Write the implementation strategy, constraints, risks, and checks. |
 | `split_tasks` | Divide the plan into ordered behavioral tasks. Tests stay inside each task's TDD cycle, never as standalone test items. |
 | `write_task_files` | Call `planner_task_upsert`; the wrapper creates `task.json`, `task.md`, and empty TDD lifecycle artifacts. |
@@ -170,7 +166,7 @@ Execution handles one task at a time. Experiments are sequential implementation 
 | `write_tests` | Write failing, mock, or contract tests before implementation. |
 | `run_failing_tests` | Prove that the tests detect missing behavior. |
 | `start_experiments` | Create one candidate branch. |
-| `run_experiment` | Implement one candidate, run checks, commit, and refresh memory. |
+| `run_experiment` | Implement one candidate, run checks, and commit. |
 | `summarize_experiment` | Record approach, diff, checks, risks, and tradeoffs. |
 | `compact_experiment` | Compact candidate context when enabled. |
 | `select_experiment` | Try another distinct candidate or select the best one. |
@@ -239,34 +235,18 @@ While a plan is active, raw shell `git` is blocked for the model. Planner wrappe
 
 Project commands such as tests, builds, linters, generators, and formatters should run from the worktree path reported by `planner_status`. Commands may still enter subdirectories inside that worktree when the project layout requires it.
 
-## Project Memory 🧠
+## Project Context 🧠
 
-The memory layer is designed for context-limited local models. It avoids repeatedly loading an entire repository.
-
-During discovery, the model:
+Discovery is intentionally lightweight for context-limited local models:
 
 ```text
-scans Git-visible files
-  -> claims one file
-  -> reads bounded chunks to EOF
-  -> records file metadata
-  -> records reusable API signatures and effects
-  -> verifies hashes and source anchors
-  -> completes that file
-  -> claims the next file
+bounded project map
+  -> focused CPU-only search
+  -> read only useful source files
+  -> summarize findings in discovery.md
 ```
 
-Large files persist the exact next unread line. After automatic compaction, the model resumes from that line instead of rereading completed files.
-
-Memory tracks:
-
-- file paths, hashes, kinds, languages, and summaries;
-- reusable symbol signatures and source anchors;
-- relations such as calls, tests, dependencies, reads, and writes;
-- effects that may change behavior without changing a function signature;
-- freshness checkpoints after planner-controlled commits and merges.
-
-The model reads memory first and rereads source only when memory is stale, incomplete, insufficient, or requires verification.
+The planner does not require a full-project semantic index, embeddings model, vector database, or VRAM. After compact, the model reloads `discovery.md` and searches again only when the current task needs more evidence.
 
 ## Storage Layout 📁
 
@@ -294,14 +274,6 @@ getAgentDir()/extensions/pi-code-planner/
           questions.md
           decisions.md
           final_summary.md
-          memory/
-            project_patterns.md
-            indexing.json
-            files/index.jsonl
-            symbols/index.jsonl
-            relations/index.jsonl
-            dirty.json
-            checkpoints/latest.json
           tasks/
             <task-id>/
               task.json
@@ -323,15 +295,13 @@ Key files:
 | --- | --- |
 | `project.json` | Stable project identity, plan list, and active plan id. |
 | `plan.json` | Structured task list for one plan. |
-| `state.json` | Crash-recoverable stage, step, branch, worktree, compact, and memory state. |
+| `state.json` | Crash-recoverable stage, step, branch, worktree, and compact state. |
 | `request.md` | Exact raw user request. |
 | `goal.md` | Model-normalized goal approved before discovery. |
 | `plan.md` | Human-readable implementation plan written after discovery. |
 | `questions.md` | Evidence-based questions and explicit user answers. |
 | `decisions.md` | Durable user decisions. |
-| `memory/*` | Bounded project context and freshness checkpoints. |
-
-Memory is selective: the planner does not force a local model to read and preserve every file in a repository. `planner_memory_project_map` summarizes areas, manifests, entrypoints, tests, and config paths without reading source contents. `planner_memory_search_project` performs bounded CPU-only working-tree search without another model or VRAM usage. The model stores only relevant files and may broaden its query when context is insufficient.
+`planner_memory_project_map` summarizes areas, manifests, entrypoints, tests, and config paths without reading source contents. `planner_memory_search_project` performs bounded CPU-only working-tree search without another model or VRAM usage.
 
 ## Settings And Overrides ⚙️
 

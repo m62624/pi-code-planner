@@ -112,70 +112,6 @@ export type {
 } from "./instructions/schema";
 export { INSTRUCTION_KEYS } from "./instructions/schema";
 export type {
-	MemoryGateInspection,
-	MemoryGateRequiredCheck,
-} from "./memory/gate";
-export {
-	applyMemoryGateFreshness,
-	inspectMemoryGate,
-	MEMORY_GATE_REQUIRED_CHECKS,
-} from "./memory/gate";
-export type {
-	MemoryIndexingReadChunk,
-	MemoryIndexingSummary,
-} from "./memory/indexing";
-export {
-	addActiveMemoryCandidateSymbols,
-	claimNextMemoryIndexingFile,
-	completeActiveMemoryFile,
-	DEFAULT_MEMORY_CHUNK_LINES,
-	ignoreActiveMemoryFile,
-	isMemoryIndexingComplete,
-	MAX_MEMORY_CHUNK_LINES,
-	readActiveMemoryFileChunk,
-	readMemoryIndexingState,
-	scanMemoryIndexingQueue,
-	summarizeMemoryIndexing,
-	upsertActiveMemoryFile,
-	verifyActiveMemoryFile,
-	writeMemoryIndexingState,
-} from "./memory/indexing";
-export type { JsonlValidator } from "./memory/jsonl";
-export {
-	PlannerJsonlError,
-	readJsonl,
-	removeJsonlEntries,
-	upsertJsonlEntries,
-	writeJsonl,
-} from "./memory/jsonl";
-export {
-	clearMemoryDirty,
-	computeMemoryCheckpoint,
-	createEmptyMemoryIndexingState,
-	initializeMemoryFiles,
-	markMemoryDirty,
-	readFileIndex,
-	readMemoryCheckpoint,
-	readMemoryDirtyState,
-	readProjectPatterns,
-	readRelationIndex,
-	readSymbolIndex,
-	removeFileEntries,
-	removeRelationEntries,
-	removeSymbolEntries,
-	replaceFileIndex,
-	replaceRelationIndex,
-	replaceSymbolIndex,
-	upsertFileEntries,
-	upsertRelationEntries,
-	upsertSymbolEntries,
-	verifyMemoryCheckpoint,
-	writeMemoryCheckpoint,
-	writeProjectPatterns,
-} from "./memory/manager";
-export type { MemoryStoragePaths } from "./memory/paths";
-export { createMemoryStoragePaths } from "./memory/paths";
-export type {
 	ProjectMapCount,
 	ProjectMapExtensionCount,
 	ProjectMapResult,
@@ -194,67 +130,6 @@ export {
 	MAX_PROJECT_SEARCH_LIMIT,
 	searchProjectFiles,
 } from "./memory/project-search";
-export type {
-	MemoryRetrievalCursor,
-	MemoryRetrievalFilters,
-	MemoryRetrievalInput,
-	MemoryRetrievalLimits,
-	MemoryRetrievalPage,
-	MemoryRetrievalResult,
-} from "./memory/retrieval";
-export {
-	DEFAULT_MEMORY_RETRIEVAL_LIMIT,
-	MAX_MEMORY_RETRIEVAL_LIMIT,
-	retrieveMemoryContext,
-} from "./memory/retrieval";
-export type {
-	MemoryCheckpoint,
-	MemoryCheckpointVerification,
-	MemoryDirtyFile,
-	MemoryDirtyReason,
-	MemoryDirtyState,
-	MemoryFileEntry,
-	MemoryFileKind,
-	MemoryFileStatus,
-	MemoryIndexingFileEntry,
-	MemoryIndexingFileStatus,
-	MemoryIndexingMode,
-	MemoryIndexingState,
-	MemoryRelationEntry,
-	MemoryRelationKind,
-	MemorySymbolEffects,
-	MemorySymbolEntry,
-	MemorySymbolGlobalState,
-	MemorySymbolKind,
-	MemorySymbolVisibility,
-	MemoryVerificationStatus,
-} from "./memory/schema";
-export type {
-	MemoryProjectSnapshot,
-	MemoryProjectSnapshotInput,
-} from "./memory/snapshot";
-export { createMemoryProjectSnapshot } from "./memory/snapshot";
-export type {
-	MemoryFreshnessApplyInput,
-	MemoryFreshnessApplyResult,
-	MemoryFreshnessInput,
-	MemoryFreshnessResult,
-	MemoryProjectFileSnapshotEntry,
-} from "./memory/verification";
-export {
-	analyzeMemoryFreshness,
-	applyMemoryFreshness,
-} from "./memory/verification";
-export type {
-	MemoryBatchEntryKind,
-	MemoryBatchRejectedEntry,
-	MemoryBatchWriteResult,
-} from "./memory/write-api";
-export {
-	validateMemoryBatchAgainstIndexes,
-	writeMemoryBatch,
-	writeMemoryBatchWithReferences,
-} from "./memory/write-api";
 export type { GitignoreWorktreeRuleResult } from "./project-local/gitignore";
 export {
 	ensureProjectWorktreesIgnored,

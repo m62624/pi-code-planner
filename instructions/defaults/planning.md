@@ -62,7 +62,7 @@ Planning is complete only when `plan.md` is coherent, every task has artifacts a
 
 ## manual-compact
 
-Preserve the full plan goal, constraints, ordered task list, task artifact paths, task dependencies, acceptance criteria, open decisions, and memory pointers. After compaction, call `planner_status`. Before the first task, reread the full `plan.md`, then read only the selected `task.md` and relevant bounded memory.
+Preserve the full plan goal, constraints, ordered task list, task artifact paths, task dependencies, acceptance criteria, open decisions, and `discovery.md`. After compaction, call `planner_status`. Before the first task, reread the full `plan.md`, then read only the selected `task.md` and use focused project search when context is insufficient.
 
 ## auto-compact
 

@@ -10,41 +10,27 @@ import {
 describe("instruction routing", () => {
 	it("maps broad stages to stage and supporting instruction keys", () => {
 		expect(keys("init", "check_git")).toEqual(["init", "git"]);
-		expect(keys("discovery", "index_files_iteratively")).toEqual([
-			"discovery",
-			"memory",
-		]);
-		expect(keys("planning", "draft_plan")).toEqual(["planning", "memory"]);
+		expect(keys("discovery", "scan_project_structure")).toEqual(["discovery"]);
+		expect(keys("planning", "draft_plan")).toEqual(["planning"]);
 		expect(keys("finalize", "verify_plan_branch")).toEqual(["finalize", "git"]);
 		expect(keys("done", "await_user_acceptance")).toEqual(["done"]);
-		expect(keys("recovery", "inspect_git")).toEqual([
-			"recovery",
-			"git",
-			"memory",
-		]);
+		expect(keys("recovery", "inspect_git")).toEqual(["recovery", "git"]);
 	});
 
 	it("adds tdd, experiment, refactor, and git commit instructions for execution steps", () => {
-		expect(keys("execution", "write_tdd_plan")).toEqual([
-			"execution",
-			"tdd",
-			"memory",
-		]);
+		expect(keys("execution", "write_tdd_plan")).toEqual(["execution", "tdd"]);
 		expect(keys("execution", "run_experiment")).toEqual([
 			"execution",
 			"experiment",
-			"memory",
 		]);
 		expect(keys("execution", "refactor_task")).toEqual([
 			"execution",
 			"refactor",
-			"memory",
 		]);
 		expect(keys("execution", "merge_task_to_plan")).toEqual([
 			"execution",
 			"git",
 			"git-commit",
-			"memory",
 		]);
 	});
 
@@ -61,7 +47,7 @@ describe("instruction routing", () => {
 			paths: createInstructionPaths(projectPaths),
 		});
 
-		expect(routing.keys).toEqual(["execution", "tdd", "memory"]);
+		expect(routing.keys).toEqual(["execution", "tdd"]);
 		expect(routing.entries[0]).toMatchObject({
 			key: "execution",
 			defaultPath:

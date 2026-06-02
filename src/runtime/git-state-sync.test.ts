@@ -98,7 +98,7 @@ describe("planner git state sync", () => {
 		).toEqual({ action: "allow", reason: null });
 	});
 
-	it("requires memory update when head differs from last memory checkpoint", () => {
+	it("allows normal flow when head differs from legacy memory checkpoint", () => {
 		const state = {
 			...baseState(),
 			currentBranch: "plan/plan-a",
@@ -110,10 +110,7 @@ describe("planner git state sync", () => {
 				state,
 				reality: reality({ branch: "plan/plan-a", headCommit: "new456" }),
 			}),
-		).toMatchObject({
-			action: "require_memory_update",
-			reason: "HEAD new456 differs from memory checkpoint old123.",
-		});
+		).toEqual({ action: "allow", reason: null });
 	});
 
 	it("requires recovery on wrong branch or conflicts", () => {
@@ -152,9 +149,9 @@ describe("planner git state sync", () => {
 
 		expect(synced).toMatchObject({
 			currentBranch: "task/plan-a/task-1",
-			lastCheckpointCommit: "old123",
-			requiresMemoryUpdate: true,
-			memoryUpdateReason: "planner_commit",
+			lastCheckpointCommit: "new456",
+			requiresMemoryUpdate: false,
+			memoryUpdateReason: null,
 		});
 	});
 
@@ -181,9 +178,9 @@ describe("planner git state sync", () => {
 		expect(synced.before.headCommit).toBe("old123");
 		expect(synced.after.headCommit).toBe("new456");
 		expect(synced.state).toMatchObject({
-			lastCheckpointCommit: "old123",
-			requiresMemoryUpdate: true,
-			memoryUpdateReason: "planner_commit",
+			lastCheckpointCommit: "new456",
+			requiresMemoryUpdate: false,
+			memoryUpdateReason: null,
 		});
 	});
 
@@ -200,8 +197,8 @@ describe("planner git state sync", () => {
 			step: "inspect_git",
 			stepStatus: "blocked",
 			broken: true,
-			requiresMemoryUpdate: true,
-			memoryUpdateReason: "planner_merge",
+			requiresMemoryUpdate: false,
+			memoryUpdateReason: null,
 		});
 	});
 

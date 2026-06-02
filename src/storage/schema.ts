@@ -27,11 +27,7 @@ export type IntakeStep = "draft_goal" | "await_goal_approval";
 
 export type DiscoveryStep =
 	| "scan_project_structure"
-	| "index_files_iteratively"
-	| "write_project_patterns"
-	| "write_relations"
 	| "write_questions"
-	| "verify_memory"
 	| "compact_discovery"
 	| "enter_planning";
 
@@ -108,11 +104,7 @@ export const PLANNER_STAGE_STEPS = {
 	intake: ["draft_goal", "await_goal_approval"],
 	discovery: [
 		"scan_project_structure",
-		"index_files_iteratively",
-		"write_project_patterns",
-		"write_relations",
 		"write_questions",
-		"verify_memory",
 		"compact_discovery",
 		"enter_planning",
 	],

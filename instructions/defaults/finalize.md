@@ -33,7 +33,7 @@ Finalize is complete only when the integrated plan branch is checked, `final_sum
 
 ## manual-compact
 
-Preserve `final_summary.md`, project-level verification results, changed-file summary, branch state, checkpoint state, known risks, and unresolved limitations. After compaction, call `planner_status`, read the final summary and verify artifacts, then enter done flow.
+Preserve `final_summary.md`, project-level verification results, changed-file summary, branch state, known risks, and unresolved limitations. After compaction, call `planner_status`, read the final summary and verify artifacts, then enter done flow.
 
 ## auto-compact
 

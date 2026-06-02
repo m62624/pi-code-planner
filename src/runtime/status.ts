@@ -5,10 +5,6 @@ import type {
 	InstructionContent,
 	InstructionKey,
 } from "../instructions/schema";
-import {
-	readMemoryIndexingState,
-	summarizeMemoryIndexing,
-} from "../memory/indexing";
 import type { PlannerFs } from "../storage/fs";
 import type { PlannerStage, PlannerStep } from "../storage/schema";
 import {
@@ -38,20 +34,17 @@ export interface PlannerStatusTextInput {
 
 export const PLANNER_STATUS_INVARIANTS = [
 	"Raw git is forbidden while a planner plan is active. Use planner git wrappers only.",
-	"The model never edits project.json, plan.json, state.json, memory checkpoint files, or worktree index files directly.",
+	"The model never edits project.json, plan.json, state.json, or worktree index files directly.",
 	"Call planner_status before choosing the next planner action after every tool result, compact, recovery, or user decision.",
-	"Normal flow is blocked by recovery, user decision, compact gate, or required memory update.",
-	"Memory-first rule: inspect planner memory before broad source reads; read source only when memory is missing, stale, insufficient, or must be verified.",
+	"Normal flow is blocked by recovery, user decision, or compact gate.",
+	"Discovery uses a bounded project map and focused search before source reads. It does not build a durable per-symbol mirror of the repository.",
 	"Stage and step order is strict. Recovery is the only stage that may resume into a valid non-recovery position.",
 	"A completed step cannot run again. Advance it first.",
 	"Every wrapper tool must be allowed by runtime preflight and wrapper policy for the current exact stage/step.",
 	"Every workflow transition must be allowed by the state machine for the current exact stepStatus.",
 	"Actual git branch must match state.currentBranch when currentBranch is set.",
 	"Git conflicts always block normal flow and require recovery.",
-	"HEAD mismatch with lastCheckpointCommit requires memory update before normal flow continues.",
-	"Dirty worktree is allowed inside an active work step, but not when syncing memory checkpoint or crossing a checkpoint boundary.",
-	"Memory checkpoint sync requires a clean worktree and clean memory freshness.",
-	"A planner commit does not finish an atomic unit. The unit is consistent only after commit plus memory update plus checkpoint sync.",
+	"Dirty worktree is allowed inside an active work step, but must be resolved before merge boundaries.",
 	"Merge targets come from state.json only. The model may choose taskId or experimentId, but not source/target merge branches.",
 	"Production behavior changes are allowed only in implementation/refactor steps that explicitly permit them.",
 	"Task branch cannot merge into plan before final task checks pass.",
@@ -182,75 +175,25 @@ export const PLANNER_STEP_RULES = {
 	}),
 
 	scan_project_structure: stepRule("discovery", "scan_project_structure", {
-		objective: "Select the smallest useful file set for durable memory.",
+		objective:
+			"Become familiar with the project without indexing the repository.",
 		requiredActions: [
 			"Call planner_memory_project_map once to inspect a bounded mechanical repository overview without reading source contents.",
 			"Start with planner_memory_search_project using a query derived from goal.md.",
 			"Inspect bounded ranked excerpts and broaden the query only when context is insufficient.",
-			"Call planner_memory_scan_project with only the relevant paths worth preserving in durable memory.",
+			"Read only the source files needed to understand architecture, commands, risks, and the requested change.",
+			"Write concise findings to discovery.md.",
 		],
 		allowedNow: [
-			"Use planner_memory_project_map, planner_memory_search_project, planner_memory_scan_project, and planner_memory_index_status.",
+			"Use planner_memory_project_map, planner_memory_search_project, bounded shell reads, and discovery.md.",
 		],
 		forbiddenNow: [
 			"Do not implement code.",
-			"Do not queue every project file by default.",
+			"Do not read every project file by default.",
 		],
-		exitCondition:
-			"memory/indexing.json contains a selective relevant project file queue.",
+		exitCondition: "discovery.md contains the useful bounded project overview.",
 		nextInstruction:
-			"Call planner_finish_step to open index_files_iteratively.",
-	}),
-	index_files_iteratively: stepRule("discovery", "index_files_iteratively", {
-		objective:
-			"Read, summarize, extract reusable symbols from, verify, and complete exactly one queued file at a time.",
-		requiredActions: [
-			"Call planner_memory_index_status.",
-			"Claim one file with planner_memory_next_file.",
-			"Read it only through planner_memory_read_chunk until EOF; long-file progress is persisted by line number.",
-			"Record file metadata with planner_memory_upsert_active_file.",
-			"Record reusable symbols and mandatory effects in batches of at most 5 with planner_memory_upsert_symbols.",
-			"Verify anchors and hashes with planner_memory_verify_active_file.",
-			"Complete the active file with planner_memory_complete_active_file, then repeat.",
-		],
-		allowedNow: [
-			"Use iterative planner memory wrappers for the active file only.",
-			"Use planner_memory_ignore_active_file only for an intentionally excluded file with an explicit summary.",
-		],
-		forbiddenNow: [
-			"Do not read or index multiple source files in parallel.",
-			"Do not reread completed files after compact.",
-			"Do not write memory JSONL directly.",
-		],
-		exitCondition:
-			"Every queued file is indexed, ignored, or missing; no active, pending, reading, verifying, or failed file remains.",
-		nextInstruction:
-			"Call planner_finish_step to open write_project_patterns only after planner_memory_index_status says Complete: true.",
-	}),
-	write_project_patterns: stepRule("discovery", "write_project_patterns", {
-		objective: "Write project architecture and convention notes.",
-		requiredActions: [
-			"Write project_patterns.md with observed patterns, commands, dependencies, and uncertainty.",
-		],
-		allowedNow: ["Write planner artifacts and memory project patterns."],
-		forbiddenNow: ["Do not edit production code."],
-		exitCondition:
-			"project_patterns.md contains evidence-backed patterns and open questions.",
-		nextInstruction: "Call planner_finish_step to open write_relations.",
-	}),
-	write_relations: stepRule("discovery", "write_relations", {
-		objective:
-			"Index relations between files, symbols, modules, tests, and configuration.",
-		requiredActions: [
-			"Write evidence-backed relation entries for calls, tests, configures, depends_on, exposes, reads, or writes.",
-		],
-		allowedNow: ["Use planner_memory_upsert_relations for relation entries."],
-		forbiddenNow: [
-			"Do not invent relations without evidence path/search text.",
-		],
-		exitCondition:
-			"Important symbol/file relations have evidence-backed entries.",
-		nextInstruction: "Call planner_finish_step to open write_questions.",
+			"Call planner_finish_step to open and start write_questions.",
 	}),
 	write_questions: stepRule("discovery", "write_questions", {
 		objective: "Resolve evidence-based user questions before planning.",
@@ -266,27 +209,13 @@ export const PLANNER_STEP_RULES = {
 		forbiddenNow: ["Do not ask broad questions before collecting evidence."],
 		exitCondition:
 			"questions.md is non-empty and every answer required before planning is recorded in decisions.md.",
-		nextInstruction: "Call planner_finish_step to open verify_memory.",
-	}),
-	verify_memory: stepRule("discovery", "verify_memory", {
-		objective: "Verify memory consistency against source files.",
-		requiredActions: [
-			"Inspect memory freshness.",
-			"Verify that file hashes, symbol anchors, relation evidence, and effects are consistent.",
-		],
-		allowedNow: [
-			"Use planner_memory_inspect, planner_memory_verify, and planner_memory_sync_checkpoint when clean.",
-		],
-		forbiddenNow: [
-			"Do not sync checkpoint if memory is stale or worktree is dirty.",
-		],
-		exitCondition: "Memory is clean and checkpoint is synced to current HEAD.",
-		nextInstruction: "Call planner_finish_step to open compact_discovery.",
+		nextInstruction:
+			"Call planner_finish_step to open and start compact_discovery.",
 	}),
 	compact_discovery: stepRule("discovery", "compact_discovery", {
 		objective: "Create a compact boundary after discovery.",
 		requiredActions: [
-			"Request Pi compact and preserve discovery summary, memory status, and open questions.",
+			"Request Pi compact and preserve discovery summary and open questions.",
 		],
 		allowedNow: ["Compact flow only."],
 		forbiddenNow: [
@@ -408,7 +337,7 @@ export const PLANNER_STEP_RULES = {
 			"Read task.md and memory, then write tdd.md with failing test strategy and checks.",
 		],
 		allowedNow: [
-			"Write TDD planner artifacts and inspect memory/source for test design.",
+			"Write TDD planner artifacts and inspect discovery context/source for test design.",
 		],
 		forbiddenNow: ["Do not change production behavior."],
 		exitCondition:
@@ -420,12 +349,12 @@ export const PLANNER_STEP_RULES = {
 			"Write failing/mock/contract tests before production implementation.",
 		requiredActions: [
 			"Write tests, fixtures, mocks, and required test harness wiring for the active task.",
-			"Record tests in tests.md. If project files changed, commit through planner_git_commit, refresh memory, verify it, and sync checkpoint before continuing.",
+			"Record tests in tests.md. If project files changed, commit through planner_git_commit before continuing.",
 		],
 		allowedNow: ["Edit test files and necessary test integration files."],
 		forbiddenNow: ["Do not implement production behavior."],
 		exitCondition:
-			"tests.md records the tests, project files are clean and checkpointed, and tests are expected to fail or catch missing behavior.",
+			"tests.md records the tests, project files are committed, and tests are expected to fail or catch missing behavior.",
 		nextInstruction: "Call planner_finish_step to open run_failing_tests.",
 	}),
 	run_failing_tests: stepRule("execution", "run_failing_tests", {
@@ -459,14 +388,14 @@ export const PLANNER_STEP_RULES = {
 		objective:
 			"Implement one candidate solution in the active experiment branch.",
 		requiredActions: [
-			"Implement only this attempt's approach, run focused checks, commit through planner git, then update memory.",
+			"Implement only this attempt's approach, run focused checks, then commit through planner git.",
 		],
 		allowedNow: [
 			"Edit production/test files in scope, run checks, use planner_git_commit.",
 		],
 		forbiddenNow: ["Do not merge the experiment or delete branches here."],
 		exitCondition:
-			"Experiment implementation is committed and memory checkpoint is synced for the experiment HEAD.",
+			"Experiment implementation is committed and the worktree is clean.",
 		nextInstruction: "Call planner_finish_step to open summarize_experiment.",
 	}),
 	summarize_experiment: stepRule("execution", "summarize_experiment", {
@@ -484,7 +413,7 @@ export const PLANNER_STEP_RULES = {
 	compact_experiment: stepRule("execution", "compact_experiment", {
 		objective: "Compact the active experiment attempt.",
 		requiredActions: [
-			"Request Pi compact preserving attempt summary, checks, memory checkpoint, and comparison context.",
+			"Request Pi compact preserving attempt summary, checks, and comparison context.",
 		],
 		allowedNow: ["Compact flow only."],
 		forbiddenNow: ["Do not edit code while compact is required/pending."],
@@ -515,15 +444,13 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Use planner_git_merge_selected_experiment; extension determines source and target from state.json.",
 		],
-		allowedNow: [
-			"Use selected experiment merge wrapper and update memory after merge commit.",
-		],
+		allowedNow: ["Use the selected experiment merge wrapper."],
 		forbiddenNow: [
 			"Do not use raw git merge.",
 			"Do not keep unselected experiment branches after merge.",
 		],
 		exitCondition:
-			"Selected experiment is merged into task branch, experiment branches are cleaned, memory is synced.",
+			"Selected experiment is merged into task branch and experiment branches are cleaned.",
 		nextInstruction: "Call planner_finish_step to open refactor_task.",
 	}),
 	refactor_task: stepRule("execution", "refactor_task", {
@@ -533,7 +460,7 @@ export const PLANNER_STEP_RULES = {
 			"Read the selected implementation and inspect the planner-controlled diff.",
 			"Question unnecessary abstraction, duplication, speculative flexibility, premature generalization, and code that exists for imagined future work rather than the current task.",
 			"Write refactor.md with concrete findings, KISS review, changes applied, and justified decisions to keep code unchanged.",
-			"Commit and update memory if project files changed.",
+			"Commit if project files changed.",
 		],
 		allowedNow: [
 			"Edit code for refactor, run checks, use planner git commit/refactor merge wrappers as policy allows.",
@@ -543,7 +470,7 @@ export const PLANNER_STEP_RULES = {
 			"Do not treat a successful linter or test run as sufficient refactor review.",
 		],
 		exitCondition:
-			"refactor.md contains a concrete KISS review, refactor is committed if changed, and memory is synced.",
+			"refactor.md contains a concrete KISS review and the refactor is committed if changed.",
 		nextInstruction: "Call planner_finish_step to open run_final_tests.",
 	}),
 	run_final_tests: stepRule("execution", "run_final_tests", {
@@ -552,12 +479,12 @@ export const PLANNER_STEP_RULES = {
 			"Run final task checks and verify no accidental out-of-scope changes.",
 		],
 		allowedNow: [
-			"Run checks, inspect planner diff, commit final fixes if needed, update memory.",
+			"Run checks, inspect planner diff, and commit final fixes if needed.",
 		],
 		forbiddenNow: [
-			"Do not merge task to plan while tests or memory are stale.",
+			"Do not merge task to plan while tests fail or project files remain uncommitted.",
 		],
-		exitCondition: "Final checks pass and memory checkpoint is synced.",
+		exitCondition: "Final checks pass and the worktree is clean.",
 		nextInstruction: "Call planner_finish_step to open merge_task_to_plan.",
 	}),
 	merge_task_to_plan: stepRule("execution", "merge_task_to_plan", {
@@ -565,15 +492,13 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Use planner_git_merge_task_to_plan; extension determines task and plan branches from state.json.",
 		],
-		allowedNow: [
-			"Use task-to-plan merge wrapper and update memory after merge commit.",
-		],
+		allowedNow: ["Use the task-to-plan merge wrapper."],
 		forbiddenNow: [
 			"Do not use raw git merge.",
 			"Do not start next task before compact_task.",
 		],
 		exitCondition:
-			"Task branch is merged into plan branch, task branch is deleted, memory is synced.",
+			"Task branch is merged into plan branch and the task branch is deleted.",
 		nextInstruction: "Call planner_finish_step to open compact_task.",
 	}),
 	compact_task: stepRule("execution", "compact_task", {
@@ -764,7 +689,7 @@ export const PLANNER_STEP_RULES = {
 	compare_expected_actual: stepRule("recovery", "compare_expected_actual", {
 		objective: "Compare actual git reality with state.json.",
 		requiredActions: [
-			"Compare expected branch, worktree path, checkpoint commit, merge targets, dirty/conflict status.",
+			"Compare expected branch, worktree path, merge targets, dirty/conflict status.",
 		],
 		allowedNow: ["Recovery analysis only."],
 		forbiddenNow: ["Do not repair before classification."],
@@ -774,7 +699,7 @@ export const PLANNER_STEP_RULES = {
 	classify_recovery: stepRule("recovery", "classify_recovery", {
 		objective: "Classify the recovery problem.",
 		requiredActions: [
-			"Classify missing worktree, wrong branch, dirty checkpoint, external commit, conflict, missing files, or history rewrite.",
+			"Classify missing worktree, wrong branch, dirty worktree, external commit, conflict, missing files, or history rewrite.",
 		],
 		allowedNow: ["Recovery analysis and user-facing explanation."],
 		forbiddenNow: ["Do not choose destructive repair automatically."],
@@ -871,8 +796,6 @@ export async function buildPlannerStatusText(
 		`- activeExperimentId: ${state.activeExperimentId ?? "(none)"}`,
 		`- questionsSubmitted: ${String(state.questionsSubmitted)}`,
 		`- questionsResolved: ${String(state.questionsResolved)}`,
-		`- requiresMemoryUpdate: ${String(state.requiresMemoryUpdate)}`,
-		`- memoryUpdateReason: ${state.memoryUpdateReason ?? "(none)"}`,
 		`- compactBoundaries: ${JSON.stringify(state.compactBoundaries)}`,
 		`- requiresCompact: ${String(state.requiresCompact)}`,
 		`- requiresUserDecision: ${String(state.requiresUserDecision)}`,
@@ -887,7 +810,6 @@ export async function buildPlannerStatusText(
 		`- actualHEAD: ${preflight.gitReality?.headCommit ?? "(unavailable)"}`,
 		`- dirty: ${preflight.gitReality ? String(preflight.gitReality.isDirty) : "(unavailable)"}`,
 		`- conflicts: ${preflight.gitReality ? String(preflight.gitReality.hasConflicts) : "(unavailable)"}`,
-		`- lastCheckpointCommit: ${state.lastCheckpointCommit ?? "(none)"}`,
 		`- activeBranches: ${JSON.stringify(state.activeBranches)}`,
 		`- mergeTargets: ${JSON.stringify(state.mergeTargets)}`,
 		"",
@@ -939,8 +861,8 @@ export async function buildPlannerStatusText(
 		"## Planner Artifacts",
 		...formatPlannerArtifactLinks(preflight),
 		"",
-		"## Memory-First Rule",
-		"During discovery/index_files_iteratively or a required refresh queue, read only the active queued file through planner_memory_read_chunk and resume from activeIndexNextUnreadLine after compact. Outside initial indexing, inspect project_patterns, file index, symbol index, relation index, and dirty state before broad source reads. Read source only when memory is missing, stale, insufficient, or must be verified for the current step.",
+		"## Discovery Context Rule",
+		"Use planner_memory_project_map and planner_memory_search_project for a bounded overview before broad source reads. Read source only when the project map, search excerpts, and discovery.md are insufficient for the current step.",
 	);
 
 	return lines.join("\n");
@@ -1022,67 +944,23 @@ function formatLifecycleNextAction(
 			if (decision.requiredTool === "planner_finish_step") {
 				return `Call planner_finish_step only after exit condition is true: ${rule?.exitCondition ?? "(missing rule)"}`;
 			}
-			if (decision.requiredTool === "planner_finish_and_start_step") {
-				return `Call planner_finish_and_start_step only after exit condition is true: ${rule?.exitCondition ?? "(missing rule)"}`;
-			}
 			return decision.modelMessage;
 		case "start_step":
 			return `Call planner_start_step, then follow ${decision.stage}/${decision.step}: ${rule?.objective ?? "current step"}.`;
-		case "write_memory":
-		case "inspect_memory":
-		case "sync_memory_checkpoint":
-			return `Update planner memory first: inspect/apply freshness, rewrite affected file/symbol/relation/effects entries, verify memory, then sync checkpoint when the worktree is clean. Exact next action: ${decision.modelMessage}`;
 		default:
 			return decision.modelMessage;
 	}
 }
 
 async function formatMemorySection(
-	fs: PlannerFs,
-	preflight: PlannerPreflightResult,
+	_fs: PlannerFs,
+	_preflight: PlannerPreflightResult,
 ): Promise<string[]> {
-	const lines: string[] = [];
-	if (!preflight.memoryPaths) {
-		lines.push(
-			"- memory paths: (unavailable before worktree/memory initialization)",
-		);
-		return lines;
-	}
-	lines.push(
-		`- project patterns: ${preflight.memoryPaths.projectPatternsMd}`,
-		`- files index: ${preflight.memoryPaths.filesIndexJsonl}`,
-		`- symbols index: ${preflight.memoryPaths.symbolsIndexJsonl}`,
-		`- relations index: ${preflight.memoryPaths.relationsIndexJsonl}`,
-		`- indexing state: ${preflight.memoryPaths.indexingJson}`,
-		`- dirty state: ${preflight.memoryPaths.dirtyJson}`,
-		`- checkpoint: ${preflight.memoryPaths.latestCheckpointJson}`,
-		`- checkpointValid: ${preflight.memoryCheckpoint ? String(preflight.memoryCheckpoint.valid) : "(unavailable)"}`,
-	);
-	if (preflight.memoryGate) {
-		lines.push(
-			`- memoryClean: ${String(preflight.memoryGate.clean)}`,
-			`- filesToReindex: ${preflight.memoryGate.freshness.filesToReindex.join(", ") || "(none)"}`,
-			`- affectedSymbols: ${preflight.memoryGate.freshness.affectedSymbolIds.join(", ") || "(none)"}`,
-			`- affectedRelations: ${preflight.memoryGate.freshness.affectedRelationIds.join(", ") || "(none)"}`,
-			`- requiredChecks: ${preflight.memoryGate.requiredChecks.join(", ") || "(none)"}`,
-		);
-	} else {
-		lines.push("- memoryFreshness: not inspected for this step/gate");
-	}
-	const indexing = await readMemoryIndexingState(fs, preflight.memoryPaths);
-	const summary = summarizeMemoryIndexing(indexing);
-	const active = indexing.activeFile
-		? indexing.files.find((entry) => entry.path === indexing.activeFile)
-		: null;
-	lines.push(
-		`- indexingMode: ${summary.mode}`,
-		`- indexingComplete: ${String(summary.complete)}`,
-		`- indexingFiles: total=${summary.total}, pending=${summary.pending}, reading=${summary.reading}, verifying=${summary.verifying}, indexed=${summary.indexed}, ignored=${summary.ignored}, missing=${summary.missing}, failed=${summary.failed}`,
-		`- activeIndexFile: ${active?.path ?? "(none)"}`,
-		`- activeIndexNextUnreadLine: ${active?.nextUnreadLine ?? "(none)"}`,
-		`- activeIndexLineCount: ${active?.lineCount ?? "(none)"}`,
-	);
-	return lines;
+	return [
+		"- durable symbol indexing: disabled",
+		"- use planner_memory_project_map for a bounded mechanical overview",
+		"- use planner_memory_search_project for focused CPU-only search",
+	];
 }
 
 function formatInstructionRoutes(preflight: PlannerPreflightResult): string[] {

@@ -2,7 +2,6 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { syncInstructionFiles } from "../instructions/manager";
 import { createInstructionPaths } from "../instructions/paths";
-import { createMemoryStoragePaths } from "../memory/paths";
 import {
 	createPlanStoragePaths,
 	createProjectStoragePaths,
@@ -82,10 +81,8 @@ describe("planner compact runtime", () => {
 		expect(message).toContain(PLANNER_SYSTEM_INSTRUCTIONS_HEADER);
 		expect(message.startsWith("[SYSTEM_INSTRUCTIONS]")).toBe(true);
 		expect(message).toContain("Call planner_status immediately");
-		expect(message).toContain("planner_memory_search");
+		expect(message).toContain("planner_memory_search_project");
 		expect(message).toContain("State the missing detail before reading source");
-		expect(message).toContain("activeIndexNextUnreadLine");
-		expect(message).toContain("Do not reread completed files");
 		expect(message).toContain("- planId: plan-a");
 		expect(message).toContain("- step: compact_task");
 		expect(message).toContain("Check git and memory before resuming.");
@@ -181,7 +178,6 @@ async function createCompactSetup() {
 		projectRoot: "/repo/app",
 	});
 	const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
-	const memoryPaths = createMemoryStoragePaths(planPaths);
 	const worktreePath = join(
 		projectPaths.projectRoot,
 		".pi",
@@ -216,7 +212,6 @@ async function createCompactSetup() {
 			allowedTools: ["planner_status"],
 		},
 		planPaths,
-		memoryPaths,
 		instructions: {
 			keys: ["execution", "experiment"],
 			entries: [],

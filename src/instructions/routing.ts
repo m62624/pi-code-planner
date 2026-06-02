@@ -48,8 +48,8 @@ export function getInstructionKeysForPlannerStep(input: {
 		case "intake":
 			break;
 		case "discovery":
+			break;
 		case "planning":
-			keys.push("memory");
 			break;
 		case "execution":
 			keys.push(...executionInstructionKeys(input.step));
@@ -65,7 +65,7 @@ export function getInstructionKeysForPlannerStep(input: {
 			}
 			break;
 		case "recovery":
-			keys.push("git", "memory");
+			keys.push("git");
 			break;
 	}
 
@@ -83,7 +83,7 @@ function executionInstructionKeys(step: PlannerStep): InstructionKey[] {
 		step === "run_failing_tests" ||
 		step === "run_final_tests"
 	) {
-		return ["tdd", "memory"];
+		return ["tdd"];
 	}
 
 	if (
@@ -94,7 +94,7 @@ function executionInstructionKeys(step: PlannerStep): InstructionKey[] {
 		step === "select_experiment" ||
 		step === "merge_best_experiment"
 	) {
-		const keys: InstructionKey[] = ["experiment", "memory"];
+		const keys: InstructionKey[] = ["experiment"];
 		if (step === "merge_best_experiment") {
 			keys.splice(1, 0, "git", "git-commit");
 		}
@@ -102,7 +102,7 @@ function executionInstructionKeys(step: PlannerStep): InstructionKey[] {
 	}
 
 	if (step === "refactor_task") {
-		return ["refactor", "memory"];
+		return ["refactor"];
 	}
 
 	if (
@@ -110,14 +110,14 @@ function executionInstructionKeys(step: PlannerStep): InstructionKey[] {
 		step === "merge_task_to_plan" ||
 		step === "select_next_task"
 	) {
-		const keys: InstructionKey[] = ["git", "memory"];
+		const keys: InstructionKey[] = ["git"];
 		if (step === "merge_task_to_plan") {
 			keys.splice(1, 0, "git-commit");
 		}
 		return keys;
 	}
 
-	return ["memory"];
+	return [];
 }
 
 function isGitStep(step: PlannerStep): boolean {

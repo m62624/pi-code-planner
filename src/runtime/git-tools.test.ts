@@ -13,10 +13,6 @@ import type {
 	GitWorktreeRemoveInput,
 } from "../git/runner";
 import {
-	initializeMemoryFiles,
-	writeMemoryCheckpoint,
-} from "../memory/manager";
-import {
 	createPlanStoragePaths,
 	createProjectStoragePaths,
 	type ProjectStoragePaths,
@@ -162,9 +158,9 @@ describe("planner git tools", () => {
 		});
 		expect(await readPlanState(fs, setup.planPaths)).toMatchObject({
 			currentBranch: "task/plan-a/task-1",
-			lastCheckpointCommit: "old123",
-			requiresMemoryUpdate: true,
-			memoryUpdateReason: "planner_commit",
+			lastCheckpointCommit: "new456",
+			requiresMemoryUpdate: false,
+			memoryUpdateReason: null,
 		});
 	});
 
@@ -264,8 +260,8 @@ describe("planner git tools", () => {
 		});
 		expect(await readPlanState(fs, setup.planPaths)).toMatchObject({
 			currentBranch: "task/plan-a/task-1",
-			requiresMemoryUpdate: true,
-			memoryUpdateReason: "planner_merge",
+			requiresMemoryUpdate: false,
+			memoryUpdateReason: null,
 			mergeTargets: { experimentToTask: null },
 		});
 	});
@@ -330,14 +326,6 @@ async function createGitToolSetup(
 	if (input.createWorktreeDir ?? true) {
 		await fs.mkdirp(worktreePath);
 		await fs.writeText(join(worktreePath, "src/a.ts"), "");
-	}
-	if (input.initializeMemory ?? true) {
-		const memoryPaths = await initializeMemoryFiles(fs, planPaths);
-		await writeMemoryCheckpoint(
-			fs,
-			memoryPaths,
-			input.checkpointCommit ?? "abc123",
-		);
 	}
 	await setActivePlan(fs, projectPaths, "plan-a");
 	return { projectPaths, planPaths };

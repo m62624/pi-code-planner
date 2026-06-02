@@ -11,7 +11,6 @@ import type {
 	GitWorktreeAddInput,
 	GitWorktreeRemoveInput,
 } from "../git/runner";
-import { initializeMemoryFiles } from "../memory/manager";
 import {
 	createPlanStoragePaths,
 	createProjectStoragePaths,
@@ -203,7 +202,6 @@ async function createQuestionSetup(
 		planPaths,
 		createPlanRecord({ planId: "plan-a", title: "Plan A" }),
 	);
-	await initializeMemoryFiles(fs, planPaths);
 	await fs.mkdirp(worktreePath);
 	await initializePlanState(fs, planPaths, {
 		...createInitialPlanState({

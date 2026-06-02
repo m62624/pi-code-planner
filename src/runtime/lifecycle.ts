@@ -17,9 +17,6 @@ export type PlannerLifecycleAction =
 	| "no_active_plan"
 	| "inspect_recovery"
 	| "ask_user_decision"
-	| "inspect_memory"
-	| "write_memory"
-	| "sync_memory_checkpoint"
 	| "compact_pending"
 	| "draft_goal"
 	| "await_goal_decision"
@@ -84,8 +81,6 @@ export function decidePlannerLifecycleNext(
 				modelMessage:
 					"Ask the user for the required decision. Use planner_recovery_inspect if you need the exact recovery report before asking.",
 			};
-		case "require_memory_update":
-			return memoryDecision(preflight, base);
 		case "require_compact":
 			return {
 				...base,
@@ -99,54 +94,6 @@ export function decidePlannerLifecycleNext(
 		case "allow_stage_machine":
 			return stateMachineDecision(preflight, base, allowedTransitions);
 	}
-}
-
-function memoryDecision(
-	preflight: PlannerPreflightResult,
-	base: PlannerLifecycleDecision,
-): PlannerLifecycleDecision {
-	if (preflight.gitReality?.isDirty) {
-		return {
-			...base,
-			action: "inspect_recovery",
-			requiredTool: "planner_recovery_inspect",
-			requiredTransition: null,
-			reason: "Memory checkpoint cannot sync while the worktree is dirty.",
-			modelMessage:
-				"Call planner_recovery_inspect and ask the user before resolving dirty worktree at a memory checkpoint boundary.",
-		};
-	}
-	if (!preflight.memoryGate) {
-		return {
-			...base,
-			action: "inspect_memory",
-			requiredTool: "planner_memory_inspect",
-			requiredTransition: null,
-			reason: preflight.decision.reason ?? "Memory update is required.",
-			modelMessage:
-				"Call planner_memory_inspect to get the exact stale files, symbols, relations, and effect checks.",
-		};
-	}
-	if (preflight.memoryGate.clean) {
-		return {
-			...base,
-			action: "sync_memory_checkpoint",
-			requiredTool: "planner_memory_sync_checkpoint",
-			requiredTransition: null,
-			reason: "Memory is fresh and checkpoint can be synced.",
-			modelMessage:
-				"Call planner_memory_sync_checkpoint. Do not continue the stage until checkpoint sync clears requiresMemoryUpdate.",
-		};
-	}
-	return {
-		...base,
-		action: "write_memory",
-		requiredTool: "planner_memory_scan_project",
-		requiredTransition: null,
-		reason: preflight.memoryGate.instruction,
-		modelMessage:
-			"Call planner_memory_scan_project to build a refresh queue. Process exactly one changed file at a time through next_file, read_chunk, upsert_active_file, symbol batches, verify_active_file, and complete_active_file. Then refresh evidence-backed relations, verify memory, and sync checkpoint.",
-	};
 }
 
 function stateMachineDecision(
@@ -246,8 +193,8 @@ function stateMachineDecision(
 					: transitionDecision({
 							base,
 							action: "finish_step",
-							transition: "finish_and_start_step",
-							tool: "planner_finish_and_start_step",
+							transition: "finish_step",
+							tool: "planner_finish_step",
 							allowedTransitions,
 							reason: `Planner step is running: ${state.stage}/${state.step}.`,
 							modelMessage:
@@ -259,12 +206,12 @@ function stateMachineDecision(
 				return transitionDecision({
 					base,
 					action: "finish_step",
-					transition: "finish_and_start_step",
-					tool: "planner_finish_and_start_step",
+					transition: "finish_step",
+					tool: "planner_finish_step",
 					allowedTransitions,
 					reason: `Planner step is running: ${state.stage}/${state.step}.`,
 					modelMessage:
-						"Finish the current step and start the next one in a single call: planner_finish_and_start_step. You MUST specify one of these targets: " +
+						"Finish the current step and start the next one in a single call: planner_finish_step. You MUST specify one of these targets: " +
 						branchingTargets.join(", ") +
 						" The response contains the next step name and instruction keys. Load those instruction files while waiting for the response, then call planner_status to verify the state.",
 				});
@@ -272,12 +219,12 @@ function stateMachineDecision(
 			return transitionDecision({
 				base,
 				action: "finish_step",
-				transition: "finish_and_start_step",
-				tool: "planner_finish_and_start_step",
+				transition: "finish_step",
+				tool: "planner_finish_step",
 				allowedTransitions,
 				reason: `Planner step is running: ${state.stage}/${state.step}.`,
 				modelMessage:
-					"Finish the current step and start the next one in a single call: planner_finish_and_start_step. The response contains the next step name and instruction keys. Load those instruction files while waiting for the response, then call planner_status to verify the state.",
+					"Finish the current step and start the next one in a single call: planner_finish_step. The response contains the next step name and instruction keys. Load those instruction files while waiting for the response, then call planner_status to verify the state.",
 			});
 		}
 		case "completed":

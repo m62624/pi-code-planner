@@ -46,8 +46,8 @@ While a planner plan is active, the persisted worktree path reported by `planner
 ## Checkpoint Rules
 
 - Commit only through `planner_git_commit`.
-- After commit or merge, normal flow is blocked until affected memory is updated, verified, and checkpointed.
-- A dirty worktree is allowed during implementation but not at memory checkpoint sync or compact boundaries.
+- After commit or merge, call `planner_status` and continue the persisted state-machine step.
+- A dirty worktree is allowed during implementation but must be resolved before merge boundaries.
 - Conflicts, unexpected branch changes, missing worktrees, and inconsistent history require recovery inspection.
 - External commits trigger memory refresh, not automatic reset.
 
@@ -70,7 +70,7 @@ While a planner plan is active, the persisted worktree path reported by `planner
 
 ## manual-compact
 
-Preserve current branch, HEAD, last checkpoint commit, dirty/conflict status, managed branch registry, merge targets, selected experiment, cleanup obligations, and exact next wrapper. After compaction, call `planner_status`.
+Preserve current branch, HEAD, dirty/conflict status, managed branch registry, merge targets, selected experiment, cleanup obligations, and exact next wrapper. After compaction, call `planner_status`.
 
 ## auto-compact
 

@@ -22,24 +22,8 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_git_create_refactor_branch",
 	"planner_git_merge_refactor_to_task",
 	"planner_git_merge_task_to_plan",
-	"planner_memory_inspect",
-	"planner_memory_apply_freshness",
-	"planner_memory_scan_project",
 	"planner_memory_project_map",
 	"planner_memory_search_project",
-	"planner_memory_index_status",
-	"planner_memory_next_file",
-	"planner_memory_read_chunk",
-	"planner_memory_upsert_active_file",
-	"planner_memory_write_project_patterns",
-	"planner_memory_upsert_symbols",
-	"planner_memory_verify_active_file",
-	"planner_memory_complete_active_file",
-	"planner_memory_ignore_active_file",
-	"planner_memory_upsert_relations",
-	"planner_memory_search",
-	"planner_memory_verify",
-	"planner_memory_sync_checkpoint",
 	"planner_recovery_inspect",
 	"planner_recovery_resume",
 ] as const;
@@ -88,33 +72,16 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_git_inspect",
 			"planner_memory_project_map",
 			"planner_memory_search_project",
-			"planner_memory_scan_project",
-			"planner_memory_index_status",
 		],
-		index_files_iteratively: [
-			"planner_memory_search_project",
-			"planner_memory_index_status",
-			"planner_memory_next_file",
-			"planner_memory_read_chunk",
-			"planner_memory_upsert_active_file",
-			"planner_memory_upsert_symbols",
-			"planner_memory_verify_active_file",
-			"planner_memory_complete_active_file",
-			"planner_memory_ignore_active_file",
-		],
-		write_project_patterns: ["planner_memory_write_project_patterns"],
-		write_relations: ["planner_memory_upsert_relations"],
 		write_questions: ["planner_questions_submit", "planner_questions_resolve"],
-		verify_memory: [
-			"planner_memory_inspect",
-			"planner_memory_verify",
-			"planner_memory_sync_checkpoint",
-		],
 		compact_discovery: [],
 		enter_planning: [],
 	},
 	planning: {
-		read_memory: ["planner_memory_inspect", "planner_memory_search"],
+		read_memory: [
+			"planner_memory_project_map",
+			"planner_memory_search_project",
+		],
 		draft_plan: [],
 		split_tasks: [],
 		write_task_files: ["planner_task_upsert"],
@@ -189,12 +156,7 @@ const STEP_ALLOWED_TOOLS = {
 export function getAllowedPlannerWrapperTools(
 	state: Pick<
 		PlanStateRecord,
-		| "stage"
-		| "step"
-		| "broken"
-		| "requiresUserDecision"
-		| "requiresCompact"
-		| "requiresMemoryUpdate"
+		"stage" | "step" | "broken" | "requiresUserDecision" | "requiresCompact"
 	>,
 ): readonly PlannerWrapperTool[] {
 	if (state.broken || state.requiresUserDecision) {
@@ -202,29 +164,6 @@ export function getAllowedPlannerWrapperTools(
 			"planner_git_inspect",
 			...STEP_ALLOWED_TOOLS.recovery.read_state,
 			"planner_recovery_resume",
-		]);
-	}
-
-	if (state.requiresMemoryUpdate) {
-		return withAlwaysAllowed([
-			"planner_git_inspect",
-			"planner_memory_inspect",
-			"planner_memory_apply_freshness",
-			"planner_memory_scan_project",
-			"planner_memory_project_map",
-			"planner_memory_search_project",
-			"planner_memory_index_status",
-			"planner_memory_next_file",
-			"planner_memory_read_chunk",
-			"planner_memory_upsert_active_file",
-			"planner_memory_upsert_symbols",
-			"planner_memory_verify_active_file",
-			"planner_memory_complete_active_file",
-			"planner_memory_ignore_active_file",
-			"planner_memory_upsert_relations",
-			"planner_memory_search",
-			"planner_memory_verify",
-			"planner_memory_sync_checkpoint",
 		]);
 	}
 
@@ -240,7 +179,6 @@ export function getAllowedPlannerWrapperTools(
 		...stepRules,
 		...(MEMORY_SEARCH_STAGES.has(state.stage)
 			? ([
-					"planner_memory_search",
 					"planner_memory_project_map",
 					"planner_memory_search_project",
 				] as const)
@@ -258,7 +196,6 @@ export function checkPlannerWrapperAllowed(input: {
 		| "broken"
 		| "requiresUserDecision"
 		| "requiresCompact"
-		| "requiresMemoryUpdate"
 	>;
 }): PlannerToolPolicyDecision {
 	const allowedTools = getAllowedPlannerWrapperTools(input.state);
@@ -272,7 +209,6 @@ export function checkPlannerWrapperAllowed(input: {
 				broken: input.state.broken,
 				requiresUserDecision: input.state.requiresUserDecision,
 				requiresCompact: input.state.requiresCompact,
-				requiresMemoryUpdate: input.state.requiresMemoryUpdate,
 			});
 
 	return {
@@ -310,7 +246,6 @@ function buildBlockedToolReason(input: {
 	broken: boolean;
 	requiresUserDecision: boolean;
 	requiresCompact: boolean;
-	requiresMemoryUpdate: boolean;
 }): string {
 	if (input.broken || input.requiresUserDecision) {
 		return [
@@ -325,14 +260,6 @@ function buildBlockedToolReason(input: {
 			`Planner wrapper ${input.tool} is blocked.`,
 			"The active plan is at a compact boundary.",
 			"Finish compact/resume flow before calling normal planner wrappers.",
-		].join("\n");
-	}
-
-	if (input.requiresMemoryUpdate) {
-		return [
-			`Planner wrapper ${input.tool} is blocked.`,
-			"The active plan requires a memory update before normal work can continue.",
-			"Inspect memory freshness, update affected memory entries, verify freshness, then resume.",
 		].join("\n");
 	}
 

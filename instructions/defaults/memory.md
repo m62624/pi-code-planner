@@ -2,109 +2,28 @@
 
 ## Purpose
 
-Memory is a selective durable knowledge base for context-limited local models. It is not a mandatory mirror of every project file. The extension first performs bounded CPU-only working-tree search, then stores mechanical facts only for files that are useful to the current goal. The model remains responsible for language semantics: Rust traits, Go interfaces, private helpers, inherited behavior, side effects, and reusable APIs must be interpreted from source evidence.
+Keep project understanding cheap for a context-limited local model. Planner memory is a bounded retrieval aid, not a durable mirror of every file, symbol, relation, or commit.
 
-## Durable Files
+## Available Retrieval
 
-- `project_patterns.md` stores architecture, conventions, commands, dependency versions, and uncertainty.
-- `indexing.json` stores the durable file queue, active file, hash, line count, next unread line, candidate symbols, and verification state.
-- `files/index.jsonl` stores project files with hashes and concise summaries.
-- `symbols/index.jsonl` stores signatures, exact anchors, visibility, summaries, verification state, and effects.
-- `relations/index.jsonl` stores evidence-backed links between files, symbols, modules, tests, and configuration.
-- `dirty.json` stores files requiring refresh.
-- `checkpoints/latest.json` stores the last verified memory checkpoint.
+1. Call `planner_memory_project_map` for a mechanical overview of project areas, languages, manifests, entrypoints, tests, and configuration paths.
+2. Call `planner_memory_search_project` with a task-oriented query for bounded ranked excerpts.
+3. Refine the query when context is insufficient.
+4. Read source files directly only when the overview and excerpts are not enough or when the current change requires exact verification.
 
-## Selective Search First
-
-Do not index the whole repository by default.
-
-1. Build a task-oriented query from the approved goal or active task.
-2. Call `planner_memory_project_map` once for a bounded mechanical overview. It does not read project source contents.
-3. Call `planner_memory_search_project`.
-4. Inspect the bounded ranked excerpts.
-5. Refine or broaden the query only when context is insufficient.
-6. Call `planner_memory_scan_project` with the smallest relevant `paths` set worth preserving.
-7. Read source through the bounded file loop before trusting or editing it.
-
-`planner_memory_project_map` and `planner_memory_search_project` are mechanical and CPU-only. They do not start another model, consume VRAM, or persist a full-project semantic database.
-
-## Selected File Rule
-
-Never index selected source files as one large trusted batch.
-
-1. Build or resume the selective queue with `planner_memory_scan_project`.
-2. Call `planner_memory_index_status`.
-3. Claim one file with `planner_memory_next_file`.
-4. Read bounded chunks with `planner_memory_read_chunk` until EOF. Long files resume from the persisted `nextUnreadLine`.
-5. Record file metadata with `planner_memory_upsert_active_file`.
-6. Record reusable symbols in batches of at most 5 with `planner_memory_upsert_symbols`.
-7. Verify the active file with `planner_memory_verify_active_file`.
-8. Complete the active file with `planner_memory_complete_active_file`.
-9. Repeat until the selected queue is complete. Search again only when the stored context is insufficient.
-
-The wrapper refuses early completion, changed hashes, stale anchors, cross-file symbol writes, claiming another file while an active file remains incomplete, global verification before queue completion, and checkpoint sync before queue completion.
-
-`indexing.json` is validated whenever it is loaded. Invalid persisted cursors, duplicate files, missing hashes, unsupported statuses, and inconsistent active-file state block progress instead of silently restarting work.
-
-## Semantic Self-Review
-
-Before calling `planner_memory_verify_active_file`, compare the extracted symbols against the complete chunks read for the active file. Check language-specific reusable behavior, trait or interface implementations, inherited behavior, private helpers used by other code, tests, and hidden side effects.
-
-The TypeScript wrapper validates mechanical facts across languages: file hashes, line progress, exact anchors, queue state, relation references, and evidence substrings. It cannot infer every language semantic. When evidence is incomplete, record uncertainty and use `globalState: "unknown"` instead of guessing.
-
-## Effects
-
-For every reusable or changed symbol, re-evaluate:
-
-- external or global state reads
-- external or global state writes
-- filesystem, network, process, environment, time, random, database, or UI IO
-- calls to side-effectful symbols
-- hidden behavior changes that affect callers or tests without changing the signature
-
-Effects are mandatory. Use `globalState: "unknown"` when evidence is insufficient. Do not guess `none`.
-
-## Relations
-
-Record cross-file relationships after the relevant symbols exist and the file queue is complete. Use small batches and exact evidence substrings. Relationships include calls, implements, extends, contains, tests, configures, depends_on, exposes, reads, and writes. Review the completed symbol index first so cross-file meaning is evaluated with full project evidence.
-
-## Refresh After Git Changes
-
-After planner-controlled commit, merge, external commit, manual checkout, history rewrite, or detected file hash change:
-
-1. Call `planner_status`.
-2. Call `planner_memory_inspect`.
-3. Call `planner_memory_apply_freshness` when stale entries must be marked.
-4. Call `planner_memory_scan_project` to create a refresh queue containing only changed or missing indexed files. New unindexed files stay outside durable memory until the current task needs them; discover relevant new files explicitly with `planner_memory_search_project`.
-5. Process the refresh queue file-by-file with the same strict indexing loop.
-6. Re-record affected evidence-backed relations.
-7. Call `planner_memory_verify`.
-8. When the worktree and memory are clean, call `planner_memory_sync_checkpoint`.
-
-Missing files are removed from file, symbol, and relation memory automatically. Completing a refreshed file removes obsolete symbols and relations from its previous version.
-
-## Memory-First Retrieval
-
-After discovery compact:
-
-1. Read `project_patterns.md`.
-2. Use bounded `planner_memory_search` queries against files, symbols, and relations.
-3. Use `planner_memory_search_project` when durable memory is insufficient.
-4. Read source only when memory is missing, stale, insufficient, or requires verification.
-5. Request the next bounded page or refine the query for large projects. Do not dump all indexes into one prompt.
+Both retrieval wrappers are CPU-only. They do not start another model, consume VRAM, or require a full-project indexing pass.
 
 ## Restrictions
 
-- Do not edit JSONL, `indexing.json`, dirty state, or checkpoint files directly.
-- Do not sync checkpoint while the worktree is dirty.
-- Do not assume clean `git diff` means memory is fresh. Compare HEAD and file hashes.
-- Do not reset git because memory is stale.
-- Do not omit effects.
+- Do not read the whole repository by default.
+- Do not create a file-by-file indexing queue.
+- Do not maintain JSONL symbol, relation, dirty-state, or checkpoint files.
+- Do not block normal implementation after commit or merge for memory synchronization.
 
 ## manual-compact
 
-Preserve checkpoint commit, freshness state, indexing mode, active file, next unread line, queue counts, failed files, dirty files, affected symbols, affected relations, unresolved effect uncertainty, retrieval hints, and memory paths. After compaction, call `planner_status`.
+Preserve the approved goal, active task, relevant paths, useful search queries, and `discovery.md`. After compaction, call `planner_status`.
 
 ## auto-compact
 
-Call `planner_status` immediately. If a file is active, continue from the exact `nextUnreadLine`. Do not reread completed files. If status reports stale memory, process only the persisted refresh queue before normal work.
+Call `planner_status` immediately. Read the current task artifacts and `discovery.md`. Search the project again only when context is insufficient.

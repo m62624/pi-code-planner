@@ -10,7 +10,6 @@ import {
 	completePlannerCompact,
 	enterPlannerRecovery,
 	failPlannerStep,
-	finishAndStartPlannerStep,
 	finishPlannerStep,
 	isPlannerCompactEnabled,
 	type PlannerPosition,
@@ -24,7 +23,6 @@ import {
 export type PlannerStateTransition =
 	| { type: "start_step" }
 	| { type: "finish_step"; next?: PlannerPosition }
-	| { type: "finish_and_start_step"; next?: PlannerPosition }
 	| { type: "advance_step" }
 	| { type: "fail_step"; reason: string }
 	| {
@@ -167,13 +165,7 @@ export function getAllowedPlannerStateTransitionTypes(
 		case "running":
 			return state.step.startsWith("compact_") && isPlannerCompactEnabled(state)
 				? ["request_compact", "fail_step", "block_step", "enter_recovery"]
-				: [
-						"finish_step",
-						"finish_and_start_step",
-						"fail_step",
-						"block_step",
-						"enter_recovery",
-					];
+				: ["finish_step", "fail_step", "block_step", "enter_recovery"];
 		case "completed":
 			return ["advance_step"];
 		case "failed":
@@ -194,8 +186,6 @@ function applyTransition(
 			return startPlannerStep(state);
 		case "finish_step":
 			return finishPlannerStep(state, { next: transition.next });
-		case "finish_and_start_step":
-			return finishAndStartPlannerStep(state, { next: transition.next });
 		case "advance_step":
 			return advancePlannerStep(state);
 		case "fail_step":

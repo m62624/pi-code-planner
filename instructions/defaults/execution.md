@@ -2,11 +2,11 @@
 
 ## Purpose
 
-Execute exactly one active task at a time through tests-first development, sequential experiments, candidate selection, refactor, verification, merge, memory sync, and task compact.
+Execute exactly one active task at a time through tests-first development, sequential experiments, candidate selection, refactor, verification, merge, and task compact.
 
 ## Context Reload Policy
 
-- At `prepare_task`, call `planner_status`, reread the full `plan.md`, read answered `questions.md` and `decisions.md`, read the selected `task.md`, then inspect relevant bounded memory.
+- At `prepare_task`, call `planner_status`, reread the full `plan.md`, read answered `questions.md` and `decisions.md`, read the selected `task.md`, then inspect `discovery.md` and use focused project search only if needed.
 - During one experiment loop, reread `task.md`, `tdd.md`, test/verify artifacts, completed experiment summaries, and relevant memory. Read the full `plan.md` only when integration context is unclear.
 - After `compact_task`, do not carry live reasoning into the next task. Call `planner_status`, reread the full `plan.md`, inspect task status, then load the next `task.md`.
 - After recovery or auto-compact, call `planner_status` before any edit or check.
@@ -21,14 +21,14 @@ Execute exactly one active task at a time through tests-first development, seque
    - Define test strategy, mocks, fixtures, checks, edge cases, and expected failing signal.
 3. `write_tests`
    - Write failing, mock, or contract tests before production implementation.
-   - Record `tests.md`. If project files changed, commit through planner git, refresh memory, verify it, and sync checkpoint before experiments.
+   - Record `tests.md`. If project files changed, commit through planner git before experiments.
 4. `run_failing_tests`
    - Run focused checks and prove that tests detect the missing behavior.
 5. `start_experiments`
    - Create one experiment branch for one distinct implementation attempt.
 6. `run_experiment`
    - Implement only the active attempt.
-   - Run checks, commit through planner git, refresh memory, verify it, and sync checkpoint.
+   - Run checks and commit through planner git.
 7. `summarize_experiment`
    - Record approach, checks, diff summary, strengths, weaknesses, risks, and numeric comparison evidence.
 8. `compact_experiment`
@@ -39,16 +39,16 @@ Execute exactly one active task at a time through tests-first development, seque
    - If the attempt budget or stop criteria are satisfied, select the best attempt id and continue to merge.
 10. `merge_best_experiment`
    - Use the planner wrapper. Source and target branches come from persisted state.
-   - Refresh and sync memory after merge.
+   - Call `planner_status` after merge.
 11. `refactor_task`
    - Challenge the selected result without changing behavior.
    - Write `refactor.md` with a concrete KISS review. Passing checks alone do not prove that refactor review is complete.
-   - Commit and refresh memory only if files changed.
+   - Commit only if files changed.
 12. `run_final_tests`
    - Run final focused and integration checks. Inspect scope and accidental edits.
 13. `merge_task_to_plan`
    - Merge the task branch into the plan branch through the planner wrapper.
-   - Refresh and sync memory after merge.
+   - Call `planner_status` after merge.
 14. `compact_task`
    - Compact the completed task result.
 15. `select_next_task`
@@ -57,8 +57,8 @@ Execute exactly one active task at a time through tests-first development, seque
 ## Atomic Unit Rules
 
 - A commit alone does not finish an atomic unit.
-- After every planner-controlled commit or merge, memory must be refreshed, verified, and checkpointed before normal flow continues.
-- Dirty worktree is allowed while implementing a running step, but checkpoint sync requires a clean worktree.
+- After every planner-controlled commit or merge, call `planner_status` and continue the persisted state-machine step.
+- Dirty worktree is allowed while implementing a running step, but must be resolved before merge boundaries.
 - Built-in project write/edit calls are enabled only during `write_tests`, `run_experiment`, and `refactor_task`. The planner does not infer file roles from names, so tests, fixtures, harness wiring, configuration, and production code may share files. Follow the exact step purpose.
 - Never edit the original checkout while a planner worktree is active. Continue inside the worktree session reported by `planner_status`.
 - Run every project command from the worktree path reported by `planner_status`. This includes focused tests, full tests, builds, type checks, linters, formatters, generators, package scripts, compilers, and project-specific verification commands, regardless of language or tooling.
@@ -77,10 +77,10 @@ Execute exactly one active task at a time through tests-first development, seque
 
 ## manual-compact
 
-Preserve the plan id, active task id, active experiment id, exact branch, checkpoint commit, current step, task artifact paths, verification results, selected candidate state, completed experiment summaries, open risks, and exact next action. After compaction, call `planner_status`.
+Preserve the plan id, active task id, active experiment id, exact branch, current step, task artifact paths, verification results, selected candidate state, completed experiment summaries, open risks, and exact next action. After compaction, call `planner_status`.
 
 For `compact_experiment`, reload `task.md`, `tdd.md`, tests, verify notes, prior experiment summaries, and relevant memory. For `compact_task`, reload full `plan.md` before choosing the next task.
 
 ## auto-compact
 
-Call `planner_status` immediately. Do not continue editing from chat memory. Restore the exact task and experiment from persisted state, inspect git and memory gates, then reread the artifacts required by the current step. If scope may have changed, reread full `plan.md`.
+Call `planner_status` immediately. Do not continue editing from chat memory. Restore the exact task and experiment from persisted state, inspect the git gate, then reread the artifacts required by the current step. Use bounded project context or focused source reads only when the exact action needs them. If scope may have changed, reread full `plan.md`.

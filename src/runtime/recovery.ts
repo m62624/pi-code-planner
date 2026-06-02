@@ -1,8 +1,4 @@
 import type { GitRunner } from "../git/runner";
-import { inspectMemoryGate, type MemoryGateInspection } from "../memory/gate";
-import { verifyMemoryCheckpoint } from "../memory/manager";
-import { createMemoryStoragePaths } from "../memory/paths";
-import type { MemoryCheckpointVerification } from "../memory/schema";
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
 import type { PlanStateRecord } from "../storage/schema";
@@ -63,8 +59,6 @@ export interface PlannerRecoveryInspection {
 	actual: {
 		worktreeExists: boolean | null;
 		git: PlannerGitReality | null;
-		memoryCheckpoint: MemoryCheckpointVerification | null;
-		memoryGate: MemoryGateInspection | null;
 		branches: PlannerRecoveryBranchInspection[];
 	};
 	safeOptions: string[];
@@ -94,8 +88,6 @@ export async function inspectPlannerRecovery(input: {
 			actual: {
 				worktreeExists: null,
 				git: null,
-				memoryCheckpoint: null,
-				memoryGate: null,
 				branches: [],
 			},
 			safeOptions: safeOptionsForIssues([issue]),
@@ -114,23 +106,6 @@ export async function inspectPlannerRecovery(input: {
 					repoRoot: state.worktreePath,
 				})
 			: null;
-	const memoryPaths = createMemoryStoragePaths(context.planPaths);
-	const memoryCheckpoint = await safeVerifyMemoryCheckpoint({
-		fs: input.fs,
-		memoryPaths,
-	});
-	const memoryGate =
-		state.worktreePath &&
-		worktreeExists &&
-		gitReality &&
-		memoryCheckpoint?.valid
-			? await safeInspectMemoryGate({
-					fs: input.fs,
-					git: input.git,
-					repoRoot: state.worktreePath,
-					memoryPaths,
-				})
-			: null;
 	const branches = await inspectManagedBranches({
 		git: input.git,
 		repoRoot: input.projectPaths.projectRoot,
@@ -140,8 +115,6 @@ export async function inspectPlannerRecovery(input: {
 		state,
 		worktreeExists,
 		gitReality,
-		memoryCheckpoint,
-		memoryGate,
 		branches,
 	});
 
@@ -171,8 +144,6 @@ export async function inspectPlannerRecovery(input: {
 		actual: {
 			worktreeExists,
 			git: gitReality,
-			memoryCheckpoint,
-			memoryGate,
 			branches,
 		},
 		safeOptions: safeOptionsForIssues(issues),
@@ -201,9 +172,6 @@ export function formatPlannerRecoveryInspection(
 		`- stepStatus: ${inspection.expected.stepStatus ?? "(none)"}`,
 		`- worktreePath: ${inspection.expected.worktreePath ?? "(none)"}`,
 		`- currentBranch: ${inspection.expected.currentBranch ?? "(none)"}`,
-		`- lastCheckpointCommit: ${inspection.expected.lastCheckpointCommit ?? "(none)"}`,
-		`- requiresMemoryUpdate: ${String(inspection.expected.requiresMemoryUpdate)}`,
-		`- memoryUpdateReason: ${inspection.expected.memoryUpdateReason ?? "(none)"}`,
 		`- requiresCompact: ${String(inspection.expected.requiresCompact)}`,
 		`- requiresUserDecision: ${String(inspection.expected.requiresUserDecision)}`,
 		`- broken: ${String(inspection.expected.broken)}`,
@@ -211,14 +179,12 @@ export function formatPlannerRecoveryInspection(
 		`- activeBranches: ${JSON.stringify(inspection.expected.activeBranches)}`,
 		`- mergeTargets: ${JSON.stringify(inspection.expected.mergeTargets)}`,
 		"",
-		"## Actual Git And Memory",
+		"## Actual Git",
 		`- worktreeExists: ${String(inspection.actual.worktreeExists)}`,
 		`- gitBranch: ${inspection.actual.git?.branch ?? "(unavailable)"}`,
 		`- gitHEAD: ${inspection.actual.git?.headCommit ?? "(unavailable)"}`,
 		`- gitDirty: ${inspection.actual.git ? String(inspection.actual.git.isDirty) : "(unavailable)"}`,
 		`- gitConflicts: ${inspection.actual.git ? String(inspection.actual.git.hasConflicts) : "(unavailable)"}`,
-		`- memoryCheckpointValid: ${inspection.actual.memoryCheckpoint ? String(inspection.actual.memoryCheckpoint.valid) : "(unavailable)"}`,
-		`- memoryClean: ${inspection.actual.memoryGate ? String(inspection.actual.memoryGate.clean) : "(not inspected)"}`,
 		"",
 		"## Managed Branches",
 		...formatBranches(inspection.actual.branches),
@@ -238,8 +204,6 @@ function classifyRecoveryIssues(input: {
 	state: PlanStateRecord;
 	worktreeExists: boolean;
 	gitReality: PlannerGitReality | null;
-	memoryCheckpoint: MemoryCheckpointVerification | null;
-	memoryGate: MemoryGateInspection | null;
 	branches: readonly PlannerRecoveryBranchInspection[];
 }): PlannerRecoveryIssue[] {
 	const issues: PlannerRecoveryIssue[] = [];
@@ -294,43 +258,12 @@ function classifyRecoveryIssues(input: {
 			message: `Expected branch ${state.currentBranch}, got ${gitReality.branch}. Actual branch role: ${branchRole(state, gitReality.branch)}.`,
 		});
 	}
-	if (input.memoryCheckpoint && !input.memoryCheckpoint.valid) {
-		issues.push({
-			code: "memory_checkpoint_corrupt",
-			severity: "blocking",
-			message: `Memory checkpoint hash mismatch: ${input.memoryCheckpoint.mismatches.join(", ") || "(unknown)"}.`,
-		});
-	}
 	if (gitReality?.isDirty) {
 		issues.push({
 			code: "dirty_worktree",
 			severity: "warning",
 			message:
 				"Worktree has uncommitted changes. This is allowed inside active work, but not at checkpoint/sync/plan-switch boundaries.",
-		});
-	}
-	if (state.requiresMemoryUpdate) {
-		issues.push({
-			code: "memory_update_required",
-			severity: "warning",
-			message: `Planner already marked memory update required: ${state.memoryUpdateReason ?? "unknown reason"}. This can be expected after planner commit or merge.`,
-		});
-	} else if (
-		gitReality &&
-		state.lastCheckpointCommit !== null &&
-		gitReality.headCommit !== state.lastCheckpointCommit
-	) {
-		issues.push({
-			code: "external_commit",
-			severity: "warning",
-			message: `HEAD ${gitReality.headCommit} differs from last checkpoint ${state.lastCheckpointCommit} and state did not mark a planner commit/merge memory update.`,
-		});
-	}
-	if (input.memoryGate && !input.memoryGate.clean) {
-		issues.push({
-			code: "memory_update_required",
-			severity: "warning",
-			message: input.memoryGate.instruction,
 		});
 	}
 	for (const branch of input.branches) {
@@ -472,15 +405,6 @@ function recoveryRecommendation(
 	if (issues.some((issue) => issue.code === "wrong_branch")) {
 		return "Do not continue on the wrong branch. If the worktree is clean, a planner repair may switch back to the expected branch; otherwise ask the user.";
 	}
-	if (issues.some((issue) => issue.code === "memory_checkpoint_corrupt")) {
-		return "Do not sync memory. Inspect memory files and ask the user before destructive repair.";
-	}
-	if (issues.some((issue) => issue.code === "external_commit")) {
-		return "Treat this as external history change. Re-run memory freshness and discovery update before normal flow.";
-	}
-	if (issues.some((issue) => issue.code === "memory_update_required")) {
-		return "Continue with planner memory update, verify memory, then sync checkpoint. This is expected after planner commit or merge.";
-	}
 	if (issues.some((issue) => issue.code === "dirty_worktree")) {
 		return "Do not switch plans or sync checkpoint until dirty changes are committed, reverted by user approval, or explained.";
 	}
@@ -494,16 +418,6 @@ function safeOptionsForIssues(
 	issues: readonly PlannerRecoveryIssue[],
 ): string[] {
 	const options = new Set<string>(["Call planner_status after inspection."]);
-	if (issues.some((issue) => issue.code === "memory_update_required")) {
-		options.add(
-			"Update affected memory through planner memory tools, verify freshness, then sync checkpoint when worktree is clean.",
-		);
-	}
-	if (issues.some((issue) => issue.code === "external_commit")) {
-		options.add(
-			"Run memory freshness/discovery update for the actual HEAD before resuming.",
-		);
-	}
 	if (issues.some((issue) => issue.code === "wrong_branch")) {
 		options.add(
 			"If worktree is clean and expected branch exists, ask user before switching back through a future recovery action.",
@@ -544,11 +458,6 @@ function destructiveOptionsForIssues(
 	) {
 		options.add(
 			"Delete broken planner files/worktree references only after explicit user approval.",
-		);
-	}
-	if (issues.some((issue) => issue.code === "memory_checkpoint_corrupt")) {
-		options.add(
-			"Regenerate or delete corrupted memory files only after explicit user approval.",
 		);
 	}
 	return [...options];
@@ -603,30 +512,6 @@ async function safeInspectGitReality(input: {
 }): Promise<PlannerGitReality | null> {
 	try {
 		return await inspectPlannerGitReality(input);
-	} catch {
-		return null;
-	}
-}
-
-async function safeVerifyMemoryCheckpoint(input: {
-	fs: PlannerFs;
-	memoryPaths: ReturnType<typeof createMemoryStoragePaths>;
-}): Promise<MemoryCheckpointVerification | null> {
-	try {
-		return await verifyMemoryCheckpoint(input.fs, input.memoryPaths);
-	} catch {
-		return null;
-	}
-}
-
-async function safeInspectMemoryGate(input: {
-	fs: PlannerFs;
-	git: GitRunner;
-	repoRoot: string;
-	memoryPaths: ReturnType<typeof createMemoryStoragePaths>;
-}): Promise<MemoryGateInspection | null> {
-	try {
-		return await inspectMemoryGate(input);
 	} catch {
 		return null;
 	}

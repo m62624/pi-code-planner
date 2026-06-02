@@ -16,14 +16,6 @@ import {
 import { syncBundledInstructionFiles } from "./instructions/defaults";
 import { createInstructionPaths } from "./instructions/paths";
 import {
-	MEMORY_FILE_KINDS,
-	MEMORY_RELATION_KINDS,
-	MEMORY_SYMBOL_GLOBAL_STATES,
-	MEMORY_SYMBOL_KINDS,
-	MEMORY_SYMBOL_VISIBILITIES,
-	MEMORY_VERIFICATION_STATUSES,
-} from "./memory/schema";
-import {
 	buildAcceptedPlanCompletionPrompt,
 	finalizeAcceptedPlan,
 	inspectAcceptedPlan,
@@ -53,7 +45,7 @@ import {
 } from "./runtime/goal-tools";
 import {
 	executePlannerMemoryTool,
-	PLANNER_MEMORY_TOOL_NAMES,
+	PLANNER_EXPOSED_MEMORY_TOOL_NAMES,
 	type PlannerMemoryToolName,
 } from "./runtime/memory-tools";
 import { runPlannerOrchestrator } from "./runtime/orchestrator";
@@ -276,44 +268,6 @@ const OPTIONAL_REASON_TOOL_PARAMETERS = {
 	additionalProperties: false,
 } as const;
 
-const MEMORY_PROJECT_PATTERNS_TOOL_PARAMETERS = {
-	type: "object",
-	properties: {
-		content: {
-			type: "string",
-			description:
-				"Full project_patterns.md markdown with observed architecture, conventions, commands, dependencies, and uncertainty.",
-		},
-	},
-	required: ["content"],
-	additionalProperties: false,
-} as const;
-
-const MEMORY_READ_CHUNK_TOOL_PARAMETERS = {
-	type: "object",
-	properties: {
-		maxLines: {
-			type: "number",
-			description:
-				"Optional bounded line count. Defaults to 200 and is capped at 400.",
-		},
-	},
-	additionalProperties: false,
-} as const;
-
-const MEMORY_SCAN_PROJECT_TOOL_PARAMETERS = {
-	type: "object",
-	properties: {
-		paths: {
-			type: "array",
-			items: { type: "string" },
-			description:
-				"Relevant project-relative paths selected after planner_memory_search_project. Initial discovery indexes only these files.",
-		},
-	},
-	additionalProperties: false,
-} as const;
-
 const MEMORY_SEARCH_PROJECT_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {
@@ -336,181 +290,6 @@ const MEMORY_PROJECT_MAP_TOOL_PARAMETERS = {
 			description:
 				"Optional bounded path count for map groups. Defaults to 30 and is capped at 100.",
 		},
-	},
-	additionalProperties: false,
-} as const;
-
-const MEMORY_ACTIVE_FILE_TOOL_PARAMETERS = {
-	type: "object",
-	properties: {
-		kind: { type: "string", enum: MEMORY_FILE_KINDS },
-		language: { type: "string" },
-		summary: {
-			type: "string",
-			description:
-				"Concise responsibility or explicit reason why the active file is intentionally ignored.",
-		},
-	},
-	required: ["kind", "language", "summary"],
-	additionalProperties: false,
-} as const;
-
-const MEMORY_SYMBOLS_TOOL_PARAMETERS = {
-	type: "object",
-	properties: {
-		symbols: {
-			type: "array",
-			description:
-				"At most 5 reusable symbols from the current active file. Provide semantic fields only. The extension derives a stable id, file language, qualified name, anchor, visibility default, verification.fileHash, and verified status when omitted.",
-			items: {
-				type: "object",
-				properties: {
-					id: {
-						type: "string",
-						description: "Optional stable id override. Usually omit it.",
-					},
-					path: {
-						type: "string",
-						description:
-							"Optional compatibility override. Usually omit it: the extension derives the current active file path.",
-					},
-					language: {
-						type: "string",
-						description:
-							"Optional override. Defaults to the indexed file language.",
-					},
-					kind: { type: "string", enum: MEMORY_SYMBOL_KINDS },
-					name: { type: "string" },
-					qualifiedName: {
-						type: "string",
-						description: "Optional. Defaults to name.",
-					},
-					signature: { type: "string" },
-					summary: { type: "string" },
-					visibility: {
-						type: "string",
-						enum: MEMORY_SYMBOL_VISIBILITIES,
-						description: "Optional. Defaults to unknown.",
-					},
-					effects: {
-						type: "object",
-						properties: {
-							reads: { type: "array", items: { type: "string" } },
-							writes: { type: "array", items: { type: "string" } },
-							io: { type: "array", items: { type: "string" } },
-							globalState: {
-								type: "string",
-								enum: MEMORY_SYMBOL_GLOBAL_STATES,
-							},
-						},
-						required: ["reads", "writes", "io", "globalState"],
-						additionalProperties: false,
-					},
-					anchorSearchText: {
-						type: "string",
-						description:
-							"Optional stable source text used to relocate the symbol. Defaults to signature.",
-					},
-				},
-				required: ["kind", "name", "signature", "summary", "effects"],
-				additionalProperties: false,
-			},
-		},
-	},
-	required: ["symbols"],
-	additionalProperties: false,
-} as const;
-
-const MEMORY_RELATIONS_TOOL_PARAMETERS = {
-	type: "object",
-	properties: {
-		relations: {
-			type: "array",
-			description:
-				"Evidence-backed relations. from/to accept a generated symbol id, unique name, or qualified name. evidencePath defaults to the from symbol file and must already be indexed.",
-			items: {
-				type: "object",
-				properties: {
-					id: {
-						type: "string",
-						description: "Optional stable id override. Usually omit it.",
-					},
-					from: { type: "string" },
-					to: { type: ["string", "null"] },
-					kind: { type: "string", enum: MEMORY_RELATION_KINDS },
-					evidencePath: {
-						type: "string",
-						description:
-							"Optional. Defaults to the source path of the from symbol.",
-					},
-					evidenceSearchText: { type: "string" },
-				},
-				required: ["from", "to", "kind", "evidenceSearchText"],
-				additionalProperties: false,
-			},
-		},
-	},
-	required: ["relations"],
-	additionalProperties: false,
-} as const;
-
-const MEMORY_SEARCH_TOOL_PARAMETERS = {
-	type: "object",
-	properties: {
-		query: { type: "string" },
-		cursor: {
-			type: "object",
-			properties: {
-				files: { type: "number" },
-				symbols: { type: "number" },
-				relations: { type: "number" },
-			},
-			additionalProperties: false,
-		},
-		limits: {
-			type: "object",
-			properties: {
-				files: { type: "number" },
-				symbols: { type: "number" },
-				relations: { type: "number" },
-			},
-			additionalProperties: false,
-		},
-		filters: {
-			type: "object",
-			properties: {
-				paths: { type: "array", items: { type: "string" } },
-				languages: { type: "array", items: { type: "string" } },
-				symbolKinds: {
-					type: "array",
-					items: { type: "string", enum: MEMORY_SYMBOL_KINDS },
-				},
-				relationKinds: {
-					type: "array",
-					items: { type: "string", enum: MEMORY_RELATION_KINDS },
-				},
-				globalState: {
-					type: "array",
-					items: { type: "string", enum: MEMORY_SYMBOL_GLOBAL_STATES },
-				},
-				verificationStatus: {
-					type: "array",
-					items: { type: "string", enum: MEMORY_VERIFICATION_STATUSES },
-				},
-				dirtyOnly: { type: "boolean" },
-			},
-			additionalProperties: false,
-		},
-		includeProjectPatterns: { type: "boolean" },
-		includeDirtyState: { type: "boolean" },
-	},
-	additionalProperties: false,
-} as const;
-
-const MEMORY_APPLY_FRESHNESS_TOOL_PARAMETERS = {
-	type: "object",
-	properties: {
-		detectedAt: { type: "string" },
 	},
 	additionalProperties: false,
 } as const;
@@ -1119,7 +898,7 @@ function registerPlannerTools(
 		});
 	}
 
-	for (const toolName of PLANNER_MEMORY_TOOL_NAMES) {
+	for (const toolName of PLANNER_EXPOSED_MEMORY_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
 			label: memoryToolLabel(toolName),
@@ -1472,117 +1251,28 @@ function gitToolParameters(toolName: PlannerGitToolName) {
 
 function memoryToolLabel(toolName: PlannerMemoryToolName): string {
 	switch (toolName) {
-		case "planner_memory_inspect":
-			return "Planner Memory Inspect";
-		case "planner_memory_apply_freshness":
-			return "Planner Memory Apply Freshness";
-		case "planner_memory_scan_project":
-			return "Planner Memory Scan Project";
 		case "planner_memory_project_map":
 			return "Planner Memory Project Map";
 		case "planner_memory_search_project":
 			return "Planner Memory Search Project";
-		case "planner_memory_index_status":
-			return "Planner Memory Index Status";
-		case "planner_memory_next_file":
-			return "Planner Memory Next File";
-		case "planner_memory_read_chunk":
-			return "Planner Memory Read Chunk";
-		case "planner_memory_upsert_active_file":
-			return "Planner Memory Upsert Active File";
-		case "planner_memory_write_project_patterns":
-			return "Planner Memory Write Project Patterns";
-		case "planner_memory_upsert_symbols":
-			return "Planner Memory Upsert Symbols";
-		case "planner_memory_verify_active_file":
-			return "Planner Memory Verify Active File";
-		case "planner_memory_complete_active_file":
-			return "Planner Memory Complete Active File";
-		case "planner_memory_ignore_active_file":
-			return "Planner Memory Ignore Active File";
-		case "planner_memory_upsert_relations":
-			return "Planner Memory Upsert Relations";
-		case "planner_memory_search":
-			return "Planner Memory Search";
-		case "planner_memory_verify":
-			return "Planner Memory Verify";
-		case "planner_memory_sync_checkpoint":
-			return "Planner Memory Sync Checkpoint";
 	}
 }
 
 function memoryToolDescription(toolName: PlannerMemoryToolName): string {
 	switch (toolName) {
-		case "planner_memory_inspect":
-			return "Inspect memory freshness and list affected files, symbols, relations, and required effect checks.";
-		case "planner_memory_apply_freshness":
-			return "Mark stale memory entries dirty or missing before the model rewrites affected memory.";
-		case "planner_memory_scan_project":
-			return "Build or resume a selective durable indexing queue. Initial discovery indexes only explicitly selected paths; refresh mode includes stale indexed files.";
 		case "planner_memory_project_map":
 			return "Build a bounded CPU-only map of project areas, languages, manifests, entrypoints, tests, and config paths without reading source contents.";
 		case "planner_memory_search_project":
 			return "Search the working tree mechanically on CPU and return bounded ranked excerpts. Does not persist a whole-project index.";
-		case "planner_memory_index_status":
-			return "Show durable file indexing progress, active file, and the exact next unread line.";
-		case "planner_memory_next_file":
-			return "Claim exactly one pending project file for memory indexing.";
-		case "planner_memory_read_chunk":
-			return "Read the next bounded source chunk from the active file and persist the next unread line.";
-		case "planner_memory_upsert_active_file":
-			return "Record metadata for the fully-read active file before extracting reusable symbols.";
-		case "planner_memory_write_project_patterns":
-			return "Write project architecture and convention notes to the exact managed project_patterns.md path.";
-		case "planner_memory_upsert_symbols":
-			return "Write at most 5 validated reusable symbols for the active file. Exact source anchors, stable ids, verification hashes, and effects are checked.";
-		case "planner_memory_verify_active_file":
-			return "Verify that the active file was fully read and every candidate symbol anchor still exists at the scanned hash.";
-		case "planner_memory_complete_active_file":
-			return "Recheck and finalize the verified active file, then clear it so the next file can be claimed.";
-		case "planner_memory_ignore_active_file":
-			return "Explicitly mark an intentionally excluded active file as ignored with a durable summary.";
-		case "planner_memory_upsert_relations":
-			return "Write validated evidence-backed symbol relation entries. Stable relation ids are computed automatically when omitted.";
-		case "planner_memory_search":
-			return "Read bounded project patterns, files, symbols, relations, and dirty state with optional filters and cursors.";
-		case "planner_memory_verify":
-			return "Verify whether memory matches the current project snapshot.";
-		case "planner_memory_sync_checkpoint":
-			return "Sync memory checkpoint to current HEAD after memory verifies clean.";
 	}
 }
 
 function memoryToolParameters(toolName: PlannerMemoryToolName) {
 	switch (toolName) {
-		case "planner_memory_write_project_patterns":
-			return MEMORY_PROJECT_PATTERNS_TOOL_PARAMETERS;
-		case "planner_memory_read_chunk":
-			return MEMORY_READ_CHUNK_TOOL_PARAMETERS;
-		case "planner_memory_upsert_active_file":
-		case "planner_memory_ignore_active_file":
-			return MEMORY_ACTIVE_FILE_TOOL_PARAMETERS;
-		case "planner_memory_upsert_symbols":
-			return MEMORY_SYMBOLS_TOOL_PARAMETERS;
-		case "planner_memory_upsert_relations":
-			return MEMORY_RELATIONS_TOOL_PARAMETERS;
-		case "planner_memory_search":
-			return MEMORY_SEARCH_TOOL_PARAMETERS;
-		case "planner_memory_apply_freshness":
-			return MEMORY_APPLY_FRESHNESS_TOOL_PARAMETERS;
-		case "planner_memory_scan_project":
-			return MEMORY_SCAN_PROJECT_TOOL_PARAMETERS;
 		case "planner_memory_project_map":
 			return MEMORY_PROJECT_MAP_TOOL_PARAMETERS;
 		case "planner_memory_search_project":
 			return MEMORY_SEARCH_PROJECT_TOOL_PARAMETERS;
-		case "planner_memory_inspect":
-		case "planner_memory_index_status":
-		case "planner_memory_next_file":
-		case "planner_memory_verify_active_file":
-		case "planner_memory_complete_active_file":
-		case "planner_memory_verify":
-		case "planner_memory_sync_checkpoint":
-			return EMPTY_TOOL_PARAMETERS;
 	}
 }
 

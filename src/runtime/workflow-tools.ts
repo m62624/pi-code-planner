@@ -1,11 +1,5 @@
 import { join } from "node:path";
 import type { GitRunner } from "../git/runner";
-import { inspectMemoryGate } from "../memory/gate";
-import {
-	readMemoryIndexingState,
-	summarizeMemoryIndexing,
-} from "../memory/indexing";
-import { readMemoryCheckpoint } from "../memory/manager";
 import type { PlannerFs } from "../storage/fs";
 import {
 	createTaskStoragePaths,
@@ -32,7 +26,6 @@ import {
 export const PLANNER_WORKFLOW_TOOL_NAMES = [
 	"planner_start_step",
 	"planner_finish_step",
-	"planner_finish_and_start_step",
 	"planner_advance_step",
 	"planner_fail_step",
 	"planner_block_step",
@@ -143,68 +136,6 @@ async function validateWorkflowExit(input: {
 		return null;
 	}
 	const { state } = input.orchestrator.preflight.context;
-	const memoryPaths = input.orchestrator.preflight.memoryPaths;
-	if (state.stage === "discovery" && state.step === "scan_project_structure") {
-		if (!memoryPaths) {
-			return "Planner memory paths are missing.";
-		}
-		const indexing = await readMemoryIndexingState(input.fs, memoryPaths);
-		return indexing.mode === "initial_discovery"
-			? null
-			: "Project structure scan is incomplete. Call planner_memory_scan_project before finishing discovery/scan_project_structure.";
-	}
-	if (state.stage === "discovery" && state.step === "index_files_iteratively") {
-		if (!memoryPaths) {
-			return "Planner memory paths are missing.";
-		}
-		const summary = summarizeMemoryIndexing(
-			await readMemoryIndexingState(input.fs, memoryPaths),
-		);
-		return summary.complete
-			? null
-			: [
-					"Iterative memory indexing is incomplete.",
-					`Active file: ${summary.activeFile ?? "(none)"}.`,
-					`Pending=${summary.pending}, reading=${summary.reading}, verifying=${summary.verifying}, failed=${summary.failed}.`,
-					"Call planner_memory_index_status and continue the exact active file.",
-				].join("\n");
-	}
-	if (state.stage === "discovery" && state.step === "verify_memory") {
-		if (!memoryPaths) {
-			return "Planner memory paths are missing.";
-		}
-		const summary = summarizeMemoryIndexing(
-			await readMemoryIndexingState(input.fs, memoryPaths),
-		);
-		if (!summary.complete) {
-			return [
-				"Memory verification boundary cannot finish while iterative indexing is incomplete.",
-				`Active file: ${summary.activeFile ?? "(none)"}.`,
-				`Pending=${summary.pending}, reading=${summary.reading}, verifying=${summary.verifying}, failed=${summary.failed}.`,
-				"Call planner_memory_index_status and finish the exact active file first.",
-			].join("\n");
-		}
-		if (!state.worktreePath) {
-			return "Planner worktree path is missing.";
-		}
-		const inspection = await inspectMemoryGate({
-			fs: input.fs,
-			git: input.git,
-			repoRoot: state.worktreePath,
-			memoryPaths,
-		});
-		const checkpoint = await readMemoryCheckpoint(input.fs, memoryPaths);
-		const head = input.orchestrator.preflight.gitReality?.headCommit;
-		if (!inspection.clean || checkpoint.commit !== head) {
-			return [
-				"Memory verification boundary is not complete.",
-				`Memory clean: ${String(inspection.clean)}.`,
-				`Checkpoint commit: ${checkpoint.commit ?? "(none)"}.`,
-				`Current HEAD: ${head ?? "(none)"}.`,
-				"Use planner_memory_verify and planner_memory_sync_checkpoint before finishing discovery/verify_memory.",
-			].join("\n");
-		}
-	}
 	if (state.stage === "discovery" && state.step === "write_questions") {
 		const artifactBlock = await requireNonEmptyArtifact(
 			input.fs,
@@ -391,17 +322,15 @@ function validateMergedTask(state: PlanStateRecord): string | null {
 }
 
 function validateCleanMemoryCheckpoint(
-	state: PlanStateRecord,
+	_state: PlanStateRecord,
 	gitReality: PlannerGitReality | null,
 ): string | null {
 	if (!gitReality) {
 		return "Git reality is unavailable.";
 	}
-	return !gitReality.isDirty &&
-		!state.requiresMemoryUpdate &&
-		state.lastCheckpointCommit === gitReality.headCommit
+	return !gitReality.isDirty
 		? null
-		: "Commit planner changes, refresh affected memory file-by-file, verify memory, and sync the checkpoint before finishing this step.";
+		: "Commit planner changes before finishing this step.";
 }
 
 async function validateExperimentSummary(
@@ -448,16 +377,6 @@ export function workflowToolTransition(
 						next: { stage: nextStage as never, step: nextStep as never },
 					}
 				: { type: "finish_step" };
-		}
-		case "planner_finish_and_start_step": {
-			const nextStage = stringOrUndefined(object.nextStage);
-			const nextStep = stringOrUndefined(object.nextStep);
-			return nextStage && nextStep
-				? {
-						type: "finish_and_start_step",
-						next: { stage: nextStage as never, step: nextStep as never },
-					}
-				: { type: "finish_and_start_step" };
 		}
 		case "planner_advance_step":
 			return { type: "advance_step" };

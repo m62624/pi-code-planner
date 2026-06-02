@@ -3,7 +3,6 @@ import { planBranchName } from "../git/branches";
 import type { GitRunner } from "../git/runner";
 import { syncBundledInstructionFiles } from "../instructions/defaults";
 import { createInstructionPaths } from "../instructions/paths";
-import { initializeMemoryFiles } from "../memory/manager";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { WorktreeSettings } from "../settings/schema";
 import type { PlannerFs } from "../storage/fs";
@@ -167,7 +166,6 @@ async function createPlanTool(
 	await initializePlanFiles(input.fs, planPaths, plan);
 	await input.fs.writeTextAtomic(planPaths.requestMd, `${request.trim()}\n`);
 	await initializePlanState(input.fs, planPaths, state);
-	const memoryPaths = await initializeMemoryFiles(input.fs, planPaths);
 	await upsertProjectPlanSummary(input.fs, input.projectPaths, {
 		planId,
 		title: validatedTitle,
@@ -190,7 +188,6 @@ async function createPlanTool(
 			plan,
 			state,
 			planPaths,
-			memoryPaths,
 			worktree,
 			settings,
 		},

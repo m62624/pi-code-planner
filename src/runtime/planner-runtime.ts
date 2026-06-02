@@ -2,10 +2,8 @@ import {
 	getAllowedPlannerWrapperTools,
 	type PlannerWrapperTool,
 } from "../guard/tool-policy";
-import type { MemoryGateInspection } from "../memory/gate";
 import type {
 	InitStep,
-	MemoryUpdateReason,
 	PlannerStage,
 	PlannerStep,
 	PlanStateRecord,
@@ -15,7 +13,6 @@ import type { PlannerGitReality } from "./git-state-sync";
 
 export type PlannerRuntimeAction =
 	| "allow_stage_machine"
-	| "require_memory_update"
 	| "require_recovery"
 	| "require_user_decision"
 	| "require_compact"
@@ -29,7 +26,6 @@ export type PlannerRuntimeRecoveryReason =
 	| "git_unavailable"
 	| "wrong_branch"
 	| "git_conflict"
-	| "memory_checkpoint_corrupt"
 	| "broken_state"
 	| "user_decision_required";
 
@@ -37,8 +33,6 @@ export interface PlannerRuntimeRealityInput {
 	contextStatus: ActivePlanContextStatus;
 	state?: PlanStateRecord;
 	git?: PlannerGitReality | null;
-	memory?: MemoryGateInspection | null;
-	memoryCheckpointValid?: boolean;
 	worktreeExists?: boolean;
 }
 
@@ -46,7 +40,6 @@ export interface PlannerRuntimeDecision {
 	action: PlannerRuntimeAction;
 	reason: string | null;
 	recoveryReason: PlannerRuntimeRecoveryReason | null;
-	memoryUpdateReason: MemoryUpdateReason | null;
 	allowedTools: readonly PlannerWrapperTool[];
 	stage: PlannerStage | null;
 	step: PlannerStep | null;
@@ -55,7 +48,6 @@ export interface PlannerRuntimeDecision {
 	requiresRecovery: boolean;
 	requiresUserDecision: boolean;
 	requiresCompact: boolean;
-	memory: MemoryGateInspection | null;
 	git: PlannerGitReality | null;
 }
 
@@ -142,14 +134,6 @@ export function evaluatePlannerRuntimeReality(
 		});
 	}
 
-	if (input.memoryCheckpointValid === false) {
-		return recovery(
-			input,
-			"memory_checkpoint_corrupt",
-			"Memory checkpoint integrity could not be verified.",
-		);
-	}
-
 	if (!input.git) {
 		return recovery(input, "git_unavailable", "Git reality is unavailable.");
 	}
@@ -171,35 +155,6 @@ export function evaluatePlannerRuntimeReality(
 			"wrong_branch",
 			`Expected branch ${input.state.currentBranch}, got ${input.git.branch}.`,
 		);
-	}
-
-	if (input.state.requiresMemoryUpdate) {
-		return memoryUpdate({
-			input,
-			reason: input.state.memoryUpdateReason
-				? `Memory update required: ${input.state.memoryUpdateReason}.`
-				: "Memory update required.",
-			memoryUpdateReason: input.state.memoryUpdateReason,
-		});
-	}
-
-	if (
-		input.state.lastCheckpointCommit !== null &&
-		input.git.headCommit !== input.state.lastCheckpointCommit
-	) {
-		return memoryUpdate({
-			input,
-			reason: `HEAD ${input.git.headCommit} differs from memory checkpoint ${input.state.lastCheckpointCommit}.`,
-			memoryUpdateReason: "external_commit",
-		});
-	}
-
-	if (input.memory && !input.memory.clean) {
-		return memoryUpdate({
-			input,
-			reason: input.memory.instruction,
-			memoryUpdateReason: "file_hash_changed",
-		});
 	}
 
 	if (input.state.requiresCompact) {
@@ -250,35 +205,11 @@ function recovery(
 	});
 }
 
-function memoryUpdate(input: {
-	input: PlannerRuntimeRealityInput;
-	reason: string;
-	memoryUpdateReason: MemoryUpdateReason | null;
-}): PlannerRuntimeDecision {
-	const stateForPolicy = input.input.state
-		? {
-				...input.input.state,
-				requiresMemoryUpdate: true,
-			}
-		: null;
-	return decision({
-		input: input.input,
-		action: "require_memory_update",
-		reason: input.reason,
-		memoryUpdateReason: input.memoryUpdateReason,
-		allowedTools: stateForPolicy
-			? getAllowedPlannerWrapperTools(stateForPolicy)
-			: RECOVERY_TOOLS,
-		requiresMemoryUpdate: true,
-	});
-}
-
 function decision(input: {
 	input: PlannerRuntimeRealityInput;
 	action: PlannerRuntimeAction;
 	reason: string | null;
 	recoveryReason?: PlannerRuntimeRecoveryReason | null;
-	memoryUpdateReason?: MemoryUpdateReason | null;
 	allowedTools: readonly PlannerWrapperTool[];
 	requiresMemoryUpdate?: boolean;
 	requiresRecovery?: boolean;
@@ -289,7 +220,6 @@ function decision(input: {
 		action: input.action,
 		reason: input.reason,
 		recoveryReason: input.recoveryReason ?? null,
-		memoryUpdateReason: input.memoryUpdateReason ?? null,
 		allowedTools: input.allowedTools,
 		stage: input.input.state?.stage ?? null,
 		step: input.input.state?.step ?? null,
@@ -298,7 +228,6 @@ function decision(input: {
 		requiresRecovery: input.requiresRecovery ?? false,
 		requiresUserDecision: input.requiresUserDecision ?? false,
 		requiresCompact: input.requiresCompact ?? false,
-		memory: input.input.memory ?? null,
 		git: input.input.git ?? null,
 	};
 }

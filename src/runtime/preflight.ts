@@ -5,17 +5,8 @@ import {
 	getInstructionRoutingForState,
 	type InstructionRouting,
 } from "../instructions/routing";
-import { inspectMemoryGate, type MemoryGateInspection } from "../memory/gate";
-import { verifyMemoryCheckpoint } from "../memory/manager";
-import {
-	createMemoryStoragePaths,
-	type MemoryStoragePaths,
-} from "../memory/paths";
-import type { MemoryCheckpointVerification } from "../memory/schema";
 import type { PlannerFs } from "../storage/fs";
 import type { PlanStoragePaths, ProjectStoragePaths } from "../storage/paths";
-import type { MemoryUpdateReason, PlanStateRecord } from "../storage/schema";
-import { savePlanState } from "../storage/state-store";
 import { type ActivePlanContext, readActivePlanContext } from "./active-plan";
 import {
 	inspectPlannerGitReality,
@@ -37,10 +28,7 @@ export interface PlannerPreflightResult {
 	context: ActivePlanContext;
 	decision: PlannerRuntimeDecision;
 	planPaths: PlanStoragePaths | null;
-	memoryPaths: MemoryStoragePaths | null;
 	gitReality: PlannerGitReality | null;
-	memoryGate: MemoryGateInspection | null;
-	memoryCheckpoint: MemoryCheckpointVerification | null;
 	instructions: InstructionRouting | null;
 	worktreeExists: boolean | null;
 }
@@ -68,10 +56,7 @@ export async function runPlannerPreflight(
 				contextStatus: context.status,
 			}),
 			planPaths: null,
-			memoryPaths: null,
 			gitReality: null,
-			memoryGate: null,
-			memoryCheckpoint: null,
 			instructions: null,
 			worktreeExists: null,
 		};
@@ -94,10 +79,7 @@ export async function runPlannerPreflight(
 				worktreeExists,
 			}),
 			planPaths: context.planPaths,
-			memoryPaths: null,
 			gitReality: null,
-			memoryGate: null,
-			memoryCheckpoint: null,
 			instructions,
 			worktreeExists,
 		};
@@ -118,89 +100,24 @@ export async function runPlannerPreflight(
 				worktreeExists,
 			}),
 			planPaths: context.planPaths,
-			memoryPaths: null,
 			gitReality,
-			memoryGate: null,
-			memoryCheckpoint: null,
 			instructions,
 			worktreeExists,
 		};
 	}
 
-	const memoryPaths = createMemoryStoragePaths(context.planPaths);
-	const memoryCheckpoint = await safeVerifyMemoryCheckpoint({
-		fs: input.fs,
-		memoryPaths,
-	});
-
-	if (!memoryCheckpoint?.valid) {
-		return {
-			context,
-			decision: evaluatePlannerRuntimeReality({
-				contextStatus: context.status,
-				state: context.state,
-				git: gitReality,
-				memoryCheckpointValid: false,
-				worktreeExists,
-			}),
-			planPaths: context.planPaths,
-			memoryPaths,
-			gitReality,
-			memoryGate: null,
-			memoryCheckpoint,
-			instructions,
-			worktreeExists,
-		};
-	}
-
-	const shouldInspectMemory = shouldInspectMemoryFreshness({
-		state: context.state,
-		git: gitReality,
-	});
-	const memoryGate = shouldInspectMemory
-		? await inspectMemoryGate({
-				fs: input.fs,
-				git: input.git,
-				repoRoot: context.state.worktreePath,
-				memoryPaths,
-			})
-		: null;
 	const decision = evaluatePlannerRuntimeReality({
 		contextStatus: context.status,
 		state: context.state,
 		git: gitReality,
-		memory: memoryGate,
-		memoryCheckpointValid: true,
 		worktreeExists,
 	});
-	const syncedContext =
-		decision.action === "require_memory_update"
-			? await persistMemoryUpdateGate({
-					fs: input.fs,
-					context,
-					reason: decision.memoryUpdateReason,
-				})
-			: context;
-	const syncedDecision =
-		syncedContext === context
-			? decision
-			: evaluatePlannerRuntimeReality({
-					contextStatus: syncedContext.status,
-					state: syncedContext.state,
-					git: gitReality,
-					memory: memoryGate,
-					memoryCheckpointValid: true,
-					worktreeExists,
-				});
 
 	return {
-		context: syncedContext,
-		decision: syncedDecision,
+		context,
+		decision,
 		planPaths: context.planPaths,
-		memoryPaths,
 		gitReality,
-		memoryGate,
-		memoryCheckpoint,
 		instructions,
 		worktreeExists,
 	};
@@ -283,76 +200,12 @@ export function formatPlannerPreflightStatus(
 	return lines.join("\n");
 }
 
-async function persistMemoryUpdateGate(input: {
-	fs: PlannerFs;
-	context: Extract<ActivePlanContext, { status: "ready" }>;
-	reason: MemoryUpdateReason | null;
-}): Promise<Extract<ActivePlanContext, { status: "ready" }>> {
-	const state = input.context.state;
-	const next = markStateRequiresMemoryUpdate(state, input.reason);
-	if (next === state) {
-		return input.context;
-	}
-	await savePlanState(input.fs, input.context.planPaths, next);
-	return { ...input.context, state: next };
-}
-
-function markStateRequiresMemoryUpdate(
-	state: PlanStateRecord,
-	reason: MemoryUpdateReason | null,
-): PlanStateRecord {
-	if (state.requiresMemoryUpdate && state.memoryUpdateReason === reason) {
-		return state;
-	}
-	return {
-		...state,
-		requiresMemoryUpdate: true,
-		memoryUpdateReason: reason,
-	};
-}
-
-function shouldInspectMemoryFreshness(input: {
-	state: PlanStateRecord;
-	git: PlannerGitReality;
-}): boolean {
-	if (input.state.requiresMemoryUpdate) {
-		return true;
-	}
-	if (
-		input.state.lastCheckpointCommit !== null &&
-		input.git.headCommit !== input.state.lastCheckpointCommit
-	) {
-		return true;
-	}
-	if (input.state.requiresCompact) {
-		return true;
-	}
-	if (input.state.step.startsWith("compact_")) {
-		return true;
-	}
-	if (input.state.step.startsWith("enter_")) {
-		return true;
-	}
-	return false;
-}
-
 async function safeInspectGitReality(input: {
 	git: GitRunner;
 	repoRoot: string;
 }): Promise<PlannerGitReality | null> {
 	try {
 		return await inspectPlannerGitReality(input);
-	} catch {
-		return null;
-	}
-}
-
-async function safeVerifyMemoryCheckpoint(input: {
-	fs: PlannerFs;
-	memoryPaths: MemoryStoragePaths;
-}): Promise<MemoryCheckpointVerification | null> {
-	try {
-		return await verifyMemoryCheckpoint(input.fs, input.memoryPaths);
 	} catch {
 		return null;
 	}

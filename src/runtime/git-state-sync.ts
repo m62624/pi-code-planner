@@ -101,25 +101,6 @@ export function evaluatePlannerToolPreflight(input: {
 		};
 	}
 
-	if (input.state.requiresMemoryUpdate) {
-		return {
-			action: "require_memory_update",
-			reason: input.state.memoryUpdateReason
-				? `Memory update required: ${input.state.memoryUpdateReason}.`
-				: "Memory update required.",
-		};
-	}
-
-	if (
-		input.state.lastCheckpointCommit !== null &&
-		input.reality.headCommit !== input.state.lastCheckpointCommit
-	) {
-		return {
-			action: "require_memory_update",
-			reason: `HEAD ${input.reality.headCommit} differs from memory checkpoint ${input.state.lastCheckpointCommit}.`,
-		};
-	}
-
 	return { action: "allow", reason: null };
 }
 
@@ -137,10 +118,11 @@ export function syncStateAfterPlannerGitMutation(input: {
 		step: conflicted ? "inspect_git" : input.state.step,
 		stepStatus: conflicted ? "blocked" : input.state.stepStatus,
 		currentBranch: input.after.branch,
-		requiresMemoryUpdate: headChanged || input.state.requiresMemoryUpdate,
-		memoryUpdateReason: headChanged
-			? input.headChangeReason
-			: input.state.memoryUpdateReason,
+		lastCheckpointCommit: headChanged
+			? input.after.headCommit
+			: input.state.lastCheckpointCommit,
+		requiresMemoryUpdate: false,
+		memoryUpdateReason: null,
 		broken: conflicted ? true : input.state.broken,
 		brokenReason: conflicted
 			? "Git worktree has unresolved conflicts after planner git mutation."

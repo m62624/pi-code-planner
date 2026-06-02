@@ -1,4 +1,4 @@
-import { basename, isAbsolute, relative, resolve, sep } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { getPlannerStageStepBehavior } from "../runtime/stage-behavior";
 import type { PlanStoragePaths, ProjectStoragePaths } from "../storage/paths";
 import type { PlanStateRecord } from "../storage/schema";
@@ -15,10 +15,7 @@ export type PlannerBuiltinToolCall =
 
 export interface PlannerBuiltinGuardState extends GitWatcherState {
 	projectPaths: Pick<ProjectStoragePaths, "projectRoot"> | null;
-	planPaths?: Pick<
-		PlanStoragePaths,
-		"planDir" | "memoryDir" | "requestMd" | "goalMd"
-	> | null;
+	planPaths?: Pick<PlanStoragePaths, "planDir" | "requestMd" | "goalMd"> | null;
 	planState: Pick<PlanStateRecord, "stage" | "step" | "worktreePath"> | null;
 }
 
@@ -55,7 +52,7 @@ export function checkPlannerBuiltinToolAllowed(
 		return {
 			allow: false,
 			reason: [
-				`Built-in Pi ${input.tool.toolName} cannot modify planner-managed goal or memory files directly.`,
+				`Built-in Pi ${input.tool.toolName} cannot modify planner-managed intake files directly.`,
 				"Use the exact planner wrapper reported by planner_status.",
 				`Call ${PLANNER_STATUS_TOOL_NAME} before continuing.`,
 			].join("\n"),
@@ -115,11 +112,8 @@ function isProtectedPlannerArtifact(
 	if (!state.planPaths) return false;
 	const target = isAbsolute(path) ? resolve(path) : resolve(cwd, path);
 	return (
-		isPathInside(state.planPaths.memoryDir, target) ||
 		target === resolve(state.planPaths.requestMd) ||
-		target === resolve(state.planPaths.goalMd) ||
-		(isPathInside(state.planPaths.planDir, target) &&
-			basename(target) === "project_patterns.md")
+		target === resolve(state.planPaths.goalMd)
 	);
 }
 

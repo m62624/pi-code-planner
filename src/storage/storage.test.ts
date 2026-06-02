@@ -194,11 +194,7 @@ describe("plan state store", () => {
 			intake: ["draft_goal", "await_goal_approval"],
 			discovery: [
 				"scan_project_structure",
-				"index_files_iteratively",
-				"write_project_patterns",
-				"write_relations",
 				"write_questions",
-				"verify_memory",
 				"compact_discovery",
 				"enter_planning",
 			],
@@ -266,7 +262,7 @@ describe("plan state store", () => {
 		).toEqual({
 			init: 7,
 			intake: 2,
-			discovery: 8,
+			discovery: 4,
 			planning: 7,
 			execution: 15,
 			finalize: 4,
@@ -297,7 +293,7 @@ describe("plan state store", () => {
 		await setPlanStep(fs, planA, {
 			stage: "discovery",
 			step: "scan_project_structure",
-			nextStep: "write_project_patterns",
+			nextStep: "write_questions",
 		});
 
 		expect((await readPlanState(fs, planA)).stage).toBe("discovery");
@@ -322,17 +318,13 @@ describe("plan state store", () => {
 			stepStatus: "running",
 		});
 
-		const completed = await completePlanStep(
-			fs,
-			planPaths,
-			"write_project_patterns",
-		);
+		const completed = await completePlanStep(fs, planPaths, "write_questions");
 
 		expect(completed).toMatchObject({
 			stage: "discovery",
 			step: "scan_project_structure",
 			stepStatus: "completed",
-			nextStep: "write_project_patterns",
+			nextStep: "write_questions",
 		} satisfies Partial<PlanStateRecord>);
 	});
 

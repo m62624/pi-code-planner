@@ -11,7 +11,6 @@ import type {
 	GitWorktreeAddInput,
 	GitWorktreeRemoveInput,
 } from "../git/runner";
-import { initializeMemoryFiles } from "../memory/manager";
 import {
 	createPlanStoragePaths,
 	createProjectStoragePaths,
@@ -188,7 +187,6 @@ async function createGoalSetup(state: Record<string, unknown> = {}): Promise<{
 		planPaths,
 		createPlanRecord({ planId: "plan-a", title: "Plan A" }),
 	);
-	await initializeMemoryFiles(fs, planPaths);
 	await upsertProjectPlanSummary(fs, projectPaths, {
 		planId: "plan-a",
 		title: "Plan A",

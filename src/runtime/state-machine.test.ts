@@ -55,13 +55,13 @@ describe("planner state machine", () => {
 		).toThrowStateMachine("step_already_completed");
 	});
 
-	it("blocks normal start while recovery, memory update, compact, or user decision gates are set", () => {
+	it("blocks normal start while recovery, compact, or user decision gates are set", () => {
 		expect(() => startPlannerStep(state({ broken: true }))).toThrowStateMachine(
 			"state_blocked",
 		);
 		expect(() =>
 			startPlannerStep(state({ requiresMemoryUpdate: true })),
-		).toThrowStateMachine("state_blocked");
+		).not.toThrow();
 		expect(() =>
 			startPlannerStep(state({ requiresCompact: true })),
 		).toThrowStateMachine("state_blocked");
@@ -100,7 +100,7 @@ describe("planner state machine", () => {
 			advancePlannerStep(
 				state({
 					stepStatus: "completed",
-					nextStep: "index_files_iteratively",
+					nextStep: "draft_plan",
 				}),
 			),
 		).toThrowStateMachine("invalid_next_step");
@@ -138,11 +138,11 @@ describe("planner state machine", () => {
 		});
 	});
 
-	it("finishes a linear step atomically and opens the next pending step", () => {
+	it("finishes a linear step atomically and starts the next step", () => {
 		expect(finishPlannerStep(state({ stepStatus: "running" }))).toMatchObject({
 			stage: "init",
 			step: "check_git",
-			stepStatus: "pending",
+			stepStatus: "running",
 			nextStep: null,
 		});
 	});
@@ -301,7 +301,7 @@ describe("planner state machine", () => {
 			requestPlannerCompact(
 				state({
 					stage: "discovery",
-					step: "verify_memory",
+					step: "write_questions",
 					stepStatus: "running",
 				}),
 			),
@@ -327,7 +327,7 @@ describe("planner state machine", () => {
 		expect(completePlannerCompact(pendingCompact)).toMatchObject({
 			stage: "discovery",
 			step: "enter_planning",
-			stepStatus: "pending",
+			stepStatus: "running",
 			nextStep: null,
 			requiresCompact: false,
 		});

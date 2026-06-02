@@ -241,15 +241,9 @@ export function finishPlannerStep(
 	state: PlanStateRecord,
 	options: CompletePlannerStepOptions = {},
 ): PlanStateRecord {
-	return advancePlannerStep(completePlannerStep(state, options));
-}
-
-export function finishAndStartPlannerStep(
-	state: PlanStateRecord,
-	options: CompletePlannerStepOptions = {},
-): PlanStateRecord {
-	const finished = finishPlannerStep(state, options);
-	return startPlannerStep(finished);
+	return startNextPlannerStep(
+		advancePlannerStep(completePlannerStep(state, options)),
+	);
 }
 
 export function failPlannerStep(
@@ -343,13 +337,15 @@ export function completePlannerCompact(
 		);
 	}
 	const next = selectNextPosition(state);
-	return advancePlannerStep({
-		...state,
-		stepStatus: "completed",
-		nextStep: next?.step ?? null,
-		requiresCompact: false,
-		blockedReason: null,
-	});
+	return startNextPlannerStep(
+		advancePlannerStep({
+			...state,
+			stepStatus: "completed",
+			nextStep: next?.step ?? null,
+			requiresCompact: false,
+			blockedReason: null,
+		}),
+	);
 }
 
 export function enterPlannerRecovery(
@@ -468,6 +464,10 @@ function markStepStopped(
 	};
 }
 
+function startNextPlannerStep(state: PlanStateRecord): PlanStateRecord {
+	return state.stepStatus === "pending" ? startPlannerStep(state) : state;
+}
+
 function assertRunning(state: PlanStateRecord): void {
 	if (state.stepStatus !== "running") {
 		throw new PlannerStateMachineError(
@@ -478,15 +478,10 @@ function assertRunning(state: PlanStateRecord): void {
 }
 
 function assertNormalFlowOpen(state: PlanStateRecord): void {
-	if (
-		state.broken ||
-		state.requiresUserDecision ||
-		state.requiresMemoryUpdate ||
-		state.requiresCompact
-	) {
+	if (state.broken || state.requiresUserDecision || state.requiresCompact) {
 		throw new PlannerStateMachineError(
 			"state_blocked",
-			"Planner state is blocked by recovery, user decision, memory update, or compact.",
+			"Planner state is blocked by recovery, user decision, or compact.",
 		);
 	}
 }

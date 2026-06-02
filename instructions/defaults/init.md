@@ -11,7 +11,7 @@ The normal entry point is `planner_create_plan` or `/planner-create`. The extens
 1. Resolve the opened project root and stable project id.
 2. Check whether git is available through planner wrappers.
 3. Initialize git only when the repository does not exist and the controlled flow allows it.
-4. Prepare project storage, settings, instruction files, plan artifacts, and memory files.
+4. Prepare project storage, settings, instruction files, and plan artifacts.
 5. Resolve the worktree location from effective settings. Do not invent a path.
 6. Create exactly one dedicated worktree for the whole plan.
    - For a project-local worktree, the extension writes a repository-local exclude rule for the original checkout.
@@ -24,7 +24,7 @@ The normal entry point is `planner_create_plan` or `/planner-create`. The extens
 - Do not edit project files.
 - Do not create tasks, task branches, experiment branches, or commits.
 - Do not run raw git through shell.
-- Do not edit `project.json`, `plan.json`, `state.json`, checkpoint files, or worktree indexes directly.
+- Do not edit `project.json`, `plan.json`, `state.json`, or worktree indexes directly.
 - If bootstrap state is inconsistent, call `planner_status` and use recovery guidance.
 
 ## Exit Condition

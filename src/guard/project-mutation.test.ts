@@ -58,22 +58,16 @@ describe("planner built-in Pi tool guard", () => {
 		).toEqual({ allow: true, reason: null });
 	});
 
-	it("blocks direct writes to planner-managed goal and memory files", () => {
+	it("blocks direct writes to planner-managed intake files", () => {
 		const state = activeState("intake");
 		state.planPaths = {
 			planDir: "/agent/extensions/pi-code-planner/projects/app/plans/plan-a",
-			memoryDir:
-				"/agent/extensions/pi-code-planner/projects/app/plans/plan-a/memory",
 			requestMd:
 				"/agent/extensions/pi-code-planner/projects/app/plans/plan-a/request.md",
 			goalMd:
 				"/agent/extensions/pi-code-planner/projects/app/plans/plan-a/goal.md",
 		};
-		for (const path of [
-			state.planPaths.goalMd,
-			`${state.planPaths.memoryDir}/symbols/index.jsonl`,
-			`${state.planPaths.planDir}/project_patterns.md`,
-		]) {
+		for (const path of [state.planPaths.goalMd, state.planPaths.requestMd]) {
 			const result = decision({ toolName: "write", path, state });
 			expect(result.allow, path).toBe(false);
 			expect(result.reason).toContain("planner wrapper");

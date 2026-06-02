@@ -96,8 +96,7 @@ export function buildPlannerCompactInstructions(input: {
 		"",
 		"Create a compact summary for pi-code-planner continuation.",
 		"Keep the summary concise. Preserve durable pointers and decisions instead of replaying the full conversation.",
-		"Preserve planner state, artifact paths, git/memory gates, completed work, open risks, and the exact next required planner action.",
-		"Preserve memory indexing mode, active indexing file, and exact next unread line when a durable indexing queue is in progress.",
+		"Preserve planner state, artifact paths, git gate, completed work, open risks, and the exact next required planner action.",
 		"Do not mark any planner step complete unless state.json already says it is complete.",
 		"After compaction, continuation must call planner_status before choosing any next action.",
 		"",
@@ -109,8 +108,6 @@ export function buildPlannerCompactInstructions(input: {
 		`- activeTaskId: ${state?.activeTaskId ?? "(none)"}`,
 		`- activeExperimentId: ${state?.activeExperimentId ?? "(none)"}`,
 		`- currentBranch: ${state?.currentBranch ?? "(none)"}`,
-		`- lastCheckpointCommit: ${state?.lastCheckpointCommit ?? "(none)"}`,
-		`- requiresMemoryUpdate: ${String(state?.requiresMemoryUpdate ?? false)}`,
 		`- compactBoundaries: ${JSON.stringify(state?.compactBoundaries ?? null)}`,
 		`- requiresCompact: ${String(state?.requiresCompact ?? false)}`,
 		"",
@@ -145,11 +142,9 @@ export function buildPlannerPostCompactMessage(input: {
 		"",
 		"A Pi compaction boundary has completed while pi-code-planner is active.",
 		"Do not continue from memory or from the previous chat state.",
-		"Call planner_status immediately before using any other tool. Follow the exact reported stage, step, allowed wrappers, memory gate, and recovery gate.",
-		"Use bounded planner memory before reading project source. Start with planner_memory_search when planner_status allows it.",
-		"Read project source only when bounded memory is missing, stale, insufficient for the exact current action, or requires verification. State the missing detail before reading source.",
-		"If planner_status reports stale memory, update planner memory before continuing.",
-		"If planner_status reports an active memory indexing file, resume that file from activeIndexNextUnreadLine. Do not reread completed files or claim another file.",
+		"Call planner_status immediately before using any other tool. Follow the exact reported stage, step, allowed wrappers, and recovery gate.",
+		"Use bounded project context before reading source broadly. Start with planner_memory_project_map or planner_memory_search_project when planner_status allows them.",
+		"Read source files only when the bounded overview is insufficient for the exact current action. State the missing detail before reading source.",
 		"If planner_status reports recovery, use recovery tools and ask the user before destructive repair.",
 		"Do not use raw git. Use planner git wrappers only.",
 		"",
@@ -245,15 +240,6 @@ function artifactLines(preflight: PlannerPreflightResult): string[] {
 		`- decisions.md: ${planPaths.decisionsMd}`,
 		`- tasksDir: ${planPaths.tasksDir}`,
 	];
-	if (preflight.memoryPaths) {
-		lines.push(
-			`- memoryDir: ${preflight.memoryPaths.memoryDir}`,
-			`- memory files: ${preflight.memoryPaths.filesIndexJsonl}`,
-			`- memory symbols: ${preflight.memoryPaths.symbolsIndexJsonl}`,
-			`- memory relations: ${preflight.memoryPaths.relationsIndexJsonl}`,
-			`- memory indexing progress: ${preflight.memoryPaths.indexingJson}`,
-		);
-	}
 	return lines;
 }
 

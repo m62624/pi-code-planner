@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Explore multiple implementation candidates for one active task. Each experiment branch represents one distinct approach, one committed checkpoint, one memory sync, and one durable summary.
+Explore multiple implementation candidates for one active task. Each experiment branch represents one distinct approach, one commit, and one durable summary.
 
 ## Attempt Lifecycle
 
@@ -11,11 +11,10 @@ Explore multiple implementation candidates for one active task. Each experiment 
 3. Implement only one approach during `run_experiment`.
 4. Run focused checks.
 5. Commit through `planner_git_commit`.
-6. Refresh affected file, symbol, relation, and effect memory entries.
-7. Verify memory and sync checkpoint.
-8. Write a durable experiment summary.
-9. Request `compact_experiment`.
-10. At `select_experiment`, either:
+6. Confirm the worktree is clean.
+7. Write a durable experiment summary.
+8. Request `compact_experiment`.
+9. At `select_experiment`, either:
    - continue to `start_experiments` for another genuinely different attempt, or
    - select the best completed attempt with `planner_git_select_experiment` and continue to merge.
 
@@ -57,8 +56,8 @@ For every attempt record:
 
 ## manual-compact
 
-Preserve the active task id, active attempt id, attempt branch, commit, memory checkpoint, checks, summary path, numeric evidence, strengths, weaknesses, prior attempt summaries, remaining attempt budget, and exact next decision. After compaction, call `planner_status`, reload `task.md`, `tdd.md`, tests, verify notes, prior summaries, and relevant bounded memory. Do not reread the whole project by default.
+Preserve the active task id, active attempt id, attempt branch, commit, checks, summary path, numeric evidence, strengths, weaknesses, prior attempt summaries, remaining attempt budget, and exact next decision. After compaction, call `planner_status`, reload `task.md`, `tdd.md`, tests, verify notes, prior summaries, and `discovery.md`. Do not reread the whole project by default.
 
 ## auto-compact
 
-Call `planner_status` immediately. Reload the active experiment from persisted state and read durable summaries before deciding whether to continue, retry, or select. Do not treat an uncommitted or uncheckpointed attempt as complete.
+Call `planner_status` immediately. Reload the active experiment from persisted state and read durable summaries before deciding whether to continue, retry, or select. Do not treat an uncommitted attempt as complete.

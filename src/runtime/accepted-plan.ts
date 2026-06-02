@@ -201,11 +201,6 @@ function assertAcceptedPlanReady(state: PlanStateRecord): void {
 	if (state.broken || state.requiresUserDecision) {
 		throw new Error("Planner accept is blocked until recovery is complete.");
 	}
-	if (state.requiresMemoryUpdate) {
-		throw new Error(
-			"Planner accept is blocked until planner memory is synchronized.",
-		);
-	}
 	if (state.requiresCompact) {
 		throw new Error(
 			"Planner accept is blocked until required compact completes.",

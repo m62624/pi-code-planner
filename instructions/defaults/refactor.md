@@ -20,7 +20,7 @@ KISS does not mean avoiding advanced language features. Traits, interfaces, gene
 6. Run focused tests from the worktree path reported by `planner_status` after each meaningful refactor group.
 7. Commit through planner wrappers if files changed.
 8. Refresh affected memory entries, including effects.
-9. Verify and sync memory checkpoint.
+9. Commit the refactor if project files changed.
 
 ## Restrictions
 
@@ -35,11 +35,11 @@ KISS does not mean avoiding advanced language features. Traits, interfaces, gene
 
 ## Exit Condition
 
-Refactor is complete only when `refactor.md` contains a concrete review, checks pass, the diff stays within task scope, changed files are committed, and memory checkpoint matches current HEAD.
+Refactor is complete only when `refactor.md` contains a concrete review, checks pass, the diff stays within task scope, and changed files are committed.
 
 ## manual-compact
 
-Preserve selected candidate context, refactor intent, changed files, checks, commit, memory checkpoint, and any deferred cleanup. After compaction, call `planner_status` before continuing.
+Preserve selected candidate context, refactor intent, changed files, checks, commit, and any deferred cleanup. After compaction, call `planner_status` before continuing.
 
 ## auto-compact
 

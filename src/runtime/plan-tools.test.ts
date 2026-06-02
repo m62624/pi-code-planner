@@ -17,8 +17,6 @@ import {
 	instructionFilePath,
 } from "../instructions/paths";
 import { INSTRUCTION_KEYS } from "../instructions/schema";
-import { readMemoryCheckpoint } from "../memory/manager";
-import { createMemoryStoragePaths } from "../memory/paths";
 import {
 	createPlanStoragePaths,
 	createProjectStoragePaths,
@@ -114,7 +112,6 @@ describe("planner plan tools", () => {
 		expect(result.text).toContain("Plan: api-audit");
 
 		const planPaths = createPlanStoragePaths(projectPaths, "api-audit");
-		const memoryPaths = createMemoryStoragePaths(planPaths);
 		await expect(readProjectRecord(fs, projectPaths)).resolves.toMatchObject({
 			activePlanId: "api-audit",
 			plans: [
@@ -148,9 +145,6 @@ describe("planner plan tools", () => {
 				task: false,
 				experiment: false,
 			},
-		});
-		await expect(readMemoryCheckpoint(fs, memoryPaths)).resolves.toMatchObject({
-			commit: null,
 		});
 		expect(fs.snapshot()[planPaths.planMd]).toBe("");
 		expect(fs.snapshot()[planPaths.requestMd]).toBe(

@@ -1,7 +1,7 @@
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
 import type { PlanStoragePaths, ProjectStoragePaths } from "../storage/paths";
-import type { MemoryUpdateReason, PlanStateRecord } from "../storage/schema";
+import type { PlanStateRecord } from "../storage/schema";
 import { savePlanState } from "../storage/state-store";
 import {
 	inspectPlannerRecovery,
@@ -79,10 +79,6 @@ export async function resumePlannerRecovery(
 		});
 	}
 
-	const memoryReason = memoryReasonFromInspection({
-		inspection,
-		state: input.state,
-	});
 	const nextState: PlanStateRecord = {
 		...input.state,
 		stage: input.target.stage,
@@ -90,15 +86,12 @@ export async function resumePlannerRecovery(
 		stepStatus: "pending",
 		nextStep: null,
 		requiresCompact: false,
-		requiresMemoryUpdate: memoryReason !== null,
-		memoryUpdateReason: memoryReason,
+		requiresMemoryUpdate: false,
+		memoryUpdateReason: null,
 		requiresUserDecision: false,
 		broken: false,
 		brokenReason: null,
-		blockedReason:
-			memoryReason !== null
-				? `Recovery resumed, but memory update is required: ${memoryReason}.`
-				: null,
+		blockedReason: null,
 	};
 
 	await savePlanState(input.fs, input.planPaths, nextState);
@@ -107,7 +100,7 @@ export async function resumePlannerRecovery(
 		previousState: input.state,
 		state: nextState,
 		inspection,
-		text: formatResumeApplied(nextState, memoryReason),
+		text: formatResumeApplied(nextState),
 	};
 }
 
@@ -120,25 +113,6 @@ function blockingRecoveryIssues(
 	);
 }
 
-function memoryReasonFromInspection(input: {
-	inspection: PlannerRecoveryInspection;
-	state: PlanStateRecord;
-}): MemoryUpdateReason | null {
-	if (
-		input.inspection.issues.some((issue) => issue.code === "external_commit")
-	) {
-		return "external_commit";
-	}
-	if (
-		input.inspection.issues.some(
-			(issue) => issue.code === "memory_update_required",
-		)
-	) {
-		return input.state.memoryUpdateReason ?? "file_hash_changed";
-	}
-	return null;
-}
-
 function isValidResumeTarget(target: PlannerPosition): boolean {
 	try {
 		return target.stage !== "recovery" && isPlannerStepInStage(target);
@@ -147,16 +121,11 @@ function isValidResumeTarget(target: PlannerPosition): boolean {
 	}
 }
 
-function formatResumeApplied(
-	state: PlanStateRecord,
-	memoryReason: MemoryUpdateReason | null,
-): string {
+function formatResumeApplied(state: PlanStateRecord): string {
 	return [
 		"Planner recovery resumed.",
 		`Current: ${state.stage}/${state.step} (${state.stepStatus})`,
-		memoryReason
-			? `Memory update is still required before normal flow continues: ${memoryReason}.`
-			: "No blocking recovery issue remains.",
+		"No blocking recovery issue remains.",
 		"Call planner_status before choosing the next planner action.",
 	].join("\n");
 }
