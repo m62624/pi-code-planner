@@ -114,7 +114,7 @@ export async function executePlannerQuestionTool(
 	await appendText(
 		input.fs,
 		planPaths.questionsMd,
-		"## Resolution\n\nUser answers were recorded in decisions.md.",
+		`## User Answers\n\n${answers.trim()}\n\n## Resolution\n\nDiscovery questions were answered explicitly. The same durable answers were recorded in decisions.md.`,
 	);
 	const next = { ...state, questionsSubmitted: true, questionsResolved: true };
 	await savePlanState(input.fs, planPaths, next);

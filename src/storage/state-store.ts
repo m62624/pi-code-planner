@@ -21,14 +21,17 @@ export async function readPlanState(
 	fs: PlannerFs,
 	paths: PlanStoragePaths,
 ): Promise<PlanStateRecord> {
-	return await readJson<PlanStateRecord>(fs, paths.stateJson);
+	return normalizePlanState(
+		await readJson<PlanStateRecord>(fs, paths.stateJson),
+	);
 }
 
 export async function readPlanStateIfExists(
 	fs: PlannerFs,
 	paths: PlanStoragePaths,
 ): Promise<PlanStateRecord | null> {
-	return await readJsonIfExists<PlanStateRecord>(fs, paths.stateJson);
+	const state = await readJsonIfExists<PlanStateRecord>(fs, paths.stateJson);
+	return state ? normalizePlanState(state) : null;
 }
 
 export async function savePlanState(
@@ -100,4 +103,17 @@ export async function markPlanBroken(
 		requiresUserDecision: true,
 		blockedReason: reason,
 	}));
+}
+
+function normalizePlanState(state: PlanStateRecord): PlanStateRecord {
+	return {
+		...state,
+		questionsSubmitted: state.questionsSubmitted ?? false,
+		questionsResolved: state.questionsResolved ?? false,
+		compactBoundaries: state.compactBoundaries ?? {
+			stage: true,
+			task: false,
+			experiment: false,
+		},
+	};
 }

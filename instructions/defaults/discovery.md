@@ -35,7 +35,7 @@ Build durable compressed project memory before planning or implementation. Disco
 5. `write_questions`
    - Call `planner_questions_submit` with evidence-based unresolved questions and explicit assumptions for `questions.md`.
    - If unresolved questions exist, the tool returns the exact text to show the user verbatim. Wait for answers before leaving this step.
-   - Call `planner_questions_resolve` with the user's explicit answers. The wrapper records answers in `decisions.md` and marks the persisted question gate resolved.
+   - Call `planner_questions_resolve` with the user's explicit answers. The wrapper records answers in both `questions.md` and `decisions.md`, then marks the persisted question gate resolved.
    - If no questions remain, call `planner_questions_submit` with `hasOpenQuestions: false` and say so explicitly in the content; the artifact must not remain empty.
    - Ask the user only after collecting project evidence. Do not ask speculative implementation questions during intake.
 6. `verify_memory`

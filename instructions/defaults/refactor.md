@@ -2,18 +2,25 @@
 
 ## Purpose
 
-Improve the selected task implementation after the best experiment has been merged. Refactor changes structure, clarity, naming, duplication, or integration quality without changing requested behavior.
+Challenge and improve the selected task implementation after the best experiment has been merged. Refactor changes structure, clarity, naming, duplication, or integration quality without changing requested behavior.
+
+KISS does not mean avoiding advanced language features. Traits, interfaces, generics, macros, or other abstractions are valid when the current task needs them. KISS means every abstraction, branch, type, helper, and extension point must justify its existence through the current behavior or existing project design. Do not add flexibility for imagined future work.
 
 ## Required Process
 
 1. Read `task.md`, `tdd.md`, test artifacts, selected experiment summary, and relevant bounded memory.
 2. Inspect the current task-branch diff through planner wrappers.
-3. Identify concrete refactor opportunities that reduce complexity or better match project conventions.
-4. Apply only behavior-preserving changes.
-5. Run focused tests from the worktree path reported by `planner_status` after each meaningful refactor group.
-6. Commit through planner wrappers if files changed.
-7. Refresh affected memory entries, including effects.
-8. Verify and sync memory checkpoint.
+3. Question the implementation actively:
+   - Can any helper, abstraction, branch, conversion, or validation path be removed or made clearer?
+   - Is any code duplicated, speculative, over-generalized, or implemented for future use rather than the current task?
+   - Does the implementation match existing project conventions and confirmed user decisions?
+   - Are signatures and effects still as small and explicit as possible?
+4. Write `refactor.md` with concrete findings, KISS review, changes applied, and justified decisions to keep code unchanged.
+5. Apply only behavior-preserving changes.
+6. Run focused tests from the worktree path reported by `planner_status` after each meaningful refactor group.
+7. Commit through planner wrappers if files changed.
+8. Refresh affected memory entries, including effects.
+9. Verify and sync memory checkpoint.
 
 ## Restrictions
 
@@ -21,13 +28,14 @@ Improve the selected task implementation after the best experiment has been merg
 - Do not weaken tests to make refactor pass.
 - Do not change public API unless the active task explicitly requires it.
 - Do not perform speculative cleanup outside the active task.
+- Do not claim that refactor is unnecessary merely because tests, Clippy, a linter, or a formatter pass. Tool output is evidence, not design review.
 - Do not run project tests, builds, formatters, or other verification commands from the original checkout. Use the planner worktree as shell cwd.
 - If a behavior change is required, stop and return to planning or create a new task.
 - Do not use raw git.
 
 ## Exit Condition
 
-Refactor is complete only when checks pass, the diff stays within task scope, changed files are committed, and memory checkpoint matches current HEAD.
+Refactor is complete only when `refactor.md` contains a concrete review, checks pass, the diff stays within task scope, changed files are committed, and memory checkpoint matches current HEAD.
 
 ## manual-compact
 

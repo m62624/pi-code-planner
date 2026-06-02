@@ -99,6 +99,9 @@ describe("planner discovery question tools", () => {
 		expect(setup.fs.snapshot()[setup.planPaths.decisionsMd]).toContain(
 			"Keep read-only find pipelines allowed.",
 		);
+		expect(setup.fs.snapshot()[setup.planPaths.questionsMd]).toContain(
+			"Keep read-only find pipelines allowed.",
+		);
 		await expect(
 			readPlanState(setup.fs, setup.planPaths),
 		).resolves.toMatchObject({

@@ -522,16 +522,23 @@ export const PLANNER_STEP_RULES = {
 		nextInstruction: "Call planner_finish_step to open refactor_task.",
 	}),
 	refactor_task: stepRule("execution", "refactor_task", {
-		objective: "Refactor the task branch without changing behavior.",
+		objective:
+			"Challenge the task implementation and simplify it without changing behavior.",
 		requiredActions: [
-			"Improve clarity/style/integration while preserving test behavior, then commit and update memory if changes occur.",
+			"Read the selected implementation and inspect the planner-controlled diff.",
+			"Question unnecessary abstraction, duplication, speculative flexibility, premature generalization, and code that exists for imagined future work rather than the current task.",
+			"Write refactor.md with concrete findings, KISS review, changes applied, and justified decisions to keep code unchanged.",
+			"Commit and update memory if project files changed.",
 		],
 		allowedNow: [
 			"Edit code for refactor, run checks, use planner git commit/refactor merge wrappers as policy allows.",
 		],
-		forbiddenNow: ["Do not add new task scope or behavior."],
+		forbiddenNow: [
+			"Do not add new task scope or behavior.",
+			"Do not treat a successful linter or test run as sufficient refactor review.",
+		],
 		exitCondition:
-			"Refactor is checked, committed if changed, and memory is synced.",
+			"refactor.md contains a concrete KISS review, refactor is committed if changed, and memory is synced.",
 		nextInstruction: "Call planner_finish_step to open run_final_tests.",
 	}),
 	run_final_tests: stepRule("execution", "run_final_tests", {
@@ -636,6 +643,7 @@ export const PLANNER_STEP_RULES = {
 		objective: "Present the completed plan result to the user.",
 		requiredActions: [
 			"Show summary, checks, risks, plan branch, worktree path, and output options.",
+			"After presenting the result, call planner_finish_step immediately so state enters done/await_user_acceptance.",
 		],
 		allowedNow: ["Read final artifacts and present user-facing summary."],
 		forbiddenNow: [
@@ -643,7 +651,8 @@ export const PLANNER_STEP_RULES = {
 			"Do not cleanup before user accepts.",
 		],
 		exitCondition: "User has enough information to accept or request changes.",
-		nextInstruction: "Call planner_finish_step to open await_user_acceptance.",
+		nextInstruction:
+			"After presenting the result, call planner_finish_step immediately to open await_user_acceptance. The user may also run /planner-accept directly as an explicit acceptance command.",
 	}),
 	await_user_acceptance: stepRule("done", "await_user_acceptance", {
 		objective: "Wait for explicit user decision.",
@@ -1131,6 +1140,7 @@ function formatPlannerArtifactLinks(
 			`- active tdd.md: ${join(taskDir, "tdd.md")}`,
 			`- active tests.md: ${join(taskDir, "tests.md")}`,
 			`- active implementation.md: ${join(taskDir, "implementation.md")}`,
+			`- active refactor.md: ${join(taskDir, "refactor.md")}`,
 			`- active verify.md: ${join(taskDir, "verify.md")}`,
 		);
 		if (state.activeExperimentId) {

@@ -6,7 +6,7 @@ Use strict tests-first development for every execution task. Production implemen
 
 ## Required Sequence
 
-1. During `write_tdd_plan`, read `task.md`, relevant memory entries, existing tests, and project test conventions.
+1. During `write_tdd_plan`, read answered `questions.md`, `decisions.md`, `task.md`, relevant memory entries, existing tests, and project test conventions.
 2. Write `tdd.md` with:
    - behavior under test
    - arguments, return value, errors, and integration points

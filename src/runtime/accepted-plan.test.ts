@@ -235,13 +235,34 @@ describe("accepted planner result", () => {
 		expect(preview.originalSessionExists).toBe(false);
 	});
 
+	it("accepts an explicit user command immediately after result presentation", async () => {
+		const fixture = await createFixture({
+			state: { stage: "done", step: "present_result", stepStatus: "running" },
+		});
+
+		await expect(inspectAcceptedPlan(fixture)).resolves.toMatchObject({
+			planId: "plan-a",
+			outputBranch: "output/plan-a",
+		});
+	});
+
+	it("blocks acceptance before result presentation starts", async () => {
+		const fixture = await createFixture({
+			state: { stage: "done", step: "present_result", stepStatus: "pending" },
+		});
+
+		await expect(inspectAcceptedPlan(fixture)).rejects.toThrow(
+			"allowed only after result presentation",
+		);
+	});
+
 	it("blocks acceptance outside done/await_user_acceptance", async () => {
 		const fixture = await createFixture({
 			state: { stage: "finalize", step: "write_final_summary" },
 		});
 
 		await expect(inspectAcceptedPlan(fixture)).rejects.toThrow(
-			"allowed only at done/await_user_acceptance",
+			"allowed only after result presentation",
 		);
 	});
 

@@ -267,6 +267,18 @@ async function validateWorkflowExit(input: {
 				)
 			);
 		case "refactor_task":
+			return (
+				(taskDir
+					? await requireNonEmptyArtifact(
+							input.fs,
+							join(taskDir, "refactor.md"),
+						)
+					: "Active task is missing. Prepare exactly one task branch first.") ??
+				validateCleanMemoryCheckpoint(
+					state,
+					input.orchestrator.preflight.gitReality,
+				)
+			);
 		case "run_final_tests":
 			return (
 				(taskDir

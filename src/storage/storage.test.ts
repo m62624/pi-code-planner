@@ -336,6 +336,39 @@ describe("plan state store", () => {
 		} satisfies Partial<PlanStateRecord>);
 	});
 
+	it("normalizes state files created before question and compact settings existed", async () => {
+		const fs = new MockPlannerFs();
+		const project = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(project, "legacy-plan");
+		const state = createInitialPlanState({
+			baseBranch: "main",
+			planBranch: "plan/legacy-plan",
+		});
+		const {
+			questionsSubmitted: _questionsSubmitted,
+			questionsResolved: _questionsResolved,
+			compactBoundaries: _compactBoundaries,
+			...legacy
+		} = state;
+		await fs.writeTextAtomic(
+			planPaths.stateJson,
+			`${JSON.stringify(legacy)}\n`,
+		);
+
+		await expect(readPlanState(fs, planPaths)).resolves.toMatchObject({
+			questionsSubmitted: false,
+			questionsResolved: false,
+			compactBoundaries: {
+				stage: true,
+				task: false,
+				experiment: false,
+			},
+		});
+	});
+
 	it("marks broken state as recovery and requiring user decision", async () => {
 		const fs = new MockPlannerFs();
 		const project = createProjectStoragePaths({

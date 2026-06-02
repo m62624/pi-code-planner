@@ -8,6 +8,7 @@ Present the verified plan result, wait for an explicit user decision, then eithe
 
 1. `present_result`
    - Read `final_summary.md` and present scope, checks, risks, plan branch, worktree path, and output options.
+   - After presenting the result, call `planner_finish_step` immediately to enter `await_user_acceptance`.
 2. `await_user_acceptance`
    - Ask the user to accept the result or request changes.
    - Never decide on behalf of the user.
@@ -29,6 +30,7 @@ Present the verified plan result, wait for an explicit user decision, then eithe
 
 ## Acceptance Rules
 
+- `/planner-accept` is an explicit user acceptance command. It may safely finalize directly after `present_result` or during `await_user_acceptance` when all runtime gates are clean.
 - No production edits are allowed in done.
 - Change requests preserve the worktree and return to planning.
 - Cleanup requires explicit acceptance.

@@ -47,6 +47,7 @@ export type PlannerBehaviorArtifact =
 	| "tdd.md"
 	| "tests.md"
 	| "implementation.md"
+	| "refactor.md"
 	| "verify.md"
 	| "experiment.json"
 	| "experiment/summary.md"
@@ -498,7 +499,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		projectAccess: "production_edits",
 		actions: ["refactor", "run_checks", "planner_git", "write_memory"],
 		requiredArtifacts: ["implementation.md", "tests.md"],
-		updatedArtifacts: ["implementation.md", "verify.md", "memory/dirty.json"],
+		updatedArtifacts: ["refactor.md", "verify.md", "memory/dirty.json"],
 		requiredGates: ["experiment_merged"],
 		expectedTools: [
 			"planner_git_commit",

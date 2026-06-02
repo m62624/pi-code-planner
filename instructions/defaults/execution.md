@@ -6,7 +6,7 @@ Execute exactly one active task at a time through tests-first development, seque
 
 ## Context Reload Policy
 
-- At `prepare_task`, call `planner_status`, reread the full `plan.md`, read the selected `task.md`, then inspect relevant bounded memory.
+- At `prepare_task`, call `planner_status`, reread the full `plan.md`, read answered `questions.md` and `decisions.md`, read the selected `task.md`, then inspect relevant bounded memory.
 - During one experiment loop, reread `task.md`, `tdd.md`, test/verify artifacts, completed experiment summaries, and relevant memory. Read the full `plan.md` only when integration context is unclear.
 - After `compact_task`, do not carry live reasoning into the next task. Call `planner_status`, reread the full `plan.md`, inspect task status, then load the next `task.md`.
 - After recovery or auto-compact, call `planner_status` before any edit or check.
@@ -41,7 +41,8 @@ Execute exactly one active task at a time through tests-first development, seque
    - Use the planner wrapper. Source and target branches come from persisted state.
    - Refresh and sync memory after merge.
 11. `refactor_task`
-   - Improve the selected result without changing behavior.
+   - Challenge the selected result without changing behavior.
+   - Write `refactor.md` with a concrete KISS review. Passing checks alone do not prove that refactor review is complete.
    - Commit and refresh memory only if files changed.
 12. `run_final_tests`
    - Run final focused and integration checks. Inspect scope and accidental edits.

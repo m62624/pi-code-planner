@@ -149,7 +149,7 @@ These are Pi slash commands for the user. They are not model tools.
 | `/planner-rename [--id <plan-id>] <new-title>` | Rename a human-readable plan title without changing ids, branches, or paths. |
 | `/planner-delete [<plan-id>]` | Delete a selected inactive plan after confirmation. Without an id, open the TUI picker. |
 | `/planner-delete --force-active <plan-id>` | Explicit escape hatch: remove an active plan, its worktree, related planner files, and managed child branches. |
-| `/planner-accept` | After explicit approval at `done/await_user_acceptance`, export one output branch, remove temporary planner state, and return Pi to the original project session. |
+| `/planner-accept` | Explicitly accept a presented result, export one output branch, remove temporary planner state, and return Pi to the original project session. Valid after `done/present_result` or during `done/await_user_acceptance`. |
 
 ## Core Model Rule
 
@@ -274,7 +274,7 @@ Execution processes exactly one task at a time. Experiments are sequential alter
 | `compact_experiment` | Compact the completed candidate context. |
 | `select_experiment` | Continue with another distinct attempt or select the best candidate. |
 | `merge_best_experiment` | Merge the selected candidate into the task branch. |
-| `refactor_task` | Improve the selected result without changing behavior. |
+| `refactor_task` | Challenge the selected result, write `refactor.md`, and simplify it without changing behavior. Passing checks alone are not sufficient review. |
 | `run_final_tests` | Run focused and broader task-level verification. |
 | `merge_task_to_plan` | Merge the verified task branch into the plan branch. |
 | `compact_task` | Compact the completed atomic task. |
@@ -521,6 +521,7 @@ getAgentDir()/extensions/pi-code-planner/
               tdd.md
               tests.md
               implementation.md
+              refactor.md
               verify.md
               experiments/
                 <attempt-id>/
@@ -538,7 +539,7 @@ Important files:
 | `request.md` | Exact raw requested outcome captured when the plan is created. |
 | `goal.md` | Model-normalized goal, assumptions, constraints, and non-goals approved by the user before discovery. |
 | `plan.md` | Human-readable implementation plan written after discovery and question resolution. |
-| `questions.md` | Evidence-based discovery questions and their resolution state. |
+| `questions.md` | Evidence-based discovery questions, explicit user answers, and their resolution state. |
 | `decisions.md` | User answers and durable planning decisions. |
 | `memory/indexing.json` | Crash-recoverable file queue with one active file and its exact next unread line. |
 | `memory/*` | Compressed project context and freshness checkpoint data. |

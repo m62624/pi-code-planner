@@ -184,14 +184,18 @@ export function buildAcceptedPlanCompletionPrompt(input: {
 }
 
 function assertAcceptedPlanReady(state: PlanStateRecord): void {
-	if (state.stage !== "done" || state.step !== "await_user_acceptance") {
+	const acceptsExplicitUserCommand =
+		state.stage === "done" &&
+		((state.step === "present_result" && state.stepStatus !== "pending") ||
+			state.step === "await_user_acceptance");
+	if (!acceptsExplicitUserCommand) {
 		throw new Error(
-			`Planner accept is allowed only at done/await_user_acceptance, not ${state.stage}/${state.step}.`,
+			`Planner accept is allowed only after result presentation at done/present_result or done/await_user_acceptance, not ${state.stage}/${state.step}.`,
 		);
 	}
 	if (state.stepStatus === "blocked" || state.stepStatus === "failed") {
 		throw new Error(
-			`Planner accept is blocked while await_user_acceptance is ${state.stepStatus}.`,
+			`Planner accept is blocked while ${state.stage}/${state.step} is ${state.stepStatus}.`,
 		);
 	}
 	if (state.broken || state.requiresUserDecision) {

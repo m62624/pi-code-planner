@@ -368,6 +368,47 @@ describe("planner workflow tools", () => {
 		});
 		expect(result.text).toContain("refresh affected memory");
 	});
+
+	it("blocks refactor completion until a concrete refactor review is written", async () => {
+		const setup = await createWorkflowSetup({
+			stage: "execution",
+			step: "refactor_task",
+			stepStatus: "running",
+			activeTaskId: "task-1",
+		});
+
+		const result = await finishStep(setup);
+
+		expect(result.result).toMatchObject({
+			status: "blocked",
+			code: "runtime_blocked",
+		});
+		expect(result.text).toContain("/tasks/task-1/refactor.md");
+	});
+
+	it("allows refactor completion after a concrete review with a clean checkpoint", async () => {
+		const setup = await createWorkflowSetup({
+			stage: "execution",
+			step: "refactor_task",
+			stepStatus: "running",
+			activeTaskId: "task-1",
+		});
+		await setup.fs.writeText(
+			join(setup.planPaths.tasksDir, "task-1", "refactor.md"),
+			"# Refactor Review\n\nRemoved no code: each helper is required by the current task.\n",
+		);
+
+		const result = await finishStep(setup);
+
+		expect(result.result).toMatchObject({ status: "applied" });
+		await expect(
+			readPlanState(setup.fs, setup.planPaths),
+		).resolves.toMatchObject({
+			stage: "execution",
+			step: "run_final_tests",
+			stepStatus: "pending",
+		});
+	});
 });
 
 async function finishStep(

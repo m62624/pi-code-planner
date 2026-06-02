@@ -344,7 +344,7 @@ async function mergeTaskTool(
 		input,
 		ready,
 		headChangeReason: "planner_merge",
-		text: "Planner merged task branch into plan branch.",
+		text: "Planner merged task branch into plan branch. The merged task branch and any residual managed experiment/refactor branches for this task were deleted.",
 		operation: () =>
 			mergeTaskToPlan({
 				git: input.git,
