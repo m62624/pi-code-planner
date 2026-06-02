@@ -19,4 +19,21 @@ describe("planner branch names", () => {
 		);
 		expect(outputBranchName("Plan A")).toBe("output/plan-a");
 	});
+
+	it("replaces dots with hyphens", () => {
+		expect(planBranchName("watcher-json.timer.tools")).toBe(
+			"plan/watcher-json-timer-tools",
+		);
+		expect(
+			experimentBranchName(
+				"watcher-json.timer",
+				"llaner-status.-10.to",
+				"attempt",
+			),
+		).toBe("experiment/watcher-json-timer/llaner-status-10-to/attempt");
+	});
+
+	it("handles mixed special characters", () => {
+		expect(planBranchName("Plan.v2 (draft)!")).toBe("plan/plan-v2-draft");
+	});
 });

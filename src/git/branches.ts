@@ -25,5 +25,10 @@ export function outputBranchName(planId: string): string {
 }
 
 function sanitizeBranchPart(value: string): string {
-	return sanitizeIdPart(value).replace(/\.+/g, ".") || "unnamed";
+	return (
+		sanitizeIdPart(value)
+			.replace(/\./g, "-")
+			.replace(/-+/g, "-")
+			.replace(/^-+|-+$/g, "") || "unnamed"
+	);
 }
