@@ -423,9 +423,9 @@ describe("planner plan tools", () => {
 		});
 
 		expect(result.status).toBe("applied");
-		expect(result.text).toContain("Plan: audit-safe-find-command");
+		expect(result.text).toContain("Plan: audit-safe");
 		await expect(readProjectRecord(fs, projectPaths)).resolves.toMatchObject({
-			activePlanId: "audit-safe-find-command",
+			activePlanId: "audit-safe",
 		});
 	});
 });

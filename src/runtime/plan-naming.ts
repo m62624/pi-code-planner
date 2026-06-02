@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { sanitizeIdPart } from "../storage/ids";
 import type { ProjectRecord } from "../storage/schema";
 
@@ -6,9 +7,10 @@ export interface PlannerCreateCommandArgs {
 	request?: string;
 }
 
-const MAX_GENERATED_PLAN_ID_LENGTH = 48;
 const MAX_GENERATED_PLAN_TITLE_LENGTH = 80;
 const MAX_GENERATED_PLAN_TITLE_WORDS = 6;
+const PLAN_PREFIX_CHARS = 10;
+const PLAN_SUFFIX_CHARS = 4;
 
 export function parsePlannerCreateCommandArgs(
 	args: string,
@@ -64,16 +66,25 @@ export function resolvePlannerPlanId(input: {
 		return requested;
 	}
 
-	const base =
-		sanitizeIdPart(input.request).slice(0, MAX_GENERATED_PLAN_ID_LENGTH) ||
-		"plan";
+	const prefix = generatePlanPrefix(input.request);
 	const existing = new Set(input.project.plans.map((plan) => plan.planId));
-	if (!existing.has(base)) {
-		return base;
+	if (!existing.has(prefix)) {
+		return prefix;
 	}
 
-	for (let suffix = 2; suffix < 10_000; suffix += 1) {
-		const candidate = `${base}-${suffix}`;
+	// Collision: append a short hash suffix for uniqueness
+	const suffix = createHash("sha256")
+		.update(input.request)
+		.digest("hex")
+		.slice(0, PLAN_SUFFIX_CHARS);
+	const candidate = `${prefix}-${suffix}`;
+	if (!existing.has(candidate)) {
+		return candidate;
+	}
+
+	// Fallback: try with a counter
+	for (let counter = 2; counter < 1000; counter += 1) {
+		const candidate = `${prefix}-${counter}`;
 		if (!existing.has(candidate)) {
 			return candidate;
 		}
@@ -82,6 +93,14 @@ export function resolvePlannerPlanId(input: {
 	throw new Error(
 		`Unable to allocate unique planner id for request: ${input.request}`,
 	);
+}
+
+function generatePlanPrefix(request: string): string {
+	const sanitized = sanitizeIdPart(request);
+	if (sanitized.length <= PLAN_PREFIX_CHARS) {
+		return sanitized || "plan";
+	}
+	return sanitized.slice(0, PLAN_PREFIX_CHARS);
 }
 
 export function createPlannerPlanTitle(request: string): string {

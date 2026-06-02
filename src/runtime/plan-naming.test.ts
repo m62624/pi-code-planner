@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { SCHEMA_VERSION } from "../constants";
 import type { ProjectRecord } from "../storage/schema";
@@ -87,19 +88,27 @@ describe("planner plan naming", () => {
 				request: "Fix approval find command",
 				project: projectWithPlans([]),
 			}),
-		).toBe("fix-approval-find-command");
+		).toBe("fix-approv");
 	});
 
-	it("adds numeric suffix when generated id already exists", () => {
+	it("adds short hash suffix when generated id already exists", () => {
+		const result = resolvePlannerPlanId({
+			request: "Fix approval find command",
+			project: projectWithPlans(["fix-approv"]),
+		});
+		expect(result).toMatch(/^fix-approv-[a-z0-9]{4}$/);
+	});
+
+	it("adds numeric suffix when hash collision also exists", () => {
 		expect(
 			resolvePlannerPlanId({
 				request: "Fix approval find command",
 				project: projectWithPlans([
-					"fix-approval-find-command",
-					"fix-approval-find-command-2",
+					"fix-approv",
+					`fix-approv-${createHash("sha256").update("Fix approval find command").digest("hex").slice(0, 4)}`,
 				]),
 			}),
-		).toBe("fix-approval-find-command-3");
+		).toBe("fix-approv-2");
 	});
 
 	it("keeps generated ids and titles bounded for multiline requests", () => {
