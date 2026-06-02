@@ -176,6 +176,15 @@ export {
 export type { MemoryStoragePaths } from "./memory/paths";
 export { createMemoryStoragePaths } from "./memory/paths";
 export type {
+	ProjectSearchMatch,
+	ProjectSearchResult,
+} from "./memory/project-search";
+export {
+	DEFAULT_PROJECT_SEARCH_LIMIT,
+	MAX_PROJECT_SEARCH_LIMIT,
+	searchProjectFiles,
+} from "./memory/project-search";
+export type {
 	MemoryRetrievalCursor,
 	MemoryRetrievalFilters,
 	MemoryRetrievalInput,
@@ -268,6 +277,8 @@ export {
 	consumePlannerControlledCompact,
 	createPlannerCompactRuntimeState,
 	enqueuePlannerPostCompactMessage,
+	formatPlannerCompactFailure,
+	isPlannerCompactTimeoutError,
 	markPlannerControlledCompactStarted,
 	PLANNER_COMPACT_MARKER,
 	PLANNER_SYSTEM_INSTRUCTIONS_HEADER,

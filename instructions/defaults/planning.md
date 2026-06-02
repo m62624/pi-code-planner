@@ -40,6 +40,9 @@ At `planning/read_memory`, load context in this order:
 - Prefer dependency order: foundations before composition.
 - Do not batch unrelated functions, files, or refactors into one task.
 - Every task must define how TDD proves the requested behavior.
+- Never create standalone plan tasks named like "write tests", "add mocks", "test the implementation", or "verify the code".
+- Tests, mocks, fixtures, and checks belong inside the individual behavioral task that needs them. Each task runs its own tests-first TDD loop before production edits.
+- A separate testing task is allowed only when test infrastructure itself is the requested product behavior or an explicit shared prerequisite, not merely because implementation needs tests.
 - If a task reveals additional required work, add or revise a task artifact during planning instead of silently expanding implementation scope.
 
 ## Restrictions

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Memory is the durable compressed project knowledge base for context-limited local models. The extension stores mechanical facts and verifies source anchors. The model remains responsible for language semantics: Rust traits, Go interfaces, private helpers, inherited behavior, side effects, and reusable APIs must be interpreted from source evidence.
+Memory is a selective durable knowledge base for context-limited local models. It is not a mandatory mirror of every project file. The extension first performs bounded CPU-only working-tree search, then stores mechanical facts only for files that are useful to the current goal. The model remains responsible for language semantics: Rust traits, Go interfaces, private helpers, inherited behavior, side effects, and reusable APIs must be interpreted from source evidence.
 
 ## Durable Files
 
@@ -14,11 +14,24 @@ Memory is the durable compressed project knowledge base for context-limited loca
 - `dirty.json` stores files requiring refresh.
 - `checkpoints/latest.json` stores the last verified memory checkpoint.
 
-## File-By-File Rule
+## Selective Search First
 
-Never index source files as one large trusted batch.
+Do not index the whole repository by default.
 
-1. Build or resume the queue with `planner_memory_scan_project`.
+1. Build a task-oriented query from the approved goal or active task.
+2. Call `planner_memory_search_project`.
+3. Inspect the bounded ranked excerpts.
+4. Refine or broaden the query only when context is insufficient.
+5. Call `planner_memory_scan_project` with the smallest relevant `paths` set worth preserving.
+6. Read source through the bounded file loop before trusting or editing it.
+
+`planner_memory_search_project` is mechanical and CPU-only. It does not start another model, consume VRAM, or persist a full-project semantic database.
+
+## Selected File Rule
+
+Never index selected source files as one large trusted batch.
+
+1. Build or resume the selective queue with `planner_memory_scan_project`.
 2. Call `planner_memory_index_status`.
 3. Claim one file with `planner_memory_next_file`.
 4. Read bounded chunks with `planner_memory_read_chunk` until EOF. Long files resume from the persisted `nextUnreadLine`.
@@ -26,7 +39,7 @@ Never index source files as one large trusted batch.
 6. Record reusable symbols in batches of at most 5 with `planner_memory_upsert_symbols`.
 7. Verify the active file with `planner_memory_verify_active_file`.
 8. Complete the active file with `planner_memory_complete_active_file`.
-9. Repeat until the queue is complete.
+9. Repeat until the selected queue is complete. Search again only when the stored context is insufficient.
 
 The wrapper refuses early completion, changed hashes, stale anchors, cross-file symbol writes, claiming another file while an active file remains incomplete, global verification before queue completion, and checkpoint sync before queue completion.
 
@@ -61,7 +74,7 @@ After planner-controlled commit, merge, external commit, manual checkout, histor
 1. Call `planner_status`.
 2. Call `planner_memory_inspect`.
 3. Call `planner_memory_apply_freshness` when stale entries must be marked.
-4. Call `planner_memory_scan_project` to create a refresh queue containing only changed, new, or missing files.
+4. Call `planner_memory_scan_project` to create a refresh queue containing only changed or missing indexed files. New unindexed files stay outside durable memory until the current task needs them; discover relevant new files explicitly with `planner_memory_search_project`.
 5. Process the refresh queue file-by-file with the same strict indexing loop.
 6. Re-record affected evidence-backed relations.
 7. Call `planner_memory_verify`.
@@ -75,8 +88,9 @@ After discovery compact:
 
 1. Read `project_patterns.md`.
 2. Use bounded `planner_memory_search` queries against files, symbols, and relations.
-3. Read source only when memory is missing, stale, insufficient, or requires verification.
-4. Request the next bounded page or refine the query for large projects. Do not dump all indexes into one prompt.
+3. Use `planner_memory_search_project` when durable memory is insufficient.
+4. Read source only when memory is missing, stale, insufficient, or requires verification.
+5. Request the next bounded page or refine the query for large projects. Do not dump all indexes into one prompt.
 
 ## Restrictions
 

@@ -11,12 +11,14 @@ Turn the user's raw request into an explicit approved goal before reading projec
    - Write `goal.md` in your own words.
    - Include the requested outcome, current assumptions, non-goals, and constraints.
    - Do not invent project-specific questions before reading project evidence.
+   - Propose a short plan title with `planner_goal_submit`. Prefer a concise English phrase unless the user explicitly requests another language.
+   - The title is user-facing and may contain Unicode. It is not the stable branch-safe `planId`.
    - Do not inspect project source.
 2. `await_goal_approval`
    - Show the user the full generated `goal.md` content. The `planner_goal_submit` result includes it for review.
    - Explain that `plan.md` is intentionally written later, during `planning/draft_plan`, after discovery memory and evidence-based questions are complete.
-   - Ask whether the goal is approved or needs revision.
-   - If revision is requested, update `goal.md` and ask again.
+   - Ask whether the goal and proposed title are approved or need revision.
+   - If revision is requested, update `goal.md`, propose a revised title when needed, and ask again.
    - Enter discovery only after explicit approval.
 
 ## Restrictions

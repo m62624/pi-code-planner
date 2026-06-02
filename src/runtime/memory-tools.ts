@@ -26,6 +26,7 @@ import {
 	writeMemoryCheckpoint,
 	writeProjectPatterns,
 } from "../memory/manager";
+import { searchProjectFiles } from "../memory/project-search";
 import { retrieveMemoryContext } from "../memory/retrieval";
 import { MEMORY_FILE_KINDS, type MemoryFileKind } from "../memory/schema";
 import type {
@@ -47,6 +48,7 @@ export const PLANNER_MEMORY_TOOL_NAMES = [
 	"planner_memory_inspect",
 	"planner_memory_apply_freshness",
 	"planner_memory_scan_project",
+	"planner_memory_search_project",
 	"planner_memory_index_status",
 	"planner_memory_next_file",
 	"planner_memory_read_chunk",
@@ -133,6 +135,7 @@ export async function executePlannerMemoryTool(
 				});
 			}
 			case "planner_memory_scan_project": {
+				const params = asObject(input.params);
 				const inspection =
 					orchestrator.preflight.memoryGate ??
 					(await inspectMemoryGate({
@@ -154,12 +157,31 @@ export async function executePlannerMemoryTool(
 					onlyPaths:
 						mode === "refresh"
 							? inspection.freshness.filesToReindex
-							: undefined,
+							: (stringArrayOrUndefined(params.paths) ?? []),
 				});
 				return applied(input.toolName, formatMemoryIndexingState(state), {
 					state,
 					summary: summarizeMemoryIndexing(state),
 				});
+			}
+			case "planner_memory_search_project": {
+				const params = asObject(input.params);
+				const result = await searchProjectFiles({
+					fs: input.fs,
+					git: input.git,
+					repoRoot: ready.worktreePath,
+					query: requiredString(params, "query"),
+					limit: numberOrUndefined(params.limit),
+				});
+				return applied(
+					input.toolName,
+					[
+						"Planner selective project search result.",
+						"Use the smallest relevant path set with planner_memory_scan_project. Broaden the query only when context is insufficient.",
+						JSON.stringify(result, null, 2),
+					].join("\n"),
+					{ result },
+				);
 			}
 			case "planner_memory_index_status": {
 				const state = await readMemoryIndexingState(
@@ -548,6 +570,17 @@ function formatMemoryInspection(inspection: MemoryGateInspection): string {
 		`Affected relations: ${inspection.freshness.affectedRelationIds.join(", ") || "(none)"}.`,
 		`Required checks: ${inspection.requiredChecks.join(", ") || "(none)"}.`,
 	].join("\n");
+}
+
+function stringArrayOrUndefined(value: unknown): string[] | undefined {
+	if (value === undefined) return undefined;
+	if (
+		!Array.isArray(value) ||
+		!value.every((item) => typeof item === "string")
+	) {
+		throw new TypeError("paths must be a string array.");
+	}
+	return value;
 }
 
 async function prepareSymbolEntries(input: {

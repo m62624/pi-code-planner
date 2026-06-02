@@ -8,6 +8,7 @@ export interface PlannerCreateCommandArgs {
 
 const MAX_GENERATED_PLAN_ID_LENGTH = 48;
 const MAX_GENERATED_PLAN_TITLE_LENGTH = 80;
+const MAX_GENERATED_PLAN_TITLE_WORDS = 6;
 
 export function parsePlannerCreateCommandArgs(
 	args: string,
@@ -89,9 +90,24 @@ export function createPlannerPlanTitle(request: string): string {
 			.split(/\r?\n/)
 			.map((line) => line.trim())
 			.find(Boolean) ?? "Planner task";
-	return firstLine.length <= MAX_GENERATED_PLAN_TITLE_LENGTH
-		? firstLine
-		: `${firstLine.slice(0, MAX_GENERATED_PLAN_TITLE_LENGTH - 3).trimEnd()}...`;
+	const words = firstLine.split(/\s+/).slice(0, MAX_GENERATED_PLAN_TITLE_WORDS);
+	const compact = words.join(" ");
+	return validatePlannerPlanTitle(
+		compact.length <= MAX_GENERATED_PLAN_TITLE_LENGTH
+			? compact
+			: `${compact.slice(0, MAX_GENERATED_PLAN_TITLE_LENGTH - 3).trimEnd()}...`,
+	);
+}
+
+export function validatePlannerPlanTitle(title: string): string {
+	const normalized = title.trim().replace(/\s+/g, " ");
+	if (!normalized) throw new TypeError("title must be a non-empty string.");
+	if (normalized.length > MAX_GENERATED_PLAN_TITLE_LENGTH) {
+		throw new TypeError(
+			`title must be at most ${MAX_GENERATED_PLAN_TITLE_LENGTH} characters.`,
+		);
+	}
+	return normalized;
 }
 
 function tokenizeCommandArgs(args: string): string[] {

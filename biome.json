@@ -15,6 +15,7 @@
 		}
 	},
 	"files": {
+		"includes": ["**", "!!**/.pi"],
 		"ignoreUnknown": false
 	},
 	"vcs": {

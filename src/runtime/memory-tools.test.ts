@@ -85,6 +85,49 @@ class MockGitRunner implements GitRunner {
 }
 
 describe("planner memory tools", () => {
+	it("searches the project mechanically and queues only selected relevant files", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createMemoryToolSetup(fs, {
+			state: {
+				stage: "discovery",
+				step: "scan_project_structure",
+				stepStatus: "running",
+			},
+			fileContent: "export const unrelated = 1;\n",
+			indexedHash: hashOf("export const unrelated = 1;\n"),
+			checkpointCommit: "abc123",
+		});
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await fs.writeText(
+			join(worktreePath, "src/config.ts"),
+			"export function parseConfig(input: string) {\n\treturn input;\n}\n",
+		);
+		const git = new MockGitRunner({ files: ["src/a.ts", "src/config.ts"] });
+
+		const search = await executePlannerMemoryTool({
+			fs,
+			git,
+			projectPaths: setup.projectPaths,
+			toolName: "planner_memory_search_project",
+			params: { query: "parse config", limit: 1 },
+		});
+		expect(search.status).toBe("applied");
+		expect(search.text).toContain("src/config.ts");
+
+		const scan = await executePlannerMemoryTool({
+			fs,
+			git,
+			projectPaths: setup.projectPaths,
+			toolName: "planner_memory_scan_project",
+			params: { paths: ["src/config.ts"] },
+		});
+		expect(scan.status).toBe("applied");
+		expect(scan.details).toMatchObject({
+			state: { files: [{ path: "src/config.ts", status: "pending" }] },
+			summary: { total: 1, pending: 1 },
+		});
+	});
+
 	it("runs the full stale-memory cycle and clears the gate only after clean verification", async () => {
 		const fs = new MockPlannerFs();
 		const setup = await createMemoryToolSetup(fs, {

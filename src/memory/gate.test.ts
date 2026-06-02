@@ -129,7 +129,7 @@ describe("memory gate", () => {
 		expect(result.instruction).toContain('globalState="unknown"');
 	});
 
-	it("requires memory update for new files that are not in the file index yet", async () => {
+	it("does not force selective memory to index unrelated new files", async () => {
 		const fs = new MockPlannerFs();
 		const paths = await initializeTestMemory(fs);
 		await fs.writeText("/repo/app/src/new.ts", "export const value = 1;\n");
@@ -141,12 +141,11 @@ describe("memory gate", () => {
 			memoryPaths: paths,
 		});
 
-		expect(result.clean).toBe(false);
-		expect(result.nextAction).toBe("update_memory");
-		expect(result.requiredChecks).toEqual(MEMORY_GATE_REQUIRED_CHECKS);
+		expect(result.clean).toBe(true);
+		expect(result.nextAction).toBe("continue");
+		expect(result.requiredChecks).toEqual([]);
 		expect(result.freshness.newFiles).toEqual(["src/new.ts"]);
-		expect(result.freshness.filesToReindex).toEqual(["src/new.ts"]);
-		expect(result.instruction).toContain("New files: src/new.ts.");
+		expect(result.freshness.filesToReindex).toEqual([]);
 	});
 
 	it("requires memory update for indexed files missing from the current snapshot", async () => {
@@ -182,7 +181,7 @@ describe("memory gate", () => {
 		});
 	});
 
-	it("keeps gate blocked when git lists a file that is missing from disk", async () => {
+	it("ignores missing unindexed files until selective search chooses them", async () => {
 		const fs = new MockPlannerFs();
 		const paths = await initializeTestMemory(fs);
 
@@ -193,10 +192,10 @@ describe("memory gate", () => {
 			memoryPaths: paths,
 		});
 
-		expect(result.clean).toBe(false);
-		expect(result.nextAction).toBe("update_memory");
+		expect(result.clean).toBe(true);
+		expect(result.nextAction).toBe("continue");
 		expect(result.snapshot.missingFiles).toEqual(["src/missing-unindexed.ts"]);
-		expect(result.requiredChecks).toEqual(MEMORY_GATE_REQUIRED_CHECKS);
+		expect(result.requiredChecks).toEqual([]);
 	});
 
 	it("applies freshness so stale entries become dirty before model memory update", async () => {

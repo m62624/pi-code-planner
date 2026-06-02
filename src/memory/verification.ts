@@ -25,6 +25,7 @@ export interface MemoryFreshnessInput {
 	fs: PlannerFs;
 	paths: MemoryStoragePaths;
 	currentFiles: readonly MemoryProjectFileSnapshotEntry[];
+	trackNewFiles?: boolean;
 }
 
 export interface MemoryFreshnessApplyInput extends MemoryFreshnessInput {
@@ -80,7 +81,7 @@ export async function analyzeMemoryFreshness(
 	const affectedFiles = new Set([
 		...changedFiles,
 		...missingFiles,
-		...newFiles,
+		...(input.trackNewFiles === false ? [] : newFiles),
 	]);
 	const affectedSymbolIds = affectedSymbols(symbolIndex, affectedFiles);
 	const affectedRelationIds = affectedRelations(

@@ -18,6 +18,8 @@ import {
 	consumePlannerControlledCompact,
 	createPlannerCompactRuntimeState,
 	enqueuePlannerPostCompactMessage,
+	formatPlannerCompactFailure,
+	isPlannerCompactTimeoutError,
 	markPlannerControlledCompactStarted,
 	PLANNER_COMPACT_MARKER,
 	PLANNER_SYSTEM_INSTRUCTIONS_HEADER,
@@ -156,6 +158,19 @@ describe("planner compact runtime", () => {
 				options: { deliverAs: "followUp" },
 			},
 		]);
+	});
+
+	it("explains how to retry a persisted compact boundary after timeout", () => {
+		const error = new Error("request timed out after 300000ms");
+
+		expect(isPlannerCompactTimeoutError(error)).toBe(true);
+		expect(formatPlannerCompactFailure(error)).toContain(
+			"Call planner_request_compact to retry",
+		);
+		expect(formatPlannerCompactFailure(error)).toContain("HTTP idle timeout");
+		expect(isPlannerCompactTimeoutError(new Error("model unavailable"))).toBe(
+			false,
+		);
 	});
 });
 

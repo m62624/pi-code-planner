@@ -320,6 +320,9 @@ describe("planner state machine", () => {
 			requiresCompact: true,
 			blockedReason: "compact discovery before planning",
 		});
+		expect(requestPlannerCompact(pendingCompact, "retry compact")).toBe(
+			pendingCompact,
+		);
 
 		expect(completePlannerCompact(pendingCompact)).toMatchObject({
 			stage: "discovery",

@@ -91,7 +91,7 @@ export function decidePlannerLifecycleNext(
 				requiredTransition: "complete_compact",
 				reason: preflight.decision.reason ?? "Planner compact is pending.",
 				modelMessage:
-					"Wait for the Pi compact boundary to finish, then call planner_complete_compact and call planner_status again.",
+					"Wait for the Pi compact boundary to finish, then call planner_complete_compact and call planner_status again. If the Pi compact API reported a timeout or failure, call planner_request_compact to retry the same persisted boundary instead of completing it.",
 			};
 		case "allow_stage_machine":
 			return stateMachineDecision(preflight, base, allowedTransitions);

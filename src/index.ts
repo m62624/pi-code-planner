@@ -37,6 +37,7 @@ import {
 	consumePlannerControlledCompact,
 	createPlannerCompactRuntimeState,
 	enqueuePlannerPostCompactMessage,
+	formatPlannerCompactFailure,
 	markPlannerControlledCompactStarted,
 	type PlannerCompactRuntimeState,
 } from "./runtime/compact";
@@ -135,8 +136,13 @@ const GOAL_SUBMIT_TOOL_PARAMETERS = {
 			description:
 				"Full goal.md markdown in your own words: outcome, assumptions, non-goals, and constraints. Evidence-based clarification questions are collected after discovery.",
 		},
+		title: {
+			type: "string",
+			description:
+				"Short proposed plan title. Prefer a concise English phrase unless the user requested another language. The user reviews this title together with goal.md.",
+		},
 	},
-	required: ["content"],
+	required: ["content", "title"],
 	additionalProperties: false,
 } as const;
 
@@ -257,6 +263,33 @@ const MEMORY_READ_CHUNK_TOOL_PARAMETERS = {
 				"Optional bounded line count. Defaults to 200 and is capped at 400.",
 		},
 	},
+	additionalProperties: false,
+} as const;
+
+const MEMORY_SCAN_PROJECT_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		paths: {
+			type: "array",
+			items: { type: "string" },
+			description:
+				"Relevant project-relative paths selected after planner_memory_search_project. Initial discovery indexes only these files.",
+		},
+	},
+	additionalProperties: false,
+} as const;
+
+const MEMORY_SEARCH_PROJECT_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		query: {
+			type: "string",
+			description:
+				"Task-oriented lexical query. Refine or broaden it when the bounded result is insufficient.",
+		},
+		limit: { type: "number" },
+	},
+	required: ["query"],
 	additionalProperties: false,
 } as const;
 
@@ -1168,10 +1201,7 @@ async function maybeStartPlannerControlledCompact(input: {
 			},
 			onError: (error) => {
 				clearPlannerControlledCompact(input.compactRuntime);
-				input.ctx.ui.notify(
-					`Planner compact failed: ${error.message}`,
-					"error",
-				);
+				input.ctx.ui.notify(formatPlannerCompactFailure(error), "error");
 			},
 		});
 	}, 0);
@@ -1359,6 +1389,8 @@ function memoryToolLabel(toolName: PlannerMemoryToolName): string {
 			return "Planner Memory Apply Freshness";
 		case "planner_memory_scan_project":
 			return "Planner Memory Scan Project";
+		case "planner_memory_search_project":
+			return "Planner Memory Search Project";
 		case "planner_memory_index_status":
 			return "Planner Memory Index Status";
 		case "planner_memory_next_file":
@@ -1395,7 +1427,9 @@ function memoryToolDescription(toolName: PlannerMemoryToolName): string {
 		case "planner_memory_apply_freshness":
 			return "Mark stale memory entries dirty or missing before the model rewrites affected memory.";
 		case "planner_memory_scan_project":
-			return "Build or resume the durable project file indexing queue. Refresh mode includes only stale files.";
+			return "Build or resume a selective durable indexing queue. Initial discovery indexes only explicitly selected paths; refresh mode includes stale indexed files.";
+		case "planner_memory_search_project":
+			return "Search the working tree mechanically on CPU and return bounded ranked excerpts. Does not persist a whole-project index.";
 		case "planner_memory_index_status":
 			return "Show durable file indexing progress, active file, and the exact next unread line.";
 		case "planner_memory_next_file":
@@ -1442,8 +1476,11 @@ function memoryToolParameters(toolName: PlannerMemoryToolName) {
 			return MEMORY_SEARCH_TOOL_PARAMETERS;
 		case "planner_memory_apply_freshness":
 			return MEMORY_APPLY_FRESHNESS_TOOL_PARAMETERS;
-		case "planner_memory_inspect":
 		case "planner_memory_scan_project":
+			return MEMORY_SCAN_PROJECT_TOOL_PARAMETERS;
+		case "planner_memory_search_project":
+			return MEMORY_SEARCH_PROJECT_TOOL_PARAMETERS;
+		case "planner_memory_inspect":
 		case "planner_memory_index_status":
 		case "planner_memory_next_file":
 		case "planner_memory_verify_active_file":

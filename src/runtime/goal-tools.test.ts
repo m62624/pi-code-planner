@@ -16,8 +16,13 @@ import {
 	createPlanStoragePaths,
 	createProjectStoragePaths,
 } from "../storage/paths";
-import { initializePlanFiles } from "../storage/plan-store";
-import { ensureProjectRecord, setActivePlan } from "../storage/project-store";
+import { initializePlanFiles, readPlanRecord } from "../storage/plan-store";
+import {
+	ensureProjectRecord,
+	readProjectRecord,
+	setActivePlan,
+	upsertProjectPlanSummary,
+} from "../storage/project-store";
 import { createInitialPlanState, createPlanRecord } from "../storage/schema";
 import { initializePlanState, readPlanState } from "../storage/state-store";
 import { MockPlannerFs } from "../test/mock-fs";
@@ -63,7 +68,10 @@ describe("planner goal tools", () => {
 		const result = await executePlannerGoalTool({
 			...setup,
 			toolName: "planner_goal_submit",
-			params: { content: "# Goal\n\nAudit the safe find command." },
+			params: {
+				content: "# Goal\n\nAudit the safe find command.",
+				title: "Audit safe find handling",
+			},
 		});
 
 		expect(result.status).toBe("applied");
@@ -78,6 +86,15 @@ describe("planner goal tools", () => {
 			stepStatus: "running",
 		});
 		expect(result.text).toContain("explicitly approve");
+		expect(result.text).toContain("Audit safe find handling");
+		await expect(
+			readPlanRecord(setup.fs, setup.planPaths),
+		).resolves.toMatchObject({ title: "Audit safe find handling" });
+		await expect(
+			readProjectRecord(setup.fs, setup.projectPaths),
+		).resolves.toMatchObject({
+			plans: [{ planId: "plan-a", title: "Audit safe find handling" }],
+		});
 	});
 
 	it("enters discovery only after explicit approval", async () => {
@@ -145,7 +162,7 @@ describe("planner goal tools", () => {
 		const result = await executePlannerGoalTool({
 			...setup,
 			toolName: "planner_goal_submit",
-			params: { content: "# Goal\n\nToo late." },
+			params: { content: "# Goal\n\nToo late.", title: "Too late" },
 		});
 
 		expect(result.status).toBe("blocked");
@@ -172,6 +189,11 @@ async function createGoalSetup(state: Record<string, unknown> = {}): Promise<{
 		createPlanRecord({ planId: "plan-a", title: "Plan A" }),
 	);
 	await initializeMemoryFiles(fs, planPaths);
+	await upsertProjectPlanSummary(fs, projectPaths, {
+		planId: "plan-a",
+		title: "Plan A",
+		status: "active",
+	});
 	await fs.mkdirp(worktreePath);
 	await fs.writeTextAtomic(
 		planPaths.requestMd,

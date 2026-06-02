@@ -5,6 +5,7 @@ import {
 	createPlannerPlanTitle,
 	parsePlannerCreateCommandArgs,
 	resolvePlannerPlanId,
+	validatePlannerPlanTitle,
 } from "./plan-naming";
 
 function projectWithPlans(planIds: string[]): ProjectRecord {
@@ -110,7 +111,22 @@ describe("planner plan naming", () => {
 				project: projectWithPlans([]),
 			}).length,
 		).toBeLessThanOrEqual(48);
-		expect(createPlannerPlanTitle(request)).toHaveLength(80);
-		expect(createPlannerPlanTitle(request)).toMatch(/\.\.\.$/);
+		expect(createPlannerPlanTitle(request)).toBe(
+			"Implement a carefully described planner improvement",
+		);
+	});
+
+	it("keeps generated titles short and accepts user titles in any language", () => {
+		expect(
+			createPlannerPlanTitle(
+				"Implement a carefully described planner improvement with many details",
+			),
+		).toBe("Implement a carefully described planner improvement");
+		expect(validatePlannerPlanTitle("Быстрый поиск памяти")).toBe(
+			"Быстрый поиск памяти",
+		);
+		expect(() => validatePlannerPlanTitle(" \n ")).toThrow(
+			"title must be a non-empty string",
+		);
 	});
 });

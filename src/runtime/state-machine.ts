@@ -299,13 +299,16 @@ export function requestPlannerCompact(
 	reason = "Planner compact boundary is required.",
 ): PlanStateRecord {
 	assertValidStatePosition(state);
-	assertRunning(state);
 	if (!COMPACT_STEPS.has(state.step)) {
 		throw new PlannerStateMachineError(
 			"not_compact_step",
 			`Planner step ${state.step} is not a compact step.`,
 		);
 	}
+	if (state.requiresCompact && state.stepStatus === "blocked") {
+		return state;
+	}
+	assertRunning(state);
 	return {
 		...state,
 		stepStatus: "blocked",

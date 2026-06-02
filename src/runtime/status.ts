@@ -152,7 +152,8 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Read request.md.",
 			"Write goal.md in your own words with outcome, assumptions, non-goals, and constraints.",
-			"Call planner_goal_submit with the full goal markdown.",
+			"Propose a short user-facing title. Prefer concise English unless the user requested another language.",
+			"Call planner_goal_submit with the full goal markdown and proposed title.",
 		],
 		allowedNow: ["Use planner_goal_submit only after the draft is complete."],
 		forbiddenNow: [
@@ -166,8 +167,8 @@ export const PLANNER_STEP_RULES = {
 	await_goal_approval: stepRule("intake", "await_goal_approval", {
 		objective: "Wait for explicit user approval of the normalized goal.",
 		requiredActions: [
-			"Show the exact goal.md path and summarize the draft.",
-			"Ask whether the goal is approved or needs revision.",
+			"Show the exact goal.md path, proposed title, and draft summary.",
+			"Ask whether the goal and title are approved or need revision.",
 			"Call planner_goal_decide only after the user explicitly answers.",
 		],
 		allowedNow: ["Use planner_goal_decide with approve or revise."],
@@ -181,21 +182,21 @@ export const PLANNER_STEP_RULES = {
 	}),
 
 	scan_project_structure: stepRule("discovery", "scan_project_structure", {
-		objective: "Create the durable file indexing queue from project structure.",
+		objective: "Select the smallest useful file set for durable memory.",
 		requiredActions: [
-			"Call planner_memory_scan_project before reading source files.",
-			"Inspect the returned queue summary.",
-			"Do not manually invent the project file list.",
+			"Start with planner_memory_search_project using a query derived from goal.md.",
+			"Inspect bounded ranked excerpts and broaden the query only when context is insufficient.",
+			"Call planner_memory_scan_project with only the relevant paths worth preserving in durable memory.",
 		],
 		allowedNow: [
-			"Use planner_memory_scan_project and planner_memory_index_status.",
+			"Use planner_memory_search_project, planner_memory_scan_project, and planner_memory_index_status.",
 		],
 		forbiddenNow: [
 			"Do not implement code.",
-			"Do not read source files before the durable queue exists.",
+			"Do not queue every project file by default.",
 		],
 		exitCondition:
-			"memory/indexing.json contains the current project file queue.",
+			"memory/indexing.json contains a selective relevant project file queue.",
 		nextInstruction:
 			"Call planner_finish_step to open index_files_iteratively.",
 	}),
@@ -333,6 +334,7 @@ export const PLANNER_STEP_RULES = {
 		objective: "Split the plan into atomic tasks.",
 		requiredActions: [
 			"Create an ordered task list with small independent tasks and acceptance criteria.",
+			"Keep tests inside each behavioral task as its TDD cycle. Never create standalone tasks for writing tests, mocks, or verification.",
 		],
 		allowedNow: ["Write planner artifacts and plan task records."],
 		forbiddenNow: ["Do not start TDD before task files exist."],
@@ -353,6 +355,7 @@ export const PLANNER_STEP_RULES = {
 		objective: "Verify the plan before execution.",
 		requiredActions: [
 			"Check that task order, scope, acceptance criteria, and risks are explicit.",
+			"Reject standalone test-only tasks. Each behavioral task must own its tests-first TDD work.",
 		],
 		allowedNow: ["Read/write planner artifacts."],
 		forbiddenNow: ["Do not start execution while plan gaps remain."],

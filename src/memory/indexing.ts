@@ -83,10 +83,9 @@ export async function scanMemoryIndexingQueue(input: {
 }): Promise<MemoryIndexingState> {
 	const listedPaths = uniqueSorted(await input.git.listProjectFiles(input));
 	const listedSet = new Set(listedPaths);
-	const targetPaths =
-		input.mode === "refresh" && input.onlyPaths
-			? uniqueSorted(input.onlyPaths)
-			: listedPaths;
+	const targetPaths = input.onlyPaths
+		? uniqueSorted(input.onlyPaths)
+		: listedPaths;
 	const current = await readMemoryIndexingState(input.fs, input.paths);
 	const canResume = current.mode === input.mode;
 	const previous = new Map(current.files.map((entry) => [entry.path, entry]));

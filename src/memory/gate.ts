@@ -43,6 +43,7 @@ export async function inspectMemoryGate(input: {
 		fs: input.fs,
 		paths: input.memoryPaths,
 		currentFiles: snapshot.files,
+		trackNewFiles: false,
 	});
 
 	return buildMemoryGateInspection({
@@ -68,6 +69,7 @@ export async function applyMemoryGateFreshness(input: {
 		fs: input.fs,
 		paths: input.memoryPaths,
 		currentFiles: snapshot.files,
+		trackNewFiles: false,
 		detectedAt: input.detectedAt,
 	});
 
@@ -83,8 +85,7 @@ function buildMemoryGateInspection(input: {
 	snapshot: MemoryProjectSnapshot;
 	freshness: MemoryFreshnessResult;
 }): MemoryGateInspection {
-	const clean =
-		input.freshness.clean && input.snapshot.missingFiles.length === 0;
+	const clean = input.freshness.clean;
 	return {
 		clean,
 		repoRoot: input.repoRoot,

@@ -2,15 +2,17 @@
 
 ## Purpose
 
-Build durable compressed project memory before planning or implementation. Discovery is intentionally strict: enumerate the project once, then inspect exactly one queued file at a time. Never rely on chat history as indexing state.
+Build selective durable project memory before planning or implementation. Discovery is intentionally strict: search mechanically, preserve only useful files, then inspect exactly one selected queued file at a time. Never rely on chat history as indexing state.
 
 ## Strict Step Order
 
 1. `scan_project_structure`
-   - Call `planner_memory_scan_project`.
-   - The extension enumerates tracked and untracked non-ignored project files through git and writes `memory/indexing.json`.
+   - Build a focused query from the approved goal and call `planner_memory_search_project`.
+   - Inspect bounded ranked excerpts. Broaden or refine the query only when context is insufficient.
+   - Call `planner_memory_scan_project` with the smallest relevant `paths` set worth preserving.
+   - The extension writes the selective queue to `memory/indexing.json`.
    - Call `planner_memory_index_status` and inspect the durable queue summary.
-   - Do not manually invent a file list and do not begin broad source reading before the queue exists.
+   - Do not queue every repository file by default and do not begin broad source reading before the queue exists.
 2. `index_files_iteratively`
    - Call `planner_memory_index_status`.
    - If there is no active file, call `planner_memory_next_file`.
@@ -58,7 +60,7 @@ Build durable compressed project memory before planning or implementation. Disco
 
 ## Exit Condition
 
-Discovery is complete only when the durable file queue is complete, reusable symbols and effects are verified file-by-file, evidence-backed relations and project patterns are written, required user questions are answered or explicitly absent, memory verification passes, the checkpoint is synced, and the configured discovery compact boundary finishes.
+Discovery is complete only when the selective durable file queue is complete, reusable symbols and effects are verified file-by-file, evidence-backed relations and project patterns are written, required user questions are answered or explicitly absent, memory verification passes, the checkpoint is synced, and the configured discovery compact boundary finishes.
 
 ## manual-compact
 

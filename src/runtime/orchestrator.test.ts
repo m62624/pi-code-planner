@@ -223,7 +223,10 @@ describe("planner lifecycle orchestrator", () => {
 			requiredTool: "planner_complete_compact",
 			requiredTransition: "complete_compact",
 		});
-		expect(result.allowedWorkflowTools).toEqual(["planner_complete_compact"]);
+		expect(result.allowedWorkflowTools).toEqual([
+			"planner_request_compact",
+			"planner_complete_compact",
+		]);
 	});
 });
 

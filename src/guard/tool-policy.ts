@@ -24,6 +24,7 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_memory_inspect",
 	"planner_memory_apply_freshness",
 	"planner_memory_scan_project",
+	"planner_memory_search_project",
 	"planner_memory_index_status",
 	"planner_memory_next_file",
 	"planner_memory_read_chunk",
@@ -83,10 +84,12 @@ const STEP_ALLOWED_TOOLS = {
 	discovery: {
 		scan_project_structure: [
 			"planner_git_inspect",
+			"planner_memory_search_project",
 			"planner_memory_scan_project",
 			"planner_memory_index_status",
 		],
 		index_files_iteratively: [
+			"planner_memory_search_project",
 			"planner_memory_index_status",
 			"planner_memory_next_file",
 			"planner_memory_read_chunk",
@@ -205,6 +208,7 @@ export function getAllowedPlannerWrapperTools(
 			"planner_memory_inspect",
 			"planner_memory_apply_freshness",
 			"planner_memory_scan_project",
+			"planner_memory_search_project",
 			"planner_memory_index_status",
 			"planner_memory_next_file",
 			"planner_memory_read_chunk",
@@ -231,7 +235,7 @@ export function getAllowedPlannerWrapperTools(
 	return withAlwaysAllowed([
 		...stepRules,
 		...(MEMORY_SEARCH_STAGES.has(state.stage)
-			? (["planner_memory_search"] as const)
+			? (["planner_memory_search", "planner_memory_search_project"] as const)
 			: []),
 	]);
 }

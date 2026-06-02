@@ -144,7 +144,7 @@ export function getAllowedPlannerStateTransitionTypes(
 	}
 
 	if (preflight.decision.action === "require_compact") {
-		return ["complete_compact"];
+		return ["request_compact", "complete_compact"];
 	}
 
 	if (
@@ -215,6 +215,12 @@ function runtimeAllowsTransition(
 ): boolean {
 	if (transition.type === "complete_compact") {
 		return preflight.decision.action === "require_compact";
+	}
+	if (
+		transition.type === "request_compact" &&
+		preflight.decision.action === "require_compact"
+	) {
+		return true;
 	}
 
 	if (

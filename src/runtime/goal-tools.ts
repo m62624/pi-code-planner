@@ -1,11 +1,14 @@
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
+import { updatePlanRecord } from "../storage/plan-store";
+import { upsertProjectPlanSummary } from "../storage/project-store";
 import { savePlanState } from "../storage/state-store";
 import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { validatePlannerPlanTitle } from "./plan-naming";
 import {
 	advancePlannerStep,
 	completePlannerStep,
@@ -59,7 +62,17 @@ export async function executePlannerGoalTool(
 	const params = asObject(input.params);
 	if (input.toolName === "planner_goal_submit") {
 		const content = requiredString(params, "content");
+		const title = validatePlannerPlanTitle(requiredString(params, "title"));
 		await input.fs.writeTextAtomic(planPaths.goalMd, `${content.trim()}\n`);
+		const plan = await updatePlanRecord(input.fs, planPaths, (record) => ({
+			...record,
+			title,
+		}));
+		await upsertProjectPlanSummary(input.fs, input.projectPaths, {
+			planId: plan.planId,
+			title,
+			status: plan.status === "draft" ? "active" : plan.status,
+		});
 		const next = startPlannerStep(
 			advancePlannerStep(completePlannerStep(state)),
 		);
@@ -71,12 +84,14 @@ export async function executePlannerGoalTool(
 				`Goal artifact: ${planPaths.goalMd}`,
 				"",
 				"## Goal Draft For User Review",
+				`Proposed plan title: ${title}`,
+				"",
 				content.trim(),
 				"",
 				"Ask the user to review the goal and explicitly approve it or request revision.",
 				"After the user answers, call planner_goal_decide.",
 			].join("\n"),
-			{ state: next, goalMd: planPaths.goalMd },
+			{ state: next, goalMd: planPaths.goalMd, title },
 		);
 	}
 

@@ -190,7 +190,7 @@ describe("instruction manager", () => {
 		expect(defaults.discovery).toContain("# discovery");
 		expect(defaults.discovery).toContain("## Strict Step Order");
 		expect(defaults.memory).toContain(
-			"Memory is the durable compressed project knowledge base",
+			"Memory is a selective durable knowledge base",
 		);
 	});
 

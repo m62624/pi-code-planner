@@ -32,7 +32,11 @@ import {
 	createProjectLocalWorktreeLocation,
 } from "../worktree/paths";
 import { inspectPlannerGitReality } from "./git-state-sync";
-import { createPlannerPlanTitle, resolvePlannerPlanId } from "./plan-naming";
+import {
+	createPlannerPlanTitle,
+	resolvePlannerPlanId,
+	validatePlannerPlanTitle,
+} from "./plan-naming";
 
 export const PLANNER_PLAN_TOOL_NAMES = ["planner_create_plan"] as const;
 
@@ -73,6 +77,7 @@ async function createPlanTool(
 	const request = requiredString(params, "request");
 	const title =
 		optionalString(params, "title") ?? createPlannerPlanTitle(request);
+	const validatedTitle = validatePlannerPlanTitle(title);
 	const project = await ensureProjectRecord(input.fs, input.projectPaths);
 	const planId = resolvePlannerPlanId({
 		requestedPlanId: optionalString(params, "planId") ?? undefined,
@@ -104,7 +109,11 @@ async function createPlanTool(
 		(await safeCurrentBranch(input.git, input.projectPaths.projectRoot)) ??
 		"main";
 	const planBranch = planBranchName(planId);
-	const plan = createPlanRecord({ planId, title, status: "active" });
+	const plan = createPlanRecord({
+		planId,
+		title: validatedTitle,
+		status: "active",
+	});
 	const settings = await loadEffectivePlannerSettings({
 		fs: input.fs,
 		projectPaths: input.projectPaths,
@@ -161,7 +170,7 @@ async function createPlanTool(
 	const memoryPaths = await initializeMemoryFiles(input.fs, planPaths);
 	await upsertProjectPlanSummary(input.fs, input.projectPaths, {
 		planId,
-		title,
+		title: validatedTitle,
 		status: "active",
 	});
 	const nextProject = await setActivePlan(input.fs, input.projectPaths, planId);
@@ -171,7 +180,7 @@ async function createPlanTool(
 		[
 			"Planner plan created.",
 			`Plan: ${planId}`,
-			`Title: ${title}`,
+			`Provisional title: ${validatedTitle}`,
 			`Base branch: ${baseBranch}`,
 			`Worktree: ${worktreeLocation}`,
 			"Next: switch/open Pi in the planner worktree session, call planner_status, draft goal.md in your own words, and wait for explicit user approval before discovery. Ask evidence-based clarification questions only after discovery.",

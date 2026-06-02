@@ -235,6 +235,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		updatedArtifacts: ["memory/indexing.json"],
 		requiredGates: ["plan_worktree_exists"],
 		expectedTools: [
+			"planner_memory_search_project",
 			"planner_memory_scan_project",
 			"planner_memory_index_status",
 		],

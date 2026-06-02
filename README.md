@@ -129,8 +129,8 @@ The model restates the user's request before reading source code.
 
 | Step | Purpose |
 | --- | --- |
-| `draft_goal` | Rewrite the raw request into `goal.md` with assumptions, constraints, and non-goals. |
-| `await_goal_approval` | Show the goal and wait for explicit user approval or revision. |
+| `draft_goal` | Rewrite the raw request into `goal.md` and propose a short user-facing plan title. |
+| `await_goal_approval` | Show the goal and title, then wait for explicit user approval or revision. |
 
 ### `discovery`
 
@@ -138,8 +138,8 @@ The model builds durable project memory before implementation.
 
 | Step | Purpose |
 | --- | --- |
-| `scan_project_structure` | Enumerate Git-visible files and persist the indexing queue. |
-| `index_files_iteratively` | Read exactly one file at a time in bounded chunks, record reusable symbols, verify anchors, then continue. |
+| `scan_project_structure` | Search Git-visible files mechanically on CPU, then persist only the smallest useful indexing queue. |
+| `index_files_iteratively` | Read exactly one selected file at a time in bounded chunks, record reusable symbols, verify anchors, then continue. |
 | `write_project_patterns` | Record architecture, dependencies, conventions, and test patterns. |
 | `write_relations` | Record evidence-backed relations between files and symbols. |
 | `write_questions` | Ask focused questions after evidence is collected. |
@@ -153,7 +153,7 @@ The model builds durable project memory before implementation.
 | --- | --- |
 | `read_memory` | Reconstruct context from bounded project memory. |
 | `draft_plan` | Write the implementation strategy, constraints, risks, and checks. |
-| `split_tasks` | Divide the plan into ordered atomic tasks. |
+| `split_tasks` | Divide the plan into ordered behavioral tasks. Tests stay inside each task's TDD cycle, never as standalone test items. |
 | `write_task_files` | Create `task.json` and `task.md` for each task. |
 | `verify_plan` | Confirm that tasks are bounded, ordered, and testable. |
 | `compact_planning` | Compact planning context when enabled. |
@@ -331,6 +331,8 @@ Key files:
 | `decisions.md` | Durable user decisions. |
 | `memory/*` | Bounded project context and freshness checkpoints. |
 
+Memory is selective: the planner does not force a local model to read and preserve every file in a repository. `planner_memory_search_project` performs bounded CPU-only working-tree search without another model or VRAM usage. The model stores only relevant files and may broaden its query when context is insufficient.
+
 ## Settings And Overrides ⚙️
 
 ### Worktree Location
@@ -398,6 +400,8 @@ Compact defaults are:
 ```
 
 Skipped compact boundaries still advance through persisted state-machine steps, so recovery remains deterministic.
+
+If compact generation times out on a slow local model, the boundary remains pending. Retry with `planner_request_compact`; for repeated timeouts, increase Pi's `HTTP idle timeout` in `/settings` to `5 min` or `disabled`.
 
 ### Instruction Append Files
 

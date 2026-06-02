@@ -229,6 +229,14 @@ describe("persisted planner state transition", () => {
 		await applyPlannerStateTransition({
 			fs: setup.fs,
 			preflight: compactSetup.preflight,
+			transition: { type: "request_compact", reason: "retry after timeout" },
+		});
+		expect(await readPlanState(setup.fs, setup.planPaths)).toEqual(
+			compactPending,
+		);
+		await applyPlannerStateTransition({
+			fs: setup.fs,
+			preflight: compactSetup.preflight,
 			transition: { type: "complete_compact" },
 		});
 

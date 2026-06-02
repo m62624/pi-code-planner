@@ -95,6 +95,7 @@ export function buildPlannerCompactInstructions(input: {
 		PLANNER_COMPACT_MARKER,
 		"",
 		"Create a compact summary for pi-code-planner continuation.",
+		"Keep the summary concise. Preserve durable pointers and decisions instead of replaying the full conversation.",
 		"Preserve planner state, artifact paths, git/memory gates, completed work, open risks, and the exact next required planner action.",
 		"Preserve memory indexing mode, active indexing file, and exact next unread line when a durable indexing queue is in progress.",
 		"Do not mark any planner step complete unless state.json already says it is complete.",
@@ -180,6 +181,19 @@ export function enqueuePlannerPostCompactMessage(input: {
 	}
 	input.sendUserMessage(input.message, { deliverAs: "followUp" });
 	return "followUp";
+}
+
+export function formatPlannerCompactFailure(error: Error): string {
+	const timeoutGuidance = isPlannerCompactTimeoutError(error)
+		? " The persisted compact boundary is still pending. Call planner_request_compact to retry. If local generation remains slow, open Pi /settings and set HTTP idle timeout to 5 min or disabled."
+		: " The persisted compact boundary is still pending. Call planner_request_compact to retry after resolving the failure.";
+	return `Planner compact failed: ${error.message}.${timeoutGuidance}`;
+}
+
+export function isPlannerCompactTimeoutError(error: Error): boolean {
+	return /timed?\s*out|timeout|time limit|deadline|exceeded/i.test(
+		error.message,
+	);
 }
 
 export async function collectAutoCompactInstructionSections(input: {
