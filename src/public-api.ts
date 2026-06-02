@@ -176,6 +176,16 @@ export {
 export type { MemoryStoragePaths } from "./memory/paths";
 export { createMemoryStoragePaths } from "./memory/paths";
 export type {
+	ProjectMapCount,
+	ProjectMapExtensionCount,
+	ProjectMapResult,
+} from "./memory/project-map";
+export {
+	buildProjectMap,
+	DEFAULT_PROJECT_MAP_PATH_LIMIT,
+	MAX_PROJECT_MAP_PATH_LIMIT,
+} from "./memory/project-map";
+export type {
 	ProjectSearchMatch,
 	ProjectSearchResult,
 } from "./memory/project-search";
@@ -473,6 +483,11 @@ export {
 	PLANNER_STATUS_INVARIANTS,
 	PLANNER_STEP_RULES,
 } from "./runtime/status";
+export type { PlannerTaskToolName } from "./runtime/task-tools";
+export {
+	executePlannerTaskTool,
+	PLANNER_TASK_TOOL_NAMES,
+} from "./runtime/task-tools";
 export type {
 	PlannerListEntry,
 	PlannerUserCommandInput,
@@ -519,10 +534,15 @@ export {
 	readJsonIfExists,
 	writeJson,
 } from "./storage/json";
-export type { PlanStoragePaths, ProjectStoragePaths } from "./storage/paths";
+export type {
+	PlanStoragePaths,
+	ProjectStoragePaths,
+	TaskStoragePaths,
+} from "./storage/paths";
 export {
 	createPlanStoragePaths,
 	createProjectStoragePaths,
+	createTaskStoragePaths,
 } from "./storage/paths";
 export {
 	initializePlanFiles,
@@ -563,6 +583,7 @@ export type {
 	ProjectRecord,
 	RecoveryStep,
 	StepStatus,
+	TaskRecord,
 	TaskStatus,
 } from "./storage/schema";
 export {
@@ -581,6 +602,8 @@ export {
 	setPlanStep,
 	updatePlanState,
 } from "./storage/state-store";
+export type { UpsertTaskArtifactsInput } from "./storage/task-store";
+export { readTaskRecord, upsertTaskArtifacts } from "./storage/task-store";
 export type { WorktreeProjectIndexRecord } from "./storage/worktree-index";
 export {
 	createWorktreeProjectIndexPath,

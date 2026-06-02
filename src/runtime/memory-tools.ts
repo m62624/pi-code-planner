@@ -23,12 +23,18 @@ import {
 	readFileIndex,
 	readMemoryCheckpoint,
 	readMemoryDirtyState,
+	readSymbolIndex,
 	writeMemoryCheckpoint,
 	writeProjectPatterns,
 } from "../memory/manager";
+import { buildProjectMap } from "../memory/project-map";
 import { searchProjectFiles } from "../memory/project-search";
 import { retrieveMemoryContext } from "../memory/retrieval";
-import { MEMORY_FILE_KINDS, type MemoryFileKind } from "../memory/schema";
+import {
+	MEMORY_FILE_KINDS,
+	type MemoryFileKind,
+	type MemorySymbolEntry,
+} from "../memory/schema";
 import type {
 	MemoryBatchRejectedEntry,
 	MemoryBatchWriteResult,
@@ -48,6 +54,7 @@ export const PLANNER_MEMORY_TOOL_NAMES = [
 	"planner_memory_inspect",
 	"planner_memory_apply_freshness",
 	"planner_memory_scan_project",
+	"planner_memory_project_map",
 	"planner_memory_search_project",
 	"planner_memory_index_status",
 	"planner_memory_next_file",
@@ -163,6 +170,23 @@ export async function executePlannerMemoryTool(
 					state,
 					summary: summarizeMemoryIndexing(state),
 				});
+			}
+			case "planner_memory_project_map": {
+				const params = asObject(input.params);
+				const result = await buildProjectMap({
+					git: input.git,
+					repoRoot: ready.worktreePath,
+					maxPathsPerGroup: numberOrUndefined(params.maxPathsPerGroup),
+				});
+				return applied(
+					input.toolName,
+					[
+						"Planner mechanical project map.",
+						"Use this bounded map to choose focused search queries. Do not read every file.",
+						JSON.stringify(result, null, 2),
+					].join("\n"),
+					{ result },
+				);
 			}
 			case "planner_memory_search_project": {
 				const params = asObject(input.params);
@@ -350,6 +374,7 @@ export async function executePlannerMemoryTool(
 					paths: ready.memoryPaths,
 					relations: await prepareRelationEntries({
 						fs: input.fs,
+						paths: ready.memoryPaths,
 						worktreePath: ready.worktreePath,
 						relations,
 					}),
@@ -606,7 +631,8 @@ async function prepareSymbolEntries(input: {
 	const rejected: MemoryBatchRejectedEntry[] = [];
 	for (const [index, value] of input.symbols.entries()) {
 		const entry = asObject(value);
-		const path = optionalString(entry, "path");
+		const requestedPath = optionalString(entry, "path");
+		const path = requestedPath ?? activeFile?.path;
 		const file = path ? indexedFiles.get(path) : null;
 		if (
 			!activeFile ||
@@ -679,16 +705,24 @@ async function prepareSymbolEntries(input: {
 
 async function prepareRelationEntries(input: {
 	fs: PlannerFs;
+	paths: NonNullable<PlannerOrchestratorResult["preflight"]["memoryPaths"]>;
 	worktreePath: string;
 	relations: readonly unknown[];
 }): Promise<unknown[]> {
+	const symbols = await readSymbolIndex(input.fs, input.paths);
 	const prepared: unknown[] = [];
 	for (const value of input.relations) {
 		const entry = asObject(value);
-		const from = optionalString(entry, "from") ?? "";
-		const to = entry.to === null ? null : (optionalString(entry, "to") ?? "");
+		const from = resolveSymbolReference(symbols, optionalString(entry, "from"));
+		const to =
+			entry.to === null
+				? null
+				: resolveSymbolReference(symbols, optionalString(entry, "to"));
 		const kind = optionalString(entry, "kind") ?? "unknown";
-		const evidencePath = optionalString(entry, "evidencePath") ?? "";
+		const evidencePath =
+			optionalString(entry, "evidencePath") ??
+			symbols.find((symbol) => symbol.id === from)?.path ??
+			"";
 		const evidenceSearchText =
 			optionalString(entry, "evidenceSearchText") ?? "";
 		if (
@@ -726,6 +760,28 @@ async function prepareRelationEntries(input: {
 		});
 	}
 	return prepared;
+}
+
+function resolveSymbolReference(
+	symbols: readonly MemorySymbolEntry[],
+	reference: string | undefined,
+): string {
+	if (!reference)
+		throw new TypeError("Symbol reference must be a non-empty string.");
+	const matches = symbols.filter(
+		(symbol) =>
+			symbol.id === reference ||
+			symbol.qualifiedName === reference ||
+			symbol.name === reference,
+	);
+	if (matches.length !== 1) {
+		throw new TypeError(
+			matches.length === 0
+				? `Symbol reference does not exist: ${reference}.`
+				: `Symbol reference is ambiguous: ${reference}. Use an exact generated id or qualifiedName.`,
+		);
+	}
+	return matches[0]?.id ?? reference;
 }
 
 function formatMemoryIndexingState(

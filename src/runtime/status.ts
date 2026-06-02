@@ -184,12 +184,13 @@ export const PLANNER_STEP_RULES = {
 	scan_project_structure: stepRule("discovery", "scan_project_structure", {
 		objective: "Select the smallest useful file set for durable memory.",
 		requiredActions: [
+			"Call planner_memory_project_map once to inspect a bounded mechanical repository overview without reading source contents.",
 			"Start with planner_memory_search_project using a query derived from goal.md.",
 			"Inspect bounded ranked excerpts and broaden the query only when context is insufficient.",
 			"Call planner_memory_scan_project with only the relevant paths worth preserving in durable memory.",
 		],
 		allowedNow: [
-			"Use planner_memory_search_project, planner_memory_scan_project, and planner_memory_index_status.",
+			"Use planner_memory_project_map, planner_memory_search_project, planner_memory_scan_project, and planner_memory_index_status.",
 		],
 		forbiddenNow: [
 			"Do not implement code.",
@@ -344,9 +345,10 @@ export const PLANNER_STEP_RULES = {
 	write_task_files: stepRule("planning", "write_task_files", {
 		objective: "Create task artifacts.",
 		requiredActions: [
-			"Write task.json/task.md for each task with scope, acceptance criteria, and affected memory hints.",
+			"Call planner_task_upsert for each behavioral task with scope, acceptance criteria, and bounded memory hints.",
+			"Let the wrapper create task.json, task.md, and empty TDD lifecycle artifacts. Do not write task JSON manually.",
 		],
-		allowedNow: ["Write task planner artifacts only."],
+		allowedNow: ["Use planner_task_upsert for task planner artifacts only."],
 		forbiddenNow: ["Do not write tests or production code yet."],
 		exitCondition: "Every planned task has its required files.",
 		nextInstruction: "Call planner_finish_step to open verify_plan.",

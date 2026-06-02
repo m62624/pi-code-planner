@@ -7,7 +7,12 @@ import {
 } from "../memory/indexing";
 import { readMemoryCheckpoint } from "../memory/manager";
 import type { PlannerFs } from "../storage/fs";
-import type { ProjectStoragePaths } from "../storage/paths";
+import {
+	createTaskStoragePaths,
+	type PlanStoragePaths,
+	type ProjectStoragePaths,
+} from "../storage/paths";
+import { readPlanRecord } from "../storage/plan-store";
 import type { PlanStateRecord } from "../storage/schema";
 import type { PlannerGitReality } from "./git-state-sync";
 import {
@@ -203,7 +208,12 @@ async function validateWorkflowExit(input: {
 		);
 	}
 	if (state.stage !== "execution") {
-		return null;
+		return state.stage === "planning" && state.step === "write_task_files"
+			? await validateTaskArtifacts(
+					input.fs,
+					input.orchestrator.preflight.context.planPaths,
+				)
+			: null;
 	}
 
 	const taskDir = state.activeTaskId
@@ -300,6 +310,24 @@ async function validateWorkflowExit(input: {
 		default:
 			return null;
 	}
+}
+
+async function validateTaskArtifacts(
+	fs: PlannerFs,
+	planPaths: PlanStoragePaths,
+): Promise<string | null> {
+	const plan = await readPlanRecord(fs, planPaths);
+	if (plan.tasks.length === 0) {
+		return "No planner tasks exist. Call planner_task_upsert for each behavioral task before finishing planning/write_task_files.";
+	}
+	for (const task of plan.tasks) {
+		const paths = createTaskStoragePaths(planPaths, task.taskId);
+		for (const path of [paths.taskJson, paths.taskMd]) {
+			const artifactBlock = await requireNonEmptyArtifact(fs, path);
+			if (artifactBlock) return artifactBlock;
+		}
+	}
+	return null;
 }
 
 function validatePreparedTask(state: PlanStateRecord): string | null {

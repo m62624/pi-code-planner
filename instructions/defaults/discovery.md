@@ -7,6 +7,7 @@ Build selective durable project memory before planning or implementation. Discov
 ## Strict Step Order
 
 1. `scan_project_structure`
+   - Call `planner_memory_project_map` once. Use its bounded mechanical overview to identify top-level areas, manifests, entrypoints, tests, and config paths without reading every source file.
    - Build a focused query from the approved goal and call `planner_memory_search_project`.
    - Inspect bounded ranked excerpts. Broaden or refine the query only when context is insufficient.
    - Call `planner_memory_scan_project` with the smallest relevant `paths` set worth preserving.
@@ -20,7 +21,7 @@ Build selective durable project memory before planning or implementation. Discov
    - Continue reading chunks until `EOF: true`.
    - Call `planner_memory_upsert_active_file` with file kind, language, and a concise responsibility summary.
    - Extract reusable functions, methods, traits, interfaces, types, classes, modules, constants, tests, and other language-specific APIs from the active file.
-   - Record symbols with `planner_memory_upsert_symbols` in batches of at most 5. Every symbol requires a signature, concise semantic summary, exact `anchorSearchText`, and effects.
+   - Record symbols with `planner_memory_upsert_symbols` in batches of at most 5. Provide semantic fields only: kind, name, signature, concise summary, exact `anchorSearchText`, and effects. Omit active file path, language, id, hash, and verification fields unless an explicit override is required; the wrapper derives them.
    - Effects must state reads, writes, IO, and global-state behavior. Use `globalState: "unknown"` when evidence is insufficient.
    - Before verification, compare your extracted symbol list against every chunk read from the active file. Check language-specific reusable behavior such as trait or interface methods, implementations, inherited behavior, private reusable helpers, tests, and hidden side effects. The wrapper validates mechanical evidence; you validate semantics.
    - Call `planner_memory_verify_active_file`. The wrapper checks that the file was fully read, its hash did not change, and every candidate anchor still exists in source.
@@ -30,7 +31,7 @@ Build selective durable project memory before planning or implementation. Discov
 3. `write_project_patterns`
    - Use `planner_memory_write_project_patterns` to write evidence-backed architecture, conventions, dependency versions, build commands, test commands, formatting commands, risks, and uncertainty.
 4. `write_relations`
-   - Use `planner_memory_upsert_relations` in batches of at most 5 for evidence-backed relations such as calls, implements, extends, tests, configures, depends_on, exposes, reads, and writes.
+   - Use `planner_memory_upsert_relations` in batches of at most 5 for evidence-backed relations such as calls, implements, extends, tests, configures, depends_on, exposes, reads, and writes. Prefer a unique symbol name or qualified name; use generated ids only when a name is ambiguous. Omit `evidencePath` when the relation evidence is in the `from` symbol file.
    - Relation evidence must contain a project-relative file path and an exact source substring.
    - Relationships may be recorded after file indexing because cross-file meaning is clearer when reusable symbols are already available.
    - Review the completed symbol index before leaving this step. Add only important reusable relations; record uncertainty instead of inventing a link.

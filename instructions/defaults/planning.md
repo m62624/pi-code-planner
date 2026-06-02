@@ -24,7 +24,9 @@ At `planning/read_memory`, load context in this order:
    - Split the plan into small ordered tasks.
    - Each task must be independently understandable and small enough for one TDD loop.
 4. `write_task_files`
-   - Create one `task.json` and `task.md` per task.
+   - Call `planner_task_upsert` once per behavioral task.
+   - Provide semantic fields only: task id, title, objective, scope, acceptance criteria, and bounded memory hints.
+   - The wrapper creates `task.json`, `task.md`, and empty TDD lifecycle artifacts. Do not write task JSON manually.
    - Each `task.md` must state scope, acceptance criteria, expected files or symbols, dependency context, checks, and memory hints.
 5. `verify_plan`
    - Verify that tasks are ordered, bounded, testable, and free of hidden broad work.

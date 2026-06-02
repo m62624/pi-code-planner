@@ -56,6 +56,7 @@ describe("planner wrapper tool policy", () => {
 			"planner_git_inspect",
 			"planner_git_merge_selected_experiment",
 			"planner_memory_search",
+			"planner_memory_project_map",
 			"planner_memory_search_project",
 		] satisfies PlannerWrapperTool[]);
 
@@ -69,6 +70,7 @@ describe("planner wrapper tool policy", () => {
 			"planner_git_inspect",
 			"planner_git_merge_task_to_plan",
 			"planner_memory_search",
+			"planner_memory_project_map",
 			"planner_memory_search_project",
 		] satisfies PlannerWrapperTool[]);
 	});
@@ -83,6 +85,7 @@ describe("planner wrapper tool policy", () => {
 			"planner_status",
 			"planner_git_inspect",
 			"planner_memory_search",
+			"planner_memory_project_map",
 			"planner_memory_search_project",
 		] satisfies PlannerWrapperTool[]);
 		expect(
@@ -113,6 +116,25 @@ describe("planner wrapper tool policy", () => {
 		).toBe(false);
 	});
 
+	it("allows wrapper-generated task artifacts only during planning write_task_files", () => {
+		expect(
+			checkPlannerWrapperAllowed({
+				tool: "planner_task_upsert",
+				state: {
+					...baseState,
+					stage: "planning",
+					step: "write_task_files",
+				},
+			}),
+		).toMatchObject({ allow: true });
+		expect(
+			checkPlannerWrapperAllowed({
+				tool: "planner_task_upsert",
+				state: { ...baseState, stage: "planning", step: "draft_plan" },
+			}),
+		).toMatchObject({ allow: false });
+	});
+
 	it("blocks normal wrappers while compact is required", () => {
 		const decision = checkPlannerWrapperAllowed({
 			tool: "planner_git_inspect",
@@ -137,6 +159,7 @@ describe("planner wrapper tool policy", () => {
 			"planner_memory_inspect",
 			"planner_memory_apply_freshness",
 			"planner_memory_scan_project",
+			"planner_memory_project_map",
 			"planner_memory_search_project",
 			"planner_memory_index_status",
 			"planner_memory_next_file",

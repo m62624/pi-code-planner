@@ -235,6 +235,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		updatedArtifacts: ["memory/indexing.json"],
 		requiredGates: ["plan_worktree_exists"],
 		expectedTools: [
+			"planner_memory_project_map",
 			"planner_memory_search_project",
 			"planner_memory_scan_project",
 			"planner_memory_index_status",
@@ -357,12 +358,17 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		["plan.md"],
 		["plan.md"],
 	),
-	write_task_files: artifactBehavior(
-		"planning",
-		"write_task_files",
-		["task.json", "task.md"],
-		["plan.md"],
-	),
+	write_task_files: behavior("planning", "write_task_files", {
+		projectAccess: "planner_artifacts",
+		actions: ["write_artifacts"],
+		requiredArtifacts: ["plan.md"],
+		updatedArtifacts: ["task.json", "task.md"],
+		requiredGates: [],
+		expectedTools: ["planner_task_upsert"],
+		commitPolicy: "forbidden",
+		memoryPolicy: "read_first",
+		compactPolicy: "not_allowed",
+	}),
 	verify_plan: behavior("planning", "verify_plan", {
 		projectAccess: "planner_artifacts",
 		actions: ["write_artifacts"],
@@ -897,6 +903,8 @@ function isMemoryReadTool(tool: PlannerWrapperTool): boolean {
 	return (
 		tool === "planner_memory_inspect" ||
 		tool === "planner_memory_search" ||
+		tool === "planner_memory_project_map" ||
+		tool === "planner_memory_search_project" ||
 		tool === "planner_memory_index_status"
 	);
 }

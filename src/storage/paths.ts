@@ -29,6 +29,18 @@ export interface PlanStoragePaths {
 	tasksDir: string;
 }
 
+export interface TaskStoragePaths {
+	taskDir: string;
+	taskJson: string;
+	taskMd: string;
+	tddMd: string;
+	testsMd: string;
+	implementationMd: string;
+	refactorMd: string;
+	verifyMd: string;
+	experimentsDir: string;
+}
+
 export function createProjectStoragePaths(input: {
 	agentDir: string;
 	projectRoot: string;
@@ -69,5 +81,23 @@ export function createPlanStoragePaths(
 		decisionsMd: join(planDir, "decisions.md"),
 		memoryDir: join(planDir, "memory"),
 		tasksDir: join(planDir, "tasks"),
+	};
+}
+
+export function createTaskStoragePaths(
+	planPaths: PlanStoragePaths,
+	taskId: string,
+): TaskStoragePaths {
+	const taskDir = join(planPaths.tasksDir, taskId);
+	return {
+		taskDir,
+		taskJson: join(taskDir, "task.json"),
+		taskMd: join(taskDir, "task.md"),
+		tddMd: join(taskDir, "tdd.md"),
+		testsMd: join(taskDir, "tests.md"),
+		implementationMd: join(taskDir, "implementation.md"),
+		refactorMd: join(taskDir, "refactor.md"),
+		verifyMd: join(taskDir, "verify.md"),
+		experimentsDir: join(taskDir, "experiments"),
 	};
 }

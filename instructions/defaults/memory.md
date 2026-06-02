@@ -19,13 +19,14 @@ Memory is a selective durable knowledge base for context-limited local models. I
 Do not index the whole repository by default.
 
 1. Build a task-oriented query from the approved goal or active task.
-2. Call `planner_memory_search_project`.
-3. Inspect the bounded ranked excerpts.
-4. Refine or broaden the query only when context is insufficient.
-5. Call `planner_memory_scan_project` with the smallest relevant `paths` set worth preserving.
-6. Read source through the bounded file loop before trusting or editing it.
+2. Call `planner_memory_project_map` once for a bounded mechanical overview. It does not read project source contents.
+3. Call `planner_memory_search_project`.
+4. Inspect the bounded ranked excerpts.
+5. Refine or broaden the query only when context is insufficient.
+6. Call `planner_memory_scan_project` with the smallest relevant `paths` set worth preserving.
+7. Read source through the bounded file loop before trusting or editing it.
 
-`planner_memory_search_project` is mechanical and CPU-only. It does not start another model, consume VRAM, or persist a full-project semantic database.
+`planner_memory_project_map` and `planner_memory_search_project` are mechanical and CPU-only. They do not start another model, consume VRAM, or persist a full-project semantic database.
 
 ## Selected File Rule
 

@@ -11,6 +11,7 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_goal_decide",
 	"planner_questions_submit",
 	"planner_questions_resolve",
+	"planner_task_upsert",
 	"planner_git_inspect",
 	"planner_git_init",
 	"planner_git_commit",
@@ -24,6 +25,7 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_memory_inspect",
 	"planner_memory_apply_freshness",
 	"planner_memory_scan_project",
+	"planner_memory_project_map",
 	"planner_memory_search_project",
 	"planner_memory_index_status",
 	"planner_memory_next_file",
@@ -84,6 +86,7 @@ const STEP_ALLOWED_TOOLS = {
 	discovery: {
 		scan_project_structure: [
 			"planner_git_inspect",
+			"planner_memory_project_map",
 			"planner_memory_search_project",
 			"planner_memory_scan_project",
 			"planner_memory_index_status",
@@ -114,7 +117,7 @@ const STEP_ALLOWED_TOOLS = {
 		read_memory: ["planner_memory_inspect", "planner_memory_search"],
 		draft_plan: [],
 		split_tasks: [],
-		write_task_files: [],
+		write_task_files: ["planner_task_upsert"],
 		verify_plan: [],
 		compact_planning: [],
 		enter_execution: [],
@@ -208,6 +211,7 @@ export function getAllowedPlannerWrapperTools(
 			"planner_memory_inspect",
 			"planner_memory_apply_freshness",
 			"planner_memory_scan_project",
+			"planner_memory_project_map",
 			"planner_memory_search_project",
 			"planner_memory_index_status",
 			"planner_memory_next_file",
@@ -235,7 +239,11 @@ export function getAllowedPlannerWrapperTools(
 	return withAlwaysAllowed([
 		...stepRules,
 		...(MEMORY_SEARCH_STAGES.has(state.stage)
-			? (["planner_memory_search", "planner_memory_search_project"] as const)
+			? ([
+					"planner_memory_search",
+					"planner_memory_project_map",
+					"planner_memory_search_project",
+				] as const)
 			: []),
 	]);
 }

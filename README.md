@@ -138,7 +138,7 @@ The model builds durable project memory before implementation.
 
 | Step | Purpose |
 | --- | --- |
-| `scan_project_structure` | Search Git-visible files mechanically on CPU, then persist only the smallest useful indexing queue. |
+| `scan_project_structure` | Build a bounded mechanical project map, search Git-visible files on CPU, then persist only the smallest useful indexing queue. |
 | `index_files_iteratively` | Read exactly one selected file at a time in bounded chunks, record reusable symbols, verify anchors, then continue. |
 | `write_project_patterns` | Record architecture, dependencies, conventions, and test patterns. |
 | `write_relations` | Record evidence-backed relations between files and symbols. |
@@ -154,7 +154,7 @@ The model builds durable project memory before implementation.
 | `read_memory` | Reconstruct context from bounded project memory. |
 | `draft_plan` | Write the implementation strategy, constraints, risks, and checks. |
 | `split_tasks` | Divide the plan into ordered behavioral tasks. Tests stay inside each task's TDD cycle, never as standalone test items. |
-| `write_task_files` | Create `task.json` and `task.md` for each task. |
+| `write_task_files` | Call `planner_task_upsert`; the wrapper creates `task.json`, `task.md`, and empty TDD lifecycle artifacts. |
 | `verify_plan` | Confirm that tasks are bounded, ordered, and testable. |
 | `compact_planning` | Compact planning context when enabled. |
 | `enter_execution` | Start the first task. |
@@ -331,7 +331,7 @@ Key files:
 | `decisions.md` | Durable user decisions. |
 | `memory/*` | Bounded project context and freshness checkpoints. |
 
-Memory is selective: the planner does not force a local model to read and preserve every file in a repository. `planner_memory_search_project` performs bounded CPU-only working-tree search without another model or VRAM usage. The model stores only relevant files and may broaden its query when context is insufficient.
+Memory is selective: the planner does not force a local model to read and preserve every file in a repository. `planner_memory_project_map` summarizes areas, manifests, entrypoints, tests, and config paths without reading source contents. `planner_memory_search_project` performs bounded CPU-only working-tree search without another model or VRAM usage. The model stores only relevant files and may broaden its query when context is insufficient.
 
 ## Settings And Overrides ⚙️
 

@@ -23,7 +23,11 @@ import {
 	createPlanStoragePaths,
 	createProjectStoragePaths,
 } from "../storage/paths";
-import { initializePlanFiles } from "../storage/plan-store";
+import {
+	initializePlanFiles,
+	readPlanRecord,
+	savePlanRecord,
+} from "../storage/plan-store";
 import { ensureProjectRecord, setActivePlan } from "../storage/project-store";
 import {
 	createInitialPlanState,
@@ -31,6 +35,7 @@ import {
 	type PlanStateRecord,
 } from "../storage/schema";
 import { initializePlanState, readPlanState } from "../storage/state-store";
+import { upsertTaskArtifacts } from "../storage/task-store";
 import { MockPlannerFs } from "../test/mock-fs";
 import {
 	executePlannerWorkflowTool,
@@ -292,6 +297,36 @@ describe("planner workflow tools", () => {
 			code: "runtime_blocked",
 		});
 		expect(result.text).toContain("planner_git_create_task_branch");
+	});
+
+	it("blocks planning task artifact completion until wrapper-generated tasks exist", async () => {
+		const setup = await createWorkflowSetup({
+			stage: "planning",
+			step: "write_task_files",
+			stepStatus: "running",
+		});
+
+		const blocked = await finishStep(setup);
+		expect(blocked.result).toMatchObject({ status: "blocked" });
+		expect(blocked.text).toContain("planner_task_upsert");
+
+		await upsertTaskArtifacts(setup.fs, setup.planPaths, {
+			taskId: "task-1",
+			title: "Task one",
+			objective: "Implement one behavior.",
+			scope: [],
+			acceptanceCriteria: ["Focused behavior passes."],
+			memoryHints: [],
+		});
+		const plan = await readPlanRecord(setup.fs, setup.planPaths);
+		await savePlanRecord(setup.fs, setup.planPaths, {
+			...plan,
+			tasks: [{ taskId: "task-1", title: "Task one", status: "pending" }],
+		});
+
+		await expect(finishStep(setup)).resolves.toMatchObject({
+			result: { status: "applied" },
+		});
 	});
 
 	it("blocks TDD plan completion while tdd.md is empty", async () => {

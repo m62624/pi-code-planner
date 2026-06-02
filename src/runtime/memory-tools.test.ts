@@ -85,6 +85,40 @@ class MockGitRunner implements GitRunner {
 }
 
 describe("planner memory tools", () => {
+	it("returns a bounded mechanical project map before selective source search", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createMemoryToolSetup(fs, {
+			state: {
+				stage: "discovery",
+				step: "scan_project_structure",
+				stepStatus: "running",
+			},
+			fileContent: "export const unrelated = 1;\n",
+			indexedHash: hashOf("export const unrelated = 1;\n"),
+			checkpointCommit: "abc123",
+		});
+
+		const result = await executePlannerMemoryTool({
+			fs,
+			git: new MockGitRunner({
+				files: ["package.json", "src/index.ts", "tests/index.test.ts"],
+			}),
+			projectPaths: setup.projectPaths,
+			toolName: "planner_memory_project_map",
+			params: {},
+		});
+
+		expect(result.status).toBe("applied");
+		expect(result.details).toMatchObject({
+			result: {
+				totalFiles: 3,
+				manifests: ["package.json"],
+				entrypoints: ["src/index.ts"],
+				testPaths: ["tests/index.test.ts"],
+			},
+		});
+	});
+
 	it("searches the project mechanically and queues only selected relevant files", async () => {
 		const fs = new MockPlannerFs();
 		const setup = await createMemoryToolSetup(fs, {
@@ -241,7 +275,6 @@ describe("planner memory tools", () => {
 			params: {
 				symbols: [
 					{
-						path: "src/a.ts",
 						name: "value",
 						kind: "constant",
 						signature: "value: number",
@@ -617,10 +650,9 @@ describe("planner memory tools", () => {
 			params: {
 				relations: [
 					{
-						from: "sym_value",
+						from: "value",
 						to: null,
 						kind: "exposes",
-						evidencePath: "src/a.ts",
 						evidenceSearchText: "value",
 					},
 				],

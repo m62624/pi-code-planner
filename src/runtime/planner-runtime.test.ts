@@ -218,6 +218,7 @@ describe("planner runtime reality evaluator", () => {
 			"planner_memory_inspect",
 			"planner_memory_apply_freshness",
 			"planner_memory_scan_project",
+			"planner_memory_project_map",
 			"planner_memory_search_project",
 			"planner_memory_index_status",
 			"planner_memory_next_file",
@@ -360,6 +361,7 @@ describe("planner runtime reality evaluator", () => {
 			"planner_git_inspect",
 			"planner_git_commit",
 			"planner_memory_search",
+			"planner_memory_project_map",
 			"planner_memory_search_project",
 		] satisfies PlannerWrapperTool[]);
 	});

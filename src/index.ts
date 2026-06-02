@@ -78,6 +78,11 @@ import {
 	type PlannerRecoveryToolName,
 } from "./runtime/recovery-tools";
 import {
+	executePlannerTaskTool,
+	PLANNER_TASK_TOOL_NAMES,
+	type PlannerTaskToolName,
+} from "./runtime/task-tools";
+import {
 	confirmPlannerDelete,
 	inputPlannerRenameTitle,
 	selectPlannerPlanId,
@@ -195,6 +200,36 @@ const QUESTIONS_RESOLVE_TOOL_PARAMETERS = {
 	additionalProperties: false,
 } as const;
 
+const TASK_UPSERT_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		taskId: {
+			type: "string",
+			description:
+				"Stable lowercase ASCII id for one behavioral task, for example parse-config.",
+		},
+		title: { type: "string" },
+		objective: { type: "string" },
+		scope: { type: "array", items: { type: "string" } },
+		acceptanceCriteria: { type: "array", items: { type: "string" } },
+		memoryHints: {
+			type: "array",
+			items: { type: "string" },
+			description:
+				"Symbols, paths, or concepts for bounded memory retrieval before TDD.",
+		},
+	},
+	required: [
+		"taskId",
+		"title",
+		"objective",
+		"scope",
+		"acceptanceCriteria",
+		"memoryHints",
+	],
+	additionalProperties: false,
+} as const;
+
 const COMPLETE_STEP_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {
@@ -293,6 +328,18 @@ const MEMORY_SEARCH_PROJECT_TOOL_PARAMETERS = {
 	additionalProperties: false,
 } as const;
 
+const MEMORY_PROJECT_MAP_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		maxPathsPerGroup: {
+			type: "number",
+			description:
+				"Optional bounded path count for map groups. Defaults to 30 and is capped at 100.",
+		},
+	},
+	additionalProperties: false,
+} as const;
+
 const MEMORY_ACTIVE_FILE_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {
@@ -325,7 +372,7 @@ const MEMORY_SYMBOLS_TOOL_PARAMETERS = {
 					path: {
 						type: "string",
 						description:
-							"Current active file path already recorded by planner_memory_upsert_active_file.",
+							"Optional compatibility override. Usually omit it: the extension derives the current active file path.",
 					},
 					language: {
 						type: "string",
@@ -365,7 +412,7 @@ const MEMORY_SYMBOLS_TOOL_PARAMETERS = {
 							"Optional stable source text used to relocate the symbol. Defaults to signature.",
 					},
 				},
-				required: ["path", "kind", "name", "signature", "summary", "effects"],
+				required: ["kind", "name", "signature", "summary", "effects"],
 				additionalProperties: false,
 			},
 		},
@@ -380,7 +427,7 @@ const MEMORY_RELATIONS_TOOL_PARAMETERS = {
 		relations: {
 			type: "array",
 			description:
-				"Evidence-backed relations. from/to reference symbol ids; evidencePath must already be indexed.",
+				"Evidence-backed relations. from/to accept a generated symbol id, unique name, or qualified name. evidencePath defaults to the from symbol file and must already be indexed.",
 			items: {
 				type: "object",
 				properties: {
@@ -391,10 +438,14 @@ const MEMORY_RELATIONS_TOOL_PARAMETERS = {
 					from: { type: "string" },
 					to: { type: ["string", "null"] },
 					kind: { type: "string", enum: MEMORY_RELATION_KINDS },
-					evidencePath: { type: "string" },
+					evidencePath: {
+						type: "string",
+						description:
+							"Optional. Defaults to the source path of the from symbol.",
+					},
 					evidenceSearchText: { type: "string" },
 				},
-				required: ["from", "to", "kind", "evidencePath", "evidenceSearchText"],
+				required: ["from", "to", "kind", "evidenceSearchText"],
 				additionalProperties: false,
 			},
 		},
@@ -1002,6 +1053,30 @@ function registerPlannerTools(
 		});
 	}
 
+	for (const toolName of PLANNER_TASK_TOOL_NAMES) {
+		pi.registerTool({
+			name: toolName,
+			label: taskToolLabel(toolName),
+			description: taskToolDescription(toolName),
+			promptSnippet:
+				"Use planner_task_upsert during planning/write_task_files. Pass semantic task fields only; the wrapper writes task.json, task.md, and empty TDD lifecycle artifacts.",
+			parameters: TASK_UPSERT_TOOL_PARAMETERS as never,
+			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const result = await executePlannerTaskTool({
+					fs: createNodeFs(),
+					git: new NodeGitRunner(),
+					projectPaths: await createRuntimeProjectPaths(ctx.cwd),
+					toolName,
+					params,
+				});
+				return {
+					content: [{ type: "text", text: result.text }],
+					details: result,
+				};
+			},
+		});
+	}
+
 	for (const toolName of PLANNER_WORKFLOW_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
@@ -1050,7 +1125,7 @@ function registerPlannerTools(
 			label: memoryToolLabel(toolName),
 			description: memoryToolDescription(toolName),
 			promptSnippet:
-				"Use planner memory tools when planner_status requires indexing or refresh. Process one active file at a time: scan queue, claim file, read bounded chunks to EOF, upsert file metadata, upsert at most 5 symbols per call, verify, complete, then claim the next file. After compact, call planner_status and resume the persisted next unread line.",
+				"Use planner memory tools when planner_status requires indexing or refresh. Start with the bounded mechanical project map, then search selectively. Process one active file at a time: scan the selected queue, claim file, read bounded chunks to EOF, upsert file metadata, upsert at most 5 semantic symbols per call, verify, complete, then claim the next file. Omit derived ids, hashes, verification, and active file paths. After compact, call planner_status and resume the persisted next unread line.",
 			parameters: memoryToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const result = await executePlannerMemoryTool({
@@ -1311,6 +1386,20 @@ function questionToolParameters(toolName: PlannerQuestionToolName) {
 	}
 }
 
+function taskToolLabel(toolName: PlannerTaskToolName): string {
+	switch (toolName) {
+		case "planner_task_upsert":
+			return "Planner Task Upsert";
+	}
+}
+
+function taskToolDescription(toolName: PlannerTaskToolName): string {
+	switch (toolName) {
+		case "planner_task_upsert":
+			return "Create or replace one behavioral task from semantic fields. The wrapper writes task.json, task.md, and empty TDD lifecycle artifacts.";
+	}
+}
+
 function gitToolLabel(toolName: PlannerGitToolName): string {
 	switch (toolName) {
 		case "planner_git_inspect":
@@ -1389,6 +1478,8 @@ function memoryToolLabel(toolName: PlannerMemoryToolName): string {
 			return "Planner Memory Apply Freshness";
 		case "planner_memory_scan_project":
 			return "Planner Memory Scan Project";
+		case "planner_memory_project_map":
+			return "Planner Memory Project Map";
 		case "planner_memory_search_project":
 			return "Planner Memory Search Project";
 		case "planner_memory_index_status":
@@ -1428,6 +1519,8 @@ function memoryToolDescription(toolName: PlannerMemoryToolName): string {
 			return "Mark stale memory entries dirty or missing before the model rewrites affected memory.";
 		case "planner_memory_scan_project":
 			return "Build or resume a selective durable indexing queue. Initial discovery indexes only explicitly selected paths; refresh mode includes stale indexed files.";
+		case "planner_memory_project_map":
+			return "Build a bounded CPU-only map of project areas, languages, manifests, entrypoints, tests, and config paths without reading source contents.";
 		case "planner_memory_search_project":
 			return "Search the working tree mechanically on CPU and return bounded ranked excerpts. Does not persist a whole-project index.";
 		case "planner_memory_index_status":
@@ -1478,6 +1571,8 @@ function memoryToolParameters(toolName: PlannerMemoryToolName) {
 			return MEMORY_APPLY_FRESHNESS_TOOL_PARAMETERS;
 		case "planner_memory_scan_project":
 			return MEMORY_SCAN_PROJECT_TOOL_PARAMETERS;
+		case "planner_memory_project_map":
+			return MEMORY_PROJECT_MAP_TOOL_PARAMETERS;
 		case "planner_memory_search_project":
 			return MEMORY_SEARCH_PROJECT_TOOL_PARAMETERS;
 		case "planner_memory_inspect":

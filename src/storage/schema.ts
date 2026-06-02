@@ -204,6 +204,17 @@ export interface PlanTaskSummary {
 	status: TaskStatus;
 }
 
+export interface TaskRecord {
+	schemaVersion: typeof SCHEMA_VERSION;
+	taskId: string;
+	title: string;
+	status: TaskStatus;
+	objective: string;
+	scope: string[];
+	acceptanceCriteria: string[];
+	memoryHints: string[];
+}
+
 export interface PlanRecord {
 	schemaVersion: typeof SCHEMA_VERSION;
 	planId: string;
