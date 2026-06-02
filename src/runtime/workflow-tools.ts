@@ -16,6 +16,10 @@ import { readPlanRecord } from "../storage/plan-store";
 import type { PlanStateRecord } from "../storage/schema";
 import type { PlannerGitReality } from "./git-state-sync";
 import {
+	decidePlannerLifecycleNext,
+	type PlannerLifecycleDecision,
+} from "./lifecycle";
+import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
@@ -54,6 +58,7 @@ export interface PlannerWorkflowToolExecutionResult {
 	text: string;
 	transition: PlannerStateTransition;
 	result: PlannerStateTransitionResult;
+	lifecycle: PlannerLifecycleDecision | null;
 }
 
 export async function executePlannerWorkflowTool(
@@ -80,9 +85,10 @@ export async function executePlannerWorkflowTool(
 			state,
 		};
 		return {
-			text: formatWorkflowToolResult(result),
+			text: formatWorkflowToolResult(result, null),
 			transition,
 			result,
+			lifecycle: null,
 		};
 	}
 	const exitBlock = await validateWorkflowExit({
@@ -103,11 +109,13 @@ export async function executePlannerWorkflowTool(
 			state,
 		};
 		return {
-			text: formatWorkflowToolResult(result),
+			text: formatWorkflowToolResult(result, null),
 			transition,
 			result,
+			lifecycle: null,
 		};
 	}
+	const lifecycle = decidePlannerLifecycleNext(orchestrator.preflight);
 	const result = await applyPlannerStateTransition({
 		fs: input.fs,
 		preflight: orchestrator.preflight,
@@ -115,9 +123,10 @@ export async function executePlannerWorkflowTool(
 	});
 
 	return {
-		text: formatWorkflowToolResult(result),
+		text: formatWorkflowToolResult(result, lifecycle),
 		transition,
 		result,
+		lifecycle,
 	};
 }
 
@@ -493,6 +502,7 @@ export function workflowToolTransition(
 
 function formatWorkflowToolResult(
 	result: PlannerStateTransitionResult,
+	lifecycle: PlannerLifecycleDecision | null,
 ): string {
 	if (result.status === "blocked") {
 		return [
@@ -508,15 +518,24 @@ function formatWorkflowToolResult(
 			.join("\n");
 	}
 
-	return [
+	const lines: string[] = [
 		`Planner transition applied: ${result.transition.type}`,
 		`Previous: ${result.previousState.stage}/${result.previousState.step} (${result.previousState.stepStatus})`,
 		`Current: ${result.state.stage}/${result.state.step} (${result.state.stepStatus})`,
-		result.state.nextStep ? `Next step: ${result.state.nextStep}` : null,
-		"Call planner_status before choosing the next planner action.",
-	]
-		.filter(Boolean)
-		.join("\n");
+		...(result.state.nextStep ? [`Next step: ${result.state.nextStep}`] : []),
+	];
+
+	if (
+		result.transition.type === "start_step" &&
+		lifecycle &&
+		lifecycle.requiredTool
+	) {
+		lines.push(`Recommended finish tool: ${lifecycle.requiredTool}`);
+	}
+
+	lines.push("Call planner_status before choosing the next planner action.");
+
+	return lines.filter(Boolean).join("\n");
 }
 
 function asObject(value: unknown): Record<string, unknown> {
