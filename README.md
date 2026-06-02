@@ -1,448 +1,213 @@
-This repository is an experiment built with Pi Code and Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf for local coding work. The project may contain non-professional design choices, rough edges, or mistakes. Use it at your own risk.
+> ⚠️ This repository is an experiment built with Pi Code and Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf for local coding work. The project may contain non-professional design choices, rough edges, or mistakes. Use it at your own risk.
 
-# pi-code-planner
+# pi-code-planner 🧭
 
-`pi-code-planner` is an experimental Pi Code extension for long-running coding work with local language models.
+`pi-code-planner` is an experimental [Pi Code](https://github.com/badlogic/pi-mono) extension for coding with local language models on consumer hardware.
 
-The project is designed around a practical constraint: a smaller local model can often write focused code well, but it may lose architectural context, skip validation, repeat work after compaction, or confuse git state during a long session. This extension adds a disk-first workflow that narrows each action, persists progress, and guides the model through one explicit step at a time.
-
-The extension is primarily a helper for local models themselves. It does not try to replace the model's reasoning. It provides a harness around that reasoning:
-
-- one persistent plan state per project plan
-- one isolated git worktree per active plan
-- explicit discovery and planning before implementation
-- strict tests-first task execution
-- sequential experiment branches for alternative implementations
-- compressed project memory with file hashes, signatures, relations, and effects
-- compact boundaries that restore context through persisted artifacts
-- planner-controlled git wrappers and recovery checks
-- `planner_status` as the model-facing navigation tool
-
-This is an experimental personal project, not a production-ready automation system.
-
-## Why This Exists
-
-Large hosted models can often hold broad project context and decompose tasks on their own. Smaller local models benefit from a stricter environment:
-
-```text
-understand project
-  -> persist compressed memory
-  -> create one bounded plan
-  -> select one atomic task
-  -> write tests first
-  -> try one or more implementation candidates
-  -> select the best candidate
-  -> refactor and verify
-  -> merge into the plan branch
-  -> compact context
-  -> continue with the next task
-```
-
-The extension uses files and git as durable memory. Chat history is useful, but it is not the source of truth.
-
-## Current Status
-
-The TypeScript layers, mock tests, state machine, tools, instruction sync, and Pi registrations are implemented. The repository still needs broader live beta testing with real Pi sessions and local models.
-
-Known limitation: recovery currently provides inspection and non-destructive resume. Destructive recovery actions such as reset, forced checkout, or discarding dirty changes are intentionally not exposed as model tools.
-
-## Installation
-
-Install the extension directly from GitHub:
+Install it directly from GitHub:
 
 ```bash
 pi install git:github.com/m62624/pi-code-planner
 ```
 
-Then open Pi in the project directory where you want to use the planner.
-
-## Requirements
-
-- Pi Code
-- Node.js
-- Git
-- a project directory where git can be initialized or used
-
-The extension is model-agnostic, but it is specifically designed for local-model workflows.
-
-## Development Setup
-
-Clone this repository, or your own fork, when you want to modify the extension locally:
-
-```bash
-git clone https://github.com/m62624/pi-code-planner.git
-cd pi-code-planner
-npm install
-npm run build
-```
-
-Run Pi with the extension loaded directly from the local working tree:
-
-```bash
-pi -e ./src/index.ts
-```
-
-To install a modified fork through Pi instead, use the fork repository:
-
-```bash
-pi install git:github.com/<account>/pi-code-planner
-```
-
-## Start A Plan
-
-Open Pi in the project you want to modify and run:
+Then open Pi inside a Git project and run:
 
 ```text
 /planner-create
 ```
 
-Pi opens a multiline editor for the requested outcome. Describe the complete goal
-there; the model will normalize it into `goal.md`, ask for approval, inspect the
-project, and ask evidence-based questions later during discovery.
+Pi opens a multiline editor. Describe the outcome you want. The extension creates an isolated worktree, moves Pi into that worktree session, and starts a deterministic workflow around the model.
 
-Optional explicit plan id:
+## Why Pi? 🪶
 
-```text
-/planner-create --id focused-change
-```
+Pi was chosen as the harness because it is intentionally small. It does not assume that every coding agent has cloud-scale context, many concurrent subagents, or a large infrastructure budget.
 
-If no id is provided, the extension generates a deterministic slug from the raw
-request and adds a numeric suffix when needed. Inline text after the command is
-accepted only as an optional editor prefill. The human-readable title is generated
-from the first non-empty request line and kept short; the full text remains in
-`request.md`.
+That matters for local models. On a single consumer machine, KV cache, RAM, VRAM, and prompt length are constrained. A local model may write focused code well but still lose project context after compaction, skip verification, repeat work, or confuse Git state during a long task. Running many subagents can make those limits worse.
 
-Plan creation performs the bootstrap automatically:
+`pi-code-planner` adds only the structure needed to help a local model stay oriented:
 
-```text
-resolve project
-  -> check git
-  -> prepare planner storage
-  -> create plan branch
-  -> create plan worktree
-  -> locally exclude nested worktrees from the base checkout
-  -> commit the tracked worktree ignore rule on the plan branch when needed
-  -> persist state.json
-  -> write a valid Pi session JSONL header with the worktree cwd
-  -> switch Pi into a worktree session
-  -> keep the JSONL header so Pi can discover the worktree session
-  -> save the raw request in request.md
-  -> start intake/draft_goal
-```
+- one persisted state machine;
+- one isolated Git worktree per plan;
+- explicit discovery before implementation;
+- bounded project memory with file hashes and API signatures;
+- tests-first task execution;
+- controlled Git wrappers;
+- recovery checks when persisted state and repository reality disagree;
+- `planner_status` as the model-facing source of truth.
 
-After switching sessions, the model should call:
+This is not a guarantee of better output. The extension can also make results worse by adding overhead or constraining the model at the wrong time. It is an experiment in controlling a small stochastic coding model with deterministic code around it.
+
+The extension was tested primarily with `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf`, but the workflow is model-agnostic.
+
+## Basic Workflow 🔄
 
 ```text
-planner_status
+user request
+  -> normalize and approve goal
+  -> inspect project one file at a time
+  -> persist compressed memory
+  -> write an implementation plan
+  -> split work into atomic tasks
+  -> write tests first
+  -> implement and compare candidates
+  -> refactor and verify
+  -> merge completed tasks into one plan branch
+  -> ask the user to accept or request changes
+  -> export one ordinary output commit
 ```
 
-The model must rewrite the raw request into `goal.md` in its own words and wait for explicit user approval. Discovery remains blocked until the user approves the normalized goal. Project-specific clarification questions are collected after discovery has produced evidence.
+The chat is not the source of truth. Durable JSON and Markdown artifacts are. After compaction or recovery, the model calls `planner_status`, reloads the current position, and continues from persisted state.
 
-## User Commands
+## User Commands 🎛️
 
-These are Pi slash commands for the user. They are not model tools.
+These are Pi slash commands for the user. The model has separate internal tools.
 
 | Command | Purpose |
 | --- | --- |
-| `/planner-create [--id <plan-id>] [initial text]` | Open a multiline request editor, then create a plan, worktree, state files, and worktree Pi session. The optional id controls stable branch and folder naming; inline text is only an editor prefill. |
-| `/planner-switch [<plan-id>]` | Switch to another plan in the current project. Without an id, open the TUI picker. Reopens the most recent non-empty Pi JSONL history for that worktree instead of creating a fresh chat. |
-| `/planner-rename [--id <plan-id>] <new-title>` | Rename a human-readable plan title without changing ids, branches, or paths. |
-| `/planner-delete [<plan-id>]` | Delete a selected inactive plan after confirmation. Without an id, open the TUI picker. |
-| `/planner-delete --force-active <plan-id>` | Explicit escape hatch: remove an active plan, its worktree, related planner files, and managed child branches. |
-| `/planner-accept` | Explicitly accept a presented result, export one output branch, remove temporary planner state, and return Pi to the original project session. Valid after `done/present_result` or during `done/await_user_acceptance`. |
+| `/planner-create` | Open a multiline request editor and create a new plan. |
+| `/planner-create --id <plan-id>` | Create a plan with an explicit stable id. Without `--id`, a deterministic id is generated from the request. |
+| `/planner-switch` | Open a TUI picker for plans in the current project. |
+| `/planner-switch <plan-id>` | Activate a plan directly and resume its most recent non-empty worktree chat. |
+| `/planner-rename` | Open a TUI picker, then rename the selected plan title. |
+| `/planner-rename --id <plan-id> <title>` | Rename a plan directly without changing branches or paths. |
+| `/planner-delete` | Open a TUI picker and delete a selected plan after confirmation. |
+| `/planner-delete --force-active <plan-id>` | Explicit escape hatch: remove an active plan, its worktree, planner files, and managed child branches. |
+| `/planner-accept` | Accept a completed plan, export `output/<plan-id>`, remove temporary planner state, and return Pi to the original project session. |
 
-## Core Model Rule
+### Planner Switch And Pi Resume
 
-When a plan is active, the model should call `planner_status` whenever it is unsure what to do next and after every planner tool result, compact boundary, recovery action, or user decision.
+Each plan has its own worktree, Git branch, state file, and Pi JSONL history.
 
-`planner_status` returns:
+Use `/planner-switch` for planner work. It updates the active plan, reopens the selected worktree session, restores the worktree CWD, and resumes its latest non-empty JSONL chat. It does not create an extra Git checkout: the worktree is already attached to the persisted planner branch.
 
-- current `stage`, `step`, `stepStatus`, and `nextStep`
-- active plan, task, experiment, branch, and worktree
-- git and memory consistency state
-- the next required planner action
-- currently allowed planner wrapper tools
-- currently allowed state transitions
-- exact artifact paths
-- the full default markdown for the current stage
-- paths for supporting markdown and optional project/global append files
-- memory-first reminders
+Pi's built-in `/resume` starts in `Current Folder` scope. Press `Tab` to show `All` sessions, including worktree sessions. Directly resuming an inactive planner worktree through `/resume` is possible, but it does not update the planner's active plan record. Prefer `/planner-switch`.
 
-The model should not infer the next workflow transition from chat history.
+## State Machine 🧱
 
-## Lifecycle Overview
+The planner contains 57 explicit steps. Normal steps advance in order. Recovery is the only stage that can resume into a validated earlier position.
 
 ```text
 init
   -> intake
-      -> rewrite request as goal
-      -> wait for explicit user approval
   -> discovery
-      -> enumerate project files
-      -> index exactly one file at a time
-      -> ask evidence-based questions
   -> planning
   -> execution
-      -> task
-          -> TDD plan
-          -> failing test
-          -> experiment A
-          -> compact
-          -> experiment B
-          -> compact
-          -> select best candidate
-          -> merge into task
-          -> refactor
-          -> verify
-          -> merge into plan
-          -> compact task
   -> finalize
   -> done
 
-recovery may interrupt normal flow when persisted state and git reality disagree.
+recovery may interrupt the normal path when Git, worktree, memory, or state disagree.
 ```
-
-## Stage And Step Reference
-
-The state machine contains 57 explicit steps. Normal linear flow uses `planner_finish_step` to atomically finish the current step and open the next pending step. Recovery is the only stage that can resume into a validated non-recovery position.
 
 ### `init`
 
-Bootstrap is normally handled automatically by `/planner-create`.
+Normally completed automatically by `/planner-create`.
 
 | Step | Purpose |
 | --- | --- |
 | `check_project` | Resolve the opened project root and stable project id. |
-| `check_git` | Detect the git repository or initialize it through planner control. |
-| `prepare_storage` | Create or load project-level planner storage. |
+| `check_git` | Detect or initialize Git. |
+| `prepare_storage` | Create planner storage. |
 | `choose_worktree_location` | Resolve project-local or custom worktree settings. |
-| `create_plan_record` | Create plan records, state, markdown artifacts, and memory files. |
-| `create_plan_worktree` | Create one dedicated worktree for the entire plan. |
-| `enter_intake` | Persist the transition into `intake/draft_goal`. |
+| `create_plan_record` | Create plan state and artifacts. |
+| `create_plan_worktree` | Create the dedicated plan worktree. |
+| `enter_intake` | Move into goal drafting. |
 
 ### `intake`
 
-Intake turns the raw user request into an explicit, reviewable goal before the model reads project source.
+The model restates the user's request before reading source code.
 
 | Step | Purpose |
 | --- | --- |
-| `draft_goal` | Read `request.md`, rewrite the requested outcome in the model's own words, and record assumptions, constraints, and non-goals in `goal.md`. |
-| `await_goal_approval` | Ask the user to approve or revise `goal.md`. Enter discovery only after explicit approval. |
+| `draft_goal` | Rewrite the raw request into `goal.md` with assumptions, constraints, and non-goals. |
+| `await_goal_approval` | Show the goal and wait for explicit user approval or revision. |
 
 ### `discovery`
 
-Discovery builds durable compressed project memory before implementation. The model never treats chat history as indexing state: it follows a persisted queue and completes one file before claiming another.
+The model builds durable project memory before implementation.
 
 | Step | Purpose |
 | --- | --- |
-| `scan_project_structure` | Enumerate tracked and untracked non-ignored files through the wrapper and persist `memory/indexing.json`. |
-| `index_files_iteratively` | Claim one file, read bounded chunks to EOF, record metadata and reusable symbols, mechanically verify hash and anchors, complete it, then claim the next file. |
-| `write_project_patterns` | Persist architecture, dependency, testing, and convention notes after file indexing. |
-| `write_relations` | Record evidence-backed relationships between files and symbols. |
-| `write_questions` | Persist focused questions, uncertainty, and assumptions. |
-| `verify_memory` | Verify memory freshness and sync the initial checkpoint. |
-| `compact_discovery` | Compact the broad discovery context. |
-| `enter_planning` | Persist the transition into `planning/read_memory`. |
+| `scan_project_structure` | Enumerate Git-visible files and persist the indexing queue. |
+| `index_files_iteratively` | Read exactly one file at a time in bounded chunks, record reusable symbols, verify anchors, then continue. |
+| `write_project_patterns` | Record architecture, dependencies, conventions, and test patterns. |
+| `write_relations` | Record evidence-backed relations between files and symbols. |
+| `write_questions` | Ask focused questions after evidence is collected. |
+| `verify_memory` | Verify hashes, signatures, relations, and the initial checkpoint. |
+| `compact_discovery` | Compact broad discovery context when enabled. |
+| `enter_planning` | Move into plan construction. |
 
 ### `planning`
 
-Planning converts verified project memory into ordered atomic tasks.
-
 | Step | Purpose |
 | --- | --- |
-| `read_memory` | Reconstruct project context from compressed artifacts and bounded memory retrieval. |
+| `read_memory` | Reconstruct context from bounded project memory. |
 | `draft_plan` | Write the implementation strategy, constraints, risks, and checks. |
-| `split_tasks` | Decompose the plan into small ordered tasks. |
-| `write_task_files` | Write a `task.json` and `task.md` for each task. |
-| `verify_plan` | Confirm that tasks are bounded, ordered, testable, and complete. |
-| `compact_planning` | Compact the plan and task list before execution. |
-| `enter_execution` | Persist the transition into `execution/prepare_task`. |
+| `split_tasks` | Divide the plan into ordered atomic tasks. |
+| `write_task_files` | Create `task.json` and `task.md` for each task. |
+| `verify_plan` | Confirm that tasks are bounded, ordered, and testable. |
+| `compact_planning` | Compact planning context when enabled. |
+| `enter_execution` | Start the first task. |
 
 ### `execution`
 
-Execution processes exactly one task at a time. Experiments are sequential alternative implementations, not parallel agents.
+Execution handles one task at a time. Experiments are sequential implementation candidates, not parallel subagents.
 
 | Step | Purpose |
 | --- | --- |
-| `prepare_task` | Select one pending task and create or switch its task branch. |
-| `write_tdd_plan` | Write test strategy, mocks, fixtures, edge cases, and expected failing signal. |
-| `write_tests` | Add failing, mock, or contract tests before implementation. |
-| `run_failing_tests` | Prove that tests detect the missing behavior. |
-| `start_experiments` | Create one experiment branch for one distinct attempt. |
+| `prepare_task` | Select one pending task and create its branch. |
+| `write_tdd_plan` | Record test strategy, mocks, fixtures, edge cases, and expected failing signal. |
+| `write_tests` | Write failing, mock, or contract tests before implementation. |
+| `run_failing_tests` | Prove that the tests detect missing behavior. |
+| `start_experiments` | Create one candidate branch. |
 | `run_experiment` | Implement one candidate, run checks, commit, and refresh memory. |
-| `summarize_experiment` | Persist approach, checks, strengths, weaknesses, risks, and comparison evidence. |
-| `compact_experiment` | Compact the completed candidate context. |
-| `select_experiment` | Continue with another distinct attempt or select the best candidate. |
+| `summarize_experiment` | Record approach, diff, checks, risks, and tradeoffs. |
+| `compact_experiment` | Compact candidate context when enabled. |
+| `select_experiment` | Try another distinct candidate or select the best one. |
 | `merge_best_experiment` | Merge the selected candidate into the task branch. |
-| `refactor_task` | Challenge the selected result, write `refactor.md`, and simplify it without changing behavior. Passing checks alone are not sufficient review. |
-| `run_final_tests` | Run focused and broader task-level verification. |
-| `merge_task_to_plan` | Merge the verified task branch into the plan branch. |
-| `compact_task` | Compact the completed atomic task. |
-| `select_next_task` | Start the next task or transition into final verification. |
+| `refactor_task` | Challenge the selected code and simplify it without changing behavior. |
+| `run_final_tests` | Run focused and broader task verification. |
+| `merge_task_to_plan` | Merge the verified task into the plan branch. |
+| `compact_task` | Compact the completed task when enabled. |
+| `select_next_task` | Start the next task or enter final verification. |
 
 ### `finalize`
 
-Finalize verifies the integrated plan branch before asking the user to accept the result.
-
 | Step | Purpose |
 | --- | --- |
-| `verify_plan_branch` | Confirm merged tasks and run project-level checks. |
-| `write_final_summary` | Write completed scope, changed files, checks, risks, and limitations. |
-| `compact_finalize` | Compact final context before presenting the result. |
-| `enter_done` | Persist the transition into `done/present_result`. |
+| `verify_plan_branch` | Run integrated project-level checks. |
+| `write_final_summary` | Record scope, changed files, checks, risks, and limitations. |
+| `compact_finalize` | Compact final context when enabled. |
+| `enter_done` | Present the result to the user. |
 
 ### `done`
 
-Done is an explicit user-decision stage, not just a terminal marker.
-
 | Step | Purpose |
 | --- | --- |
-| `present_result` | Present the verified result and output options. |
-| `await_user_acceptance` | Wait for explicit acceptance or a change request. |
+| `present_result` | Show the verified result. |
+| `await_user_acceptance` | Wait for explicit acceptance or requested changes. |
 | `handle_change_request` | Record feedback and return to planning in the same worktree. |
-| `prepare_output_branch` | Internal `/planner-accept` phase: prepare the output branch after acceptance. |
-| `merge_or_export_result` | Internal `/planner-accept` phase: export the plan branch result through planner-controlled git. |
-| `cleanup_worktree` | Internal `/planner-accept` phase: remove the temporary worktree and safe-to-delete child branches. |
-| `mark_done` | Internal `/planner-accept` phase: clear active plan state and mark completion. |
-| `cleanup_plan_files` | Internal `/planner-accept` phase: remove completed plan artifacts after cleanup. |
+| `prepare_output_branch` | Internal `/planner-accept` phase. |
+| `merge_or_export_result` | Export one squashed ordinary commit on `output/<plan-id>`. |
+| `cleanup_worktree` | Remove temporary worktree and managed child branches. |
+| `mark_done` | Clear active planner state. |
+| `cleanup_plan_files` | Remove completed temporary artifacts. |
 
 ### `recovery`
 
-Recovery handles mismatches between persisted planner state and actual git/worktree state.
+Recovery is non-destructive by default.
 
 | Step | Purpose |
 | --- | --- |
-| `read_state` | Load expected planner state. |
+| `read_state` | Load expected persisted state. |
 | `inspect_git` | Inspect actual branch, HEAD, dirty files, and conflicts. |
-| `compare_expected_actual` | Compare persisted state with repository reality. |
-| `classify_recovery` | Classify the mismatch and safe next options. |
-| `ask_user_if_destructive` | Ask before any destructive repair path. |
+| `compare_expected_actual` | Compare state with repository reality. |
+| `classify_recovery` | Explain the mismatch and safe options. |
+| `ask_user_if_destructive` | Ask before destructive repair. |
 | `repair_or_resume` | Resume only after consistency is restored or explicitly accepted. |
 
-## TDD And Experiments
+## Git Model 🌿
 
-Every execution task follows tests-first development:
-
-```text
-task branch
-  -> write TDD plan
-  -> write failing/mock/contract tests
-  -> prove failing signal
-  -> create experiment branch
-  -> implement one candidate
-  -> verify and summarize
-  -> compact
-  -> optionally repeat with another candidate
-  -> select best candidate
-  -> merge candidate into task
-  -> refactor on task branch
-  -> run final checks
-  -> merge task into plan
-```
-
-The model can create multiple candidate experiments when different approaches are useful. It selects the best experiment id, but it does not invent merge targets. Merge targets are derived from persisted state.
-
-## Compact Boundaries
-
-Compaction is intentional and artifact-driven. The extension does not compact after every technical action.
-
-Compact steps remain explicit state-machine checkpoints even when a real Pi compact is disabled. The default performs stage-level compaction and skips the slower per-task and per-experiment compaction calls:
-
-```json
-{
-  "compact": {
-    "stage": true,
-    "task": false,
-    "experiment": false
-  }
-}
-```
-
-Global or project settings may override any compact boundary independently. Skipped boundaries still advance through their persisted `compact_*` step, so recovery remains deterministic.
-
-| Boundary | Reason |
-| --- | --- |
-| `discovery/compact_discovery` | Preserve project understanding and compressed memory. |
-| `planning/compact_planning` | Preserve the complete plan and ordered tasks. |
-| `execution/compact_experiment` | Preserve one candidate summary before another attempt or selection. |
-| `execution/compact_task` | Preserve one merged atomic task before selecting the next task. |
-| `finalize/compact_finalize` | Preserve final verification before user acceptance. |
-
-Pi auto-compaction is also tracked. After every planned, manual, or automatic compaction while a plan is active, the extension sends a `[SYSTEM_INSTRUCTIONS]` continuation message that instructs the model to call `planner_status` and reload exact persisted artifacts. If Pi already has queued user input, the continuation is appended as `followUp` instead of replacing the queue.
-
-If auto-compaction interrupts file indexing, `planner_status` reports the active file and exact next unread line. The model resumes that file instead of rereading completed files or restarting discovery.
-
-## Project Memory
-
-The memory layer is a compressed project index for context-limited models. It avoids repeatedly loading the entire repository.
-
-Memory stores:
-
-- a durable file-indexing queue with active file, hash, line count, exact next unread line, candidate symbols, and verification state
-- file paths, hashes, languages, kinds, statuses, and summaries
-- symbol signatures and anchors
-- symbol visibility and verification status
-- relations such as calls, tests, depends-on, configures, reads, and writes
-- effects that may not be visible in a signature
-
-Effects matter because a function can keep the same signature while starting to read environment variables, mutate global state, use filesystem or network I/O, depend on time or randomness, or call another side-effectful function.
-
-Initial discovery and later refreshes use the same strict file-by-file loop:
-
-```text
-scan project structure
-  -> persist memory/indexing.json
-  -> claim one file
-  -> read bounded chunks to EOF
-  -> persist file metadata
-  -> persist reusable symbols in batches of at most 5
-  -> verify current hash and exact anchors
-  -> complete the file
-  -> repeat
-  -> record evidence-backed relations
-  -> verify memory
-  -> sync checkpoint
-```
-
-Long files survive compact boundaries because each chunk persists `nextUnreadLine`. The model is responsible for language semantics such as Rust traits, Go interfaces, inherited behavior, private reusable helpers, and hidden side effects. The wrapper is responsible for mechanical checks such as hashes, anchors, queue order, and checkpoint freshness.
-
-The persisted queue is validated whenever it is read. Corrupted cursors, duplicate files, missing hashes, unsupported statuses, or inconsistent active-file state block progress instead of silently restarting indexing.
-
-Memory refresh is mandatory after planner-controlled commits and merges:
-
-```text
-git write
-  -> detect new HEAD
-  -> build file-hash snapshot
-  -> mark stale files and related symbols
-  -> build a refresh queue for affected files
-  -> process each affected file through the strict loop
-  -> verify freshness
-  -> sync checkpoint
-  -> continue workflow
-```
-
-The model should read bounded memory first and reread source only when memory is missing, stale, insufficient, or requires verification.
-
-The public memory tools keep model input intentionally small:
-
-- queue scanning enumerates git-visible project files and persists durable progress
-- chunk reading returns a bounded line-numbered section and advances the persisted cursor
-- active-file upsert receives kind, language, and summary only after EOF
-- symbol upsert receives at most 5 reusable symbols for the active file; every symbol requires exact anchor evidence and effects
-- active-file verification checks current hash, full-read state, file metadata, symbol hashes, and anchors before completion
-- global verification and checkpoint sync remain blocked until the durable queue has no active, pending, reading, verifying, or failed file
-- relation upsert receives at most 5 links plus exact evidence; the extension derives a stable relation id when omitted
-- memory search returns bounded pages with cursors instead of dumping the full index
-
-## Git Model
-
-Each plan owns one worktree. Tasks, experiments, and refactors are branches inside that worktree.
-
-While a plan is active, every project-scoped shell command must run from the
-worktree path reported by `planner_status`. This applies to tests, builds,
-linters, formatters, generators, package scripts, compilers, and custom
-verification commands regardless of the project's language or toolchain.
+Each plan owns one worktree. Tasks, experiments, and refactors are temporary branches inside it.
 
 ```text
 base branch
@@ -453,41 +218,48 @@ base branch
   -> output/<plan-id>
 ```
 
-Branch cleanup rules:
+Temporary branches are removed after their result is merged. After `/planner-accept`, the user keeps one ordinary `output/<plan-id>` branch with one squashed result commit:
 
-- unselected experiment branches are removed after candidate selection and merge
-- the selected experiment branch is removed after merge into task
-- the refactor branch is removed after merge into task
-- the task branch is removed after merge into plan
-- the protected plan branch is not removed by managed child cleanup during active work
-- worktree cleanup happens only after explicit user acceptance
-- `/planner-accept` exports one squashed ordinary commit on `output/<plan-id>`, removes the temporary plan branch, worktree, artifacts, worktree index, and completed worktree chat, then returns Pi to the original project JSONL session
-- if the original JSONL session is missing, `/planner-accept` creates a replacement project-root session and asks whether the completed worktree chat should be removed
+```bash
+git show output/<plan-id>
+```
 
-When a planner plan is active, raw shell `git` commands are blocked. The model uses planner git wrapper tools instead. Non-git shell commands remain available.
+While a plan is active, raw shell `git` is blocked for the model. Planner wrappers determine merge sources and targets from persisted state. The model chooses task ids and experiment ids, not arbitrary branch destinations.
 
-Each plan worktree is already checked out on its persisted planner branch. `/planner-switch` changes the active planner record and resumes the selected worktree JSONL/CWD; it does not perform an extra Git checkout. Preflight detects an externally changed worktree branch and requires recovery.
+Project commands such as tests, builds, linters, generators, and formatters should run from the worktree path reported by `planner_status`. Commands may still enter subdirectories inside that worktree when the project layout requires it.
 
-Pi's built-in `/resume` selector starts in `Current Folder` scope. Press `Tab` to view `All` sessions, including planner worktree sessions. Prefer `/planner-switch` for planner work: it updates `activePlanId` before resuming the worktree chat. Directly resuming an inactive planner worktree through `/resume` does not activate that plan.
+## Project Memory 🧠
 
-## Built-In Pi Tool Guard
+The memory layer is designed for context-limited local models. It avoids repeatedly loading an entire repository.
 
-The extension guards built-in project `write/edit` by exact state-machine position:
+During discovery, the model:
 
-| Position | Project `write/edit` |
-| --- | --- |
-| `execution/write_tests` | allowed for tests, fixtures, mocks, and harness wiring |
-| `execution/run_experiment` | allowed for one implementation candidate |
-| `execution/refactor_task` | allowed for behavior-preserving refactor |
-| every other step | blocked for project files |
+```text
+scans Git-visible files
+  -> claims one file
+  -> reads bounded chunks to EOF
+  -> records file metadata
+  -> records reusable API signatures and effects
+  -> verifies hashes and source anchors
+  -> completes that file
+  -> claims the next file
+```
 
-Planner artifacts outside the project directory remain writable where the current step allows artifact work. Writes to the original checkout are blocked while a planner worktree is active, even during implementation.
+Large files persist the exact next unread line. After automatic compaction, the model resumes from that line instead of rereading completed files.
 
-The extension does not infer file roles from names. Tests may live beside production code and harness setup may require configuration edits. It also does not maintain an allowlist of shell commands. Shell safety can be handled by a separate approval extension.
+Memory tracks:
 
-## Storage Layout
+- file paths, hashes, kinds, languages, and summaries;
+- reusable symbol signatures and source anchors;
+- relations such as calls, tests, dependencies, reads, and writes;
+- effects that may change behavior without changing a function signature;
+- freshness checkpoints after planner-controlled commits and merges.
 
-Planner state is stored under the Pi agent directory:
+The model reads memory first and rereads source only when memory is stale, incomplete, insufficient, or requires verification.
+
+## Storage Layout 📁
+
+Planner state lives under the Pi agent directory:
 
 ```text
 getAgentDir()/extensions/pi-code-planner/
@@ -510,6 +282,7 @@ getAgentDir()/extensions/pi-code-planner/
           discovery.md
           questions.md
           decisions.md
+          final_summary.md
           memory/
             project_patterns.md
             indexing.json
@@ -533,41 +306,59 @@ getAgentDir()/extensions/pi-code-planner/
                   summary.md
 ```
 
-Important files:
+Key files:
 
 | File | Purpose |
 | --- | --- |
 | `project.json` | Stable project identity, plan list, and active plan id. |
-| `plan.json` | Structured task list and progress for one plan. |
-| `state.json` | Crash-recoverable execution state for one plan. |
-| `request.md` | Exact raw requested outcome captured when the plan is created. |
-| `goal.md` | Model-normalized goal, assumptions, constraints, and non-goals approved by the user before discovery. |
-| `plan.md` | Human-readable implementation plan written after discovery and question resolution. |
-| `questions.md` | Evidence-based discovery questions, explicit user answers, and their resolution state. |
-| `decisions.md` | User answers and durable planning decisions. |
-| `memory/indexing.json` | Crash-recoverable file queue with one active file and its exact next unread line. |
-| `memory/*` | Compressed project context and freshness checkpoint data. |
+| `plan.json` | Structured task list for one plan. |
+| `state.json` | Crash-recoverable stage, step, branch, worktree, compact, and memory state. |
+| `request.md` | Exact raw user request. |
+| `goal.md` | Model-normalized goal approved before discovery. |
+| `plan.md` | Human-readable implementation plan written after discovery. |
+| `questions.md` | Evidence-based questions and explicit user answers. |
+| `decisions.md` | Durable user decisions. |
+| `memory/*` | Bounded project context and freshness checkpoints. |
 
-## Worktree Settings
+## Settings And Overrides ⚙️
 
-Global settings:
+### Worktree Location
+
+The default worktree location is project-local:
+
+```text
+<project-root>/.pi/pi-code-planner/worktrees/<plan-id>
+```
+
+The extension adds this exact rule when needed:
+
+```text
+.pi/pi-code-planner/worktrees/
+```
+
+It does not ignore the entire `.pi/` directory.
+
+To move worktrees elsewhere, configure a root before running `/planner-create`.
+
+Global settings apply to every project:
 
 ```text
 getAgentDir()/extensions/pi-code-planner/settings.json
 ```
 
-Optional project override:
+Project settings override global settings:
 
 ```text
 <project-root>/.pi/pi-code-planner/settings.json
 ```
 
-Default project-local worktree:
+Example:
 
 ```json
 {
   "worktree": {
-    "mode": "project-local"
+    "mode": "custom",
+    "root": "/mnt/fast/pi-worktrees"
   },
   "compact": {
     "stage": true,
@@ -577,214 +368,102 @@ Default project-local worktree:
 }
 ```
 
-Default path:
-
-```text
-<project-root>/.pi/pi-code-planner/worktrees/<plan-id>
-```
-
-Custom root:
-
-```json
-{
-  "worktree": {
-    "mode": "custom",
-    "root": "/mnt/fast/pi-worktrees"
-  }
-}
-```
-
-Custom path:
+The custom path becomes:
 
 ```text
 <root>/<project-id>/<plan-id>
 ```
 
-When project-local worktrees are used, the extension adds this exact rule to the
-plan branch `.gitignore` if needed:
+You do not need to know the generated plan id in advance. The extension appends both ids automatically.
 
-```text
-.pi/pi-code-planner/worktrees/
+Compact defaults are:
+
+```json
+{
+  "stage": true,
+  "task": false,
+  "experiment": false
+}
 ```
 
-It does not ignore the entire `.pi/` directory.
+Skipped compact boundaries still advance through persisted state-machine steps, so recovery remains deterministic.
 
-The extension immediately commits a created or appended tracked rule on the new
-plan branch with:
+### Instruction Append Files
 
-```text
-chore: ignore pi-code-planner worktrees
-```
-
-It also writes the same rule to the original checkout `.git/info/exclude`.
-That repository-local exclude keeps the base checkout clean while the nested
-worktree exists without changing the user's base branch.
-
-## Instruction Customization
-
-Default instruction markdown is bundled with the extension and synced into:
+Built-in Markdown instructions are synced into:
 
 ```text
 getAgentDir()/extensions/pi-code-planner/instructions/defaults/
 ```
 
-Do not edit installed defaults. They may be refreshed after an extension update.
+Do not edit synced defaults. Extension updates may overwrite them.
 
-Global append files:
+Add global instructions under:
 
 ```text
 getAgentDir()/extensions/pi-code-planner/instructions/append/
 ```
 
-Optional project-local append files:
+Add project-specific instructions under:
 
 ```text
 <project-root>/.pi/pi-code-planner/instructions/append/
 ```
 
-Available instruction keys:
+Available filenames:
 
 ```text
-init
-intake
-discovery
-planning
-execution
-finalize
-done
-recovery
-tdd
-experiment
-refactor
-memory
-git
-git-commit
+init.md
+intake.md
+discovery.md
+planning.md
+execution.md
+finalize.md
+done.md
+recovery.md
+tdd.md
+experiment.md
+refactor.md
+memory.md
+git.md
+git-commit.md
 ```
 
-Resolution order:
+Resolution is intentionally simple:
 
 ```text
-default
+built-in default
   + project append, when present
   + otherwise global append, when present
 ```
 
-Append files extend defaults. They do not replace them.
+Append files extend defaults; they do not replace them. Project append files are useful for test commands, repository conventions, architecture notes, mock strategy, and commit style.
 
-Project-local append files are useful for repository-specific requirements such as test commands, architecture conventions, mock strategy, commit style, or verification expectations.
+## Development 🛠️
 
-## Model-Facing Tools
-
-Most users do not need to call these manually. They are registered for the model and gated by runtime state.
-
-### Navigation
-
-- `planner_status`
-- `planner_create_plan`
-
-### Goal Intake
-
-- `planner_goal_submit`
-- `planner_goal_decide`
-
-### Workflow Transitions
-
-- `planner_start_step`
-- `planner_finish_step`
-- `planner_advance_step`
-- `planner_fail_step`
-- `planner_block_step`
-- `planner_retry_step`
-- `planner_request_compact`
-- `planner_complete_compact`
-- `planner_enter_recovery`
-- `planner_resume_after_recovery`
-
-### Memory
-
-- `planner_memory_inspect`
-- `planner_memory_apply_freshness`
-- `planner_memory_scan_project`
-- `planner_memory_index_status`
-- `planner_memory_next_file`
-- `planner_memory_read_chunk`
-- `planner_memory_upsert_active_file`
-- `planner_memory_write_project_patterns`
-- `planner_memory_upsert_symbols`
-- `planner_memory_verify_active_file`
-- `planner_memory_complete_active_file`
-- `planner_memory_ignore_active_file`
-- `planner_memory_upsert_relations`
-- `planner_memory_search`
-- `planner_memory_verify`
-- `planner_memory_sync_checkpoint`
-
-### Git
-
-- `planner_git_inspect`
-- `planner_git_init`
-- `planner_git_commit`
-- `planner_git_create_task_branch`
-- `planner_git_create_experiment_branch`
-- `planner_git_select_experiment`
-- `planner_git_merge_selected_experiment`
-- `planner_git_create_refactor_branch`
-- `planner_git_merge_refactor_to_task`
-- `planner_git_merge_task_to_plan`
-
-Final output export and cleanup are intentionally exposed only as the user slash command `/planner-accept`, because removing the active worktree must be coordinated with Pi JSONL session handoff.
-
-### Recovery
-
-- `planner_recovery_inspect`
-- `planner_recovery_resume`
-
-### Discovery Questions
-
-- `planner_questions_submit`
-- `planner_questions_resolve`
-
-## Recovery Behavior
-
-Before public planner tool calls, the extension compares persisted state with actual git and worktree reality:
-
-- worktree existence
-- current branch
-- `HEAD`
-- dirty files
-- conflicts
-- checkpoint commit
-- memory freshness
-
-When state and reality disagree, normal workflow stops and recovery inspection becomes available.
-
-The extension does not automatically reset, delete, force-checkout, or discard user work. Destructive recovery remains a user decision.
-
-## Development
-
-Run tests:
+Clone the repository when you want to modify the extension locally:
 
 ```bash
-npm test
+git clone https://github.com/m62624/pi-code-planner.git
+cd pi-code-planner
+npm install
+npm run build
+pi -e ./src/index.ts
 ```
 
-Run static checks:
-
-```bash
-npm run check
-```
-
-Build TypeScript:
+Checks:
 
 ```bash
 npm run build
+npm run check
+npm test
 ```
 
-## Safety Notes
+## Safety Notes ⚠️
 
-- Review the source before installing. Pi extensions execute code with the permissions of the Pi process.
-- This project is experimental.
-- Planner persistence reduces lost context but cannot make model output correct automatically.
-- Git wrappers reduce accidental workflow drift but do not replace normal code review.
+- Review the source before installing. Pi extensions execute with the permissions of the Pi process.
+- This is an experimental personal project.
+- Persisted state reduces context loss but cannot make model output correct.
+- Git wrappers reduce workflow drift but do not replace code review.
 - Shell safety is outside this extension's scope. Use a separate approval extension or an isolated environment when needed.
 - Keep backups of important repositories.
