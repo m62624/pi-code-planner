@@ -3,7 +3,10 @@ import type { InstructionKey } from "../instructions/schema";
 import type { PlannerStage, PlannerStep, StepStatus } from "../storage/schema";
 import type { PlannerRuntimeAction } from "./planner-runtime";
 import type { PlannerPreflightResult } from "./preflight";
-import { isPlannerCompactEnabled } from "./state-machine";
+import {
+	getAllowedNextPlannerPositions,
+	isPlannerCompactEnabled,
+} from "./state-machine";
 import {
 	getAllowedPlannerStateTransitionTypes,
 	type PlannerStateTransitionType,
@@ -227,29 +230,56 @@ function stateMachineDecision(
 				modelMessage:
 					"Call planner_start_step. After it starts, follow the current step rule and instruction files.",
 			});
-		case "running":
-			return state.step.startsWith("compact_") && isPlannerCompactEnabled(state)
-				? transitionDecision({
-						base,
-						action: "request_compact",
-						transition: "request_compact",
-						tool: "planner_request_compact",
-						allowedTransitions,
-						reason: `Compact step is running: ${state.stage}/${state.step}.`,
-						modelMessage:
-							"Prepare the compact boundary summary, then call planner_request_compact.",
-					})
-				: transitionDecision({
-						base,
-						action: "finish_step",
-						transition: "finish_step",
-						tool: "planner_finish_step",
-						allowedTransitions,
-						reason: `Planner step is running: ${state.stage}/${state.step}.`,
-						modelMessage: state.step.startsWith("compact_")
-							? "This compact boundary is disabled in state.json. Call planner_finish_step to skip the real Pi compact while preserving the state-machine checkpoint."
-							: "Finish the current step only after its exit condition is true. Then call planner_finish_step. The next persisted step opens atomically.",
-					});
+		case "running": {
+			if (state.step.startsWith("compact_")) {
+				return isPlannerCompactEnabled(state)
+					? transitionDecision({
+							base,
+							action: "request_compact",
+							transition: "request_compact",
+							tool: "planner_request_compact",
+							allowedTransitions,
+							reason: `Compact step is running: ${state.stage}/${state.step}.`,
+							modelMessage:
+								"Prepare the compact boundary summary, then call planner_request_compact.",
+						})
+					: transitionDecision({
+							base,
+							action: "finish_step",
+							transition: "finish_and_start_step",
+							tool: "planner_finish_and_start_step",
+							allowedTransitions,
+							reason: `Planner step is running: ${state.stage}/${state.step}.`,
+							modelMessage:
+								"This compact boundary is disabled in state.json. Call planner_finish_step to skip the real Pi compact while preserving the state-machine checkpoint.",
+						});
+			}
+			const branchingTargets = getBranchingTargets(state);
+			if (branchingTargets) {
+				return transitionDecision({
+					base,
+					action: "finish_step",
+					transition: "finish_and_start_step",
+					tool: "planner_finish_and_start_step",
+					allowedTransitions,
+					reason: `Planner step is running: ${state.stage}/${state.step}.`,
+					modelMessage:
+						"Finish the current step and start the next one in a single call: planner_finish_and_start_step. You MUST specify one of these targets: " +
+						branchingTargets.join(", ") +
+						" The response contains the next step name and instruction keys. Load those instruction files while waiting for the response, then call planner_status to verify the state.",
+				});
+			}
+			return transitionDecision({
+				base,
+				action: "finish_step",
+				transition: "finish_and_start_step",
+				tool: "planner_finish_and_start_step",
+				allowedTransitions,
+				reason: `Planner step is running: ${state.stage}/${state.step}.`,
+				modelMessage:
+					"Finish the current step and start the next one in a single call: planner_finish_and_start_step. The response contains the next step name and instruction keys. Load those instruction files while waiting for the response, then call planner_status to verify the state.",
+			});
+		}
 		case "completed":
 			return transitionDecision({
 				base,
@@ -338,4 +368,18 @@ function baseDecision(
 		reason: preflight.decision.reason ?? "",
 		modelMessage: "Call planner_status and follow the reported gate.",
 	};
+}
+
+function getBranchingTargets(state: {
+	stage: PlannerStage;
+	step: PlannerStep;
+}): { stage: string; step: string }[] | null {
+	const allowed = getAllowedNextPlannerPositions({
+		stage: state.stage,
+		step: state.step,
+	});
+	if (allowed.length <= 1) {
+		return null;
+	}
+	return allowed.map((p) => ({ stage: p.stage, step: p.step }));
 }

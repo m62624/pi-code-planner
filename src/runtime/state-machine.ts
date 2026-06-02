@@ -244,6 +244,14 @@ export function finishPlannerStep(
 	return advancePlannerStep(completePlannerStep(state, options));
 }
 
+export function finishAndStartPlannerStep(
+	state: PlanStateRecord,
+	options: CompletePlannerStepOptions = {},
+): PlanStateRecord {
+	const finished = finishPlannerStep(state, options);
+	return startPlannerStep(finished);
+}
+
 export function failPlannerStep(
 	state: PlanStateRecord,
 	reason: string,

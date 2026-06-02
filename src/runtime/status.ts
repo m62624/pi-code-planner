@@ -1019,9 +1019,13 @@ function formatLifecycleNextAction(
 ): string {
 	switch (decision.action) {
 		case "finish_step":
-			return decision.requiredTool === "planner_finish_step"
-				? `Call planner_finish_step only after exit condition is true: ${rule?.exitCondition ?? "(missing rule)"}`
-				: decision.modelMessage;
+			if (decision.requiredTool === "planner_finish_step") {
+				return `Call planner_finish_step only after exit condition is true: ${rule?.exitCondition ?? "(missing rule)"}`;
+			}
+			if (decision.requiredTool === "planner_finish_and_start_step") {
+				return `Call planner_finish_and_start_step only after exit condition is true: ${rule?.exitCondition ?? "(missing rule)"}`;
+			}
+			return decision.modelMessage;
 		case "start_step":
 			return `Call planner_start_step, then follow ${decision.stage}/${decision.step}: ${rule?.objective ?? "current step"}.`;
 		case "write_memory":

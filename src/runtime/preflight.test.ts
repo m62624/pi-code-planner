@@ -380,7 +380,7 @@ describe("planner preflight orchestrator", () => {
 		expect(result.decision.action).toBe("allow_stage_machine");
 		expect(result.instructions?.keys).toEqual(["discovery", "memory"]);
 		expect(formatPlannerPreflightStatus(result)).toContain(
-			"Allowed state transitions: finish_step, fail_step, block_step, enter_recovery",
+			"Allowed state transitions: finish_step, finish_and_start_step, fail_step, block_step, enter_recovery",
 		);
 	});
 

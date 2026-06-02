@@ -115,7 +115,7 @@ describe("planner status text", () => {
 		expect(text).toContain("- stage: execution");
 		expect(text).toContain("- step: write_tests");
 		expect(text).toContain(
-			"Call planner_finish_step only after exit condition is true: tests.md records the tests, project files are clean and checkpointed, and tests are expected to fail or catch missing behavior.",
+			"Call planner_finish_and_start_step only after exit condition is true: tests.md records the tests, project files are clean and checkpointed, and tests are expected to fail or catch missing behavior.",
 		);
 		expect(text).toContain("## Current Step Rule");
 		expect(text).toContain(

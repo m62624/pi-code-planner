@@ -74,7 +74,7 @@ describe("planner lifecycle decision", () => {
 		});
 	});
 
-	it("completes running non-compact steps only through complete_step", () => {
+	it("completes running non-compact steps only through finish_and_start_step", () => {
 		const preflight = readyPreflight({
 			state: state({
 				stage: "execution",
@@ -85,8 +85,8 @@ describe("planner lifecycle decision", () => {
 
 		expect(decidePlannerLifecycleNext(preflight)).toMatchObject({
 			action: "finish_step",
-			requiredTool: "planner_finish_step",
-			requiredTransition: "finish_step",
+			requiredTool: "planner_finish_and_start_step",
+			requiredTransition: "finish_and_start_step",
 		});
 	});
 
@@ -117,8 +117,8 @@ describe("planner lifecycle decision", () => {
 
 		expect(decidePlannerLifecycleNext(preflight)).toMatchObject({
 			action: "finish_step",
-			requiredTool: "planner_finish_step",
-			requiredTransition: "finish_step",
+			requiredTool: "planner_finish_and_start_step",
+			requiredTransition: "finish_and_start_step",
 		});
 	});
 
