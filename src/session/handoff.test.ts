@@ -6,6 +6,7 @@ import {
 	createPiSessionDir,
 	createPlannerHandoffSession,
 	removePlannerHandoffBootstrapFile,
+	selectPlannerResumeSessionFile,
 } from "./handoff";
 
 describe("planner session handoff", () => {
@@ -90,5 +91,24 @@ describe("planner session handoff", () => {
 				worktreePath: "/repo/worktree-b",
 			}),
 		).toContain("Resume only from the stage/step reported by planner_status.");
+	});
+
+	it("resumes the most recent non-empty planner session", () => {
+		expect(
+			selectPlannerResumeSessionFile([
+				{ path: "/sessions/latest-empty.jsonl", messageCount: 0 },
+				{ path: "/sessions/latest-active.jsonl", messageCount: 2 },
+				{ path: "/sessions/older.jsonl", messageCount: 8 },
+			]),
+		).toBe("/sessions/latest-active.jsonl");
+	});
+
+	it("falls back to an empty bootstrap session when no history exists", () => {
+		expect(
+			selectPlannerResumeSessionFile([
+				{ path: "/sessions/bootstrap.jsonl", messageCount: 0 },
+			]),
+		).toBe("/sessions/bootstrap.jsonl");
+		expect(selectPlannerResumeSessionFile([])).toBeNull();
 	});
 });

@@ -125,7 +125,7 @@ resolve project
   -> persist state.json
   -> write a valid Pi session JSONL header with the worktree cwd
   -> switch Pi into a worktree session
-  -> keep the JSONL header so Pi --resume can discover the worktree session
+  -> keep the JSONL header so Pi can discover the worktree session
   -> save the raw request in request.md
   -> start intake/draft_goal
 ```
@@ -145,7 +145,7 @@ These are Pi slash commands for the user. They are not model tools.
 | Command | Purpose |
 | --- | --- |
 | `/planner-create [--id <plan-id>] [initial text]` | Open a multiline request editor, then create a plan, worktree, state files, and worktree Pi session. The optional id controls stable branch and folder naming; inline text is only an editor prefill. |
-| `/planner-switch [<plan-id>]` | Switch to another plan in the current project. Without an id, open the TUI picker. |
+| `/planner-switch [<plan-id>]` | Switch to another plan in the current project. Without an id, open the TUI picker. Reopens the most recent non-empty Pi JSONL history for that worktree instead of creating a fresh chat. |
 | `/planner-rename [--id <plan-id>] <new-title>` | Rename a human-readable plan title without changing ids, branches, or paths. |
 | `/planner-delete [<plan-id>]` | Delete a selected inactive plan after confirmation. Without an id, open the TUI picker. |
 | `/planner-delete --force-active <plan-id>` | Explicit escape hatch: remove an active plan, its worktree, related planner files, and managed child branches. |
@@ -465,6 +465,10 @@ Branch cleanup rules:
 - if the original JSONL session is missing, `/planner-accept` creates a replacement project-root session and asks whether the completed worktree chat should be removed
 
 When a planner plan is active, raw shell `git` commands are blocked. The model uses planner git wrapper tools instead. Non-git shell commands remain available.
+
+Each plan worktree is already checked out on its persisted planner branch. `/planner-switch` changes the active planner record and resumes the selected worktree JSONL/CWD; it does not perform an extra Git checkout. Preflight detects an externally changed worktree branch and requires recovery.
+
+Pi's built-in `/resume` selector starts in `Current Folder` scope. Press `Tab` to view `All` sessions, including planner worktree sessions. Prefer `/planner-switch` for planner work: it updates `activePlanId` before resuming the worktree chat. Directly resuming an inactive planner worktree through `/resume` does not activate that plan.
 
 ## Built-In Pi Tool Guard
 

@@ -17,6 +17,21 @@ export interface PiSessionHeader {
 	parentSession?: string;
 }
 
+export interface PlannerResumeSessionCandidate {
+	path: string;
+	messageCount: number;
+}
+
+export function selectPlannerResumeSessionFile(
+	sessions: readonly PlannerResumeSessionCandidate[],
+): string | null {
+	return (
+		sessions.find((session) => session.messageCount > 0)?.path ??
+		sessions[0]?.path ??
+		null
+	);
+}
+
 export async function createPlannerHandoffSession(input: {
 	fs: PlannerFs;
 	agentDir: string;

@@ -4,6 +4,7 @@ import {
 	type ExtensionContext,
 	getAgentDir,
 	isToolCallEventType,
+	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { NodeGitRunner } from "./git/node-runner";
 import { PLANNER_STATUS_TOOL_NAME } from "./guard/git-watcher";
@@ -95,6 +96,7 @@ import {
 	buildPlannerResumePrompt,
 	createPlannerHandoffSession,
 	removePlannerHandoffBootstrapFile,
+	selectPlannerResumeSessionFile,
 } from "./session/handoff";
 import { createNodeFs } from "./storage/fs";
 import { resolveProjectStoragePaths } from "./storage/project-resolver";
@@ -672,13 +674,20 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				originalSessionFile:
 					ctx.cwd === projectPaths.projectRoot ? parentSession : null,
 			});
-			const session = await createPlannerHandoffSession({
-				fs,
-				agentDir,
-				worktreePath,
-				parentSession,
-			});
-			await ctx.switchSession(session.sessionFile, {
+			const existingSessionFile = selectPlannerResumeSessionFile(
+				await SessionManager.list(worktreePath),
+			);
+			const targetSessionFile =
+				existingSessionFile ??
+				(
+					await createPlannerHandoffSession({
+						fs,
+						agentDir,
+						worktreePath,
+						parentSession,
+					})
+				).sessionFile;
+			await ctx.switchSession(targetSessionFile, {
 				withSession: async (replacementCtx) => {
 					await replacementCtx.sendUserMessage(
 						buildPlannerResumePrompt({
