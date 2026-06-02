@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { join, normalize } from "node:path";
-import { EXTENSION_NAME, type SCHEMA_VERSION } from "../constants";
+import { EXTENSION_NAME, SCHEMA_VERSION } from "../constants";
 import type { PlannerFs } from "./fs";
 import { readJsonIfExists, writeJson } from "./json";
 
@@ -43,6 +43,33 @@ export async function saveWorktreeProjectIndex(input: {
 		}),
 		input.record,
 	);
+}
+
+export async function bindWorktreeOriginalSession(input: {
+	fs: PlannerFs;
+	agentDir: string;
+	worktreePath: string;
+	projectRoot: string;
+	projectId: string;
+	planId: string;
+	originalSessionFile?: string | null;
+}): Promise<WorktreeProjectIndexRecord> {
+	const existing = await readWorktreeProjectIndexIfExists(input);
+	const record: WorktreeProjectIndexRecord = {
+		schemaVersion: SCHEMA_VERSION,
+		worktreePath: input.worktreePath,
+		projectRoot: input.projectRoot,
+		projectId: input.projectId,
+		planId: input.planId,
+		originalSessionFile:
+			input.originalSessionFile ?? existing?.originalSessionFile ?? null,
+	};
+	await saveWorktreeProjectIndex({
+		fs: input.fs,
+		agentDir: input.agentDir,
+		record,
+	});
+	return record;
 }
 
 export async function readWorktreeProjectIndexIfExists(input: {

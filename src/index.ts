@@ -5,7 +5,6 @@ import {
 	getAgentDir,
 	isToolCallEventType,
 } from "@earendil-works/pi-coding-agent";
-import { SCHEMA_VERSION } from "./constants";
 import { NodeGitRunner } from "./git/node-runner";
 import { PLANNER_STATUS_TOOL_NAME } from "./guard/git-watcher";
 import {
@@ -100,7 +99,7 @@ import {
 import { createNodeFs } from "./storage/fs";
 import { resolveProjectStoragePaths } from "./storage/project-resolver";
 import { ensureProjectRecord } from "./storage/project-store";
-import { saveWorktreeProjectIndex } from "./storage/worktree-index";
+import { bindWorktreeOriginalSession } from "./storage/worktree-index";
 
 export * from "./public-api";
 
@@ -567,17 +566,14 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			}
 
 			const originalSessionFile = ctx.sessionManager.getSessionFile();
-			await saveWorktreeProjectIndex({
+			await bindWorktreeOriginalSession({
 				fs,
 				agentDir,
-				record: {
-					schemaVersion: SCHEMA_VERSION,
-					worktreePath,
-					projectRoot: projectPaths.projectRoot,
-					projectId: projectPaths.projectId,
-					planId: createdPlanId,
-					originalSessionFile: originalSessionFile ?? null,
-				},
+				worktreePath,
+				projectRoot: projectPaths.projectRoot,
+				projectId: projectPaths.projectId,
+				planId: createdPlanId,
+				originalSessionFile: originalSessionFile ?? null,
 			});
 
 			const session = await createPlannerHandoffSession({
@@ -665,11 +661,22 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				return;
 			}
 			const worktreePath = details.worktreePath;
+			const parentSession = ctx.sessionManager.getSessionFile();
+			await bindWorktreeOriginalSession({
+				fs,
+				agentDir,
+				worktreePath,
+				projectRoot: projectPaths.projectRoot,
+				projectId: projectPaths.projectId,
+				planId,
+				originalSessionFile:
+					ctx.cwd === projectPaths.projectRoot ? parentSession : null,
+			});
 			const session = await createPlannerHandoffSession({
 				fs,
 				agentDir,
 				worktreePath,
-				parentSession: ctx.sessionManager.getSessionFile(),
+				parentSession,
 			});
 			await ctx.switchSession(session.sessionFile, {
 				withSession: async (replacementCtx) => {
@@ -820,7 +827,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				await ctx.switchSession(targetSessionFile, {
 					withSession: async (replacementCtx) => {
 						if (fallbackSession) {
-							ctx.ui.notify(
+							replacementCtx.ui.notify(
 								"Original Pi JSONL session was missing. Planner resumed in a replacement project-root session.",
 								"warning",
 							);

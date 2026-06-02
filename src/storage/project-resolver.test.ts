@@ -5,6 +5,7 @@ import { createProjectStoragePaths } from "./paths";
 import { resolveProjectStoragePaths } from "./project-resolver";
 import { ensureProjectRecord } from "./project-store";
 import {
+	bindWorktreeOriginalSession,
 	readWorktreeProjectIndexIfExists,
 	saveWorktreeProjectIndex,
 } from "./worktree-index";
@@ -82,6 +83,76 @@ describe("project storage resolver", () => {
 			planId: "plan-a",
 			projectRoot: "/repo/app",
 			originalSessionFile: "/agent/sessions/--repo-app--/parent.jsonl",
+		});
+	});
+
+	it("binds a root session after a low-level plan tool created the index", async () => {
+		const fs = new MockPlannerFs();
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await saveWorktreeProjectIndex({
+			fs,
+			agentDir: "/agent",
+			record: {
+				schemaVersion: SCHEMA_VERSION,
+				worktreePath,
+				projectRoot: "/repo/app",
+				projectId: "app-123",
+				planId: "plan-a",
+			},
+		});
+
+		await bindWorktreeOriginalSession({
+			fs,
+			agentDir: "/agent",
+			worktreePath,
+			projectRoot: "/repo/app",
+			projectId: "app-123",
+			planId: "plan-a",
+			originalSessionFile: "/agent/sessions/--repo-app--/root.jsonl",
+		});
+
+		await expect(
+			readWorktreeProjectIndexIfExists({
+				fs,
+				agentDir: "/agent",
+				worktreePath,
+			}),
+		).resolves.toMatchObject({
+			originalSessionFile: "/agent/sessions/--repo-app--/root.jsonl",
+		});
+	});
+
+	it("keeps the bound root session when a later switch has no root candidate", async () => {
+		const fs = new MockPlannerFs();
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await bindWorktreeOriginalSession({
+			fs,
+			agentDir: "/agent",
+			worktreePath,
+			projectRoot: "/repo/app",
+			projectId: "app-123",
+			planId: "plan-a",
+			originalSessionFile: "/agent/sessions/--repo-app--/root.jsonl",
+		});
+
+		await bindWorktreeOriginalSession({
+			fs,
+			agentDir: "/agent",
+			worktreePath,
+			projectRoot: "/repo/app",
+			projectId: "app-123",
+			planId: "plan-a",
+			originalSessionFile: null,
+		});
+
+		await expect(
+			readWorktreeProjectIndexIfExists({
+				fs,
+				agentDir: "/agent",
+				worktreePath,
+			}),
+		).resolves.toMatchObject({
+			originalSessionFile: "/agent/sessions/--repo-app--/root.jsonl",
 		});
 	});
 });
