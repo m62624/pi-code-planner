@@ -111,25 +111,6 @@ export type {
 	SyncedInstructionFile,
 } from "./instructions/schema";
 export { INSTRUCTION_KEYS } from "./instructions/schema";
-export type {
-	ProjectMapCount,
-	ProjectMapExtensionCount,
-	ProjectMapResult,
-} from "./memory/project-map";
-export {
-	buildProjectMap,
-	DEFAULT_PROJECT_MAP_PATH_LIMIT,
-	MAX_PROJECT_MAP_PATH_LIMIT,
-} from "./memory/project-map";
-export type {
-	ProjectSearchMatch,
-	ProjectSearchResult,
-} from "./memory/project-search";
-export {
-	DEFAULT_PROJECT_SEARCH_LIMIT,
-	MAX_PROJECT_SEARCH_LIMIT,
-	searchProjectFiles,
-} from "./memory/project-search";
 export type { GitignoreWorktreeRuleResult } from "./project-local/gitignore";
 export {
 	ensureProjectWorktreesIgnored,
@@ -176,7 +157,6 @@ export type {
 export {
 	evaluatePlannerToolPreflight,
 	inspectPlannerGitReality,
-	markMemoryCheckpointSynced,
 	runSyncedPlannerGitMutation,
 	syncStateAfterPlannerGitMutation,
 } from "./runtime/git-state-sync";
@@ -203,15 +183,6 @@ export type {
 	PlannerLifecycleDecision,
 } from "./runtime/lifecycle";
 export { decidePlannerLifecycleNext } from "./runtime/lifecycle";
-export type {
-	PlannerMemoryToolExecutionInput,
-	PlannerMemoryToolExecutionResult,
-	PlannerMemoryToolName,
-} from "./runtime/memory-tools";
-export {
-	executePlannerMemoryTool,
-	PLANNER_MEMORY_TOOL_NAMES,
-} from "./runtime/memory-tools";
 export type {
 	PlannerManagedToolName,
 	PlannerOrchestratorInput,
@@ -443,7 +414,6 @@ export type {
 	ExecutionStep,
 	FinalizeStep,
 	InitStep,
-	MemoryUpdateReason,
 	MergeTargets,
 	PlannerCompactBoundaries,
 	PlannerStage,

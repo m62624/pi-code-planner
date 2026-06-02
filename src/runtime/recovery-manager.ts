@@ -86,8 +86,6 @@ export async function resumePlannerRecovery(
 		stepStatus: "pending",
 		nextStep: null,
 		requiresCompact: false,
-		requiresMemoryUpdate: false,
-		memoryUpdateReason: null,
 		requiresUserDecision: false,
 		broken: false,
 		brokenReason: null,

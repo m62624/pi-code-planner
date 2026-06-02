@@ -181,7 +181,6 @@ describe("instruction manager", () => {
 		);
 
 		expect(defaults.discovery).toBe("# bundled discovery\n");
-		expect(defaults.memory).toBe("# bundled memory\n");
 	});
 
 	it("loads repository markdown files as the bundled defaults", async () => {
@@ -189,9 +188,6 @@ describe("instruction manager", () => {
 
 		expect(defaults.discovery).toContain("# discovery");
 		expect(defaults.discovery).toContain("## Strict Step Order");
-		expect(defaults.memory).toContain(
-			"Planner memory is a bounded retrieval aid",
-		);
 	});
 
 	it("keeps every repository default substantive and auto-compact aware", async () => {

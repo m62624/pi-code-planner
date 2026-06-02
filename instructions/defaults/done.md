@@ -16,7 +16,7 @@ Present the verified plan result, wait for an explicit user decision, then eithe
    - `/planner-accept` atomically performs the remaining export, cleanup, and Pi session handoff. Do not try to reproduce that cleanup through model tools.
 3. `handle_change_request`
    - Record user feedback in durable artifacts.
-   - Return to `planning/read_memory` in the same plan worktree and branch.
+   - Return to `planning/read_context` in the same plan worktree and branch.
 4. `prepare_output_branch`
    - Internal `/planner-accept` phase: prepare the output branch in the original repository.
 5. `merge_or_export_result`
@@ -43,7 +43,7 @@ Present the verified plan result, wait for an explicit user decision, then eithe
 
 ## Change Request Reload
 
-When returning to `planning/read_memory`, reread full `plan.md`, `decisions.md`, user feedback, project patterns, and bounded memory. Rebuild tasks only as needed for the requested change.
+When returning to `planning/read_context`, reread full `plan.md`, `decisions.md`, user feedback, and `discovery.md`. Rebuild tasks only as needed for the requested change.
 
 ## auto-compact
 

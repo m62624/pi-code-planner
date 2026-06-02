@@ -8,7 +8,7 @@ KISS does not mean avoiding advanced language features. Traits, interfaces, gene
 
 ## Required Process
 
-1. Read `task.md`, `tdd.md`, test artifacts, selected experiment summary, and relevant bounded memory.
+1. Read `task.md`, `tdd.md`, test artifacts, selected experiment summary, and focused source files only when needed.
 2. Inspect the current task-branch diff through planner wrappers.
 3. Question the implementation actively:
    - Can any helper, abstraction, branch, conversion, or validation path be removed or made clearer?
@@ -19,7 +19,7 @@ KISS does not mean avoiding advanced language features. Traits, interfaces, gene
 5. Apply only behavior-preserving changes.
 6. Run focused tests from the worktree path reported by `planner_status` after each meaningful refactor group.
 7. Commit through planner wrappers if files changed.
-8. Refresh affected memory entries, including effects.
+8. Update task artifacts when the refactor changes relevant implementation details.
 9. Commit the refactor if project files changed.
 
 ## Restrictions
@@ -43,4 +43,4 @@ Preserve selected candidate context, refactor intent, changed files, checks, com
 
 ## auto-compact
 
-Call `planner_status` immediately. Reload task artifacts, selected experiment summary, verify notes, and relevant memory. Confirm whether refactor changes were committed before resuming.
+Call `planner_status` immediately. Reload task artifacts, selected experiment summary, and verify notes. Confirm whether refactor changes were committed before resuming.

@@ -7,7 +7,7 @@ Execute exactly one active task at a time through tests-first development, seque
 ## Context Reload Policy
 
 - At `prepare_task`, call `planner_status`, reread the full `plan.md`, read answered `questions.md` and `decisions.md`, read the selected `task.md`, then inspect `discovery.md` and use focused project search only if needed.
-- During one experiment loop, reread `task.md`, `tdd.md`, test/verify artifacts, completed experiment summaries, and relevant memory. Read the full `plan.md` only when integration context is unclear.
+- During one experiment loop, reread `task.md`, `tdd.md`, test/verify artifacts, and completed experiment summaries. Read the full `plan.md` only when integration context is unclear.
 - After `compact_task`, do not carry live reasoning into the next task. Call `planner_status`, reread the full `plan.md`, inspect task status, then load the next `task.md`.
 - After recovery or auto-compact, call `planner_status` before any edit or check.
 
@@ -79,8 +79,8 @@ Execute exactly one active task at a time through tests-first development, seque
 
 Preserve the plan id, active task id, active experiment id, exact branch, current step, task artifact paths, verification results, selected candidate state, completed experiment summaries, open risks, and exact next action. After compaction, call `planner_status`.
 
-For `compact_experiment`, reload `task.md`, `tdd.md`, tests, verify notes, prior experiment summaries, and relevant memory. For `compact_task`, reload full `plan.md` before choosing the next task.
+For `compact_experiment`, reload `task.md`, `tdd.md`, tests, verify notes, and prior experiment summaries. For `compact_task`, reload full `plan.md` before choosing the next task.
 
 ## auto-compact
 
-Call `planner_status` immediately. Do not continue editing from chat memory. Restore the exact task and experiment from persisted state, inspect the git gate, then reread the artifacts required by the current step. Use bounded project context or focused source reads only when the exact action needs them. If scope may have changed, reread full `plan.md`.
+Call `planner_status` immediately. Do not continue editing from chat memory. Restore the exact task and experiment from persisted state, inspect the git gate, then reread the artifacts required by the current step. Read source files only when the exact action needs details not present in the artifacts. If scope may have changed, reread full `plan.md`.

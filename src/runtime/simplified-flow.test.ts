@@ -3,21 +3,16 @@ import { getAllowedPlannerWrapperTools } from "../guard/tool-policy";
 import { getInstructionKeysForPlannerStep } from "../instructions/routing";
 import { createInitialPlanState, PLANNER_STAGE_STEPS } from "../storage/schema";
 import { syncStateAfterPlannerGitMutation } from "./git-state-sync";
-import { PLANNER_MEMORY_TOOL_NAMES } from "./memory-tools";
 import { evaluatePlannerRuntimeReality } from "./planner-runtime";
 import { finishPlannerStep } from "./state-machine";
 
 describe("simplified local-model workflow", () => {
-	it("keeps discovery bounded and removes durable indexing ceremony", () => {
+	it("keeps discovery small and removes indexing ceremony", () => {
 		expect(PLANNER_STAGE_STEPS.discovery).toEqual([
 			"scan_project_structure",
 			"write_questions",
 			"compact_discovery",
 			"enter_planning",
-		]);
-		expect(PLANNER_MEMORY_TOOL_NAMES).toEqual([
-			"planner_memory_project_map",
-			"planner_memory_search_project",
 		]);
 	});
 
@@ -34,12 +29,9 @@ describe("simplified local-model workflow", () => {
 		});
 	});
 
-	it("does not gate normal flow on stale legacy memory checkpoint fields", () => {
+	it("allows normal flow when git reality matches the current branch", () => {
 		const current = state({
 			currentBranch: "plan/plan-a",
-			lastCheckpointCommit: "old123",
-			requiresMemoryUpdate: true,
-			memoryUpdateReason: "planner_commit",
 		});
 		expect(
 			evaluatePlannerRuntimeReality({
@@ -51,21 +43,13 @@ describe("simplified local-model workflow", () => {
 		).toMatchObject({ action: "allow_stage_machine" });
 	});
 
-	it("tracks planner git mutations without scheduling memory refresh", () => {
+	it("tracks planner git mutations without a secondary sync phase", () => {
 		const synced = syncStateAfterPlannerGitMutation({
-			state: state({
-				currentBranch: "plan/plan-a",
-				lastCheckpointCommit: "old123",
-			}),
+			state: state({ currentBranch: "plan/plan-a" }),
 			before: reality({ headCommit: "old123" }),
 			after: reality({ headCommit: "new456" }),
-			headChangeReason: "planner_commit",
 		});
-		expect(synced).toMatchObject({
-			lastCheckpointCommit: "new456",
-			requiresMemoryUpdate: false,
-			memoryUpdateReason: null,
-		});
+		expect(synced).toMatchObject({ currentBranch: "plan/plan-a" });
 	});
 
 	it("routes only cheap context retrieval helpers", () => {
@@ -73,12 +57,7 @@ describe("simplified local-model workflow", () => {
 			getAllowedPlannerWrapperTools(
 				state({ stage: "discovery", step: "scan_project_structure" }),
 			),
-		).toEqual([
-			"planner_status",
-			"planner_git_inspect",
-			"planner_memory_project_map",
-			"planner_memory_search_project",
-		]);
+		).toEqual(["planner_status", "planner_git_inspect"]);
 		expect(
 			getInstructionKeysForPlannerStep({
 				stage: "execution",

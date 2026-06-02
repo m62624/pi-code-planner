@@ -15,7 +15,6 @@ export interface UpsertTaskArtifactsInput {
 	objective: string;
 	scope: string[];
 	acceptanceCriteria: string[];
-	memoryHints: string[];
 }
 
 export async function upsertTaskArtifacts(
@@ -36,7 +35,6 @@ export async function upsertTaskArtifacts(
 			input.acceptanceCriteria,
 			"acceptanceCriteria",
 		),
-		memoryHints: stringArray(input.memoryHints, "memoryHints"),
 	};
 	await fs.mkdirp(paths.experimentsDir);
 	await writeJson(fs, paths.taskJson, record);
@@ -75,10 +73,6 @@ function formatTaskMarkdown(task: TaskRecord): string {
 		"## Acceptance Criteria",
 		"",
 		...list(task.acceptanceCriteria),
-		"",
-		"## Memory Hints",
-		"",
-		...list(task.memoryHints, "(use bounded memory search for the objective)"),
 		"",
 		"## TDD Rule",
 		"",

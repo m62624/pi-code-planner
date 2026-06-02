@@ -88,7 +88,7 @@ class MockGitRunner implements GitRunner {
 }
 
 describe("planner plan tools", () => {
-	it("creates project, plan, state, memory, instructions, and activates the plan", async () => {
+	it("creates project, plan, state, instructions, and activates the plan", async () => {
 		const fs = new MockPlannerFs();
 		await seedInstructionDefaults(fs, BUNDLED_INSTRUCTION_DEFAULTS_DIR);
 		const projectPaths = createProjectStoragePaths({
@@ -138,8 +138,6 @@ describe("planner plan tools", () => {
 			},
 			worktreePath: "/repo/app/.pi/pi-code-planner/worktrees/api-audit",
 			currentBranch: "plan/api-audit",
-			lastCheckpointCommit: "bootstrap456",
-			requiresMemoryUpdate: false,
 			compactBoundaries: {
 				stage: true,
 				task: false,

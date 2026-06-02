@@ -114,7 +114,7 @@ class MockGitRunner implements GitRunner {
 }
 
 describe("planner git tools", () => {
-	it("commits through planner git and marks memory update required", async () => {
+	it("commits through planner git and persists synchronized state", async () => {
 		const fs = new MockPlannerFs();
 		const setup = await createGitToolSetup(fs, {
 			state: {
@@ -122,7 +122,6 @@ describe("planner git tools", () => {
 				step: "write_tests",
 				stepStatus: "running",
 				currentBranch: "task/plan-a/task-1",
-				lastCheckpointCommit: "old123",
 				activeBranches: {
 					base: "main",
 					plan: "plan/plan-a",
@@ -131,7 +130,6 @@ describe("planner git tools", () => {
 					selectedExperiment: null,
 				},
 			},
-			checkpointCommit: "old123",
 		});
 		const git = new MockGitRunner({
 			branch: "task/plan-a/task-1",
@@ -158,9 +156,6 @@ describe("planner git tools", () => {
 		});
 		expect(await readPlanState(fs, setup.planPaths)).toMatchObject({
 			currentBranch: "task/plan-a/task-1",
-			lastCheckpointCommit: "new456",
-			requiresMemoryUpdate: false,
-			memoryUpdateReason: null,
 		});
 	});
 
@@ -172,7 +167,6 @@ describe("planner git tools", () => {
 				step: "write_tests",
 				stepStatus: "running",
 				currentBranch: "task/plan-a/task-1",
-				lastCheckpointCommit: "abc123",
 				activeBranches: {
 					base: "main",
 					plan: "plan/plan-a",
@@ -260,8 +254,6 @@ describe("planner git tools", () => {
 		});
 		expect(await readPlanState(fs, setup.planPaths)).toMatchObject({
 			currentBranch: "task/plan-a/task-1",
-			requiresMemoryUpdate: false,
-			memoryUpdateReason: null,
 			mergeTargets: { experimentToTask: null },
 		});
 	});
@@ -293,9 +285,7 @@ async function createGitToolSetup(
 	fs: MockPlannerFs,
 	input: {
 		state?: Partial<PlanStateRecord>;
-		checkpointCommit?: string;
 		createWorktreeDir?: boolean;
-		initializeMemory?: boolean;
 	} = {},
 ): Promise<{
 	projectPaths: ProjectStoragePaths;
@@ -320,7 +310,6 @@ async function createGitToolSetup(
 			worktreePath,
 		}),
 		currentBranch: "plan/plan-a",
-		lastCheckpointCommit: input.checkpointCommit ?? "abc123",
 		...input.state,
 	});
 	if (input.createWorktreeDir ?? true) {

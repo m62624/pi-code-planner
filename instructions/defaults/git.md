@@ -49,7 +49,7 @@ While a planner plan is active, the persisted worktree path reported by `planner
 - After commit or merge, call `planner_status` and continue the persisted state-machine step.
 - A dirty worktree is allowed during implementation but must be resolved before merge boundaries.
 - Conflicts, unexpected branch changes, missing worktrees, and inconsistent history require recovery inspection.
-- External commits trigger memory refresh, not automatic reset.
+- External commits trigger recovery inspection, not automatic reset.
 
 ## Cleanup Rules
 

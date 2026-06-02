@@ -22,8 +22,6 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_git_create_refactor_branch",
 	"planner_git_merge_refactor_to_task",
 	"planner_git_merge_task_to_plan",
-	"planner_memory_project_map",
-	"planner_memory_search_project",
 	"planner_recovery_inspect",
 	"planner_recovery_resume",
 ] as const;
@@ -44,15 +42,6 @@ const ALWAYS_ALLOWED_TOOLS = [
 	"planner_status",
 ] as const satisfies readonly PlannerWrapperTool[];
 
-const MEMORY_SEARCH_STAGES = new Set<PlannerStage>([
-	"discovery",
-	"planning",
-	"execution",
-	"finalize",
-	"done",
-	"recovery",
-]);
-
 const STEP_ALLOWED_TOOLS = {
 	init: {
 		check_project: ["planner_git_inspect"],
@@ -68,20 +57,13 @@ const STEP_ALLOWED_TOOLS = {
 		await_goal_approval: ["planner_goal_decide"],
 	},
 	discovery: {
-		scan_project_structure: [
-			"planner_git_inspect",
-			"planner_memory_project_map",
-			"planner_memory_search_project",
-		],
+		scan_project_structure: ["planner_git_inspect"],
 		write_questions: ["planner_questions_submit", "planner_questions_resolve"],
 		compact_discovery: [],
 		enter_planning: [],
 	},
 	planning: {
-		read_memory: [
-			"planner_memory_project_map",
-			"planner_memory_search_project",
-		],
+		read_context: [],
 		draft_plan: [],
 		split_tasks: [],
 		write_task_files: ["planner_task_upsert"],
@@ -175,15 +157,7 @@ export function getAllowedPlannerWrapperTools(
 		Record<PlannerStep, readonly PlannerWrapperTool[]>
 	> = STEP_ALLOWED_TOOLS[state.stage];
 	const stepRules = stageRules[state.step] ?? [];
-	return withAlwaysAllowed([
-		...stepRules,
-		...(MEMORY_SEARCH_STAGES.has(state.stage)
-			? ([
-					"planner_memory_project_map",
-					"planner_memory_search_project",
-				] as const)
-			: []),
-	]);
+	return withAlwaysAllowed(stepRules);
 }
 
 export function checkPlannerWrapperAllowed(input: {

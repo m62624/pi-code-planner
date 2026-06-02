@@ -32,7 +32,7 @@ export type DiscoveryStep =
 	| "enter_planning";
 
 export type PlanningStep =
-	| "read_memory"
+	| "read_context"
 	| "draft_plan"
 	| "split_tasks"
 	| "write_task_files"
@@ -109,7 +109,7 @@ export const PLANNER_STAGE_STEPS = {
 		"enter_planning",
 	],
 	planning: [
-		"read_memory",
+		"read_context",
 		"draft_plan",
 		"split_tasks",
 		"write_task_files",
@@ -167,14 +167,6 @@ export type StepStatus =
 	| "failed"
 	| "blocked";
 
-export type MemoryUpdateReason =
-	| "planner_commit"
-	| "planner_merge"
-	| "external_commit"
-	| "manual_checkout"
-	| "rebase_or_history_rewrite"
-	| "file_hash_changed";
-
 export interface ProjectPlanSummary {
 	planId: string;
 	title: string;
@@ -204,7 +196,6 @@ export interface TaskRecord {
 	objective: string;
 	scope: string[];
 	acceptanceCriteria: string[];
-	memoryHints: string[];
 }
 
 export interface PlanRecord {
@@ -259,9 +250,6 @@ export interface PlanStateRecord {
 	managedBranches: ManagedBranchRegistry;
 	currentBranch: string | null;
 	mergeTargets: MergeTargets;
-	lastCheckpointCommit: string | null;
-	requiresMemoryUpdate: boolean;
-	memoryUpdateReason: MemoryUpdateReason | null;
 	questionsSubmitted: boolean;
 	questionsResolved: boolean;
 	compactBoundaries: PlannerCompactBoundaries;
@@ -331,9 +319,6 @@ export function createInitialPlanState(input: {
 			taskToPlan: null,
 			planToOutput: null,
 		},
-		lastCheckpointCommit: null,
-		requiresMemoryUpdate: false,
-		memoryUpdateReason: null,
 		questionsSubmitted: false,
 		questionsResolved: false,
 		compactBoundaries: input.compactBoundaries ?? {

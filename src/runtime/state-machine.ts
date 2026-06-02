@@ -121,7 +121,7 @@ export function getAllowedNextPlannerPositions(
 		];
 	}
 	if (input.stage === "discovery" && input.step === "enter_planning") {
-		return [{ stage: "planning", step: "read_memory" }];
+		return [{ stage: "planning", step: "read_context" }];
 	}
 	if (input.stage === "planning" && input.step === "enter_execution") {
 		return [{ stage: "execution", step: "prepare_task" }];
@@ -148,7 +148,7 @@ export function getAllowedNextPlannerPositions(
 		];
 	}
 	if (input.stage === "done" && input.step === "handle_change_request") {
-		return [{ stage: "planning", step: "read_memory" }];
+		return [{ stage: "planning", step: "read_context" }];
 	}
 
 	return nextWithinStage(input);
@@ -360,8 +360,6 @@ export function enterPlannerRecovery(
 		stepStatus: "blocked",
 		nextStep: null,
 		requiresCompact: false,
-		requiresMemoryUpdate: false,
-		memoryUpdateReason: null,
 		requiresUserDecision: options.requiresUserDecision ?? true,
 		broken: true,
 		brokenReason: reason,
@@ -392,8 +390,6 @@ export function resumePlannerAfterRecovery(
 		stepStatus: "pending",
 		nextStep: null,
 		requiresCompact: false,
-		requiresMemoryUpdate: false,
-		memoryUpdateReason: null,
 		requiresUserDecision: false,
 		broken: false,
 		brokenReason: null,

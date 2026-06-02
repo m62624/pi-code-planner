@@ -81,11 +81,10 @@ describe("planner compact runtime", () => {
 		expect(message).toContain(PLANNER_SYSTEM_INSTRUCTIONS_HEADER);
 		expect(message.startsWith("[SYSTEM_INSTRUCTIONS]")).toBe(true);
 		expect(message).toContain("Call planner_status immediately");
-		expect(message).toContain("planner_memory_search_project");
-		expect(message).toContain("State the missing detail before reading source");
+		expect(message).toContain("Use discovery.md as the project summary");
 		expect(message).toContain("- planId: plan-a");
 		expect(message).toContain("- step: compact_task");
-		expect(message).toContain("Check git and memory before resuming.");
+		expect(message).toContain("Check git state before resuming.");
 	});
 
 	it("queues post-compact instructions behind pending user messages", () => {
@@ -196,7 +195,6 @@ async function createCompactSetup() {
 		stepStatus: "blocked",
 		activeTaskId: "task-1",
 		currentBranch: "task/plan-a/task-1",
-		lastCheckpointCommit: "abc123",
 		requiresCompact: true,
 	} as const;
 	const preflight = {
@@ -227,7 +225,7 @@ async function createCompactSetup() {
 			"Preserve task result and artifact links.",
 			"",
 			"## auto-compact",
-			"Check git and memory before resuming.",
+			"Check git state before resuming.",
 		].join("\n"),
 	});
 

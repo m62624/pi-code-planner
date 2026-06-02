@@ -60,9 +60,6 @@ describe("planner state machine", () => {
 			"state_blocked",
 		);
 		expect(() =>
-			startPlannerStep(state({ requiresMemoryUpdate: true })),
-		).not.toThrow();
-		expect(() =>
 			startPlannerStep(state({ requiresCompact: true })),
 		).toThrowStateMachine("state_blocked");
 		expect(() =>
@@ -252,7 +249,7 @@ describe("planner state machine", () => {
 					stepStatus: "running",
 				}),
 			),
-		).toMatchObject({ nextStep: "read_memory" });
+		).toMatchObject({ nextStep: "read_context" });
 	});
 
 	it("marks failed or blocked steps and retries without moving position", () => {

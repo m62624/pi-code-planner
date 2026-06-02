@@ -207,7 +207,6 @@ async function createGoalSetup(state: Record<string, unknown> = {}): Promise<{
 		step: "draft_goal",
 		stepStatus: "running",
 		currentBranch: "plan/plan-a",
-		lastCheckpointCommit: "abc123",
 		...state,
 	});
 	await setActivePlan(fs, projectPaths, "plan-a");

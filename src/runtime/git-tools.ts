@@ -183,7 +183,6 @@ async function commitGitTool(
 		git: input.git,
 		state: ready.state,
 		repoRoot,
-		headChangeReason: "planner_commit",
 		mutate: async ({ before }) => {
 			if (!before.isDirty) {
 				throw new Error(
@@ -199,11 +198,7 @@ async function commitGitTool(
 		ready.orchestrator.preflight.context.planPaths,
 		synced.state,
 	);
-	return applied(
-		input.toolName,
-		"Planner git commit created. Memory update is required before normal flow continues.",
-		synced,
-	);
+	return applied(input.toolName, "Planner git commit created.", synced);
 }
 
 async function createTaskBranchTool(
@@ -214,7 +209,6 @@ async function createTaskBranchTool(
 	return await runStateChangingGitOperation({
 		input,
 		ready,
-		headChangeReason: "planner_commit",
 		text: `Planner task branch created for ${taskId}.`,
 		operation: () =>
 			createAndSwitchTaskBranch({
@@ -236,7 +230,6 @@ async function createExperimentBranchTool(
 	return await runStateChangingGitOperation({
 		input,
 		ready,
-		headChangeReason: "planner_commit",
 		text: `Planner experiment branch created for ${attemptId}.`,
 		operation: () =>
 			createAndSwitchExperimentBranch({
@@ -279,7 +272,6 @@ async function mergeSelectedExperimentTool(
 	return await runStateChangingGitOperation({
 		input,
 		ready,
-		headChangeReason: "planner_merge",
 		text: "Planner merged selected experiment into task branch.",
 		operation: () =>
 			mergeSelectedExperimentToTask({
@@ -302,7 +294,6 @@ async function createRefactorBranchTool(
 	return await runStateChangingGitOperation({
 		input,
 		ready,
-		headChangeReason: "planner_commit",
 		text: "Planner refactor branch created.",
 		operation: () =>
 			createAndSwitchRefactorBranch({
@@ -323,7 +314,6 @@ async function mergeRefactorTool(
 	return await runStateChangingGitOperation({
 		input,
 		ready,
-		headChangeReason: "planner_merge",
 		text: "Planner merged refactor branch into task branch.",
 		operation: () =>
 			mergeRefactorToTask({
@@ -343,7 +333,6 @@ async function mergeTaskTool(
 	return await runStateChangingGitOperation({
 		input,
 		ready,
-		headChangeReason: "planner_merge",
 		text: "Planner merged task branch into plan branch. The merged task branch and any residual managed experiment/refactor branches for this task were deleted.",
 		operation: () =>
 			mergeTaskToPlan({
@@ -357,7 +346,6 @@ async function mergeTaskTool(
 async function runStateChangingGitOperation(input: {
 	input: PlannerGitToolExecutionInput;
 	ready: ReadyGitContext;
-	headChangeReason: "planner_commit" | "planner_merge";
 	text: string;
 	operation: () => Promise<{ state: PlanStateRecord }>;
 }): Promise<PlannerGitToolExecutionResult> {
@@ -375,7 +363,6 @@ async function runStateChangingGitOperation(input: {
 		state: result.state,
 		before,
 		after,
-		headChangeReason: input.headChangeReason,
 	});
 	await savePlanState(
 		input.input.fs,

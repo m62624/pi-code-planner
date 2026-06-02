@@ -161,7 +161,6 @@ async function createPlanTool(
 		step: "draft_goal",
 		stepStatus: "running",
 		currentBranch: reality.branch,
-		lastCheckpointCommit: reality.headCommit,
 	} as const;
 	await initializePlanFiles(input.fs, planPaths, plan);
 	await input.fs.writeTextAtomic(planPaths.requestMd, `${request.trim()}\n`);

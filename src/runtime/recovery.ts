@@ -14,7 +14,6 @@ export type PlannerRecoveryIssueCode =
 	| PlannerRuntimeRecoveryReason
 	| "no_active_plan"
 	| "no_issue"
-	| "memory_update_required"
 	| "external_commit"
 	| "dirty_worktree"
 	| "managed_branch_missing";
@@ -46,9 +45,6 @@ export interface PlannerRecoveryInspection {
 		stepStatus: string | null;
 		worktreePath: string | null;
 		currentBranch: string | null;
-		lastCheckpointCommit: string | null;
-		requiresMemoryUpdate: boolean | null;
-		memoryUpdateReason: string | null;
 		requiresCompact: boolean | null;
 		requiresUserDecision: boolean | null;
 		broken: boolean | null;
@@ -131,9 +127,6 @@ export async function inspectPlannerRecovery(input: {
 			stepStatus: state.stepStatus,
 			worktreePath: state.worktreePath,
 			currentBranch: state.currentBranch,
-			lastCheckpointCommit: state.lastCheckpointCommit,
-			requiresMemoryUpdate: state.requiresMemoryUpdate,
-			memoryUpdateReason: state.memoryUpdateReason,
 			requiresCompact: state.requiresCompact,
 			requiresUserDecision: state.requiresUserDecision,
 			broken: state.broken,
@@ -263,7 +256,7 @@ function classifyRecoveryIssues(input: {
 			code: "dirty_worktree",
 			severity: "warning",
 			message:
-				"Worktree has uncommitted changes. This is allowed inside active work, but not at checkpoint/sync/plan-switch boundaries.",
+				"Worktree has uncommitted changes. This is allowed inside active work, but not at plan-switch boundaries.",
 		});
 	}
 	for (const branch of input.branches) {
@@ -406,7 +399,7 @@ function recoveryRecommendation(
 		return "Do not continue on the wrong branch. If the worktree is clean, a planner repair may switch back to the expected branch; otherwise ask the user.";
 	}
 	if (issues.some((issue) => issue.code === "dirty_worktree")) {
-		return "Do not switch plans or sync checkpoint until dirty changes are committed, reverted by user approval, or explained.";
+		return "Do not switch plans until dirty changes are committed, reverted by user approval, or explained.";
 	}
 	if (issues.some((issue) => issue.severity === "blocking")) {
 		return "Stay in recovery and ask the user before destructive repair.";
@@ -470,9 +463,6 @@ function emptyExpected(): PlannerRecoveryInspection["expected"] {
 		stepStatus: null,
 		worktreePath: null,
 		currentBranch: null,
-		lastCheckpointCommit: null,
-		requiresMemoryUpdate: null,
-		memoryUpdateReason: null,
 		requiresCompact: null,
 		requiresUserDecision: null,
 		broken: null,

@@ -37,7 +37,7 @@ That matters for local models. On a single consumer machine, KV cache, RAM, VRAM
 - one persisted state machine;
 - one isolated Git worktree per plan;
 - explicit discovery before implementation;
-- bounded project memory with file hashes and API signatures;
+- concise discovery artifacts that survive compaction;
 - tests-first task execution;
 - controlled Git wrappers;
 - recovery checks when persisted state and repository reality disagree;
@@ -53,8 +53,8 @@ The extension was tested primarily with `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf`, but t
 ```text
 user request
   -> normalize and approve goal
-  -> inspect project one file at a time
-  -> persist compressed memory
+  -> inspect only relevant project files
+  -> persist a concise discovery summary
   -> write an implementation plan
   -> split work into atomic tasks
   -> write tests first
@@ -106,7 +106,7 @@ init
   -> finalize
   -> done
 
-recovery may interrupt the normal path when Git, worktree, memory, or state disagree.
+recovery may interrupt the normal path when Git, worktree, or state disagree.
 ```
 
 ### `init`
@@ -138,7 +138,7 @@ The model becomes familiar with the project before implementation without indexi
 
 | Step | Purpose |
 | --- | --- |
-| `scan_project_structure` | Build a bounded mechanical project map, search Git-visible files on CPU, read only useful files, and summarize findings in `discovery.md`. |
+| `scan_project_structure` | Inspect the project tree, read only useful files, and summarize findings in `discovery.md`. |
 | `write_questions` | Ask focused questions after evidence is collected. |
 | `compact_discovery` | Compact broad discovery context when enabled. |
 | `enter_planning` | Move into plan construction. |
@@ -147,7 +147,7 @@ The model becomes familiar with the project before implementation without indexi
 
 | Step | Purpose |
 | --- | --- |
-| `read_memory` | Reconstruct context from `discovery.md`, task artifacts, bounded project map, and focused search. |
+| `read_context` | Reconstruct context from `discovery.md`, questions, decisions, and task artifacts. |
 | `draft_plan` | Write the implementation strategy, constraints, risks, and checks. |
 | `split_tasks` | Divide the plan into ordered behavioral tasks. Tests stay inside each task's TDD cycle, never as standalone test items. |
 | `write_task_files` | Call `planner_task_upsert`; the wrapper creates `task.json`, `task.md`, and empty TDD lifecycle artifacts. |
@@ -239,14 +239,7 @@ Project commands such as tests, builds, linters, generators, and formatters shou
 
 Discovery is intentionally lightweight for context-limited local models:
 
-```text
-bounded project map
-  -> focused CPU-only search
-  -> read only useful source files
-  -> summarize findings in discovery.md
-```
-
-The planner does not require a full-project semantic index, embeddings model, vector database, or VRAM. After compact, the model reloads `discovery.md` and searches again only when the current task needs more evidence.
+The model inspects the project tree, reads only the files needed for the approved goal, and summarizes useful findings in `discovery.md`. The planner does not maintain a semantic index, embeddings model, vector database, or separate context database. After compact, the model reloads `discovery.md` and reads additional source files only when the current task needs more evidence.
 
 ## Storage Layout 📁
 
@@ -301,7 +294,6 @@ Key files:
 | `plan.md` | Human-readable implementation plan written after discovery. |
 | `questions.md` | Evidence-based questions and explicit user answers. |
 | `decisions.md` | Durable user decisions. |
-`planner_memory_project_map` summarizes areas, manifests, entrypoints, tests, and config paths without reading source contents. `planner_memory_search_project` performs bounded CPU-only working-tree search without another model or VRAM usage.
 
 ## Settings And Overrides ⚙️
 
@@ -409,7 +401,6 @@ recovery.md
 tdd.md
 experiment.md
 refactor.md
-memory.md
 git.md
 git-commit.md
 ```

@@ -164,7 +164,7 @@ describe("planner discovery question tools", () => {
 	it("blocks question submission outside discovery/write_questions", async () => {
 		const setup = await createQuestionSetup({
 			stage: "planning",
-			step: "read_memory",
+			step: "read_context",
 			stepStatus: "running",
 		});
 
@@ -213,7 +213,6 @@ async function createQuestionSetup(
 		step: "write_questions",
 		stepStatus: "running",
 		currentBranch: "plan/plan-a",
-		lastCheckpointCommit: "abc123",
 		...state,
 	});
 	await setActivePlan(fs, projectPaths, "plan-a");

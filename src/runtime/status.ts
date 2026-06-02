@@ -37,7 +37,7 @@ export const PLANNER_STATUS_INVARIANTS = [
 	"The model never edits project.json, plan.json, state.json, or worktree index files directly.",
 	"Call planner_status before choosing the next planner action after every tool result, compact, recovery, or user decision.",
 	"Normal flow is blocked by recovery, user decision, or compact gate.",
-	"Discovery uses a bounded project map and focused search before source reads. It does not build a durable per-symbol mirror of the repository.",
+	"Discovery familiarizes the model with the project before planning. Read only the files needed for the approved goal and summarize findings in discovery.md.",
 	"Stage and step order is strict. Recovery is the only stage that may resume into a valid non-recovery position.",
 	"A completed step cannot run again. Advance it first.",
 	"Every wrapper tool must be allowed by runtime preflight and wrapper policy for the current exact stage/step.",
@@ -107,7 +107,7 @@ export const PLANNER_STEP_RULES = {
 	create_plan_record: stepRule("init", "create_plan_record", {
 		objective: "Create the plan record and initial state.",
 		requiredActions: [
-			"Create plan.json, state.json, plan markdown artifacts, and memory files.",
+			"Create plan.json, state.json, and plan markdown artifacts.",
 		],
 		allowedNow: ["Planner internal storage writes only."],
 		forbiddenNow: ["Do not start discovery before the plan record exists."],
@@ -178,20 +178,18 @@ export const PLANNER_STEP_RULES = {
 		objective:
 			"Become familiar with the project without indexing the repository.",
 		requiredActions: [
-			"Call planner_memory_project_map once to inspect a bounded mechanical repository overview without reading source contents.",
-			"Start with planner_memory_search_project using a query derived from goal.md.",
-			"Inspect bounded ranked excerpts and broaden the query only when context is insufficient.",
+			"Inspect the project tree with read-only shell commands.",
 			"Read only the source files needed to understand architecture, commands, risks, and the requested change.",
 			"Write concise findings to discovery.md.",
 		],
 		allowedNow: [
-			"Use planner_memory_project_map, planner_memory_search_project, bounded shell reads, and discovery.md.",
+			"Use read-only shell commands, source reads, and discovery.md.",
 		],
 		forbiddenNow: [
 			"Do not implement code.",
 			"Do not read every project file by default.",
 		],
-		exitCondition: "discovery.md contains the useful bounded project overview.",
+		exitCondition: "discovery.md contains a concise useful project overview.",
 		nextInstruction:
 			"Call planner_finish_step to open and start write_questions.",
 	}),
@@ -218,36 +216,31 @@ export const PLANNER_STEP_RULES = {
 			"Request Pi compact and preserve discovery summary and open questions.",
 		],
 		allowedNow: ["Compact flow only."],
-		forbiddenNow: [
-			"Do not edit code or memory while compact is required/pending.",
-		],
+		forbiddenNow: ["Do not edit code while compact is required/pending."],
 		exitCondition:
 			"Compaction finished and resume context points back to planner_status.",
 		nextInstruction: "Complete compact to open enter_planning.",
 	}),
 	enter_planning: stepRule("discovery", "enter_planning", {
 		objective: "Enter planning after verified discovery.",
-		requiredActions: ["Persist stage=planning and step=read_memory."],
+		requiredActions: ["Persist stage=planning and step=read_context."],
 		allowedNow: ["State transition only."],
-		forbiddenNow: ["Do not draft tasks until planning/read_memory is active."],
-		exitCondition: "State points to planning/read_memory.",
+		forbiddenNow: ["Do not draft tasks until planning/read_context is active."],
+		exitCondition: "State points to planning/read_context.",
 		nextInstruction:
-			"Continue with planning/read_memory and call planner_status again.",
+			"Continue with planning/read_context and call planner_status again.",
 	}),
 
-	read_memory: stepRule("planning", "read_memory", {
-		objective: "Use compressed memory as the source of project context.",
+	read_context: stepRule("planning", "read_context", {
+		objective: "Load the project context needed for planning.",
 		requiredActions: [
-			"Read project_patterns and bounded memory indexes before reading source files.",
+			"Read discovery.md, questions.md, and decisions.md.",
+			"Read specific source files only when the recorded discovery context is insufficient.",
 		],
-		allowedNow: [
-			"Use planner memory inspection/retrieval and planner artifacts.",
-		],
-		forbiddenNow: [
-			"Do not reread the whole project unless memory is insufficient or stale.",
-		],
+		allowedNow: ["Use planner artifacts and focused source reads."],
+		forbiddenNow: ["Do not reread the whole project by default."],
 		exitCondition:
-			"Relevant context for planning is loaded from memory and artifacts.",
+			"Relevant context for planning is loaded from planner artifacts.",
 		nextInstruction: "Call planner_finish_step to open draft_plan.",
 	}),
 	draft_plan: stepRule("planning", "draft_plan", {
@@ -274,7 +267,7 @@ export const PLANNER_STEP_RULES = {
 	write_task_files: stepRule("planning", "write_task_files", {
 		objective: "Create task artifacts.",
 		requiredActions: [
-			"Call planner_task_upsert for each behavioral task with scope, acceptance criteria, and bounded memory hints.",
+			"Call planner_task_upsert for each behavioral task with scope and acceptance criteria.",
 			"Let the wrapper create task.json, task.md, and empty TDD lifecycle artifacts. Do not write task JSON manually.",
 		],
 		allowedNow: ["Use planner_task_upsert for task planner artifacts only."],
@@ -296,7 +289,7 @@ export const PLANNER_STEP_RULES = {
 	compact_planning: stepRule("planning", "compact_planning", {
 		objective: "Create a compact boundary after planning.",
 		requiredActions: [
-			"Request Pi compact and preserve plan, task order, decisions, and memory pointers.",
+			"Request Pi compact and preserve plan, task order, decisions, and artifact paths.",
 		],
 		allowedNow: ["Compact flow only."],
 		forbiddenNow: [
@@ -321,9 +314,7 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Select the next task, set activeTaskId, and create/switch the task branch through planner git wrappers.",
 		],
-		allowedNow: [
-			"Read task artifacts, inspect memory, and use planner_git_create_task_branch.",
-		],
+		allowedNow: ["Read task artifacts and use planner_git_create_task_branch."],
 		forbiddenNow: [
 			"Do not write tests or production code before the task is prepared.",
 		],
@@ -334,7 +325,7 @@ export const PLANNER_STEP_RULES = {
 	write_tdd_plan: stepRule("execution", "write_tdd_plan", {
 		objective: "Write the TDD plan before changing behavior.",
 		requiredActions: [
-			"Read task.md and memory, then write tdd.md with failing test strategy and checks.",
+			"Read task.md and relevant source files, then write tdd.md with failing test strategy and checks.",
 		],
 		allowedNow: [
 			"Write TDD planner artifacts and inspect discovery context/source for test design.",
@@ -504,7 +495,7 @@ export const PLANNER_STEP_RULES = {
 	compact_task: stepRule("execution", "compact_task", {
 		objective: "Compact the completed task boundary.",
 		requiredActions: [
-			"Request Pi compact preserving task result, checks, memory state, and next-task context.",
+			"Request Pi compact preserving task result, checks, artifacts, and next-task context.",
 		],
 		allowedNow: ["Compact flow only."],
 		forbiddenNow: ["Do not edit task code while compact is required/pending."],
@@ -517,9 +508,9 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Read plan/task status and choose execution/prepare_task or finalize/verify_plan_branch.",
 		],
-		allowedNow: ["Read plan artifacts and inspect memory."],
+		allowedNow: ["Read plan artifacts and focused source files when needed."],
 		forbiddenNow: [
-			"Do not carry live context from the previous task except compacted artifacts and memory.",
+			"Do not carry live context from the previous task except compacted artifacts.",
 		],
 		exitCondition: "Next target is explicitly selected.",
 		nextInstruction:
@@ -606,7 +597,7 @@ export const PLANNER_STEP_RULES = {
 			"Do not create a new root project state.",
 		],
 		exitCondition: "Change request is recorded and planning can resume.",
-		nextInstruction: "Complete with next target planning/read_memory.",
+		nextInstruction: "Complete with next target planning/read_context.",
 	}),
 	prepare_output_branch: stepRule("done", "prepare_output_branch", {
 		objective: "Internal /planner-accept phase: prepare output branch.",
@@ -783,8 +774,6 @@ export async function buildPlannerStatusText(
 		input.fs,
 		preflight,
 	);
-	const memorySection = await formatMemorySection(input.fs, preflight);
-
 	lines.push(
 		`- plan: ${preflight.context.activePlanId}`,
 		`- plan title: ${preflight.context.plan.title}`,
@@ -813,9 +802,6 @@ export async function buildPlannerStatusText(
 		`- activeBranches: ${JSON.stringify(state.activeBranches)}`,
 		`- mergeTargets: ${JSON.stringify(state.mergeTargets)}`,
 		"",
-		"## Memory",
-		...memorySection,
-		"",
 		"## Lifecycle Decision",
 		...formatLifecycleDecision(lifecycle),
 		"",
@@ -843,7 +829,6 @@ export async function buildPlannerStatusText(
 		`- requiredGates: ${behavior.requiredGates.join(", ") || "(none)"}`,
 		`- expectedTools: ${behavior.expectedTools.join(", ") || "(none)"}`,
 		`- commitPolicy: ${behavior.commitPolicy}`,
-		`- memoryPolicy: ${behavior.memoryPolicy}`,
 		`- compactPolicy: ${behavior.compactPolicy}`,
 		"",
 		"## Allowed Planner Wrappers",
@@ -862,7 +847,7 @@ export async function buildPlannerStatusText(
 		...formatPlannerArtifactLinks(preflight),
 		"",
 		"## Discovery Context Rule",
-		"Use planner_memory_project_map and planner_memory_search_project for a bounded overview before broad source reads. Read source only when the project map, search excerpts, and discovery.md are insufficient for the current step.",
+		"Use discovery.md as the summary. Read source files only when the current action needs details that are not recorded there.",
 	);
 
 	return lines.join("\n");
@@ -950,17 +935,6 @@ function formatLifecycleNextAction(
 		default:
 			return decision.modelMessage;
 	}
-}
-
-async function formatMemorySection(
-	_fs: PlannerFs,
-	_preflight: PlannerPreflightResult,
-): Promise<string[]> {
-	return [
-		"- durable symbol indexing: disabled",
-		"- use planner_memory_project_map for a bounded mechanical overview",
-		"- use planner_memory_search_project for focused CPU-only search",
-	];
 }
 
 function formatInstructionRoutes(preflight: PlannerPreflightResult): string[] {

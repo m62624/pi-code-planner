@@ -15,7 +15,6 @@ import { createInitialPlanState } from "../storage/schema";
 import {
 	evaluatePlannerToolPreflight,
 	inspectPlannerGitReality,
-	markMemoryCheckpointSynced,
 	type PlannerGitReality,
 	runSyncedPlannerGitMutation,
 	syncStateAfterPlannerGitMutation,
@@ -65,15 +64,15 @@ class MockGitRunner implements GitRunner {
 }
 
 describe("planner git state sync", () => {
-	it("inspects actual branch, head, dirty state, and conflicts before tool execution", async () => {
+	it("inspects actual branch, head, dirty state, and conflicts", async () => {
 		const git = new MockGitRunner("plan/plan-a", "abc123", "UU src/a.ts\n");
 
-		const reality = await inspectPlannerGitReality({
-			git,
-			repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
-		});
-
-		expect(reality).toEqual({
+		await expect(
+			inspectPlannerGitReality({
+				git,
+				repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
+			}),
+		).resolves.toEqual({
 			repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
 			branch: "plan/plan-a",
 			headCommit: "abc123",
@@ -83,43 +82,15 @@ describe("planner git state sync", () => {
 		});
 	});
 
-	it("allows normal tool execution when branch, head, and memory checkpoint match", () => {
-		const state = {
-			...baseState(),
-			currentBranch: "plan/plan-a",
-			lastCheckpointCommit: "abc123",
-		};
+	it("allows matching branch and requires recovery for wrong branch or conflicts", () => {
+		const state = { ...baseState(), currentBranch: "plan/plan-a" };
 
 		expect(
 			evaluatePlannerToolPreflight({
 				state,
-				reality: reality({ branch: "plan/plan-a", headCommit: "abc123" }),
+				reality: reality({ branch: "plan/plan-a" }),
 			}),
 		).toEqual({ action: "allow", reason: null });
-	});
-
-	it("allows normal flow when head differs from legacy memory checkpoint", () => {
-		const state = {
-			...baseState(),
-			currentBranch: "plan/plan-a",
-			lastCheckpointCommit: "old123",
-		};
-
-		expect(
-			evaluatePlannerToolPreflight({
-				state,
-				reality: reality({ branch: "plan/plan-a", headCommit: "new456" }),
-			}),
-		).toEqual({ action: "allow", reason: null });
-	});
-
-	it("requires recovery on wrong branch or conflicts", () => {
-		const state = {
-			...baseState(),
-			currentBranch: "plan/plan-a",
-			lastCheckpointCommit: "abc123",
-		};
-
 		expect(
 			evaluatePlannerToolPreflight({
 				state,
@@ -129,45 +100,21 @@ describe("planner git state sync", () => {
 		expect(
 			evaluatePlannerToolPreflight({
 				state,
-				reality: reality({ branch: "plan/plan-a", statusPorcelain: "UU a.ts" }),
+				reality: reality({ statusPorcelain: "UU a.ts" }),
 			}),
 		).toMatchObject({ action: "require_recovery" });
 	});
 
-	it("syncs state after planner git mutation without advancing memory checkpoint", () => {
-		const state = {
-			...baseState(),
-			currentBranch: "task/plan-a/task-1",
-			lastCheckpointCommit: "old123",
-		};
-		const synced = syncStateAfterPlannerGitMutation({
-			state,
-			before: reality({ branch: "task/plan-a/task-1", headCommit: "old123" }),
-			after: reality({ branch: "task/plan-a/task-1", headCommit: "new456" }),
-			headChangeReason: "planner_commit",
-		});
-
-		expect(synced).toMatchObject({
-			currentBranch: "task/plan-a/task-1",
-			lastCheckpointCommit: "new456",
-			requiresMemoryUpdate: false,
-			memoryUpdateReason: null,
-		});
-	});
-
-	it("runs git mutation between before and after inspections and returns synced state", async () => {
+	it("runs a mutation between inspections and keeps state synchronized", async () => {
 		const git = new MockGitRunner("task/plan-a/task-1", "old123", "");
 		const state = {
 			...baseState(),
 			currentBranch: "task/plan-a/task-1",
-			lastCheckpointCommit: "old123",
 		};
-
 		const synced = await runSyncedPlannerGitMutation({
 			git,
 			state,
 			repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
-			headChangeReason: "planner_commit",
 			async mutate() {
 				git.setHead("new456");
 				return "committed";
@@ -178,44 +125,22 @@ describe("planner git state sync", () => {
 		expect(synced.before.headCommit).toBe("old123");
 		expect(synced.after.headCommit).toBe("new456");
 		expect(synced.state).toMatchObject({
-			lastCheckpointCommit: "new456",
-			requiresMemoryUpdate: false,
-			memoryUpdateReason: null,
+			currentBranch: "task/plan-a/task-1",
 		});
 	});
 
 	it("marks conflicted mutation result as recovery state", () => {
-		const synced = syncStateAfterPlannerGitMutation({
-			state: baseState(),
-			before: reality({ headCommit: "old123" }),
-			after: reality({ headCommit: "new456", statusPorcelain: "UU a.ts" }),
-			headChangeReason: "planner_merge",
-		});
-
-		expect(synced).toMatchObject({
+		expect(
+			syncStateAfterPlannerGitMutation({
+				state: baseState(),
+				before: reality({ headCommit: "old123" }),
+				after: reality({ headCommit: "new456", statusPorcelain: "UU a.ts" }),
+			}),
+		).toMatchObject({
 			stage: "recovery",
 			step: "inspect_git",
 			stepStatus: "blocked",
 			broken: true,
-			requiresMemoryUpdate: false,
-			memoryUpdateReason: null,
-		});
-	});
-
-	it("clears memory update gate only when checkpoint is synced to head", () => {
-		const state = {
-			...baseState(),
-			lastCheckpointCommit: "old123",
-			requiresMemoryUpdate: true,
-			memoryUpdateReason: "planner_merge" as const,
-		};
-
-		expect(
-			markMemoryCheckpointSynced({ state, headCommit: "new456" }),
-		).toMatchObject({
-			lastCheckpointCommit: "new456",
-			requiresMemoryUpdate: false,
-			memoryUpdateReason: null,
 		});
 	});
 });

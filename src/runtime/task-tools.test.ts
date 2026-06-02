@@ -69,7 +69,6 @@ describe("planner task tools", () => {
 				objective: "Parse config files with typed validation.",
 				scope: ["src/config.ts"],
 				acceptanceCriteria: ["Invalid input returns a typed error."],
-				memoryHints: ["parseConfig"],
 			},
 		});
 
@@ -122,7 +121,6 @@ async function createTaskSetup() {
 		step: "write_task_files",
 		stepStatus: "running",
 		currentBranch: "plan/plan-a",
-		lastCheckpointCommit: "abc123",
 	});
 	await setActivePlan(fs, projectPaths, "plan-a");
 	return { fs, git, projectPaths, planPaths };

@@ -86,7 +86,6 @@ export interface PlannerStageStepBehavior {
 	requiredGates: readonly PlannerBehaviorGate[];
 	expectedTools: readonly string[];
 	commitPolicy: "forbidden" | "allowed_if_dirty" | "required_if_dirty";
-	memoryPolicy: "not_required" | "read_first";
 	compactPolicy: "not_allowed" | "request_required" | "complete_required";
 }
 
@@ -105,7 +104,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: [],
 		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	check_git: behavior("init", "check_git", {
@@ -116,7 +114,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["project_resolved"],
 		expectedTools: ["planner_git_inspect", "planner_git_init"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	prepare_storage: behavior("init", "prepare_storage", {
@@ -127,7 +124,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["git_available"],
 		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	choose_worktree_location: behavior("init", "choose_worktree_location", {
@@ -138,7 +134,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["storage_ready"],
 		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	create_plan_record: behavior("init", "create_plan_record", {
@@ -156,7 +151,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["worktree_location_selected"],
 		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	create_plan_worktree: behavior("init", "create_plan_worktree", {
@@ -167,7 +161,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["plan_record_exists"],
 		expectedTools: ["planner_git_inspect"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	enter_intake: behavior("init", "enter_intake", {
@@ -178,7 +171,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["plan_worktree_exists"],
 		expectedTools: ["planner_finish_step"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	draft_goal: behavior("intake", "draft_goal", {
@@ -189,7 +181,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["plan_worktree_exists"],
 		expectedTools: ["planner_goal_submit"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	await_goal_approval: behavior("intake", "await_goal_approval", {
@@ -200,7 +191,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["plan_worktree_exists"],
 		expectedTools: ["planner_goal_decide"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 
@@ -210,12 +200,8 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["goal.md"],
 		updatedArtifacts: ["discovery.md"],
 		requiredGates: ["plan_worktree_exists"],
-		expectedTools: [
-			"planner_memory_project_map",
-			"planner_memory_search_project",
-		],
+		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	write_questions: behavior("discovery", "write_questions", {
@@ -226,7 +212,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: [],
 		expectedTools: ["planner_questions_submit", "planner_questions_resolve"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	compact_discovery: compactBehavior("discovery", "compact_discovery", [
@@ -234,18 +219,14 @@ export const PLANNER_STAGE_BEHAVIOR = {
 	]),
 	enter_planning: enterBehavior("discovery", "enter_planning", []),
 
-	read_memory: behavior("planning", "read_memory", {
+	read_context: behavior("planning", "read_context", {
 		projectAccess: "planner_artifacts",
 		actions: ["inspect_project"],
 		requiredArtifacts: ["discovery.md"],
 		updatedArtifacts: [],
 		requiredGates: [],
-		expectedTools: [
-			"planner_memory_project_map",
-			"planner_memory_search_project",
-		],
+		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	draft_plan: artifactBehavior(
@@ -268,7 +249,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: [],
 		expectedTools: ["planner_task_upsert"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "read_first",
 		compactPolicy: "not_allowed",
 	}),
 	verify_plan: behavior("planning", "verify_plan", {
@@ -279,7 +259,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: [],
 		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "read_first",
 		compactPolicy: "not_allowed",
 	}),
 	compact_planning: compactBehavior("planning", "compact_planning", [
@@ -299,7 +278,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["plan_verified"],
 		expectedTools: ["planner_git_create_task_branch"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "read_first",
 		compactPolicy: "not_allowed",
 	}),
 	write_tdd_plan: behavior("execution", "write_tdd_plan", {
@@ -310,7 +288,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["active_task_selected", "task_branch_ready"],
 		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "read_first",
 		compactPolicy: "not_allowed",
 	}),
 	write_tests: behavior("execution", "write_tests", {
@@ -321,7 +298,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["tdd_plan_written"],
 		expectedTools: ["planner_git_inspect", "planner_git_commit"],
 		commitPolicy: "allowed_if_dirty",
-		memoryPolicy: "read_first",
 		compactPolicy: "not_allowed",
 	}),
 	run_failing_tests: behavior("execution", "run_failing_tests", {
@@ -332,7 +308,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["tests_written_first"],
 		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	start_experiments: behavior("execution", "start_experiments", {
@@ -343,7 +318,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["failing_signal_recorded"],
 		expectedTools: ["planner_git_create_experiment_branch"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "read_first",
 		compactPolicy: "not_allowed",
 	}),
 	run_experiment: behavior("execution", "run_experiment", {
@@ -354,7 +328,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["experiment_branch_ready"],
 		expectedTools: ["planner_git_commit"],
 		commitPolicy: "required_if_dirty",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	summarize_experiment: behavior("execution", "summarize_experiment", {
@@ -365,7 +338,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["experiment_committed"],
 		expectedTools: ["planner_git_inspect"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "read_first",
 		compactPolicy: "not_allowed",
 	}),
 	compact_experiment: compactBehavior("execution", "compact_experiment", [
@@ -379,7 +351,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["experiment_summarized"],
 		expectedTools: ["planner_git_select_experiment"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "read_first",
 		compactPolicy: "not_allowed",
 	}),
 	merge_best_experiment: behavior("execution", "merge_best_experiment", {
@@ -390,7 +361,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["experiment_selected"],
 		expectedTools: ["planner_git_merge_selected_experiment"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	refactor_task: behavior("execution", "refactor_task", {
@@ -401,7 +371,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["experiment_merged"],
 		expectedTools: ["planner_git_commit"],
 		commitPolicy: "allowed_if_dirty",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	run_final_tests: behavior("execution", "run_final_tests", {
@@ -412,7 +381,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["refactor_checked"],
 		expectedTools: ["planner_git_commit"],
 		commitPolicy: "allowed_if_dirty",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	merge_task_to_plan: behavior("execution", "merge_task_to_plan", {
@@ -423,7 +391,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["final_tests_passed"],
 		expectedTools: ["planner_git_merge_task_to_plan"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	compact_task: compactBehavior("execution", "compact_task", [
@@ -438,7 +405,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["task_merged_to_plan"],
 		expectedTools: ["planner_finish_step"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "read_first",
 		compactPolicy: "not_allowed",
 	}),
 
@@ -450,7 +416,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["next_task_decided"],
 		expectedTools: ["planner_git_inspect"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	write_final_summary: behavior("finalize", "write_final_summary", {
@@ -461,7 +426,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["plan_branch_verified"],
 		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "read_first",
 		compactPolicy: "not_allowed",
 	}),
 	compact_finalize: compactBehavior("finalize", "compact_finalize", [
@@ -480,7 +444,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: [],
 		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	await_user_acceptance: behavior("done", "await_user_acceptance", {
@@ -491,7 +454,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["user_acceptance_required"],
 		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	handle_change_request: behavior("done", "handle_change_request", {
@@ -502,7 +464,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["user_acceptance_required"],
 		expectedTools: ["planner_finish_step"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "read_first",
 		compactPolicy: "not_allowed",
 	}),
 	prepare_output_branch: behavior("done", "prepare_output_branch", {
@@ -513,7 +474,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["user_acceptance_required"],
 		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	merge_or_export_result: behavior("done", "merge_or_export_result", {
@@ -524,7 +484,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["output_branch_ready"],
 		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	cleanup_worktree: behavior("done", "cleanup_worktree", {
@@ -535,7 +494,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["output_branch_ready"],
 		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	mark_done: behavior("done", "mark_done", {
@@ -546,7 +504,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["worktree_cleanup_done"],
 		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	cleanup_plan_files: behavior("done", "cleanup_plan_files", {
@@ -557,7 +514,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["plan_marked_done"],
 		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 
@@ -575,7 +531,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["recovery_inspected"],
 		expectedTools: ["planner_recovery_inspect"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 	repair_or_resume: behavior("recovery", "repair_or_resume", {
@@ -586,7 +541,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["user_repair_decision"],
 		expectedTools: ["planner_recovery_resume"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	}),
 } as const satisfies Record<PlannerStep, PlannerStageStepBehavior>;
@@ -626,10 +580,6 @@ export function checkPlannerStageBehaviorWrapperTool(input: {
 					`Stage behavior forbids planner commits at ${input.behavior.stage}/${input.behavior.step}.`,
 				)
 			: allowBehaviorTool(input.tool);
-	}
-
-	if (isMemoryReadTool(input.tool)) {
-		return allowBehaviorTool(input.tool);
 	}
 
 	if (isRecoveryTool(input.tool)) {
@@ -681,7 +631,6 @@ function artifactBehavior(
 		requiredGates: [],
 		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "read_first",
 		compactPolicy: "not_allowed",
 	});
 }
@@ -699,7 +648,6 @@ function compactBehavior(
 		requiredGates: [],
 		expectedTools: ["planner_request_compact", "planner_complete_compact"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "request_required",
 	});
 }
@@ -717,7 +665,6 @@ function enterBehavior(
 		requiredGates,
 		expectedTools: ["planner_finish_step"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "not_required",
 		compactPolicy: "not_allowed",
 	});
 }
@@ -734,7 +681,6 @@ function recoveryBehavior(
 		requiredGates: [],
 		expectedTools: ["planner_recovery_inspect"],
 		commitPolicy: "forbidden",
-		memoryPolicy: "read_first",
 		compactPolicy: "not_allowed",
 	});
 }
@@ -750,13 +696,6 @@ function blockBehaviorTool(
 	reason: string,
 ): PlannerStageBehaviorToolDecision {
 	return { allow: false, tool, reason };
-}
-
-function isMemoryReadTool(tool: PlannerWrapperTool): boolean {
-	return (
-		tool === "planner_memory_project_map" ||
-		tool === "planner_memory_search_project"
-	);
 }
 
 function isRecoveryTool(tool: PlannerWrapperTool): boolean {

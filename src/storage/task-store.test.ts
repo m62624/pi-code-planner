@@ -21,7 +21,6 @@ describe("planner task store", () => {
 			objective: "Parse config files with explicit validation.",
 			scope: ["src/config.ts"],
 			acceptanceCriteria: ["Invalid input returns a typed error."],
-			memoryHints: ["parseConfig", "ConfigError"],
 		});
 
 		expect(await readTaskRecord(fs, result.paths)).toMatchObject({
@@ -63,7 +62,6 @@ describe("planner task store", () => {
 				objective: "Unsafe.",
 				scope: [],
 				acceptanceCriteria: ["Never written."],
-				memoryHints: [],
 			}),
 		).rejects.toThrow("taskId");
 		await expect(
@@ -73,7 +71,6 @@ describe("planner task store", () => {
 				objective: "Unsafe.",
 				scope: [],
 				acceptanceCriteria: ["Never written."],
-				memoryHints: [],
 			}),
 		).rejects.toThrow("taskId");
 	});

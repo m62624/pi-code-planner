@@ -175,10 +175,7 @@ async function validateWorkflowExit(input: {
 				(taskDir
 					? await requireNonEmptyArtifact(input.fs, join(taskDir, "tests.md"))
 					: "Active task is missing. Prepare exactly one task branch first.") ??
-				validateCleanMemoryCheckpoint(
-					state,
-					input.orchestrator.preflight.gitReality,
-				)
+				validateCleanWorktree(input.orchestrator.preflight.gitReality)
 			);
 		case "run_failing_tests":
 			return taskDir
@@ -195,10 +192,7 @@ async function validateWorkflowExit(input: {
 				: "Active task is missing. Prepare exactly one task branch first.";
 			return (
 				artifactBlock ??
-				validateCleanMemoryCheckpoint(
-					state,
-					input.orchestrator.preflight.gitReality,
-				)
+				validateCleanWorktree(input.orchestrator.preflight.gitReality)
 			);
 		}
 		case "summarize_experiment":
@@ -212,10 +206,7 @@ async function validateWorkflowExit(input: {
 		case "merge_best_experiment":
 			return (
 				validateMergedExperiment(state) ??
-				validateCleanMemoryCheckpoint(
-					state,
-					input.orchestrator.preflight.gitReality,
-				)
+				validateCleanWorktree(input.orchestrator.preflight.gitReality)
 			);
 		case "refactor_task":
 			return (
@@ -225,28 +216,19 @@ async function validateWorkflowExit(input: {
 							join(taskDir, "refactor.md"),
 						)
 					: "Active task is missing. Prepare exactly one task branch first.") ??
-				validateCleanMemoryCheckpoint(
-					state,
-					input.orchestrator.preflight.gitReality,
-				)
+				validateCleanWorktree(input.orchestrator.preflight.gitReality)
 			);
 		case "run_final_tests":
 			return (
 				(taskDir
 					? await requireNonEmptyArtifact(input.fs, join(taskDir, "verify.md"))
 					: "Active task is missing. Prepare exactly one task branch first.") ??
-				validateCleanMemoryCheckpoint(
-					state,
-					input.orchestrator.preflight.gitReality,
-				)
+				validateCleanWorktree(input.orchestrator.preflight.gitReality)
 			);
 		case "merge_task_to_plan":
 			return (
 				validateMergedTask(state) ??
-				validateCleanMemoryCheckpoint(
-					state,
-					input.orchestrator.preflight.gitReality,
-				)
+				validateCleanWorktree(input.orchestrator.preflight.gitReality)
 			);
 		default:
 			return null;
@@ -321,8 +303,7 @@ function validateMergedTask(state: PlanStateRecord): string | null {
 		: "Task has not been merged and cleaned through planner_git_merge_task_to_plan.";
 }
 
-function validateCleanMemoryCheckpoint(
-	_state: PlanStateRecord,
+function validateCleanWorktree(
 	gitReality: PlannerGitReality | null,
 ): string | null {
 	if (!gitReality) {

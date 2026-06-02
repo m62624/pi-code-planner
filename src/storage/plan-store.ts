@@ -8,7 +8,6 @@ export async function initializePlanFiles(
 	paths: PlanStoragePaths,
 	plan: PlanRecord,
 ): Promise<PlanRecord> {
-	await fs.mkdirp(paths.memoryDir);
 	await fs.mkdirp(paths.tasksDir);
 	await savePlanRecord(fs, paths, plan);
 	await ensureTextFile(fs, paths.requestMd);

@@ -10,7 +10,6 @@ export const INSTRUCTION_KEYS = [
 	"tdd",
 	"experiment",
 	"refactor",
-	"memory",
 	"git",
 	"git-commit",
 ] as const;

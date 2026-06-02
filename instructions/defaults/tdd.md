@@ -6,7 +6,7 @@ Use strict tests-first development for every execution task. Production implemen
 
 ## Required Sequence
 
-1. During `write_tdd_plan`, read answered `questions.md`, `decisions.md`, `task.md`, relevant memory entries, existing tests, and project test conventions.
+1. During `write_tdd_plan`, read answered `questions.md`, `decisions.md`, `task.md`, existing tests, and project test conventions.
 2. Write `tdd.md` with:
    - behavior under test
    - arguments, return value, errors, and integration points
@@ -53,4 +53,4 @@ Preserve the active task id, `tdd.md` path, test artifact paths, failing signal,
 
 ## auto-compact
 
-Call `planner_status` immediately. Reload `task.md`, `tdd.md`, test artifacts, and relevant bounded memory. Do not skip the failing-test requirement because earlier chat context was compacted.
+Call `planner_status` immediately. Reload `task.md`, `tdd.md`, test artifacts, and focused source files only when needed. Do not skip the failing-test requirement because earlier chat context was compacted.

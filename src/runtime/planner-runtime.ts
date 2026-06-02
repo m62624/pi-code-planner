@@ -44,7 +44,6 @@ export interface PlannerRuntimeDecision {
 	stage: PlannerStage | null;
 	step: PlannerStep | null;
 	nextStep: PlannerStep | null;
-	requiresMemoryUpdate: boolean;
 	requiresRecovery: boolean;
 	requiresUserDecision: boolean;
 	requiresCompact: boolean;
@@ -211,7 +210,6 @@ function decision(input: {
 	reason: string | null;
 	recoveryReason?: PlannerRuntimeRecoveryReason | null;
 	allowedTools: readonly PlannerWrapperTool[];
-	requiresMemoryUpdate?: boolean;
 	requiresRecovery?: boolean;
 	requiresUserDecision?: boolean;
 	requiresCompact?: boolean;
@@ -224,7 +222,6 @@ function decision(input: {
 		stage: input.input.state?.stage ?? null,
 		step: input.input.state?.step ?? null,
 		nextStep: input.input.state?.nextStep ?? null,
-		requiresMemoryUpdate: input.requiresMemoryUpdate ?? false,
 		requiresRecovery: input.requiresRecovery ?? false,
 		requiresUserDecision: input.requiresUserDecision ?? false,
 		requiresCompact: input.requiresCompact ?? false,

@@ -1,5 +1,5 @@
 import type { GitRunner } from "../git/runner";
-import type { MemoryUpdateReason, PlanStateRecord } from "../storage/schema";
+import type { PlanStateRecord } from "../storage/schema";
 
 export interface PlannerGitReality {
 	repoRoot: string;
@@ -10,10 +10,7 @@ export interface PlannerGitReality {
 	hasConflicts: boolean;
 }
 
-export type PlannerPreflightAction =
-	| "allow"
-	| "require_memory_update"
-	| "require_recovery";
+export type PlannerPreflightAction = "allow" | "require_recovery";
 
 export interface PlannerPreflightDecision {
 	action: PlannerPreflightAction;
@@ -43,7 +40,6 @@ export async function runSyncedPlannerGitMutation<T>(input: {
 	git: GitRunner;
 	state: PlanStateRecord;
 	repoRoot: string;
-	headChangeReason: MemoryUpdateReason;
 	mutate: (context: { before: PlannerGitReality }) => Promise<T>;
 }): Promise<{
 	result: T;
@@ -68,7 +64,6 @@ export async function runSyncedPlannerGitMutation<T>(input: {
 			state: input.state,
 			before,
 			after,
-			headChangeReason: input.headChangeReason,
 		}),
 	};
 }
@@ -108,9 +103,7 @@ export function syncStateAfterPlannerGitMutation(input: {
 	state: PlanStateRecord;
 	before: PlannerGitReality;
 	after: PlannerGitReality;
-	headChangeReason: MemoryUpdateReason;
 }): PlanStateRecord {
-	const headChanged = input.before.headCommit !== input.after.headCommit;
 	const conflicted = input.after.hasConflicts;
 	return {
 		...input.state,
@@ -118,11 +111,6 @@ export function syncStateAfterPlannerGitMutation(input: {
 		step: conflicted ? "inspect_git" : input.state.step,
 		stepStatus: conflicted ? "blocked" : input.state.stepStatus,
 		currentBranch: input.after.branch,
-		lastCheckpointCommit: headChanged
-			? input.after.headCommit
-			: input.state.lastCheckpointCommit,
-		requiresMemoryUpdate: false,
-		memoryUpdateReason: null,
 		broken: conflicted ? true : input.state.broken,
 		brokenReason: conflicted
 			? "Git worktree has unresolved conflicts after planner git mutation."
@@ -130,18 +118,6 @@ export function syncStateAfterPlannerGitMutation(input: {
 		blockedReason: conflicted
 			? "Git worktree has unresolved conflicts after planner git mutation."
 			: input.state.blockedReason,
-	};
-}
-
-export function markMemoryCheckpointSynced(input: {
-	state: PlanStateRecord;
-	headCommit: string;
-}): PlanStateRecord {
-	return {
-		...input.state,
-		lastCheckpointCommit: input.headCommit,
-		requiresMemoryUpdate: false,
-		memoryUpdateReason: null,
 	};
 }
 

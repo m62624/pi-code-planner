@@ -43,11 +43,6 @@ import {
 	PLANNER_GOAL_TOOL_NAMES,
 	type PlannerGoalToolName,
 } from "./runtime/goal-tools";
-import {
-	executePlannerMemoryTool,
-	PLANNER_EXPOSED_MEMORY_TOOL_NAMES,
-	type PlannerMemoryToolName,
-} from "./runtime/memory-tools";
 import { runPlannerOrchestrator } from "./runtime/orchestrator";
 import {
 	parsePlannerCreateCommandArgs,
@@ -204,21 +199,8 @@ const TASK_UPSERT_TOOL_PARAMETERS = {
 		objective: { type: "string" },
 		scope: { type: "array", items: { type: "string" } },
 		acceptanceCriteria: { type: "array", items: { type: "string" } },
-		memoryHints: {
-			type: "array",
-			items: { type: "string" },
-			description:
-				"Symbols, paths, or concepts for bounded memory retrieval before TDD.",
-		},
 	},
-	required: [
-		"taskId",
-		"title",
-		"objective",
-		"scope",
-		"acceptanceCriteria",
-		"memoryHints",
-	],
+	required: ["taskId", "title", "objective", "scope", "acceptanceCriteria"],
 	additionalProperties: false,
 } as const;
 
@@ -264,32 +246,6 @@ const OPTIONAL_REASON_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {
 		reason: { type: "string" },
-	},
-	additionalProperties: false,
-} as const;
-
-const MEMORY_SEARCH_PROJECT_TOOL_PARAMETERS = {
-	type: "object",
-	properties: {
-		query: {
-			type: "string",
-			description:
-				"Task-oriented lexical query. Refine or broaden it when the bounded result is insufficient.",
-		},
-		limit: { type: "number" },
-	},
-	required: ["query"],
-	additionalProperties: false,
-} as const;
-
-const MEMORY_PROJECT_MAP_TOOL_PARAMETERS = {
-	type: "object",
-	properties: {
-		maxPathsPerGroup: {
-			type: "number",
-			description:
-				"Optional bounded path count for map groups. Defaults to 30 and is capped at 100.",
-		},
 	},
 	additionalProperties: false,
 } as const;
@@ -898,38 +854,13 @@ function registerPlannerTools(
 		});
 	}
 
-	for (const toolName of PLANNER_EXPOSED_MEMORY_TOOL_NAMES) {
-		pi.registerTool({
-			name: toolName,
-			label: memoryToolLabel(toolName),
-			description: memoryToolDescription(toolName),
-			promptSnippet:
-				"Use planner memory tools when planner_status requires indexing or refresh. Start with the bounded mechanical project map, then search selectively. Process one active file at a time: scan the selected queue, claim file, read bounded chunks to EOF, upsert file metadata, upsert at most 5 semantic symbols per call, verify, complete, then claim the next file. Omit derived ids, hashes, verification, and active file paths. After compact, call planner_status and resume the persisted next unread line.",
-			parameters: memoryToolParameters(toolName) as never,
-			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const result = await executePlannerMemoryTool({
-					fs: createNodeFs(),
-					git: new NodeGitRunner(),
-					projectPaths: await createRuntimeProjectPaths(ctx.cwd),
-					toolName,
-					params,
-				});
-
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
-			},
-		});
-	}
-
 	for (const toolName of PLANNER_RECOVERY_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
 			label: recoveryToolLabel(toolName),
 			description: recoveryToolDescription(toolName),
 			promptSnippet:
-				"Use planner_recovery_inspect when planner_status reports recovery or user-decision gating. Use planner_recovery_resume only after inspection shows no blocking git/worktree/memory issues. Recovery tools never reset or delete git state.",
+				"Use planner_recovery_inspect when planner_status reports recovery or user-decision gating. Use planner_recovery_resume only after inspection shows no blocking git or worktree issues. Recovery tools never reset or delete git state.",
 			parameters: recoveryToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const result = await executePlannerRecoveryTool({
@@ -1107,7 +1038,7 @@ function planToolLabel(toolName: PlannerPlanToolName): string {
 function planToolDescription(toolName: PlannerPlanToolName): string {
 	switch (toolName) {
 		case "planner_create_plan":
-			return "Create project storage, plan files, memory files, and the plan branch/worktree. Starts intake so the model can draft goal.md before discovery.";
+			return "Create project storage, plan files, and the plan branch/worktree. Starts intake so the model can draft goal.md before discovery.";
 	}
 }
 
@@ -1211,7 +1142,7 @@ function gitToolDescription(toolName: PlannerGitToolName): string {
 		case "planner_git_init":
 			return "Initialize git for the project during the init/check_git step.";
 		case "planner_git_commit":
-			return "Create a planner-controlled commit and mark memory update required.";
+			return "Create a planner-controlled commit.";
 		case "planner_git_create_task_branch":
 			return "Create and switch to the current task branch from the plan branch.";
 		case "planner_git_create_experiment_branch":
@@ -1249,33 +1180,6 @@ function gitToolParameters(toolName: PlannerGitToolName) {
 	}
 }
 
-function memoryToolLabel(toolName: PlannerMemoryToolName): string {
-	switch (toolName) {
-		case "planner_memory_project_map":
-			return "Planner Memory Project Map";
-		case "planner_memory_search_project":
-			return "Planner Memory Search Project";
-	}
-}
-
-function memoryToolDescription(toolName: PlannerMemoryToolName): string {
-	switch (toolName) {
-		case "planner_memory_project_map":
-			return "Build a bounded CPU-only map of project areas, languages, manifests, entrypoints, tests, and config paths without reading source contents.";
-		case "planner_memory_search_project":
-			return "Search the working tree mechanically on CPU and return bounded ranked excerpts. Does not persist a whole-project index.";
-	}
-}
-
-function memoryToolParameters(toolName: PlannerMemoryToolName) {
-	switch (toolName) {
-		case "planner_memory_project_map":
-			return MEMORY_PROJECT_MAP_TOOL_PARAMETERS;
-		case "planner_memory_search_project":
-			return MEMORY_SEARCH_PROJECT_TOOL_PARAMETERS;
-	}
-}
-
 function recoveryToolLabel(toolName: PlannerRecoveryToolName): string {
 	switch (toolName) {
 		case "planner_recovery_inspect":
@@ -1288,9 +1192,9 @@ function recoveryToolLabel(toolName: PlannerRecoveryToolName): string {
 function recoveryToolDescription(toolName: PlannerRecoveryToolName): string {
 	switch (toolName) {
 		case "planner_recovery_inspect":
-			return "Read-only recovery report: expected planner state, actual git/worktree/memory reality, issue classification, and safe/destructive options.";
+			return "Read-only recovery report: expected planner state, actual git/worktree reality, issue classification, and safe/destructive options.";
 		case "planner_recovery_resume":
-			return "Resume from recovery to an explicit stage/step only when blocking git/worktree/memory issues are gone. Preserves required memory update gates.";
+			return "Resume from recovery to an explicit stage/step only when blocking git or worktree issues are gone.";
 	}
 }
 

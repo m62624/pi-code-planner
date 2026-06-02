@@ -46,7 +46,6 @@ export async function executePlannerTaskTool(input: {
 					params.acceptanceCriteria,
 					"acceptanceCriteria",
 				),
-				memoryHints: stringArray(params.memoryHints, "memoryHints"),
 			},
 		);
 		await updatePlanRecord(

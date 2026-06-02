@@ -2,21 +2,20 @@
 
 ## Purpose
 
-Turn verified discovery memory into one executable plan and an ordered set of atomic tasks. Planning writes artifacts only. It never implements production behavior.
+Turn verified discovery context into one executable plan and an ordered set of atomic tasks. Planning writes artifacts only. It never implements production behavior.
 
 ## Context Reload
 
-At `planning/read_memory`, load context in this order:
+At `planning/read_context`, load context in this order:
 
 1. Call `planner_status`.
-2. Read `discovery.md`, `project_patterns.md`, `questions.md`, and `decisions.md`.
-3. Inspect bounded memory indexes and retrieve only relevant entries.
-4. Read source files only when memory is insufficient, stale, or requires verification.
+2. Read `discovery.md`, `questions.md`, and `decisions.md`.
+3. Read specific source files only when the recorded discovery context is insufficient.
 
 ## Strict Step Order
 
-1. `read_memory`
-   - Reconstruct project context from compacted artifacts and bounded memory.
+1. `read_context`
+   - Reconstruct project context from compacted artifacts.
 2. `draft_plan`
    - Write the full implementation strategy to `plan.md`.
    - Include goal, non-goals, constraints, risks, integration boundaries, required checks, and unresolved decisions.
@@ -25,9 +24,9 @@ At `planning/read_memory`, load context in this order:
    - Each task must be independently understandable and small enough for one TDD loop.
 4. `write_task_files`
    - Call `planner_task_upsert` once per behavioral task.
-   - Provide semantic fields only: task id, title, objective, scope, acceptance criteria, and bounded memory hints.
+   - Provide semantic fields only: task id, title, objective, scope, and acceptance criteria.
    - The wrapper creates `task.json`, `task.md`, and empty TDD lifecycle artifacts. Do not write task JSON manually.
-   - Each `task.md` must state scope, acceptance criteria, expected files or symbols, dependency context, checks, and memory hints.
+   - Each `task.md` must state scope, acceptance criteria, expected files or symbols, dependency context, and checks.
 5. `verify_plan`
    - Verify that tasks are ordered, bounded, testable, and free of hidden broad work.
    - Record decisions and remaining risks.
@@ -53,7 +52,7 @@ At `planning/read_memory`, load context in this order:
 - Do not write tests yet.
 - Built-in project write/edit calls remain blocked. Shell remains available, but raw git is forbidden.
 - Do not create task or experiment branches.
-- Do not reread the whole project unless bounded memory is insufficient.
+- Do not reread the whole project unless recorded discovery context is insufficient.
 - Do not rely on chat memory; write durable facts to artifacts.
 
 ## Exit Condition

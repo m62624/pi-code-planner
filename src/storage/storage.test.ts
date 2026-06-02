@@ -151,7 +151,6 @@ describe("plan record store", () => {
 		expect(fs.snapshot()[planPaths.discoveryMd]).toBe("");
 		expect(fs.snapshot()[planPaths.questionsMd]).toBe("");
 		expect(fs.snapshot()[planPaths.decisionsMd]).toBe("");
-		expect(await fs.exists(planPaths.memoryDir)).toBe(true);
 		expect(await fs.exists(planPaths.tasksDir)).toBe(true);
 	});
 
@@ -199,7 +198,7 @@ describe("plan state store", () => {
 				"enter_planning",
 			],
 			planning: [
-				"read_memory",
+				"read_context",
 				"draft_plan",
 				"split_tasks",
 				"write_task_files",
@@ -390,7 +389,7 @@ describe("plan state store", () => {
 		} satisfies Partial<PlanStateRecord>);
 	});
 
-	it("allows targeted state updates for branch and checkpoint fields", async () => {
+	it("allows targeted state updates for branch fields", async () => {
 		const fs = new MockPlannerFs();
 		const project = createProjectStoragePaths({
 			agentDir: "/agent",
@@ -407,11 +406,9 @@ describe("plan state store", () => {
 			...state,
 			worktreePath: "/repo/app/.pi/worktrees/plan-a",
 			currentBranch: "plan/plan-a",
-			lastCheckpointCommit: "abc123",
 		}));
 
 		expect(updated.worktreePath).toBe("/repo/app/.pi/worktrees/plan-a");
 		expect(updated.currentBranch).toBe("plan/plan-a");
-		expect(updated.lastCheckpointCommit).toBe("abc123");
 	});
 });

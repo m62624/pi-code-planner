@@ -2,15 +2,13 @@
 
 ## Purpose
 
-Become familiar with the project before planning. Keep this stage cheap for a local model: build a bounded mechanical overview, search for relevant code, read only the files needed for the approved goal, and summarize useful findings in `discovery.md`.
+Become familiar with the project before planning. Keep this stage cheap for a local model: inspect the project tree, read only the files needed for the approved goal, and summarize useful findings in `discovery.md`.
 
 ## Strict Step Order
 
 1. `scan_project_structure`
    - Read `goal.md`.
-   - Call `planner_memory_project_map` once for a bounded repository overview.
-   - Call `planner_memory_search_project` with a focused query derived from the approved goal.
-   - Inspect ranked excerpts. Broaden or refine the query only when the returned context is insufficient.
+   - Inspect the project tree with read-only shell commands.
    - Read only the manifests, entrypoints, tests, configuration, and source files needed to understand the requested work.
    - Write a concise `discovery.md`: architecture, relevant paths, commands, conventions, risks, and uncertainty.
 2. `write_questions`
@@ -21,7 +19,7 @@ Become familiar with the project before planning. Keep this stage cheap for a lo
 3. `compact_discovery`
    - Request planner-controlled compact only after `discovery.md` is useful and questions are resolved.
 4. `enter_planning`
-   - Advance to `planning/read_memory`.
+   - Advance to `planning/read_context`.
 
 ## Restrictions
 
@@ -33,7 +31,7 @@ Become familiar with the project before planning. Keep this stage cheap for a lo
 
 ## Exit Condition
 
-Discovery is complete when `discovery.md` contains enough bounded context for planning, required user questions are answered or explicitly absent, and the configured discovery compact boundary finishes.
+Discovery is complete when `discovery.md` contains enough context for planning, required user questions are answered or explicitly absent, and the configured discovery compact boundary finishes.
 
 ## manual-compact
 
@@ -41,4 +39,4 @@ Preserve the approved goal, `discovery.md`, relevant paths, commands, open quest
 
 ## auto-compact
 
-Call `planner_status` immediately. Read `discovery.md` and continue the persisted step. Use focused project search again only when the current context is insufficient.
+Call `planner_status` immediately. Read `discovery.md` and continue the persisted step. Read additional source files only when the current context is insufficient.
