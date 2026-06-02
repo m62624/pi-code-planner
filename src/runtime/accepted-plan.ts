@@ -132,7 +132,7 @@ export async function finalizeAcceptedPlan(input: {
 	await input.git.deleteBranch({
 		repoRoot: input.projectPaths.projectRoot,
 		branch: preview.state.activeBranches.plan,
-		force: false,
+		force: true,
 	});
 
 	const planPaths = createPlanStoragePaths(input.projectPaths, preview.planId);

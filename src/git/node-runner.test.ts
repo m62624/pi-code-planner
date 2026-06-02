@@ -122,6 +122,13 @@ describe("node git runner command args", () => {
 			"merge task",
 			"task/a/b",
 		]);
+		expect(
+			buildGitMergeArgs({
+				repoRoot: "/repo/app",
+				sourceBranch: "plan/a",
+				squash: true,
+			}),
+		).toEqual(["-C", "/repo/app", "merge", "--squash", "plan/a"]);
 	});
 
 	it("builds worktree add args for creating a new branch from base ref", () => {

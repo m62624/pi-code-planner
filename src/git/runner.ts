@@ -40,6 +40,7 @@ export interface GitMergeInput {
 	message?: string | null;
 	noFastForward?: boolean;
 	noCommit?: boolean;
+	squash?: boolean;
 }
 
 export interface GitCommitInput {

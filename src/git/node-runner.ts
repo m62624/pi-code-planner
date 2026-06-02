@@ -196,6 +196,7 @@ export function buildGitMergeArgs(input: GitMergeInput): string[] {
 		"merge",
 		...(input.noFastForward ? ["--no-ff"] : []),
 		...(input.noCommit ? ["--no-commit"] : []),
+		...(input.squash ? ["--squash"] : []),
 		...(input.message ? ["-m", input.message] : []),
 		input.sourceBranch,
 	];

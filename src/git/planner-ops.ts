@@ -306,7 +306,10 @@ export async function exportPlanToOutputBranch(input: {
 	await input.git.merge({
 		repoRoot: input.projectRoot,
 		sourceBranch: input.state.activeBranches.plan,
-		noFastForward: true,
+		squash: true,
+	});
+	await input.git.commit({
+		repoRoot: input.projectRoot,
 		message: input.message,
 	});
 	return {

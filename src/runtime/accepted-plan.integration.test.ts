@@ -102,6 +102,12 @@ describe("accepted planner result real git integration", () => {
 				await gitOutput(projectRoot, "branch", "--list", "plan/plan-a"),
 			).toBe("");
 			expect(await gitOutput(projectRoot, "status", "--porcelain=v1")).toBe("");
+			expect(await gitOutput(projectRoot, "rev-list", "--count", "HEAD")).toBe(
+				"2",
+			);
+			expect(
+				await gitOutput(projectRoot, "show", "--format=", "--stat"),
+			).toContain(".gitignore");
 			await expect(fs.exists(location.path)).resolves.toBe(false);
 			await expect(fs.exists(planPaths.planDir)).resolves.toBe(false);
 			await expect(readProjectRecord(fs, projectPaths)).resolves.toMatchObject({

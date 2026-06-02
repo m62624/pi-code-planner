@@ -308,9 +308,12 @@ describe("planner git operations", () => {
 				input: {
 					repoRoot: "/repo/app",
 					sourceBranch: "plan/plan-a",
-					noFastForward: true,
-					message: "export plan",
+					squash: true,
 				},
+			},
+			{
+				name: "commit",
+				input: { repoRoot: "/repo/app", message: "export plan" },
 			},
 		]);
 	});

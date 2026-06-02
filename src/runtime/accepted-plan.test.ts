@@ -78,7 +78,9 @@ class MockGitRunner implements GitRunner {
 		this.calls.push({ name: "switchBranch", input });
 	}
 	async stageAll(_input: GitRepoInput): Promise<void> {}
-	async commit(_input: GitCommitInput): Promise<void> {}
+	async commit(input: GitCommitInput): Promise<void> {
+		this.calls.push({ name: "commit", input });
+	}
 	async merge(input: GitMergeInput): Promise<void> {
 		this.calls.push({ name: "merge", input });
 	}
@@ -199,7 +201,13 @@ describe("accepted planner result", () => {
 			input: {
 				repoRoot: "/repo/app",
 				sourceBranch: "plan/plan-a",
-				noFastForward: true,
+				squash: true,
+			},
+		});
+		expect(fixture.git.calls).toContainEqual({
+			name: "commit",
+			input: {
+				repoRoot: "/repo/app",
 				message: "feat: export accepted planner result plan-a",
 			},
 		});
@@ -216,7 +224,7 @@ describe("accepted planner result", () => {
 			input: {
 				repoRoot: "/repo/app",
 				branch: "plan/plan-a",
-				force: false,
+				force: true,
 			},
 		});
 		expect(result.removedChildBranches).toEqual([

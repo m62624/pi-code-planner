@@ -461,7 +461,7 @@ Branch cleanup rules:
 - the task branch is removed after merge into plan
 - the protected plan branch is not removed by managed child cleanup during active work
 - worktree cleanup happens only after explicit user acceptance
-- `/planner-accept` exports `output/<plan-id>`, removes the temporary plan branch, worktree, artifacts, worktree index, and completed worktree chat, then returns Pi to the original project JSONL session
+- `/planner-accept` exports one squashed ordinary commit on `output/<plan-id>`, removes the temporary plan branch, worktree, artifacts, worktree index, and completed worktree chat, then returns Pi to the original project JSONL session
 - if the original JSONL session is missing, `/planner-accept` creates a replacement project-root session and asks whether the completed worktree chat should be removed
 
 When a planner plan is active, raw shell `git` commands are blocked. The model uses planner git wrapper tools instead. Non-git shell commands remain available.
