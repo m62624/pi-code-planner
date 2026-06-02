@@ -18,6 +18,14 @@ Then open Pi inside a Git project and run:
 
 Pi opens a multiline editor. Describe the outcome you want. The extension creates an isolated worktree, moves Pi into that worktree session, and starts a deterministic workflow around the model.
 
+**Note:** If `Shift+Enter` does not insert a new line in the `/planner-create` editor, create `~/.pi/agent/keybindings.json` with the following content to bind `Ctrl+J` as the new line shortcut:
+```json
+{
+  "tui.input.newLine": ["ctrl+j"]
+}
+```
+After editing the file, run `/reload` in Pi to apply the changes.
+
 ## Why Pi? 🪶
 
 Pi was chosen as the harness because it is intentionally small. It does not assume that every coding agent has cloud-scale context, many concurrent subagents, or a large infrastructure budget.
@@ -33,7 +41,8 @@ That matters for local models. On a single consumer machine, KV cache, RAM, VRAM
 - tests-first task execution;
 - controlled Git wrappers;
 - recovery checks when persisted state and repository reality disagree;
-- `planner_status` as the model-facing source of truth.
+- `planner_status` as the model-facing source of truth;
+- dynamic model tool scope so a local model sees only the planner wrappers allowed at its exact persisted state.
 
 This is not a guarantee of better output. The extension can also make results worse by adding overhead or constraining the model at the wrong time. It is an experiment in controlling a small stochastic coding model with deterministic code around it.
 
@@ -57,6 +66,8 @@ user request
 ```
 
 The chat is not the source of truth. Durable JSON and Markdown artifacts are. After compaction or recovery, the model calls `planner_status`, reloads the current position, and continues from persisted state.
+
+Planner slash commands remain available to the user. Model-facing planner tools are narrower: with no active plan, only `planner_status` is added to the normal Pi tool set. With an active plan, the extension keeps normal Pi tools and exposes only the planner wrappers allowed by the current runtime gate, stage, step, and transition state.
 
 ## User Commands 🎛️
 
