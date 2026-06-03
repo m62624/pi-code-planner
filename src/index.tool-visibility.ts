@@ -120,9 +120,6 @@ export function updateToolVisibility(pi: ExtensionAPI): void {
 }
 
 export function registerPlannerToolVisibility(pi: ExtensionAPI): void {
-	// Sync tool visibility immediately on load
-	updateToolVisibility(pi);
-
 	// Refresh cache on session start (using sync check for zero lag, then async check for safety)
 	pi.on("session_start", async (_event, ctx) => {
 		refreshPlanActiveCacheSync(pi, ctx.cwd);
