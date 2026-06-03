@@ -44,3 +44,18 @@ Preserve selected candidate context, refactor intent, changed files, checks, com
 ## auto-compact
 
 Call `planner_status` immediately. Reload task artifacts, selected experiment summary, and verify notes. Confirm whether refactor changes were committed before resuming.
+
+## Refactoring & Code-Safety Diagnostics
+
+### 1. Refactoring Regressions
+- **Behavior Changes**: Refactoring must not change external behavior. If a test fails after refactoring, you have violated this rule.
+- **Unused Code**: Ensure refactored paths remove old, dead code cleanly.
+- **Lint Violations**: Refactoring often introduces unused imports or formatting issues. Always run formatting/linting tools immediately.
+
+### 2. Diagnostic Steps
+1. Revert to the clean task branch HEAD if a refactoring attempt breaks tests and cannot be easily fixed.
+2. Refactor in small, incremental steps, committing after each successful step.
+
+## If You Do Not Know What To Do Next
+
+If you don't know what to do next, call `planner_status`.

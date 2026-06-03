@@ -54,3 +54,31 @@ Preserve the active task id, `tdd.md` path, test artifact paths, failing signal,
 ## auto-compact
 
 Call `planner_status` immediately. Reload `task.md`, `tdd.md`, test artifacts, and focused source files only when needed. Do not skip the failing-test requirement because earlier chat context was compacted.
+
+## Smart TDD & Boundary Coverage (KISS-based TDD)
+
+### 1. Mandatory Core Test Cases
+For every code modification or feature, your test suite must cover the following test cases before writing any production code:
+- **Baseline (Happy Path)**: The exact expected outcome for typical valid input.
+- **Minimum Limit**: Test with empty inputs, zero, empty arrays, or minimum bounds.
+- **Maximum Limit**: Test with maximum bounds, long strings, large arrays, or overflow limits.
+- **Danger Zone (Edge Cases & Errors)**: Test with null, undefined, invalid type formats, or error paths.
+
+### 2. Implementation Footprint Restriction
+- **No Speculative Coding**: Only write the absolute minimum amount of production code required to make your TDD tests pass.
+- **Do Not Guess Behaviors**: If you write code to handle a case that is not covered by a TDD test, you are violating this rule. Add a test for that case first, then implement it.
+
+## TDD & Test-Harness Diagnostics
+
+### 1. Test Harness Errors
+- **Compilation Failures**: If the test code fails to compile, fix compiler/lint issues before focusing on the behavior test.
+- **No Failing Signal**: If the test passes before you write the production code, the test is invalid or testing the wrong code path.
+- **Broken Mocks**: If the test hangs, check if your mocks are waiting for network/database calls that aren't mocked.
+
+### 2. Algorithmic Pivot Flow
+- **Doubt the Test**: If the implementation is correct but the test still fails, analyze the test assertions. Verify that expectations match the method signature.
+- **Synchronous Checks**: Verify files and import paths manually before running the test runner to avoid generic module-not-found errors.
+
+## If You Do Not Know What To Do Next
+
+If you don't know what to do next, call `planner_status`.

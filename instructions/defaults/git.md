@@ -75,3 +75,14 @@ Preserve current branch, HEAD, dirty/conflict status, managed branch registry, m
 ## auto-compact
 
 Call `planner_status` immediately. Inspect git through planner wrappers before resuming. Do not infer current branch or commit from compacted chat history.
+
+## Git Integration Diagnostics
+
+### 1. Git Wrappers vs. Raw Git
+- **Never use Raw Git**: Raw git commands run via bash bypass the state machine and corrupt the planner state. Only use planner git wrapper tools.
+- **Branch Name Conflicts**: Ensure branch names follow the expected project structure.
+- **Worktree State Incoherence**: If the git worktree state disagrees with the planner database, run recovery tools immediately.
+
+## If You Do Not Know What To Do Next
+
+If you don't know what to do next, call `planner_status`.

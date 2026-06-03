@@ -38,3 +38,18 @@ Evidence-based clarification questions belong to `discovery/write_questions`, af
 ## auto-compact
 
 Call `planner_status` immediately. Read `request.md` and `goal.md`, then resume the exact intake step. Do not begin discovery without explicit approval.
+
+## Intake & Goal Diagnostics
+
+### 1. Goal Ambiguity & Verification
+- **Identify Underspecified Outcomes**: If the user's initial request lacks concrete metrics (e.g., "make it faster" or "fix bugs"), do not guess. Draft `goal.md` with explicit, testable criteria and ask the user for confirmation.
+- **Assumptions vs. Facts**: List all technical assumptions explicitly under a dedicated header in `goal.md`. Treat any unconfirmed assumption as a risk.
+- **Scope Creep Prevention**: Clearly define "Non-Goals" to prevent the model from wandering into unrelated parts of the codebase.
+
+### 2. Failure Diagnostics
+- **If the user rejects the goal**: Do not argue. Ask for specific feedback, rewrite the goal, and re-submit.
+- **If the user is unresponsive**: Keep the goal simple and await explicit approval. Never move to discovery without a signed-off `goal.md`.
+
+## If You Do Not Know What To Do Next
+
+If you don't know what to do next, call `planner_status`.

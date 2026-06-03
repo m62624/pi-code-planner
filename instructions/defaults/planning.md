@@ -96,3 +96,17 @@ Preserve the full plan goal, constraints, ordered task list, task artifact paths
 ## auto-compact
 
 Call `planner_status` immediately and restore the exact planning step. Reread `plan.md` if it has already been written. Do not regenerate tasks from chat history and do not begin execution until the persisted plan is verified.
+
+## Planning & Task Diagnostics
+
+### 1. Decomposition Failures
+- **Too Large Scope**: If a task description contains multiple unrelated behaviors, split it into smaller sub-tasks.
+- **Missing Dependencies**: Ensure task dependencies are ordered correctly (e.g., database schema changes must be executed before API handlers).
+- **Incoherent Task ID**: Use lowercase, clean alphanumeric IDs.
+
+### 2. Troubleshooting Planning Errors
+- If verification fails during planning, re-evaluate the architecture. Ensure files listed in the task scope actually exist or are planned to be created.
+
+## If You Do Not Know What To Do Next
+
+If you don't know what to do next, call `planner_status`.

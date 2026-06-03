@@ -48,3 +48,7 @@ When returning to `planning/read_context`, reread full `plan.md`, `decisions.md`
 ## auto-compact
 
 Call `planner_status` immediately. Reread `final_summary.md` and the exact persisted decision state. Do not infer acceptance from previous chat context. Only explicit user acceptance authorizes export and cleanup.
+
+## If You Do Not Know What To Do Next
+
+If you don't know what to do next, call `planner_status`.

@@ -46,3 +46,19 @@ After recovery resume:
 ## auto-compact
 
 Call `planner_status` immediately. Do not assume recovery was completed. Reload persisted state, rerun recovery inspection, and wait for explicit user approval before destructive repair.
+
+## Recovery & Git-State Diagnostics
+
+### 1. Recovery Gating
+- **No Progress during Recovery**: You are blocked from running normal planner commands while in recovery. You must resolve the git discrepancy first.
+- **Identify Root Cause**: Read the recovery inspection report. Determine if the issue is a missing worktree, a manually checked out branch, or corrupted JSON files.
+- **User Approval for Destructive Acts**: Never run reset or delete actions without asking the user.
+
+### 2. Resolution Flow
+1. Inspect git state with `planner_recovery_inspect`.
+2. Follow the recovery classification suggestions.
+3. Resume to a safe stage/step via `planner_recovery_resume`.
+
+## If You Do Not Know What To Do Next
+
+If you don't know what to do next, call `planner_status`.

@@ -34,3 +34,19 @@ Init is complete only when the plan record exists, the plan worktree exists, the
 ## auto-compact
 
 An auto-compact during init does not authorize progress. Call `planner_status`, reload the exact persisted init step, and continue only with the wrapper reported by status. Do not inspect source until intake is approved and state explicitly says `discovery/scan_project_structure`.
+
+## Initialization & Bootstrapping Diagnostics
+
+### 1. Environment & Setup Failures
+- **Worktree Conflicts**: If the worktree creation fails, check if a directory with the same name already exists. Ensure that your current git repository is clean and has no locked index files (`.git/index.lock`).
+- **Workspace Resolution**: Verify that the Cwd is within the workspace root. Never initialize a plan in `/tmp` or system directories.
+- **State Inconsistency**: If the plan files exist but the active plan status is not detected, use recovery tools immediately instead of manually recreating files.
+
+### 2. Troubleshooting Steps
+1. Call `planner_status` to see if the project storage paths are correctly resolved.
+2. Check for locked files or missing file permissions.
+3. If git is uninitialized in the project root, verify if you should call `planner_git_init`.
+
+## If You Do Not Know What To Do Next
+
+If you don't know what to do next, call `planner_status`.

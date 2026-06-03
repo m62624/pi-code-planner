@@ -122,3 +122,29 @@ For `compact_experiment`, reload `task.md`, `tdd.md`, tests, verify notes, and p
 ## auto-compact
 
 Call `planner_status` immediately. Do not continue editing from chat memory. Restore the exact task and experiment from persisted state, inspect the git gate, then reread the artifacts required by the current step. Read source files only when the exact action needs details not present in the artifacts. If scope may have changed, reread full `plan.md`.
+
+## KISS Execution & Footprint Discipline
+
+### 1. The Principle of Minimal Footprint
+- **One File, One Goal**: Modify only the specific files declared in your TDD/Task scope. Do not polish adjacent code or run arbitrary refactorings during the execution step.
+- **Limit Function Proliferation**: Avoid creating new, separate files or helper classes unless the existing codebase layout strictly demands it. Put functions closest to their execution context.
+- **KISS Code**: Simple, readable, straightforward code with no abstraction layers is infinitely better than complex generic patterns.
+
+### 2. Implementation Boundaries
+- **No Speculative Implementations**: You are forbidden from implementing handling logic for future tasks or edge cases that have not yet been requested by the active task or verified by a TDD test.
+
+## Execution & Runtime Diagnostics
+
+### 1. Test Failures & Stack Traces
+- **Locate Error Source**: When a test fails during execution, extract the exact file path and line number of the failure. Do not look at the summary only; read the detailed assertion error.
+- **Isolate Module Interfaces**: Check the exact arguments passed to the failing function. Print or log the input arguments and returned output values to verify boundary correctness.
+- **Verify Execution Cwd**: Ensure all commands run from the specific worktree directory reported by `planner_status`.
+
+### 2. Algorithmic Pivot Protocol
+- **Stuck Loop detection**: If you make 3 attempts to fix a bug and the same test failure persists, stop.
+- **Trace Backwards**: Open the `tdd.md` plan and re-read the function's boundary conditions.
+- **Verify Mock Integrity**: Ensure your test mocks are not hiding the real bug or returning stale data.
+
+## If You Do Not Know What To Do Next
+
+If you don't know what to do next, call `planner_status`.

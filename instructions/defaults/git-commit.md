@@ -51,3 +51,17 @@ feat: try <approach> for <task>
 ## auto-compact
 
 After auto-compact, call `planner_status`. Use this style only when the current stage explicitly allows a planner commit or merge wrapper.
+
+## Version Control & Workspace Diagnostics
+
+### 1. Commit Failures
+- **Empty Commits**: If a commit fails, verify if you actually modified any tracked files.
+- **Lock Files**: If git index is locked, identify the process holding the lock and advise the user, or wait.
+- **Wrong Branch Commits**: If you committed to the wrong branch, use planner git commands to identify the head commit and do not attempt complex force pushes.
+
+### 2. Workspace Diagnostics
+- Always run `git status` via the wrapper to confirm which files are staged, modified, or untracked.
+
+## If You Do Not Know What To Do Next
+
+If you don't know what to do next, call `planner_status`.

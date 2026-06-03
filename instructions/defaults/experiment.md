@@ -61,3 +61,19 @@ Preserve the active task id, active attempt id, attempt branch, commit, checks, 
 ## auto-compact
 
 Call `planner_status` immediately. Reload the active experiment from persisted state and read durable summaries before deciding whether to continue, retry, or select. Do not treat an uncommitted attempt as complete.
+
+## Experimentation & Hypotheses Diagnostics
+
+### 1. Experiment Setup Failures
+- **Attempt ID Resolution**: If an attempt branch fails to create, check if the active task branch exists and is checked out.
+- **Experiment Branch Isolation**: Ensure that changes made in one experiment do not bleed into another. Always start each experiment from a clean task branch.
+- **Merge Conflicts**: If merging an experiment fails, identify the exact conflicting lines. Do not guess how to resolve them; look at the state of both branches.
+
+### 2. Resolution Protocol
+1. Revert any uncommitted experiment edits if the hypothesis is disproven.
+2. Choose the best experiment based on clear evidence (test coverage, simplicity, performance).
+3. If all experiments fail, discard the branch and return to planning.
+
+## If You Do Not Know What To Do Next
+
+If you don't know what to do next, call `planner_status`.

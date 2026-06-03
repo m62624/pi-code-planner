@@ -38,3 +38,18 @@ Preserve `final_summary.md`, project-level verification results, changed-file su
 ## auto-compact
 
 Call `planner_status` immediately. Restore the exact finalize step and reread `final_summary.md` if it already exists. Do not export or cleanup until explicit user acceptance is recorded.
+
+## Finalization & Verification Diagnostics
+
+### 1. Pre-Merge Verification Failures
+- **Integration Test Regressions**: If final tests fail on the plan branch, identify if the issue is a merge conflict regression.
+- **Clean Diff Verification**: Run code inspection to ensure no temporary debug lines, print statements, or scratch files are committed.
+- **Branch Synchronization**: Verify that the plan branch is fully up-to-date with the main base branch.
+
+### 2. Resolution Flow
+1. Run lint and format checks before finalizing.
+2. If integration tests fail, rollback the merge, fix the bug in the task branch, and try merging again.
+
+## If You Do Not Know What To Do Next
+
+If you don't know what to do next, call `planner_status`.

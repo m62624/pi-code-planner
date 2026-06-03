@@ -71,3 +71,30 @@ Preserve the approved goal, `discovery.md`, relevant paths, commands, open quest
 ## auto-compact
 
 Call `planner_status` immediately. Read `discovery.md` and continue the persisted step. Read additional source files only when the current context is insufficient.
+
+## Advanced Discovery Logic & Cognitive Strategies
+
+### Rule 3: Extreme Doubt and Logical Deduction
+- **Doubt Everything Always**: Never assume any existing documentation, comments, or naming conventions are 100% accurate. Trust only what you can prove via real code, runtime execution, and tests.
+- **No Unfounded Confidence**: You must assume you are missing critical details until you verify them. State your uncertainties explicitly. Never state that you are fully confident without proof.
+- **Logically Deduce, Do Not Guess**: Every conclusion must be backed by a clear path of evidence. If you see function `A` calling `B`, do not guess what `B` does based on its name; find `B`'s definition and verify its behavior.
+
+### Rule 4: Systemic Mapping of Input/Output Boundaries
+To properly study and comprehend any system, component, or feature, you must exhaustively map its boundaries:
+- **Income (Inputs)**: What triggers this module? What data, events, parameters, or configurations does it receive? Trace the source of all inputs to their origins.
+- **Outcome (Outputs)**: What does this module produce? What side-effects, state changes, return values, file writes, or events does it trigger?
+- **Detailed Boundary Study**: Never analyze a module in isolation. Study all incoming and outgoing connections first. Once you understand the input/output protocol, the internal logic becomes simple and predictable.
+
+### Rule 5: Pivoting and Diagnostic Recovery
+- **If You Get Stuck**: If a task remains blocked, do not repeatedly retry the same approach. Getting stuck is a signal that your initial assumptions were wrong, or you are moving in the wrong direction.
+- **Analyze the Divergence**: Stop and map out what has been done so far. Identify where reality diverged from your expectations.
+- **Pivot**: Move in another direction, simplify the problem, or backtrack to a known working state. Do not push forward blindly.
+
+### Rule 6: Extreme KISS (Keep It Simple, Stupid)
+- **Zero Bloat Principle**: Never create redundant functions, files, or utilities. Write only the absolute minimum amount of code required to satisfy the goal.
+- **Reuse Existing Code First**: In your discovery phase, look for existing utility functions, methods, helper packages, and classes. Do not rewrite functionality that already exists in the project.
+- **Avoid Over-Engineering**: Do not design complex abstract layers, massive factories, or unnecessary patterns unless explicitly requested. A simple procedural or straightforward object-oriented function is always preferred.
+
+## If You Do Not Know What To Do Next
+
+If you don't know what to do next, call `planner_status`.
