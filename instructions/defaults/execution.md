@@ -75,6 +75,44 @@ Execute exactly one active task at a time through tests-first development, seque
 - Do not modify unrelated files. Before finishing a task, inspect the planner-controlled diff and verify scope.
 - If new required work exceeds the current task, record it as a new task or return to planning.
 
+## Fundamental Rules
+
+### Rule 4: Uncertainty → Question
+
+**Rule:** If a task allows more than one interpretation of mechanism, integration approach, or if you are uncertain about system boundaries — you MUST ask a question. Do not guess. Do not improvise. Do not write code based on assumptions.
+
+**When to ask a question:**
+- Unclear which mechanism the task uses (internal or external)
+- Unclear which files to touch and which not
+- Unclear what to consider "immutable"
+- Risk that the solution will break the existing architecture
+
+**When NOT to ask a question:**
+- The task is unambiguous
+- All boundaries are clear
+- The mechanism is explicitly defined
+
+**Deduction:** One question is better than an hour of rewriting a wrong solution.
+
+### Rule 5: Priorities and Conflicts
+
+**Priority hierarchy (highest to lowest):**
+
+1. Direct user instructions — if the user said "change X" or "do not touch X", this overrides everything.
+2. Fundamental rules — rules 1-4 apply when there are no direct instructions.
+3. Technical criteria — when rules and instructions do not give a clear answer, you decide based on technical criteria.
+
+**When instructions contradict each other:**
+
+If a rule forbids touching file X, but you see that the technically optimal solution requires changing X — you must:
+
+1. Record in your working notes why the solution without changing X is impossible or extremely suboptimal.
+2. Formulate a specific justification: what will break, what will fail, what will work incorrectly.
+3. Offer the user an alternative: "I recommend changing X because... But if you insist on keeping X unchanged, here is an alternative that will work worse: ..."
+4. The final decision is always the user's.
+
+**Deduction:** You do not silently break rules. If technically necessary to break one — you explain why and ask for permission.
+
 ## manual-compact
 
 Preserve the plan id, active task id, active experiment id, exact branch, current step, task artifact paths, verification results, selected candidate state, completed experiment summaries, open risks, and exact next action. After compaction, call `planner_status`.

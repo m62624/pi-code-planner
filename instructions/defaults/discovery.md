@@ -33,6 +33,37 @@ Become familiar with the project before planning. Keep this stage cheap for a lo
 
 Discovery is complete when `discovery.md` contains enough context for planning, required user questions are answered or explicitly absent, and the configured discovery compact boundary finishes.
 
+## Fundamental Rules
+
+### Rule 1: System Boundaries
+
+Before reading any file, determine two things:
+
+**Internal** — files inside the project that you can read and edit. Code, configs, tests, project documentation.
+
+**External** — everything outside the project. Host mechanisms, external APIs, runtime environments, servers, models, browsers, file systems outside the project root.
+
+**Rule:** You do not write external code. You use or call external mechanisms. If a task requires an action performed by an external mechanism — the solution is in HOW to call the external mechanism, not in rewriting its code.
+
+**Deduction:** If the task says "make X happen" and X is performed by an external mechanism — you do not write X. You find the integration point where the project can ASK the external mechanism to do X.
+
+### Rule 2: Mechanism vs Outcome
+
+Every requirement has two layers:
+
+- **Outcome** — what should happen. The end state.
+- **Mechanism** — HOW it happens. The means of achievement.
+
+**Rule:** You investigate, you do not guess. When a task describes an outcome, you must NOT automatically think "I need to write code for this." Your first step is to investigate:
+
+1. Is there already a mechanism in the project that can do this? Hooks, events, handlers, scheduler?
+2. Is there a mechanism in the external world that can do this? Host API, ready-made integration?
+3. Do you need new code, or just CONNECT to an existing mechanism?
+
+Code is the last option. Not the first.
+
+**Deduction:** Before writing a single line of code, you determine the mechanism. If the mechanism can be external — you find how to interact with it. If the mechanism already exists in the project — you connect to it. New code is written only when nothing suitable is found.
+
 ## manual-compact
 
 Preserve the approved goal, `discovery.md`, relevant paths, commands, open questions, and exact current planner step. After compaction, call `planner_status`.

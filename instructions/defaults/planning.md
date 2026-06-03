@@ -59,6 +59,36 @@ At `planning/read_context`, load context in this order:
 
 Planning is complete only when `plan.md` is coherent, every task has artifacts and acceptance criteria, task order is verified, and planning compact finishes.
 
+## Fundamental Rules
+
+### Rule 3: Integration vs New Entity
+
+**Prerequisite:** This rule applies ONLY if the user did not explicitly ask to modify file X. If the user said "change X" — their word is final.
+
+**Core principle:** When adding new functionality to an existing project, you must decide: integrate into existing code or create a new entity/module/class.
+
+**Criteria for integrating into existing code (when you may touch existing files):**
+
+- The new functionality is a natural continuation of the existing logic of this file/module
+- Changes are minimal and do not restructure the existing code
+- The existing file already contains similar mechanisms, and the new functionality fits the same pattern
+- Adding new code does not require refactoring or rebuilding the existing structure
+
+**Criteria for creating a new entity (when you must NOT touch existing files, even if they seem "related"):**
+
+- The existing code is already a complete, logically closed entity (module, class, service)
+- Integration would require changing the public interface of the existing entity
+- The new functionality has a distinct responsibility from the existing one
+- The existing code follows a pattern that does not support internal extension (e.g., a module that must remain unchanged)
+
+**How to decide:**
+1. Look at the existing code. What does it do? What is its responsibility?
+2. Look at the new functionality. What is its responsibility?
+3. If responsibilities match or the new one is a subset of the existing → integrate.
+4. If responsibilities differ or the new one is a parallel entity → create a new entity.
+
+**Deduction:** You do not touch existing files if the new functionality is not a natural continuation of their responsibility. You create a new entity if the existing one is already complete.
+
 ## manual-compact
 
 Preserve the full plan goal, constraints, ordered task list, task artifact paths, task dependencies, acceptance criteria, open decisions, and `discovery.md`. After compaction, call `planner_status`. Before the first task, reread the full `plan.md`, then read only the selected `task.md` and use focused project search when context is insufficient.
