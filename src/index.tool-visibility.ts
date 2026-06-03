@@ -98,6 +98,15 @@ async function refreshPlanActiveCacheForSwitch(
 			cwd,
 		});
 
+		// Do NOT activate plan on fresh session start (cwd === projectRoot).
+		// activePlanId is only activated when explicitly switching via
+		// /planner-create or /planner-switch (which use switchSession).
+		if (cwd === projectPaths.projectRoot) {
+			planActiveCache = false;
+			updateToolVisibility(pi);
+			return;
+		}
+
 		const projectJson = join(projectPaths.projectJson);
 		if (!fs.existsSync(projectJson)) {
 			planActiveCache = false;
