@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { SCHEMA_VERSION } from "../constants";
 import { planBranchName } from "../git/branches";
 import type { GitRunner } from "../git/runner";
@@ -100,7 +101,16 @@ async function createPlanTool(
 		optionalString(params, "baseBranch") ??
 		(await safeCurrentBranch(input.git, input.projectPaths.projectRoot)) ??
 		"main";
-	const planBranch = planBranchName(planId);
+	let planBranch = planBranchName(planId);
+	// Ensure branch name is unique — append UUID suffix if branch already exists.
+	const branchExists = await input.git.branchExists({
+		repoRoot: input.projectPaths.projectRoot,
+		branch: planBranch,
+	});
+	if (branchExists) {
+		const suffix = randomUUID().slice(0, 8);
+		planBranch = `${planBranch}-${suffix}`;
+	}
 	const plan = createPlanRecord({
 		planId,
 		title: validatedTitle,

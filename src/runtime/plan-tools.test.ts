@@ -34,6 +34,7 @@ class MockGitRunner implements GitRunner {
 	readonly calls: Array<{ name: string; input: unknown }> = [];
 	private branch: string;
 	private head = "abc123";
+	readonly existingBranches: Set<string> = new Set();
 
 	constructor(branch = "main") {
 		this.branch = branch;
@@ -66,8 +67,8 @@ class MockGitRunner implements GitRunner {
 	async listProjectFiles(_input: GitRepoInput): Promise<string[]> {
 		return [];
 	}
-	async branchExists(_input: GitBranchInput): Promise<boolean> {
-		return true;
+	async branchExists(input: GitBranchInput): Promise<boolean> {
+		return this.existingBranches.has(input.branch);
 	}
 	async createBranch(_input: GitCreateBranchInput): Promise<void> {}
 	async deleteBranch(_input: GitDeleteBranchInput): Promise<void> {}
