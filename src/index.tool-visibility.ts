@@ -44,8 +44,8 @@ export function registerPlannerToolVisibility(pi: ExtensionAPI): void {
 		await refreshPlanActiveCache(ctx.cwd);
 	});
 
-	// Fast path — read from cache only, no disk I/O
-	pi.on("before_provider_request", async (event) => {
+	// Only update UI tool visibility — do NOT modify payload (breaks Pi tool execution)
+	pi.on("before_provider_request", async () => {
 		const allTools = pi.getAllTools();
 
 		const toolNames = planActiveCache
@@ -53,15 +53,5 @@ export function registerPlannerToolVisibility(pi: ExtensionAPI): void {
 			: filterPlannerTools(allTools).map((t) => t.name);
 
 		pi.setActiveTools(toolNames);
-
-		const payload = event.payload as {
-			tools?: Array<{ name: string }>;
-			[key: string]: unknown;
-		};
-		if (payload?.tools) {
-			payload.tools = payload.tools.filter((t) => toolNames.includes(t.name));
-		}
-
-		return payload;
 	});
 }
