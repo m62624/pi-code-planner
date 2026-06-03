@@ -223,7 +223,7 @@ describe("planner plan tools", () => {
 			},
 		});
 
-		const blocked = await executePlannerPlanTool({
+		const second = await executePlannerPlanTool({
 			fs,
 			git: new MockGitRunner(),
 			projectPaths,
@@ -235,8 +235,16 @@ describe("planner plan tools", () => {
 			},
 		});
 
-		expect(blocked.status).toBe("blocked");
-		expect(blocked.text).toContain("already has an active planner plan");
+		// Should succeed — new plan becomes the active one
+		expect(second.status).toBe("applied");
+		expect(second.text).toContain("Plan: plan-b");
+		await expect(readProjectRecord(fs, projectPaths)).resolves.toMatchObject({
+			activePlanId: "plan-b",
+			plans: [
+				{ planId: "plan-a", title: "Plan A", status: "active" },
+				{ planId: "plan-b", title: "Plan B", status: "active" },
+			],
+		});
 	});
 
 	it("falls back to main when git branch inspection is unavailable", async () => {

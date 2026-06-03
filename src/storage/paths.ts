@@ -57,7 +57,7 @@ export function createProjectStoragePaths(input: {
 		displayName: basename(projectRoot),
 		projectDir,
 		projectJson: join(projectDir, "project.json"),
-		plansDir: join(projectDir, "plans"),
+		plansDir: join(extensionDir, "plans"),
 		instructionsDir: join(extensionDir, "instructions"),
 		projectLocalDir: join(projectRoot, ".pi", EXTENSION_NAME),
 	};
@@ -80,6 +80,12 @@ export function createPlanStoragePaths(
 		decisionsMd: join(planDir, "decisions.md"),
 		tasksDir: join(planDir, "tasks"),
 	};
+}
+
+export function createPlansDirectory(
+	projectPaths: ProjectStoragePaths,
+): string {
+	return join(projectPaths.extensionDir, "plans");
 }
 
 export function createTaskStoragePaths(

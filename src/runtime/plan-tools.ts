@@ -83,13 +83,6 @@ async function createPlanTool(
 		request,
 		project,
 	});
-	if (project.activePlanId) {
-		return blocked(
-			input.toolName,
-			`Project already has an active planner plan: ${project.activePlanId}. Switch or finish the active plan before creating another one.`,
-			{ project },
-		);
-	}
 
 	const planPaths = createPlanStoragePaths(input.projectPaths, planId);
 	const existingPlan = await readPlanRecordIfExists(input.fs, planPaths);

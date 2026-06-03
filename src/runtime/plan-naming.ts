@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { sanitizeIdPart } from "../storage/ids";
 import type { ProjectRecord } from "../storage/schema";
 
@@ -10,7 +10,7 @@ export interface PlannerCreateCommandArgs {
 const MAX_GENERATED_PLAN_TITLE_LENGTH = 80;
 const MAX_GENERATED_PLAN_TITLE_WORDS = 6;
 const PLAN_PREFIX_CHARS = 10;
-const PLAN_SUFFIX_CHARS = 4;
+const PLAN_UUID_SUFFIX_LENGTH = 8;
 
 export function parsePlannerCreateCommandArgs(
 	args: string,
@@ -72,17 +72,14 @@ export function resolvePlannerPlanId(input: {
 		return prefix;
 	}
 
-	// Collision: append a short hash suffix for uniqueness
-	const suffix = createHash("sha256")
-		.update(input.request)
-		.digest("hex")
-		.slice(0, PLAN_SUFFIX_CHARS);
+	// Always append a UUID-based suffix for uniqueness (safe in CI)
+	const suffix = randomUUID().slice(0, PLAN_UUID_SUFFIX_LENGTH);
 	const candidate = `${prefix}-${suffix}`;
 	if (!existing.has(candidate)) {
 		return candidate;
 	}
 
-	// Fallback: try with a counter
+	// Collision: try with a counter (extremely unlikely)
 	for (let counter = 2; counter < 1000; counter += 1) {
 		const candidate = `${prefix}-${counter}`;
 		if (!existing.has(candidate)) {
