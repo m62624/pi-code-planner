@@ -333,90 +333,102 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				);
 				return;
 			}
-			const request = await ctx.ui.editor(
-				"Describe the requested outcome",
-				parsed.request ?? "",
-			);
-			if (!request?.trim()) {
-				ctx.ui.notify("Planner creation cancelled.", "info");
-				return;
-			}
-			const normalizedRequest = request.trim();
 
-			const fs = createNodeFs();
-			const agentDir = getAgentDir();
-			const projectPaths = await resolveProjectStoragePaths({
-				fs,
-				agentDir,
-				cwd: ctx.cwd,
-			});
-			const project = await ensureProjectRecord(fs, projectPaths);
-			let planId: string;
-			try {
-				planId = resolvePlannerPlanId({
-					requestedPlanId: parsed.planId,
-					request: normalizedRequest,
-					project,
-				});
-			} catch (error) {
-				ctx.ui.notify(errorMessage(error), "error");
-				return;
-			}
-			const result = await executePlannerPlanTool({
-				fs,
-				git: new NodeGitRunner(),
-				projectPaths,
-				toolName: "planner_create_plan",
-				params: {
-					planId,
-					request: normalizedRequest,
-				},
-			});
+			// Save parsed args before entering withSession.
+			// ctx.ui.editor is async and may span a session replacement
+			// (e.g. ESC → "Resumed session"). All post-editor work must
+			// use ctx.withSession to avoid stale-cx errors.
+			const initialArgs = parsed;
 
-			if (result.status !== "applied") {
-				ctx.ui.notify(result.text, "error");
-				return;
-			}
-
-			const details = result.details as {
-				state?: { worktreePath?: string | null };
-				plan?: { planId?: string };
-			};
-			const worktreePath = details.state?.worktreePath;
-			const createdPlanId = details.plan?.planId ?? planId;
-			if (!worktreePath) {
-				ctx.ui.notify(
-					"Planner plan was created without worktreePath.",
-					"error",
+			await ctx.withSession(async (sessionCtx) => {
+				const request = await sessionCtx.ui.editor(
+					"Describe the requested outcome",
+					initialArgs.request ?? "",
 				);
-				return;
-			}
+				if (!request?.trim()) {
+					sessionCtx.ui.notify("Planner creation cancelled.", "info");
+					return;
+				}
+				const normalizedRequest = request.trim();
 
-			const originalSessionFile = ctx.sessionManager.getSessionFile();
-			await bindWorktreeOriginalSession({
-				fs,
-				agentDir,
-				worktreePath,
-				projectRoot: projectPaths.projectRoot,
-				projectId: projectPaths.projectId,
-				planId: createdPlanId,
-				originalSessionFile: originalSessionFile ?? null,
-			});
+				const fs = createNodeFs();
+				const agentDir = getAgentDir();
+				const projectPaths = await resolveProjectStoragePaths({
+					fs,
+					agentDir,
+					cwd: sessionCtx.cwd,
+				});
+				const project = await ensureProjectRecord(fs, projectPaths);
+				let planId: string;
+				try {
+					planId = resolvePlannerPlanId({
+						requestedPlanId: initialArgs.planId,
+						request: normalizedRequest,
+						project,
+					});
+				} catch (error) {
+					sessionCtx.ui.notify(errorMessage(error), "error");
+					return;
+				}
+				const result = await executePlannerPlanTool({
+					fs,
+					git: new NodeGitRunner(),
+					projectPaths,
+					toolName: "planner_create_plan",
+					params: {
+						planId,
+						request: normalizedRequest,
+					},
+				});
 
-			const session = await createPlannerHandoffSession({
-				fs,
-				agentDir,
-				worktreePath,
-				parentSession: originalSessionFile,
-			});
-			await ctx.switchSession(session.sessionFile, {
-				withSession: async (replacementCtx) => {
-					await replacementCtx.sendUserMessage(
-						buildPlannerHandoffPrompt({ planId: createdPlanId, worktreePath }),
+				if (result.status !== "applied") {
+					sessionCtx.ui.notify(result.text, "error");
+					return;
+				}
+
+				const details = result.details as {
+					state?: { worktreePath?: string | null };
+					plan?: { planId?: string };
+				};
+				const worktreePath = details.state?.worktreePath;
+				const createdPlanId = details.plan?.planId ?? planId;
+				if (!worktreePath) {
+					sessionCtx.ui.notify(
+						"Planner plan was created without worktreePath.",
+						"error",
 					);
-				},
+					return;
+				}
+
+				const originalSessionFile = sessionCtx.sessionManager.getSessionFile();
+				await bindWorktreeOriginalSession({
+					fs,
+					agentDir,
+					worktreePath,
+					projectRoot: projectPaths.projectRoot,
+					projectId: projectPaths.projectId,
+					planId: createdPlanId,
+					originalSessionFile: originalSessionFile ?? null,
+				});
+
+				const session = await createPlannerHandoffSession({
+					fs,
+					agentDir,
+					worktreePath,
+					parentSession: originalSessionFile,
+				});
+				await sessionCtx.switchSession(session.sessionFile, {
+					withSession: async (replacementCtx) => {
+						await replacementCtx.sendUserMessage(
+							buildPlannerHandoffPrompt({
+								planId: createdPlanId,
+								worktreePath,
+							}),
+						);
+					},
+				});
+				await refreshPlanActiveCache(pi, sessionCtx.cwd);
 			});
-			await refreshPlanActiveCache(pi, ctx.cwd);
 		},
 	});
 
