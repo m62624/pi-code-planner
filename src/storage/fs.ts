@@ -1,5 +1,6 @@
 import {
 	mkdir,
+	readdir,
 	readFile,
 	rename,
 	rm,
@@ -13,6 +14,7 @@ export interface PlannerFs {
 	exists(path: string): Promise<boolean>;
 	mkdirp(path: string): Promise<void>;
 	readText(path: string): Promise<string>;
+	readdir(path: string): Promise<string[]>;
 	removeDir(path: string): Promise<void>;
 	removeFile(path: string): Promise<void>;
 	writeText(path: string, content: string): Promise<void>;
@@ -37,6 +39,9 @@ export function createNodeFs(): PlannerFs {
 		},
 		async readText(path) {
 			return await readFile(path, "utf8");
+		},
+		async readdir(path) {
+			return await readdir(path);
 		},
 		async removeDir(path) {
 			await rm(path, { recursive: true, force: true });

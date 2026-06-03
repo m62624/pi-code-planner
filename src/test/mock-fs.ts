@@ -11,6 +11,38 @@ export class MockPlannerFs implements PlannerFs {
 		return this.files.has(key) || this.dirs.has(key);
 	}
 
+	async readdir(path: string): Promise<string[]> {
+		const normalized = normalize(path);
+		const entries = new Set<string>();
+		for (const file of this.files.keys()) {
+			if (file === normalized) {
+				continue;
+			}
+			if (!file.startsWith(`${normalized}/`)) {
+				continue;
+			}
+			const relative = file.slice(normalized.length + 1);
+			const top = relative.split("/")[0];
+			if (top) {
+				entries.add(top);
+			}
+		}
+		for (const dir of this.dirs) {
+			if (dir === normalized) {
+				continue;
+			}
+			if (!dir.startsWith(`${normalized}/`)) {
+				continue;
+			}
+			const relative = dir.slice(normalized.length + 1);
+			const top = relative.split("/")[0];
+			if (top) {
+				entries.add(top);
+			}
+		}
+		return [...entries];
+	}
+
 	async mkdirp(path: string): Promise<void> {
 		let current = normalize(path);
 		const parts: string[] = [];

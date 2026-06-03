@@ -1,4 +1,3 @@
-import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { EXTENSION_NAME } from "../constants";
 import type { PlannerFs } from "./fs";
@@ -59,7 +58,7 @@ async function findExistingProjectRoot(input: {
 		EXTENSION_NAME,
 		"projects",
 	);
-	const entries = await safeReaddir(projectsDir);
+	const entries = await safeReaddir(input.fs, projectsDir);
 	for (const entry of entries) {
 		const projectJson = join(projectsDir, entry, "project.json");
 		const record = await readProjectRecordIfExists(input.fs, {
@@ -72,9 +71,9 @@ async function findExistingProjectRoot(input: {
 	return null;
 }
 
-async function safeReaddir(dir: string): Promise<string[]> {
+async function safeReaddir(fs: PlannerFs, dir: string): Promise<string[]> {
 	try {
-		return await readdir(dir);
+		return await fs.readdir(dir);
 	} catch {
 		return [];
 	}

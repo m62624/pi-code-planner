@@ -155,4 +155,23 @@ describe("project storage resolver", () => {
 			originalSessionFile: "/agent/sessions/--repo-app--/root.jsonl",
 		});
 	});
+
+	it("falls back to scanning extensionDir/projects when worktree index is missing", async () => {
+		const fs = new MockPlannerFs();
+		const original = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		await ensureProjectRecord(fs, original);
+
+		// cwd is inside a worktree directory but no worktree index exists
+		const resolved = await resolveProjectStoragePaths({
+			fs,
+			agentDir: "/agent",
+			cwd: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
+		});
+
+		expect(resolved.projectRoot).toBe("/repo/app");
+		expect(resolved.projectId).toBe(original.projectId);
+	});
 });
