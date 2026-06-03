@@ -17,6 +17,8 @@ import {
 	isPlanActive,
 	registerPlannerToolVisibility,
 	resetPlanActiveCache,
+	setPlanActive,
+	updateToolVisibility,
 } from "./index.tool-visibility";
 import { syncBundledInstructionFiles } from "./instructions/defaults";
 import { createInstructionPaths } from "./instructions/paths";
@@ -499,6 +501,8 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				ctx.ui.notify(result.text, "error");
 				return;
 			}
+			setPlanActive(true);
+			updateToolVisibility(pi);
 			const details = result.details as {
 				worktreePath?: string | null;
 			};
@@ -758,6 +762,11 @@ function registerPlannerTools(
 					toolName,
 					params,
 				});
+
+				if (result.status === "applied") {
+					setPlanActive(true);
+					updateToolVisibility(pi);
+				}
 
 				return {
 					content: [{ type: "text", text: result.text }],

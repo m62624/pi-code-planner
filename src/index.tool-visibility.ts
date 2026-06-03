@@ -14,6 +14,10 @@ export function isPlanActive(): boolean {
 	return planActiveCache;
 }
 
+export function setPlanActive(active: boolean): void {
+	planActiveCache = active;
+}
+
 export function filterPlannerTools(tools: RegisteredTool[]): RegisteredTool[] {
 	return tools.filter((tool) => !plannerNames.has(tool.name));
 }
