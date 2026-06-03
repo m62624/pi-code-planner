@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import type { ProjectStoragePaths } from "../storage/paths";
 
@@ -14,10 +15,17 @@ export function createProjectLocalWorktreeLocation(
 	planId: string,
 ): WorktreeLocation {
 	const root = join(projectPaths.projectLocalDir, "worktrees");
+	const path = join(root, planId);
+	let candidate = path;
+	let suffix = 1;
+	while (existsSync(candidate)) {
+		candidate = join(root, `${planId}-${suffix}`);
+		suffix++;
+	}
 	return {
 		kind: "project-local",
 		root,
-		path: join(root, planId),
+		path: candidate,
 	};
 }
 
@@ -27,10 +35,17 @@ export function createCustomWorktreeLocation(input: {
 	planId: string;
 }): WorktreeLocation {
 	const root = join(input.root, input.projectId);
+	const path = join(root, input.planId);
+	let candidate = path;
+	let suffix = 1;
+	while (existsSync(candidate)) {
+		candidate = join(root, `${input.planId}-${suffix}`);
+		suffix++;
+	}
 	return {
 		kind: "custom",
 		root,
-		path: join(root, input.planId),
+		path: candidate,
 	};
 }
 
