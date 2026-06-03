@@ -120,11 +120,9 @@ export function updateToolVisibility(pi: ExtensionAPI): void {
 }
 
 export function registerPlannerToolVisibility(pi: ExtensionAPI): void {
-	// Refresh cache on session start (using sync check for zero lag, then async check for safety)
-	pi.on("session_start", async (_event, ctx) => {
-		refreshPlanActiveCacheSync(pi, ctx.cwd);
-		await refreshPlanActiveCache(pi, ctx.cwd);
-	});
+	// Do NOT auto-activate plan on session start. Plan is only active when
+	// explicitly set via /planner-create or /planner-switch. A session restart
+	// (e.g. ESC → resumed session) must not re-activate a plan.
 
 	// Only update UI tool visibility — do NOT modify payload (breaks Pi tool execution)
 	pi.on("before_provider_request", async () => {
