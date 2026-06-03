@@ -1,15 +1,5 @@
-import * as fs from "node:fs";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { ALL_PLANNER_TOOL_NAMES } from "./guard/tool-policy";
-import { readActivePlanContext } from "./runtime/active-plan";
-import { createNodeFs } from "./storage/fs";
-import {
-	createPlanStoragePaths,
-	createProjectStoragePaths,
-} from "./storage/paths";
-import { resolveProjectStoragePaths } from "./storage/project-resolver";
-import { createWorktreeProjectIndexPath } from "./storage/worktree-index";
 
 export interface RegisteredTool {
 	name: string;
@@ -27,55 +17,11 @@ export function filterPlannerTools(tools: RegisteredTool[]): RegisteredTool[] {
 /** Synchronously check if a plan is active. */
 export function refreshPlanActiveCacheSync(
 	pi: ExtensionAPI,
-	cwd: string,
+	_cwd: string,
 ): boolean {
-	try {
-		const agentDir = getAgentDir();
-		const direct = createProjectStoragePaths({
-			agentDir,
-			projectRoot: cwd,
-		});
-
-		let projectPaths = direct;
-		if (!fs.existsSync(direct.projectJson)) {
-			const indexFile = createWorktreeProjectIndexPath({
-				agentDir,
-				worktreePath: cwd,
-			});
-			if (fs.existsSync(indexFile)) {
-				const indexContent = fs.readFileSync(indexFile, "utf8");
-				const indexRecord = JSON.parse(indexContent);
-				if (indexRecord?.projectRoot) {
-					projectPaths = createProjectStoragePaths({
-						agentDir,
-						projectRoot: indexRecord.projectRoot,
-					});
-				}
-			}
-		}
-
-		if (fs.existsSync(projectPaths.projectJson)) {
-			const projectContent = fs.readFileSync(projectPaths.projectJson, "utf8");
-			const project = JSON.parse(projectContent);
-			if (project?.activePlanId) {
-				const planPaths = createPlanStoragePaths(
-					projectPaths,
-					project.activePlanId,
-				);
-				if (
-					fs.existsSync(planPaths.planJson) &&
-					fs.existsSync(planPaths.stateJson)
-				) {
-					planActiveCache = true;
-					updateToolVisibility(pi);
-					return true;
-				}
-			}
-		}
-	} catch (_error) {
-		// Ignore sync errors to avoid crashing startup/command flows
-	}
-
+	// Do NOT auto-activate plan. activePlanId is only set via
+	// /planner-create or /planner-switch. On session start (including
+	// resumed sessions) the plan must NOT be auto-activated.
 	planActiveCache = false;
 	updateToolVisibility(pi);
 	return false;
@@ -84,23 +30,14 @@ export function refreshPlanActiveCacheSync(
 /** Refresh the plan-active cache by reading from disk. */
 export async function refreshPlanActiveCache(
 	pi: ExtensionAPI,
-	cwd: string,
+	_cwd: string,
 ): Promise<boolean> {
-	const fsInstance = createNodeFs();
-	const agentDir = getAgentDir();
-	const projectPaths = await resolveProjectStoragePaths({
-		fs: fsInstance,
-		agentDir,
-		cwd,
-	});
-
-	const context = await readActivePlanContext({
-		fs: fsInstance,
-		projectPaths,
-	});
-	planActiveCache = context.status === "ready";
+	// Do NOT auto-activate plan. activePlanId is only set via
+	// /planner-create or /planner-switch. On session start the plan
+	// must NOT be auto-activated.
+	planActiveCache = false;
 	updateToolVisibility(pi);
-	return planActiveCache;
+	return false;
 }
 
 /** Reset the cache to inactive (called after /planner-accept, /planner-delete). */
