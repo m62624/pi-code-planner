@@ -68,11 +68,18 @@ export function registerPlannerToolVisibility(pi: ExtensionAPI): void {
 	// Do NOT call updateToolVisibility synchronously during extension load.
 	// pi.getAllTools() / pi.setActiveTools() are action methods that cannot
 	// be called during extension loading. Tool visibility will be updated
-	// on before_provider_request and after /planner-create /planner-switch.
+	// on session_start (first session) and before_provider_request.
 
 	// Do NOT auto-activate plan on session start. Plan is only activated
 	// when explicitly set via /planner-create or /planner-switch.
 	// These commands call setPlanActive(true) + updateToolVisibility(pi).
+
+	// On session start: apply current planActiveCache state to hide/show tools.
+	// On fresh start planActiveCache = false → tools hidden.
+	// After /planner-create /planner-switch planActiveCache = true → tools shown.
+	pi.on("session_start", async (_event, _ctx) => {
+		updateToolVisibility(pi);
+	});
 
 	// Refresh tool visibility on every provider request.
 	pi.on("before_provider_request", async () => {
