@@ -61,9 +61,14 @@ async function findExistingProjectRoot(input: {
 	const entries = await safeReaddir(input.fs, projectsDir);
 	for (const entry of entries) {
 		const projectJson = join(projectsDir, entry, "project.json");
+		const projectPaths = createProjectStoragePaths({
+			agentDir: input.agentDir,
+			projectRoot: "",
+		});
 		const record = await readProjectRecordIfExists(input.fs, {
+			...projectPaths,
 			projectJson,
-		} as Pick<ProjectStoragePaths, "projectJson">);
+		});
 		if (record?.projectRoot) {
 			return record.projectRoot;
 		}

@@ -15,7 +15,7 @@ export interface RegisteredTool {
 	name: string;
 }
 
-const plannerNames = new Set(ALL_PLANNER_TOOL_NAMES);
+const plannerNames: Set<string> = new Set(ALL_PLANNER_TOOL_NAMES);
 
 /** Cached plan active state — false by default, updated after planner commands. */
 let planActiveCache: boolean = false;
