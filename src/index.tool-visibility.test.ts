@@ -6,6 +6,7 @@ import {
 import {
 	filterPlannerTools,
 	type RegisteredTool,
+	updateToolVisibility,
 } from "./index.tool-visibility";
 
 describe("filterPlannerTools", () => {
@@ -126,5 +127,26 @@ describe("filterPlannerTools", () => {
 
 	it("ALL_PLANNER_TOOL_NAMES has exactly 29 tools", () => {
 		expect(ALL_PLANNER_TOOL_NAMES).toHaveLength(29);
+	});
+});
+
+describe("updateToolVisibility", () => {
+	it("sets active tools on the pi instance", () => {
+		const mockTools = [
+			{ name: "bash" },
+			{ name: "planner_status" },
+			{ name: "planner_create_plan" },
+		];
+		const activeTools: string[][] = [];
+		const mockPi = {
+			getAllTools: () => mockTools,
+			setActiveTools: (names: string[]) => {
+				activeTools.push(names);
+			},
+		} as unknown as ExtensionAPI;
+
+		updateToolVisibility(mockPi);
+		expect(activeTools).toHaveLength(1);
+		expect(activeTools[0]).toEqual(["bash"]);
 	});
 });

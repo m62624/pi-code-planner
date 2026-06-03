@@ -416,7 +416,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					);
 				},
 			});
-			await refreshPlanActiveCache(ctx.cwd);
+			await refreshPlanActiveCache(pi, ctx.cwd);
 		},
 	});
 
@@ -523,7 +523,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					);
 				},
 			});
-			await refreshPlanActiveCache(ctx.cwd);
+			await refreshPlanActiveCache(pi, ctx.cwd);
 		},
 	});
 
@@ -591,7 +591,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				},
 			});
 			notifyPlannerCommandResult(ctx, result);
-			resetPlanActiveCache();
+			resetPlanActiveCache(pi);
 		},
 	});
 
@@ -684,7 +684,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 						);
 					},
 				});
-				resetPlanActiveCache();
+				resetPlanActiveCache(pi);
 			} catch (error) {
 				if (fallbackSession && !acceptedPlanFinalized) {
 					await removePlannerHandoffBootstrapFile(
