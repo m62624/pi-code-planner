@@ -384,6 +384,8 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					ctx.ui.notify(result.text, "error");
 					return;
 				}
+				setPlanActive(true);
+				updateToolVisibility(pi);
 
 				const details = result.details as {
 					state?: { worktreePath?: string | null };
