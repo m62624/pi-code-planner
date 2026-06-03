@@ -10,6 +10,10 @@ const plannerNames: Set<string> = new Set(ALL_PLANNER_TOOL_NAMES);
 /** Cached plan active state — false by default, updated after planner commands. */
 let planActiveCache: boolean = false;
 
+export function isPlanActive(): boolean {
+	return planActiveCache;
+}
+
 export function filterPlannerTools(tools: RegisteredTool[]): RegisteredTool[] {
 	return tools.filter((tool) => !plannerNames.has(tool.name));
 }

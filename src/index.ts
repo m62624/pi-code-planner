@@ -14,6 +14,7 @@ import {
 	type PlannerBuiltinToolCall,
 } from "./guard/project-mutation";
 import {
+	isPlanActive,
 	registerPlannerToolVisibility,
 	resetPlanActiveCache,
 } from "./index.tool-visibility";
@@ -1324,7 +1325,12 @@ async function readPlannerBuiltinGuardState(
 			cwd,
 		});
 		const context = await readActivePlanContext({ fs, projectPaths });
-		if (context.status === "ready") {
+		// Use isPlanActive() instead of activePlanId to determine if plan is active.
+		// This ensures the guard is only active when /planner-create or /planner-switch
+		// explicitly activates the plan. On fresh session start (project root),
+		// isPlanActive() returns false and the guard stays inactive.
+		const active = isPlanActive();
+		if (context.status === "ready" && active) {
 			return {
 				activePlanId: context.activePlanId,
 				active: true,
@@ -1334,8 +1340,8 @@ async function readPlannerBuiltinGuardState(
 			};
 		}
 		return {
-			activePlanId: context.activePlanId,
-			active: context.activePlanId !== null,
+			activePlanId: active ? context.activePlanId : null,
+			active: active,
 			projectPaths,
 			planPaths: null,
 			planState: null,
@@ -1343,7 +1349,7 @@ async function readPlannerBuiltinGuardState(
 	} catch {
 		return {
 			activePlanId: null,
-			active: true,
+			active: false,
 			projectPaths: null,
 			planPaths: null,
 			planState: null,
