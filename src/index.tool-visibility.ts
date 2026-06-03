@@ -1,11 +1,5 @@
-import * as fs from "node:fs";
-import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { ALL_PLANNER_TOOL_NAMES } from "./guard/tool-policy";
-import { createNodeFs } from "./storage/fs";
-import { createPlanStoragePaths } from "./storage/paths";
-import { resolveProjectStoragePaths } from "./storage/project-resolver";
 
 export interface RegisteredTool {
 	name: string;
@@ -66,74 +60,14 @@ export function registerPlannerToolVisibility(pi: ExtensionAPI): void {
 	// Do NOT call updateToolVisibility synchronously during extension load.
 	// pi.getAllTools() / pi.setActiveTools() are action methods that cannot
 	// be called during extension loading. Tool visibility will be updated
-	// on session_start (first session) and before_provider_request.
+	// on before_provider_request.
 
-	// On session start: check if activePlanId is set in project.json.
-	// If so, activate planner tools; otherwise keep them hidden.
-	// This handles /planner-create and /planner-switch which set activePlanId.
-	pi.on("session_start", async (_event, ctx) => {
-		await refreshPlanActiveCacheForSwitch(pi, ctx.cwd);
-	});
+	// Do NOT auto-activate plan on session start. Plan is only activated
+	// when explicitly set via /planner-create or /planner-switch.
+	// These commands call setActivePlan which sets planActiveCache = true.
 
 	// Refresh tool visibility on every provider request (handles /planner-create, /planner-switch)
 	pi.on("before_provider_request", async () => {
 		updateToolVisibility(pi);
 	});
-}
-
-/**
- * Check if activePlanId is set and update tool visibility accordingly.
- * Only activates plan when activePlanId is explicitly set (not on fresh session start).
- */
-async function refreshPlanActiveCacheForSwitch(
-	pi: ExtensionAPI,
-	cwd: string,
-): Promise<void> {
-	try {
-		const fsInstance = createNodeFs();
-		const agentDir = getAgentDir();
-		const projectPaths = await resolveProjectStoragePaths({
-			fs: fsInstance,
-			agentDir,
-			cwd,
-		});
-
-		// Do NOT activate plan on fresh session start (cwd === projectRoot).
-		// activePlanId is only activated when explicitly switching via
-		// /planner-create or /planner-switch (which use switchSession).
-		if (cwd === projectPaths.projectRoot) {
-			planActiveCache = false;
-			updateToolVisibility(pi);
-			return;
-		}
-
-		const projectJson = join(projectPaths.projectJson);
-		if (!fs.existsSync(projectJson)) {
-			planActiveCache = false;
-			updateToolVisibility(pi);
-			return;
-		}
-
-		const projectContent = fs.readFileSync(projectJson, "utf8");
-		const project = JSON.parse(projectContent);
-		if (project?.activePlanId) {
-			const planPaths = createPlanStoragePaths(
-				projectPaths,
-				project.activePlanId,
-			);
-			if (
-				fs.existsSync(planPaths.planJson) &&
-				fs.existsSync(planPaths.stateJson)
-			) {
-				planActiveCache = true;
-				updateToolVisibility(pi);
-				return;
-			}
-		}
-	} catch (_error) {
-		// Ignore errors to avoid crashing startup/command flows
-	}
-
-	planActiveCache = false;
-	updateToolVisibility(pi);
 }
