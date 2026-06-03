@@ -13,7 +13,11 @@ import {
 	type PlannerBuiltinGuardState,
 	type PlannerBuiltinToolCall,
 } from "./guard/project-mutation";
-import { registerPlannerToolVisibility } from "./index.tool-visibility";
+import {
+	refreshPlanActiveCache,
+	registerPlannerToolVisibility,
+	resetPlanActiveCache,
+} from "./index.tool-visibility";
 import { syncBundledInstructionFiles } from "./instructions/defaults";
 import { createInstructionPaths } from "./instructions/paths";
 import {
@@ -412,6 +416,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					);
 				},
 			});
+			await refreshPlanActiveCache(ctx.cwd);
 		},
 	});
 
@@ -518,6 +523,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					);
 				},
 			});
+			await refreshPlanActiveCache(ctx.cwd);
 		},
 	});
 
@@ -585,6 +591,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				},
 			});
 			notifyPlannerCommandResult(ctx, result);
+			resetPlanActiveCache();
 		},
 	});
 
@@ -677,6 +684,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 						);
 					},
 				});
+				resetPlanActiveCache();
 			} catch (error) {
 				if (fallbackSession && !acceptedPlanFinalized) {
 					await removePlannerHandoffBootstrapFile(
