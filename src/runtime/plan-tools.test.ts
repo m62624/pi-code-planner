@@ -408,8 +408,12 @@ describe("planner plan tools", () => {
 			},
 		});
 
-		expect(second.status).toBe("blocked");
-		expect(second.text).toContain("Planner plan already exists: plan-a");
+		expect(second.status).toBe("applied");
+		expect(second.details).toMatchObject({
+			plan: expect.objectContaining({
+				planId: expect.stringMatching(/^plan-a-[a-f0-9]{8}$/),
+			}),
+		});
 	});
 
 	it("generates a deterministic id from the raw request when planId is omitted", async () => {

@@ -62,12 +62,22 @@ export function resolvePlannerPlanId(input: {
 	if (input.requestedPlanId && requested.length === 0) {
 		throw new TypeError(`Invalid planner id: ${input.requestedPlanId}`);
 	}
+	const existing = new Set(input.project.plans.map((plan) => plan.planId));
+
 	if (requested.length > 0) {
-		return requested;
+		if (!existing.has(requested)) {
+			return requested;
+		}
+		// Requested planId already exists — append UUID suffix for uniqueness.
+		const suffix = randomUUID().slice(0, PLAN_UUID_SUFFIX_LENGTH);
+		const candidate = `${requested}-${suffix}`;
+		if (!existing.has(candidate)) {
+			return candidate;
+		}
+		return `${requested}-${suffix}`;
 	}
 
 	const prefix = generatePlanPrefix(input.request);
-	const existing = new Set(input.project.plans.map((plan) => plan.planId));
 	if (!existing.has(prefix)) {
 		return prefix;
 	}

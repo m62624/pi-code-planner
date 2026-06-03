@@ -68,7 +68,7 @@ describe("planner plan naming", () => {
 				request: "Ignored",
 				project: projectWithPlans(["approval-find"]),
 			}),
-		).toBe("approval-find");
+		).toMatch(/^approval-find-[a-f0-9]{8}$/);
 	});
 
 	it("rejects explicit id that cannot become a valid planner id", () => {
