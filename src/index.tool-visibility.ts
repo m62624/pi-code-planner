@@ -63,9 +63,10 @@ export function updateToolVisibility(pi: ExtensionAPI): void {
 }
 
 export function registerPlannerToolVisibility(pi: ExtensionAPI): void {
-	// Immediately filter out planner tools on extension load.
-	// Plan is only active when explicitly set via /planner-create or /planner-switch.
-	updateToolVisibility(pi);
+	// Do NOT call updateToolVisibility synchronously during extension load.
+	// pi.getAllTools() / pi.setActiveTools() are action methods that cannot
+	// be called during extension loading. Tool visibility will be updated
+	// on session_start (first session) and before_provider_request.
 
 	// On session start: check if activePlanId is set in project.json.
 	// If so, activate planner tools; otherwise keep them hidden.
