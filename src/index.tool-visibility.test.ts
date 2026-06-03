@@ -1,0 +1,130 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import {
+	ALL_PLANNER_TOOL_NAMES,
+	PLANNER_WRAPPER_TOOLS,
+} from "./guard/tool-policy";
+import {
+	filterPlannerTools,
+	type RegisteredTool,
+} from "./index.tool-visibility";
+
+describe("filterPlannerTools", () => {
+	let mockTools: RegisteredTool[];
+
+	beforeEach(() => {
+		mockTools = [
+			{ name: "bash" },
+			{ name: "read" },
+			{ name: "write" },
+			{ name: "edit" },
+			{ name: "planner_status" },
+			{ name: "planner_create_plan" },
+			{ name: "planner_goal_submit" },
+			{ name: "planner_goal_decide" },
+			{ name: "planner_questions_submit" },
+			{ name: "planner_questions_resolve" },
+			{ name: "planner_task_upsert" },
+			{ name: "planner_git_inspect" },
+			{ name: "planner_git_init" },
+			{ name: "planner_git_commit" },
+			{ name: "planner_git_create_task_branch" },
+			{ name: "planner_git_create_experiment_branch" },
+			{ name: "planner_git_select_experiment" },
+			{ name: "planner_git_merge_selected_experiment" },
+			{ name: "planner_git_create_refactor_branch" },
+			{ name: "planner_git_merge_refactor_to_task" },
+			{ name: "planner_git_merge_task_to_plan" },
+			{ name: "planner_recovery_inspect" },
+			{ name: "planner_recovery_resume" },
+			{ name: "planner_start_step" },
+			{ name: "planner_finish_step" },
+			{ name: "planner_advance_step" },
+			{ name: "planner_fail_step" },
+			{ name: "planner_block_step" },
+			{ name: "planner_retry_step" },
+			{ name: "planner_request_compact" },
+			{ name: "planner_complete_compact" },
+			{ name: "planner_enter_recovery" },
+			{ name: "planner_resume_after_recovery" },
+		];
+	});
+
+	it("filters out ALL planner tools including workflow tools", () => {
+		const result = filterPlannerTools(mockTools);
+
+		const toolNames = result.map((t) => t.name);
+		for (const plannerTool of ALL_PLANNER_TOOL_NAMES) {
+			expect(toolNames).not.toContain(plannerTool);
+		}
+	});
+
+	it("keeps non-planner tools", () => {
+		const result = filterPlannerTools(mockTools);
+
+		const toolNames = result.map((t) => t.name);
+		expect(toolNames).toContain("bash");
+		expect(toolNames).toContain("read");
+		expect(toolNames).toContain("write");
+		expect(toolNames).toContain("edit");
+	});
+
+	it("returns empty array when all tools are planner tools", () => {
+		const plannerOnlyTools: RegisteredTool[] = ALL_PLANNER_TOOL_NAMES.map(
+			(name) => ({ name }),
+		);
+
+		const result = filterPlannerTools(plannerOnlyTools);
+
+		expect(result).toHaveLength(0);
+	});
+
+	it("returns all tools unchanged when no planner tools in input", () => {
+		const nonPlannerTools: RegisteredTool[] = [
+			{ name: "bash" },
+			{ name: "read" },
+			{ name: "write" },
+		];
+
+		const result = filterPlannerTools(nonPlannerTools);
+
+		expect(result).toEqual(nonPlannerTools);
+	});
+
+	it("preserves tool names as strings", () => {
+		const result = filterPlannerTools(mockTools);
+
+		const toolNames = result.map((t) => t.name);
+		expect(toolNames.every((n) => typeof n === "string")).toBe(true);
+	});
+
+	it("removes workflow tools that are not in PLANNER_WRAPPER_TOOLS", () => {
+		const workflowTools: RegisteredTool[] = [
+			{ name: "bash" },
+			{ name: "planner_start_step" },
+			{ name: "planner_finish_step" },
+			{ name: "planner_advance_step" },
+			{ name: "planner_fail_step" },
+			{ name: "planner_block_step" },
+			{ name: "planner_retry_step" },
+			{ name: "planner_request_compact" },
+			{ name: "planner_complete_compact" },
+			{ name: "planner_enter_recovery" },
+			{ name: "planner_resume_after_recovery" },
+		];
+
+		const result = filterPlannerTools(workflowTools);
+
+		const toolNames = result.map((t) => t.name);
+		expect(toolNames).toEqual(["bash"]);
+	});
+
+	it("ALL_PLANNER_TOOL_NAMES is a superset of PLANNER_WRAPPER_TOOLS", () => {
+		for (const wrapperTool of PLANNER_WRAPPER_TOOLS) {
+			expect(ALL_PLANNER_TOOL_NAMES).toContain(wrapperTool);
+		}
+	});
+
+	it("ALL_PLANNER_TOOL_NAMES has exactly 29 tools", () => {
+		expect(ALL_PLANNER_TOOL_NAMES).toHaveLength(29);
+	});
+});

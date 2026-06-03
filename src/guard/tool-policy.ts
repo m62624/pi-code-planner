@@ -28,6 +28,22 @@ export const PLANNER_WRAPPER_TOOLS = [
 
 export type PlannerWrapperTool = (typeof PLANNER_WRAPPER_TOOLS)[number];
 
+export const ALL_PLANNER_TOOL_NAMES = [
+	...PLANNER_WRAPPER_TOOLS,
+	"planner_start_step",
+	"planner_finish_step",
+	"planner_advance_step",
+	"planner_fail_step",
+	"planner_block_step",
+	"planner_retry_step",
+	"planner_request_compact",
+	"planner_complete_compact",
+	"planner_enter_recovery",
+	"planner_resume_after_recovery",
+] as const;
+
+export type AllPlannerToolName = (typeof ALL_PLANNER_TOOL_NAMES)[number];
+
 export interface PlannerToolPolicyDecision {
 	allow: boolean;
 	tool: PlannerWrapperTool;

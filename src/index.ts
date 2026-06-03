@@ -13,6 +13,7 @@ import {
 	type PlannerBuiltinGuardState,
 	type PlannerBuiltinToolCall,
 } from "./guard/project-mutation";
+import { registerPlannerToolVisibility } from "./index.tool-visibility";
 import { syncBundledInstructionFiles } from "./instructions/defaults";
 import { createInstructionPaths } from "./instructions/paths";
 import {
@@ -293,6 +294,7 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 	registerPlannerBuiltinToolGuard(pi);
 	registerPlannerCompactEvents(pi, compactRuntime);
 	registerInstructionDefaultsSync(pi);
+	registerPlannerToolVisibility(pi);
 }
 
 function registerInstructionDefaultsSync(pi: ExtensionAPI): void {
