@@ -14,7 +14,6 @@ import {
 	type PlannerBuiltinToolCall,
 } from "./guard/project-mutation";
 import {
-	refreshPlanActiveCache,
 	registerPlannerToolVisibility,
 	resetPlanActiveCache,
 } from "./index.tool-visibility";
@@ -424,7 +423,6 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 						);
 					},
 				});
-				await refreshPlanActiveCache(pi, ctx.cwd);
 			} catch (error) {
 				// Stale ctx after session replacement (e.g. ESC during editor).
 				// Treat as cancellation — the user already got feedback from
@@ -542,7 +540,6 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					);
 				},
 			});
-			await refreshPlanActiveCache(pi, ctx.cwd);
 		},
 	});
 
