@@ -248,19 +248,10 @@ async function deletePlan(
 ): Promise<PlannerUserCommandResult> {
 	const params = asObject(input.params);
 	const planId = requiredString(params, "planId");
-	const forceActive = booleanParam(params, "forceActive") ?? false;
 	const deleteSessions = booleanParam(params, "deleteSessions") ?? false;
 	const project = await readProjectRecordIfExists(input.fs, input.projectPaths);
 	if (!project) {
 		return noProjectPlans(input.commandName);
-	}
-	const isActive = project.activePlanId === planId;
-	if (isActive && !forceActive) {
-		return blocked(
-			input.commandName,
-			`Active planner plan cannot be deleted without --force-active: ${planId}.`,
-			{ project, planId },
-		);
 	}
 	const summary = project.plans.find((plan) => plan.planId === planId);
 	if (!summary) {
@@ -280,24 +271,11 @@ async function deletePlan(
 		input.projectPaths.projectRoot,
 	);
 	if (state) {
-		if (!forceActive && projectRootExists) {
-			const guard = await assertPlanSwitchable({
-				fs: input.fs,
-				git: input.git,
-				projectPaths: input.projectPaths,
-				planId,
-				state,
-			});
-			if (!guard.allow) {
-				return blocked(input.commandName, guard.reason, { project, state });
-			}
-		}
 		if (state.worktreePath && (await input.fs.exists(state.worktreePath))) {
 			if (projectRootExists) {
 				await input.git.worktreeRemove({
 					repoRoot: input.projectPaths.projectRoot,
 					path: state.worktreePath,
-					force: forceActive,
 				});
 			} else {
 				await input.fs.removeDir(state.worktreePath);
@@ -308,7 +286,6 @@ async function deletePlan(
 				await input.git.deleteBranch({
 					repoRoot: input.projectPaths.projectRoot,
 					branch,
-					force: forceActive,
 				});
 			}
 		}
@@ -331,6 +308,7 @@ async function deletePlan(
 	}
 
 	await input.fs.removeDir(planPaths.planDir);
+	const isActive = project.activePlanId === planId;
 	const nextProject: ProjectRecord = {
 		...project,
 		activePlanId: isActive ? null : project.activePlanId,
@@ -341,7 +319,6 @@ async function deletePlan(
 		project: nextProject,
 		planId,
 		removedPlanDir: planPaths.planDir,
-		forceActive,
 		projectRootExists,
 		gitCleanupSkipped: !projectRootExists,
 	});

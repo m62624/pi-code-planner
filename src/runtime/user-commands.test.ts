@@ -361,23 +361,6 @@ describe("planner user commands", () => {
 		});
 	});
 
-	it("blocks deleting the active plan without forceActive", async () => {
-		const { fs, git, projectPaths } = await createProjectFixture({
-			activePlanId: "plan-a",
-		});
-
-		const result = await executePlannerUserCommand({
-			fs,
-			git,
-			projectPaths,
-			commandName: "planner_delete",
-			params: { planId: "plan-a" },
-		});
-
-		expect(result.status).toBe("blocked");
-		expect(result.text).toContain("without --force-active");
-	});
-
 	it("force-deletes active plan, clears active id, and removes worktree chat sessions", async () => {
 		const { fs, git, projectPaths } = await createProjectFixture({
 			activePlanId: "plan-a",
@@ -423,7 +406,6 @@ describe("planner user commands", () => {
 			input: {
 				repoRoot: "/repo/app",
 				path: worktreePath,
-				force: true,
 			},
 		});
 		expect(git.calls.some((call) => call.name === "statusPorcelain")).toBe(
@@ -530,7 +512,6 @@ describe("planner user commands", () => {
 			input: {
 				repoRoot: "/repo/app",
 				path: worktreePath,
-				force: false,
 			},
 		});
 		expect(git.calls.filter((call) => call.name === "deleteBranch")).toEqual([
@@ -539,7 +520,6 @@ describe("planner user commands", () => {
 				input: {
 					repoRoot: "/repo/app",
 					branch: "task/plan-b/task-1",
-					force: false,
 				},
 			},
 			{
@@ -547,7 +527,6 @@ describe("planner user commands", () => {
 				input: {
 					repoRoot: "/repo/app",
 					branch: "experiment/plan-b/task-1/one",
-					force: false,
 				},
 			},
 			{
@@ -555,7 +534,6 @@ describe("planner user commands", () => {
 				input: {
 					repoRoot: "/repo/app",
 					branch: "refactor/plan-b/task-1",
-					force: false,
 				},
 			},
 		]);
