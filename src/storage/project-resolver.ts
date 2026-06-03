@@ -1,3 +1,6 @@
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { EXTENSION_NAME } from "../constants";
 import type { PlannerFs } from "./fs";
 import { createProjectStoragePaths, type ProjectStoragePaths } from "./paths";
 import { readProjectRecordIfExists } from "./project-store";
@@ -29,5 +32,50 @@ export async function resolveProjectStoragePaths(input: {
 		});
 	}
 
+	// Fallback: scan extensionDir/projects/ for any known project record.
+	// This prevents creating nested worktrees when cwd is inside an existing
+	// worktree but the worktree index lookup fails.
+	const projectRoot = await findExistingProjectRoot({
+		fs: input.fs,
+		agentDir: input.agentDir,
+	});
+	if (projectRoot) {
+		return createProjectStoragePaths({
+			agentDir: input.agentDir,
+			projectRoot,
+		});
+	}
+
 	return direct;
+}
+
+async function findExistingProjectRoot(input: {
+	fs: PlannerFs;
+	agentDir: string;
+}): Promise<string | null> {
+	const projectsDir = join(
+		input.agentDir,
+		"extensions",
+		EXTENSION_NAME,
+		"projects",
+	);
+	const entries = await safeReaddir(projectsDir);
+	for (const entry of entries) {
+		const projectJson = join(projectsDir, entry, "project.json");
+		const record = await readProjectRecordIfExists(input.fs, {
+			projectJson,
+		} as Pick<ProjectStoragePaths, "projectJson">);
+		if (record?.projectRoot) {
+			return record.projectRoot;
+		}
+	}
+	return null;
+}
+
+async function safeReaddir(dir: string): Promise<string[]> {
+	try {
+		return await readdir(dir);
+	} catch {
+		return [];
+	}
 }
