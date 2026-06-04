@@ -35,9 +35,6 @@ describe("filterPlannerTools", () => {
 			{ name: "planner_git_init" },
 			{ name: "planner_git_commit" },
 			{ name: "planner_git_create_task_branch" },
-			{ name: "planner_git_create_experiment_branch" },
-			{ name: "planner_git_select_experiment" },
-			{ name: "planner_git_merge_selected_experiment" },
 			{ name: "planner_git_create_refactor_branch" },
 			{ name: "planner_git_merge_refactor_to_task" },
 			{ name: "planner_git_merge_task_to_plan" },
@@ -131,8 +128,8 @@ describe("filterPlannerTools", () => {
 		}
 	});
 
-	it("ALL_PLANNER_TOOL_NAMES has exactly 29 tools", () => {
-		expect(ALL_PLANNER_TOOL_NAMES).toHaveLength(29);
+	it("ALL_PLANNER_TOOL_NAMES has exactly 26 tools", () => {
+		expect(ALL_PLANNER_TOOL_NAMES).toHaveLength(26);
 	});
 });
 

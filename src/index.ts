@@ -309,16 +309,6 @@ const GIT_TASK_TOOL_PARAMETERS = {
 	additionalProperties: false,
 } as const;
 
-const GIT_EXPERIMENT_TOOL_PARAMETERS = {
-	type: "object",
-	properties: {
-		attemptId: { type: "string" },
-		taskId: { type: "string" },
-	},
-	required: ["attemptId"],
-	additionalProperties: false,
-} as const;
-
 const GIT_OPTIONAL_MESSAGE_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {
@@ -1302,12 +1292,6 @@ function gitToolLabel(toolName: PlannerGitToolName): string {
 			return "Planner Git Commit";
 		case "planner_git_create_task_branch":
 			return "Planner Git Create Task Branch";
-		case "planner_git_create_experiment_branch":
-			return "Planner Git Create Experiment Branch";
-		case "planner_git_select_experiment":
-			return "Planner Git Select Experiment";
-		case "planner_git_merge_selected_experiment":
-			return "Planner Git Merge Selected Experiment";
 		case "planner_git_create_refactor_branch":
 			return "Planner Git Create Refactor Branch";
 		case "planner_git_merge_refactor_to_task":
@@ -1327,12 +1311,6 @@ function gitToolDescription(toolName: PlannerGitToolName): string {
 			return "Create a planner-controlled commit.";
 		case "planner_git_create_task_branch":
 			return "Create and switch to the current task branch from the plan branch.";
-		case "planner_git_create_experiment_branch":
-			return "Create and switch to an experiment branch for the active task.";
-		case "planner_git_select_experiment":
-			return "Select the best experiment by attempt id; merge target stays state-controlled.";
-		case "planner_git_merge_selected_experiment":
-			return "Merge the state-selected experiment branch into the current task branch.";
 		case "planner_git_create_refactor_branch":
 			return "Create and switch to a refactor branch for the active task.";
 		case "planner_git_merge_refactor_to_task":
@@ -1348,10 +1326,6 @@ function gitToolParameters(toolName: PlannerGitToolName) {
 			return GIT_MESSAGE_TOOL_PARAMETERS;
 		case "planner_git_create_task_branch":
 			return GIT_TASK_TOOL_PARAMETERS;
-		case "planner_git_create_experiment_branch":
-		case "planner_git_select_experiment":
-			return GIT_EXPERIMENT_TOOL_PARAMETERS;
-		case "planner_git_merge_selected_experiment":
 		case "planner_git_merge_refactor_to_task":
 		case "planner_git_merge_task_to_plan":
 			return GIT_OPTIONAL_MESSAGE_TOOL_PARAMETERS;

@@ -101,7 +101,7 @@ function normalizeCompactSettings(
 		throw new TypeError(`Planner compact settings must be an object: ${path}`);
 	}
 	const record = value as Record<string, unknown>;
-	for (const key of ["stage", "task", "experiment"] as const) {
+	for (const key of ["stage", "task"] as const) {
 		if (record[key] !== undefined && typeof record[key] !== "boolean") {
 			throw new TypeError(
 				`Planner compact setting ${key} must be boolean: ${path}`,
@@ -111,9 +111,6 @@ function normalizeCompactSettings(
 	return {
 		...(typeof record.stage === "boolean" ? { stage: record.stage } : {}),
 		...(typeof record.task === "boolean" ? { task: record.task } : {}),
-		...(typeof record.experiment === "boolean"
-			? { experiment: record.experiment }
-			: {}),
 	};
 }
 

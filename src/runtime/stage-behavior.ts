@@ -36,12 +36,8 @@ export type PlannerBehaviorArtifact =
 	| "task.json"
 	| "task.md"
 	| "tdd.md"
-	| "tests.md"
-	| "implementation.md"
 	| "refactor.md"
 	| "verify.md"
-	| "experiment.json"
-	| "experiment/summary.md"
 	| "final_summary.md";
 
 export type PlannerBehaviorGate =
@@ -58,11 +54,7 @@ export type PlannerBehaviorGate =
 	| "tdd_plan_written"
 	| "tests_written_first"
 	| "failing_signal_recorded"
-	| "experiment_branch_ready"
-	| "experiment_committed"
-	| "experiment_summarized"
-	| "experiment_selected"
-	| "experiment_merged"
+	| "task_implemented"
 	| "refactor_checked"
 	| "final_tests_passed"
 	| "task_merged_to_plan"
@@ -294,7 +286,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		projectAccess: "test_edits",
 		actions: ["write_tests"],
 		requiredArtifacts: ["tdd.md"],
-		updatedArtifacts: ["tests.md"],
+		updatedArtifacts: ["tdd.md"],
 		requiredGates: ["tdd_plan_written"],
 		expectedTools: ["planner_git_inspect", "planner_git_commit"],
 		commitPolicy: "allowed_if_dirty",
@@ -303,72 +295,29 @@ export const PLANNER_STAGE_BEHAVIOR = {
 	run_failing_tests: behavior("execution", "run_failing_tests", {
 		projectAccess: "checks_only",
 		actions: ["run_checks", "write_artifacts"],
-		requiredArtifacts: ["tests.md"],
-		updatedArtifacts: ["verify.md"],
+		requiredArtifacts: ["tdd.md"],
+		updatedArtifacts: ["tdd.md"],
 		requiredGates: ["tests_written_first"],
 		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
-	start_experiments: behavior("execution", "start_experiments", {
-		projectAccess: "planner_artifacts",
-		actions: ["planner_git", "write_artifacts"],
-		requiredArtifacts: ["verify.md"],
-		updatedArtifacts: ["experiment.json"],
-		requiredGates: ["failing_signal_recorded"],
-		expectedTools: ["planner_git_create_experiment_branch"],
-		commitPolicy: "forbidden",
-		compactPolicy: "not_allowed",
-	}),
-	run_experiment: behavior("execution", "run_experiment", {
+	implement_task: behavior("execution", "implement_task", {
 		projectAccess: "production_edits",
 		actions: ["write_production", "run_checks", "planner_git"],
-		requiredArtifacts: ["experiment.json", "tdd.md", "tests.md"],
-		updatedArtifacts: ["implementation.md"],
-		requiredGates: ["experiment_branch_ready"],
+		requiredArtifacts: ["tdd.md"],
+		updatedArtifacts: ["tdd.md"],
+		requiredGates: ["failing_signal_recorded"],
 		expectedTools: ["planner_git_commit"],
 		commitPolicy: "required_if_dirty",
-		compactPolicy: "not_allowed",
-	}),
-	summarize_experiment: behavior("execution", "summarize_experiment", {
-		projectAccess: "planner_artifacts",
-		actions: ["write_artifacts"],
-		requiredArtifacts: ["implementation.md"],
-		updatedArtifacts: ["experiment/summary.md"],
-		requiredGates: ["experiment_committed"],
-		expectedTools: ["planner_git_inspect"],
-		commitPolicy: "forbidden",
-		compactPolicy: "not_allowed",
-	}),
-	compact_experiment: compactBehavior("execution", "compact_experiment", [
-		"experiment/summary.md",
-	]),
-	select_experiment: behavior("execution", "select_experiment", {
-		projectAccess: "planner_artifacts",
-		actions: ["planner_git"],
-		requiredArtifacts: ["experiment/summary.md"],
-		updatedArtifacts: ["state.json"],
-		requiredGates: ["experiment_summarized"],
-		expectedTools: ["planner_git_select_experiment"],
-		commitPolicy: "forbidden",
-		compactPolicy: "not_allowed",
-	}),
-	merge_best_experiment: behavior("execution", "merge_best_experiment", {
-		projectAccess: "none",
-		actions: ["planner_git"],
-		requiredArtifacts: ["state.json"],
-		updatedArtifacts: ["state.json"],
-		requiredGates: ["experiment_selected"],
-		expectedTools: ["planner_git_merge_selected_experiment"],
-		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
 	refactor_task: behavior("execution", "refactor_task", {
 		projectAccess: "production_edits",
 		actions: ["refactor", "run_checks", "planner_git"],
-		requiredArtifacts: ["implementation.md", "tests.md"],
-		updatedArtifacts: ["refactor.md", "verify.md"],
-		requiredGates: ["experiment_merged"],
+		requiredArtifacts: ["tdd.md"],
+		updatedArtifacts: ["refactor.md"],
+		requiredGates: ["task_implemented"],
 		expectedTools: ["planner_git_commit"],
 		commitPolicy: "allowed_if_dirty",
 		compactPolicy: "not_allowed",
@@ -376,8 +325,8 @@ export const PLANNER_STAGE_BEHAVIOR = {
 	run_final_tests: behavior("execution", "run_final_tests", {
 		projectAccess: "checks_only",
 		actions: ["run_checks", "write_artifacts", "planner_git"],
-		requiredArtifacts: ["tests.md", "verify.md"],
-		updatedArtifacts: ["verify.md"],
+		requiredArtifacts: ["tdd.md", "refactor.md"],
+		updatedArtifacts: ["refactor.md"],
 		requiredGates: ["refactor_checked"],
 		expectedTools: ["planner_git_commit"],
 		commitPolicy: "allowed_if_dirty",
@@ -386,7 +335,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 	merge_task_to_plan: behavior("execution", "merge_task_to_plan", {
 		projectAccess: "none",
 		actions: ["planner_git"],
-		requiredArtifacts: ["verify.md"],
+		requiredArtifacts: ["refactor.md"],
 		updatedArtifacts: ["state.json"],
 		requiredGates: ["final_tests_passed"],
 		expectedTools: ["planner_git_merge_task_to_plan"],
@@ -395,12 +344,13 @@ export const PLANNER_STAGE_BEHAVIOR = {
 	}),
 	compact_task: compactBehavior("execution", "compact_task", [
 		"task.md",
-		"verify.md",
+		"tdd.md",
+		"refactor.md",
 	]),
 	select_next_task: behavior("execution", "select_next_task", {
 		projectAccess: "planner_artifacts",
 		actions: ["write_artifacts", "state_transition"],
-		requiredArtifacts: ["plan.md", "task.json", "verify.md"],
+		requiredArtifacts: ["plan.md", "task.json", "refactor.md"],
 		updatedArtifacts: ["state.json", "decisions.md"],
 		requiredGates: ["task_merged_to_plan"],
 		expectedTools: ["planner_finish_step"],
@@ -708,9 +658,6 @@ function isStateChangingGitTool(tool: PlannerWrapperTool): boolean {
 	return (
 		tool === "planner_git_init" ||
 		tool === "planner_git_create_task_branch" ||
-		tool === "planner_git_create_experiment_branch" ||
-		tool === "planner_git_select_experiment" ||
-		tool === "planner_git_merge_selected_experiment" ||
 		tool === "planner_git_create_refactor_branch" ||
 		tool === "planner_git_merge_refactor_to_task" ||
 		tool === "planner_git_merge_task_to_plan"

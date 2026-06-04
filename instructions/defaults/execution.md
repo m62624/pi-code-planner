@@ -2,12 +2,12 @@
 
 ## Purpose
 
-Execute exactly one active task at a time through tests-first development, sequential experiments, candidate selection, refactor, verification, merge, and task compact.
+Execute exactly one active task at a time through tests-first development, implementation, mandatory refactor review, final checks, merge, and task compact. There is no experiment/candidate branch loop.
 
 ## Context Reload Policy
 
 - At `prepare_task`, call `planner_status`, reread the full `plan.md`, read answered `questions.md` and `decisions.md`, read the selected `task.md`, then inspect `discovery.md` and use focused project search only if needed.
-- During one experiment loop, reread `task.md`, `tdd.md`, test/verify artifacts, and completed experiment summaries. Read the full `plan.md` only when integration context is unclear.
+- During one task, reread `task.md`, `tdd.md`, `refactor.md`, and focused source files only when the current action needs details that are not already recorded.
 - After `compact_task`, do not carry live reasoning into the next task. Call `planner_status`, reread the full `plan.md`, inspect task status, then load the next `task.md`.
 - After recovery or auto-compact, call `planner_status` before any edit or check.
 
@@ -21,37 +21,27 @@ Execute exactly one active task at a time through tests-first development, seque
    - Define test strategy, mocks, fixtures, checks, edge cases, and expected failing signal.
 3. `write_tests`
    - Write failing, mock, or contract tests before production implementation.
-   - Record `tests.md`. If project files changed, commit through planner git before experiments.
+   - Append changed test files and intent to `tdd.md`.
+   - If project files changed, commit through planner git before continuing.
 4. `run_failing_tests`
    - Run focused checks and prove that tests detect the missing behavior.
-5. `start_experiments`
-   - Create one experiment branch for one distinct implementation attempt.
-6. `run_experiment`
-   - Implement only the active attempt.
-   - Run checks and commit through planner git.
-7. `summarize_experiment`
-   - Record approach, checks, diff summary, strengths, weaknesses, risks, and numeric comparison evidence.
-8. `compact_experiment`
-   - Compact the completed attempt.
-9. `select_experiment`
-   - Decide whether another genuinely different attempt is required.
-   - If yes, continue to `start_experiments`.
-   - If the attempt budget or stop criteria are satisfied, select the best attempt id and continue to merge.
-10. `merge_best_experiment`
-   - Use the planner wrapper. Source and target branches come from persisted state.
-   - Call `planner_status` after merge.
-11. `refactor_task`
-   - Challenge the selected result without changing behavior.
-   - Write `refactor.md` with a concrete KISS review. Passing checks alone do not prove that refactor review is complete.
-   - Commit only if files changed.
-12. `run_final_tests`
-   - Run final focused and integration checks. Inspect scope and accidental edits.
-13. `merge_task_to_plan`
+   - Record exact command, cwd, and failing signal in `tdd.md`.
+5. `implement_task`
+   - Implement only the behavior required by `task.md` and `tdd.md`.
+   - Run focused checks, update `tdd.md` with results, and commit through planner git if files changed.
+6. `refactor_task`
+   - Challenge the implementation without changing behavior.
+   - Write `refactor.md` with a concrete KISS review, changes applied, and decisions to keep code unchanged.
+   - Commit through planner git if files changed.
+7. `run_final_tests`
+   - Run final focused and integration checks from the planner worktree.
+   - Record final check results and scope review in `refactor.md`.
+8. `merge_task_to_plan`
    - Merge the task branch into the plan branch through the planner wrapper.
    - Call `planner_status` after merge.
-14. `compact_task`
-   - Compact the completed task result.
-15. `select_next_task`
+9. `compact_task`
+   - Compact the completed task result if enabled.
+10. `select_next_task`
    - Choose `execution/prepare_task` for the next task or `finalize/verify_plan_branch` when execution is complete.
 
 ## Atomic Unit Rules
@@ -59,91 +49,69 @@ Execute exactly one active task at a time through tests-first development, seque
 - A commit alone does not finish an atomic unit.
 - After every planner-controlled commit or merge, call `planner_status` and continue the persisted state-machine step.
 - Dirty worktree is allowed while implementing a running step, but must be resolved before merge boundaries.
-- Built-in project write/edit calls are enabled only during `write_tests`, `run_experiment`, and `refactor_task`. The planner does not infer file roles from names, so tests, fixtures, harness wiring, configuration, and production code may share files. Follow the exact step purpose.
+- Built-in project write/edit calls are enabled only during `write_tests`, `implement_task`, and `refactor_task`. The planner does not infer file roles from names, so tests, fixtures, harness wiring, configuration, and production code may share files. Follow the exact step purpose.
 - Never edit the original checkout while a planner worktree is active. Continue inside the worktree session reported by `planner_status`.
 - Run every project command from the worktree path reported by `planner_status`. This includes focused tests, full tests, builds, type checks, linters, formatters, generators, package scripts, compilers, and project-specific verification commands, regardless of language or tooling.
 - Before recording a successful check, confirm that its shell cwd was the planner worktree, not the original checkout.
 - Use `planner_status` after every wrapper result.
 - Raw git is forbidden.
-- The model chooses task id and experiment id only. It never invents merge source or target branches.
+- The model chooses task ids only. It never invents merge source or target branches.
 
 ## Scope Rules
 
 - Test writing must happen before production behavior changes.
-- Experiment branches are for alternative implementations, not refactor polish.
-- Refactor happens only after the best experiment is merged into the task branch.
 - Do not modify unrelated files. Before finishing a task, inspect the planner-controlled diff and verify scope.
+- Refactor is mandatory design review, not formatter/linter output. Passing checks do not prove that no refactor is needed.
 - If new required work exceeds the current task, record it as a new task or return to planning.
 
 ## Fundamental Rules
 
-### Rule 4: Uncertainty → Question
+### Rule 4: Uncertainty -> Question
 
-**Rule:** If a task allows more than one interpretation of mechanism, integration approach, or if you are uncertain about system boundaries — you MUST ask a question. Do not guess. Do not improvise. Do not write code based on assumptions.
+**Rule:** If a task allows more than one interpretation of mechanism, integration approach, or if you are uncertain about system boundaries, ask a question. Do not guess. Do not write code based on assumptions.
 
 **When to ask a question:**
-- Unclear which mechanism the task uses (internal or external)
-- Unclear which files to touch and which not
-- Unclear what to consider "immutable"
-- Risk that the solution will break the existing architecture
+- Unclear which mechanism the task uses.
+- Unclear which files to touch and which not.
+- Unclear what to consider immutable.
+- Risk that the solution will break the existing architecture.
 
-**When NOT to ask a question:**
-- The task is unambiguous
-- All boundaries are clear
-- The mechanism is explicitly defined
-
-**Deduction:** One question is better than an hour of rewriting a wrong solution.
-
-### Rule 5: Priorities and Conflicts
-
-**Priority hierarchy (highest to lowest):**
-
-1. Direct user instructions — if the user said "change X" or "do not touch X", this overrides everything.
-2. Fundamental rules — rules 1-4 apply when there are no direct instructions.
-3. Technical criteria — when rules and instructions do not give a clear answer, you decide based on technical criteria.
-
-**When instructions contradict each other:**
-
-If a rule forbids touching file X, but you see that the technically optimal solution requires changing X — you must:
-
-1. Record in your working notes why the solution without changing X is impossible or extremely suboptimal.
-2. Formulate a specific justification: what will break, what will fail, what will work incorrectly.
-3. Offer the user an alternative: "I recommend changing X because... But if you insist on keeping X unchanged, here is an alternative that will work worse: ..."
-4. The final decision is always the user's.
-
-**Deduction:** You do not silently break rules. If technically necessary to break one — you explain why and ask for permission.
+**When not to ask a question:**
+- The task is unambiguous.
+- All boundaries are clear.
+- The mechanism is explicitly defined.
 
 ## manual-compact
 
-Preserve the plan id, active task id, active experiment id, exact branch, current step, task artifact paths, verification results, selected candidate state, completed experiment summaries, open risks, and exact next action. After compaction, call `planner_status`.
+Preserve the plan id, active task id, exact branch, current step, task artifact paths, TDD evidence, refactor findings, final checks, open risks, and exact next action. After compaction, call `planner_status`.
 
-For `compact_experiment`, reload `task.md`, `tdd.md`, tests, verify notes, and prior experiment summaries. For `compact_task`, reload full `plan.md` before choosing the next task.
+For `compact_task`, reload full `plan.md` before choosing the next task.
 
 ## auto-compact
 
-Call `planner_status` immediately. Do not continue editing from chat memory. Restore the exact task and experiment from persisted state, inspect the git gate, then reread the artifacts required by the current step. Read source files only when the exact action needs details not present in the artifacts. If scope may have changed, reread full `plan.md`.
+Call `planner_status` immediately. Do not continue editing from chat memory. Restore the exact task from persisted state, inspect the git gate, then reread the artifacts required by the current step. Read source files only when the exact action needs details not present in the artifacts. If scope may have changed, reread full `plan.md`.
 
 ## KISS Execution & Footprint Discipline
 
 ### 1. The Principle of Minimal Footprint
-- **One File, One Goal**: Modify only the specific files declared in your TDD/Task scope. Do not polish adjacent code or run arbitrary refactorings during the execution step.
-- **Limit Function Proliferation**: Avoid creating new, separate files or helper classes unless the existing codebase layout strictly demands it. Put functions closest to their execution context.
-- **KISS Code**: Simple, readable, straightforward code with no abstraction layers is infinitely better than complex generic patterns.
+- **One File, One Goal**: Modify only files required by the active task. Do not polish adjacent code or run arbitrary refactorings during implementation.
+- **Limit Function Proliferation**: Avoid new files or helpers unless the existing codebase layout strictly demands it.
+- **KISS Code**: Simple, readable, direct code beats speculative abstraction.
 
 ### 2. Implementation Boundaries
-- **No Speculative Implementations**: You are forbidden from implementing handling logic for future tasks or edge cases that have not yet been requested by the active task or verified by a TDD test.
+- **No Speculative Implementations**: Do not implement handling logic for future tasks or edge cases that have not been requested by the active task or verified by a TDD test.
 
 ## Execution & Runtime Diagnostics
 
 ### 1. Test Failures & Stack Traces
-- **Locate Error Source**: When a test fails during execution, extract the exact file path and line number of the failure. Do not look at the summary only; read the detailed assertion error.
-- **Isolate Module Interfaces**: Check the exact arguments passed to the failing function. Print or log the input arguments and returned output values to verify boundary correctness.
+- **Locate Error Source**: When a test fails, extract the exact file path and line number. Do not rely on summary output only.
+- **Isolate Module Interfaces**: Check exact arguments and outputs at the failing boundary.
 - **Verify Execution Cwd**: Ensure all commands run from the specific worktree directory reported by `planner_status`.
 
 ### 2. Algorithmic Pivot Protocol
 - **Stuck Loop detection**: If you make 3 attempts to fix a bug and the same test failure persists, stop.
-- **Trace Backwards**: Open the `tdd.md` plan and re-read the function's boundary conditions.
-- **Verify Mock Integrity**: Ensure your test mocks are not hiding the real bug or returning stale data.
+- **Trace Backwards**: Open `tdd.md` and re-read boundary conditions.
+- **Verify Mock Integrity**: Ensure mocks are not hiding the real bug or returning stale data.
 
 ## If You Do Not Know What To Do Next
 

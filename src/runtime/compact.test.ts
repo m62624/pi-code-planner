@@ -59,10 +59,7 @@ describe("planner compact runtime", () => {
 		expect(bundle.text).toContain(setup.planPaths.goalMd);
 		expect(bundle.text).toContain(setup.planPaths.planMd);
 		expect(bundle.text).toContain("Preserve task result and artifact links.");
-		expect(bundle.sections).toMatchObject([
-			{ key: "execution", found: true },
-			{ key: "experiment", found: false },
-		]);
+		expect(bundle.sections).toMatchObject([{ key: "execution", found: true }]);
 	});
 
 	it("builds auto compact follow-up message that forces planner_status", async () => {
@@ -211,7 +208,7 @@ async function createCompactSetup() {
 		},
 		planPaths,
 		instructions: {
-			keys: ["execution", "experiment"],
+			keys: ["execution"],
 			entries: [],
 		},
 	} as unknown as PlannerPreflightResult;

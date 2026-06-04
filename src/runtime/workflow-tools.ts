@@ -229,39 +229,19 @@ async function validateWorkflowExit(input: {
 		case "write_tests":
 			return (
 				(taskDir
-					? await requireNonEmptyArtifact(input.fs, join(taskDir, "tests.md"))
+					? await requireNonEmptyArtifact(input.fs, join(taskDir, "tdd.md"))
 					: "Active task is missing. Prepare exactly one task branch first.") ??
 				validateCleanWorktree(input.orchestrator.preflight.gitReality)
 			);
 		case "run_failing_tests":
 			return taskDir
-				? await requireNonEmptyArtifact(input.fs, join(taskDir, "verify.md"))
+				? await requireNonEmptyArtifact(input.fs, join(taskDir, "tdd.md"))
 				: "Active task is missing. Prepare exactly one task branch first.";
-		case "start_experiments":
-			return validatePreparedExperiment(state);
-		case "run_experiment": {
-			const artifactBlock = taskDir
-				? await requireNonEmptyArtifact(
-						input.fs,
-						join(taskDir, "implementation.md"),
-					)
-				: "Active task is missing. Prepare exactly one task branch first.";
+		case "implement_task":
 			return (
-				artifactBlock ??
-				validateCleanWorktree(input.orchestrator.preflight.gitReality)
-			);
-		}
-		case "summarize_experiment":
-			return await validateExperimentSummary(input.fs, state, taskDir);
-		case "select_experiment":
-			return input.transition.type === "finish_step" &&
-				input.transition.next?.step === "merge_best_experiment" &&
-				!state.activeBranches.selectedExperiment
-				? "Select the best experiment through planner_git_select_experiment before merging."
-				: null;
-		case "merge_best_experiment":
-			return (
-				validateMergedExperiment(state) ??
+				(taskDir
+					? await requireNonEmptyArtifact(input.fs, join(taskDir, "tdd.md"))
+					: "Active task is missing. Prepare exactly one task branch first.") ??
 				validateCleanWorktree(input.orchestrator.preflight.gitReality)
 			);
 		case "refactor_task":
@@ -277,7 +257,10 @@ async function validateWorkflowExit(input: {
 		case "run_final_tests":
 			return (
 				(taskDir
-					? await requireNonEmptyArtifact(input.fs, join(taskDir, "verify.md"))
+					? await requireNonEmptyArtifact(
+							input.fs,
+							join(taskDir, "refactor.md"),
+						)
 					: "Active task is missing. Prepare exactly one task branch first.") ??
 				validateCleanWorktree(input.orchestrator.preflight.gitReality)
 			);
@@ -321,39 +304,9 @@ function validatePreparedTask(state: PlanStateRecord): string | null {
 		: "Task preparation is incomplete. Call planner_git_create_task_branch for exactly one task before finishing execution/prepare_task.";
 }
 
-function validatePreparedExperiment(state: PlanStateRecord): string | null {
-	const taskId = state.activeTaskId;
-	const experimentBranch = state.activeBranches.currentExperiment;
-	const registry = taskId ? state.managedBranches.tasks[taskId] : null;
-	return state.activeExperimentId &&
-		experimentBranch &&
-		state.currentBranch === experimentBranch &&
-		registry?.experiments.includes(experimentBranch)
-		? null
-		: "Experiment preparation is incomplete. Call planner_git_create_experiment_branch for exactly one attempt before finishing execution/start_experiments.";
-}
-
-function validateMergedExperiment(state: PlanStateRecord): string | null {
-	const taskId = state.activeTaskId;
-	const registry = taskId ? state.managedBranches.tasks[taskId] : null;
-	return taskId &&
-		state.activeBranches.currentTask &&
-		state.currentBranch === state.activeBranches.currentTask &&
-		state.activeExperimentId === null &&
-		state.activeBranches.currentExperiment === null &&
-		state.activeBranches.selectedExperiment === null &&
-		registry?.experiments.length === 0 &&
-		registry.selectedExperiment === null
-		? null
-		: "Selected experiment has not been merged and cleaned through planner_git_merge_selected_experiment.";
-}
-
 function validateMergedTask(state: PlanStateRecord): string | null {
 	return state.activeTaskId === null &&
-		state.activeExperimentId === null &&
 		state.activeBranches.currentTask === null &&
-		state.activeBranches.currentExperiment === null &&
-		state.activeBranches.selectedExperiment === null &&
 		state.currentBranch === state.activeBranches.plan
 		? null
 		: "Task has not been merged and cleaned through planner_git_merge_task_to_plan.";
@@ -368,20 +321,6 @@ function validateCleanWorktree(
 	return !gitReality.isDirty
 		? null
 		: "Commit planner changes before finishing this step.";
-}
-
-async function validateExperimentSummary(
-	fs: PlannerFs,
-	state: PlanStateRecord,
-	taskDir: string | null,
-): Promise<string | null> {
-	if (!taskDir || !state.activeExperimentId) {
-		return "Active experiment is missing. Prepare and implement exactly one experiment first.";
-	}
-	return await requireNonEmptyArtifact(
-		fs,
-		join(taskDir, "experiments", state.activeExperimentId, "summary.md"),
-	);
 }
 
 async function requireNonEmptyArtifact(

@@ -260,7 +260,7 @@ function classifyRecoveryIssues(input: {
 		});
 	}
 	for (const branch of input.branches) {
-		if (branch.exists === false && branch.role !== "selectedExperiment") {
+		if (branch.exists === false) {
 			issues.push({
 				code: "managed_branch_missing",
 				severity: "warning",
@@ -308,9 +308,6 @@ function knownManagedBranches(
 		[state.activeBranches.base, "base"],
 		[state.activeBranches.plan, "plan"],
 		[state.activeBranches.currentTask, "currentTask"],
-		[state.activeBranches.currentExperiment, "currentExperiment"],
-		[state.activeBranches.selectedExperiment, "selectedExperiment"],
-		[state.mergeTargets.experimentToTask, "mergeTarget.experimentToTask"],
 		[state.mergeTargets.taskToPlan, "mergeTarget.taskToPlan"],
 		[state.mergeTargets.planToOutput, "mergeTarget.planToOutput"],
 	];
@@ -319,12 +316,7 @@ function knownManagedBranches(
 	)) {
 		values.push(
 			[registry.task, `managed.${taskId}.task`],
-			[registry.selectedExperiment, `managed.${taskId}.selectedExperiment`],
 			[registry.refactor, `managed.${taskId}.refactor`],
-			...registry.experiments.map((branch): [string, string] => [
-				branch,
-				`managed.${taskId}.experiment`,
-			]),
 		);
 	}
 

@@ -188,38 +188,6 @@ describe("planner state machine", () => {
 		).toThrowStateMachine("invalid_next_step");
 	});
 
-	it("loops through sequential experiments or advances to selected experiment merge", () => {
-		const current = state({
-			stage: "execution",
-			step: "select_experiment",
-			stepStatus: "running",
-		});
-
-		expect(getAllowedNextPlannerPositions(current)).toEqual([
-			{ stage: "execution", step: "start_experiments" },
-			{ stage: "execution", step: "merge_best_experiment" },
-		] satisfies PlannerPosition[]);
-		expect(() => completePlannerStep(current)).toThrowStateMachine(
-			"ambiguous_next_step",
-		);
-		expect(
-			completePlannerStep(current, {
-				next: { stage: "execution", step: "start_experiments" },
-			}),
-		).toMatchObject({
-			stepStatus: "completed",
-			nextStep: "start_experiments",
-		});
-		expect(
-			completePlannerStep(current, {
-				next: { stage: "execution", step: "merge_best_experiment" },
-			}),
-		).toMatchObject({
-			stepStatus: "completed",
-			nextStep: "merge_best_experiment",
-		});
-	});
-
 	it("branches done acceptance to output flow or change request flow", () => {
 		const awaitUser = state({
 			stage: "done",
@@ -332,7 +300,7 @@ describe("planner state machine", () => {
 
 	it("enters recovery from any stage and resumes only to a valid non-recovery position", () => {
 		const recovery = enterPlannerRecovery(
-			state({ stage: "execution", step: "run_experiment" }),
+			state({ stage: "execution", step: "implement_task" }),
 			"wrong branch",
 			{ requiresUserDecision: true },
 		);
@@ -348,11 +316,11 @@ describe("planner state machine", () => {
 		expect(
 			resumePlannerAfterRecovery(recovery, {
 				stage: "execution",
-				step: "run_experiment",
+				step: "implement_task",
 			}),
 		).toMatchObject({
 			stage: "execution",
-			step: "run_experiment",
+			step: "implement_task",
 			stepStatus: "pending",
 			broken: false,
 			requiresUserDecision: false,

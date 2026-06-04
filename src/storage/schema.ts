@@ -45,12 +45,7 @@ export type ExecutionStep =
 	| "write_tdd_plan"
 	| "write_tests"
 	| "run_failing_tests"
-	| "start_experiments"
-	| "run_experiment"
-	| "summarize_experiment"
-	| "compact_experiment"
-	| "select_experiment"
-	| "merge_best_experiment"
+	| "implement_task"
 	| "refactor_task"
 	| "run_final_tests"
 	| "merge_task_to_plan"
@@ -122,12 +117,7 @@ export const PLANNER_STAGE_STEPS = {
 		"write_tdd_plan",
 		"write_tests",
 		"run_failing_tests",
-		"start_experiments",
-		"run_experiment",
-		"summarize_experiment",
-		"compact_experiment",
-		"select_experiment",
-		"merge_best_experiment",
+		"implement_task",
 		"refactor_task",
 		"run_final_tests",
 		"merge_task_to_plan",
@@ -220,20 +210,15 @@ export interface ActivePlanBranches {
 	base: string;
 	plan: string;
 	currentTask: string | null;
-	currentExperiment: string | null;
-	selectedExperiment: string | null;
 }
 
 export interface MergeTargets {
-	experimentToTask: string | null;
 	taskToPlan: string | null;
 	planToOutput: string | null;
 }
 
 export interface ManagedTaskBranchRegistry {
 	task: string | null;
-	experiments: string[];
-	selectedExperiment: string | null;
 	refactor: string | null;
 }
 
@@ -244,7 +229,6 @@ export interface ManagedBranchRegistry {
 export interface PlannerCompactBoundaries {
 	stage: boolean;
 	task: boolean;
-	experiment: boolean;
 }
 
 export interface PlanStateRecord {
@@ -254,7 +238,6 @@ export interface PlanStateRecord {
 	stepStatus: StepStatus;
 	nextStep: PlannerStep | null;
 	activeTaskId: string | null;
-	activeExperimentId: string | null;
 	worktreePath: string | null;
 	activeBranches: ActivePlanBranches;
 	managedBranches: ManagedBranchRegistry;
@@ -315,19 +298,15 @@ export function createInitialPlanState(input: {
 		stepStatus: "pending",
 		nextStep: null,
 		activeTaskId: null,
-		activeExperimentId: null,
 		worktreePath: input.worktreePath ?? null,
 		activeBranches: {
 			base: input.baseBranch,
 			plan: input.planBranch,
 			currentTask: null,
-			currentExperiment: null,
-			selectedExperiment: null,
 		},
 		managedBranches: { tasks: {} },
 		currentBranch: null,
 		mergeTargets: {
-			experimentToTask: null,
 			taskToPlan: null,
 			planToOutput: null,
 		},
@@ -336,7 +315,6 @@ export function createInitialPlanState(input: {
 		compactBoundaries: input.compactBoundaries ?? {
 			stage: true,
 			task: false,
-			experiment: false,
 		},
 		requiresCompact: false,
 		requiresUserDecision: false,

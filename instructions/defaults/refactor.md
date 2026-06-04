@@ -2,13 +2,13 @@
 
 ## Purpose
 
-Challenge and improve the selected task implementation after the best experiment has been merged. Refactor changes structure, clarity, naming, duplication, or integration quality without changing requested behavior.
+Challenge and improve the current task implementation after production code is committed. Refactor changes structure, clarity, naming, duplication, or integration quality without changing requested behavior.
 
 KISS does not mean avoiding advanced language features. Traits, interfaces, generics, macros, or other abstractions are valid when the current task needs them. KISS means every abstraction, branch, type, helper, and extension point must justify its existence through the current behavior or existing project design. Do not add flexibility for imagined future work.
 
 ## Required Process
 
-1. Read `task.md`, `tdd.md`, test artifacts, selected experiment summary, and focused source files only when needed.
+1. Read `task.md`, `tdd.md`, existing `refactor.md`, and focused source files only when needed.
 2. Inspect the current task-branch diff through planner wrappers.
 3. Question the implementation actively:
    - Can any helper, abstraction, branch, conversion, or validation path be removed or made clearer?
@@ -39,11 +39,11 @@ Refactor is complete only when `refactor.md` contains a concrete review, checks 
 
 ## manual-compact
 
-Preserve selected candidate context, refactor intent, changed files, checks, commit, and any deferred cleanup. After compaction, call `planner_status` before continuing.
+Preserve active task id, refactor intent, changed files, checks, commit, and any deferred cleanup. After compaction, call `planner_status` before continuing.
 
 ## auto-compact
 
-Call `planner_status` immediately. Reload task artifacts, selected experiment summary, and verify notes. Confirm whether refactor changes were committed before resuming.
+Call `planner_status` immediately. Reload `task.md`, `tdd.md`, and `refactor.md`. Confirm whether refactor changes were committed before resuming.
 
 ## Refactoring & Code-Safety Diagnostics
 

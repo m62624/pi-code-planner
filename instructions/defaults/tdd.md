@@ -14,9 +14,9 @@ Use strict tests-first development for every execution task. Production implemen
    - fixtures and mocks
    - focused test commands
    - expected failure or contract signal before implementation
-3. During `write_tests`, write tests and required test harness wiring only. Record them in `tests.md`. If project files changed, commit through `planner_git_commit` before continuing.
-4. During `run_failing_tests`, execute focused checks and record evidence in verify artifacts.
-5. Begin production edits only during `run_experiment`.
+3. During `write_tests`, write tests and required test harness wiring only. Record changed files, intent, and expected signal in `tdd.md`. If project files changed, commit through `planner_git_commit` before continuing.
+4. During `run_failing_tests`, execute focused checks and record the exact failing signal in `tdd.md`.
+5. Begin production edits only during `implement_task`.
 6. During `run_final_tests`, rerun focused tests and required broader integration checks.
 
 ## Test Signal Rules
@@ -38,7 +38,7 @@ Use strict tests-first development for every execution task. Production implemen
 
 ## Verification Record
 
-Record:
+Record in `tdd.md`:
 - exact commands run
 - worktree cwd used for each command
 - expected and actual result
@@ -49,11 +49,11 @@ Record:
 
 ## manual-compact
 
-Preserve the active task id, `tdd.md` path, test artifact paths, failing signal, commands, fixtures, covered edge cases, skipped checks, and final verification state. After compaction, call `planner_status` before continuing.
+Preserve the active task id, `tdd.md` path, failing signal, commands, fixtures, covered edge cases, skipped checks, and final verification state. After compaction, call `planner_status` before continuing.
 
 ## auto-compact
 
-Call `planner_status` immediately. Reload `task.md`, `tdd.md`, test artifacts, and focused source files only when needed. Do not skip the failing-test requirement because earlier chat context was compacted.
+Call `planner_status` immediately. Reload `task.md`, `tdd.md`, and focused source files only when needed. Do not skip the failing-test requirement because earlier chat context was compacted.
 
 ## Smart TDD & Boundary Coverage (KISS-based TDD)
 

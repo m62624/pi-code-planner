@@ -100,16 +100,12 @@ async function createProjectFixture(input?: {
 				tasks: {
 					"task-1": {
 						task: "task/plan-b/task-1",
-						experiments: ["experiment/plan-b/task-1/one"],
-						selectedExperiment: null,
 						refactor: "refactor/plan-b/task-1",
 					},
 				},
 			},
 			activeBranches: {
 				currentTask: "task/plan-b/task-1",
-				currentExperiment: null,
-				selectedExperiment: null,
 			},
 		},
 	});
@@ -518,13 +514,6 @@ describe("planner user commands", () => {
 				input: {
 					repoRoot: "/repo/app",
 					branch: "task/plan-b/task-1",
-				},
-			},
-			{
-				name: "deleteBranch",
-				input: {
-					repoRoot: "/repo/app",
-					branch: "experiment/plan-b/task-1/one",
 				},
 			},
 			{

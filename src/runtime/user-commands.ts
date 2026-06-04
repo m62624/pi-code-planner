@@ -434,12 +434,8 @@ async function assertPlanSwitchable(input: {
 function managedChildBranches(state: PlanStateRecord): string[] {
 	const branches = [
 		state.activeBranches.currentTask,
-		state.activeBranches.currentExperiment,
-		state.activeBranches.selectedExperiment,
 		...Object.values(state.managedBranches.tasks).flatMap((registry) => [
 			registry.task,
-			...registry.experiments,
-			registry.selectedExperiment,
 			registry.refactor,
 		]),
 	].filter((branch): branch is string => Boolean(branch));

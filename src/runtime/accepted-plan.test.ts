@@ -125,8 +125,6 @@ async function createFixture(input?: {
 			tasks: {
 				"task-a": {
 					task: "task/plan-a/task-a",
-					experiments: ["experiment/plan-a/task-a/one"],
-					selectedExperiment: "experiment/plan-a/task-a/one",
 					refactor: "refactor/plan-a/task-a",
 				},
 			},
@@ -229,7 +227,6 @@ describe("accepted planner result", () => {
 		});
 		expect(result.removedChildBranches).toEqual([
 			"task/plan-a/task-a",
-			"experiment/plan-a/task-a/one",
 			"refactor/plan-a/task-a",
 		]);
 	});

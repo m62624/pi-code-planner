@@ -90,10 +90,10 @@ describe("node git runner command args", () => {
 		expect(
 			buildGitDeleteBranchArgs({
 				repoRoot: "/repo/app",
-				branch: "experiment/a/b/c",
+				branch: "task/a/b",
 				force: true,
 			}),
-		).toEqual(["-C", "/repo/app", "branch", "-D", "experiment/a/b/c"]);
+		).toEqual(["-C", "/repo/app", "branch", "-D", "task/a/b"]);
 		expect(
 			buildGitSwitchBranchArgs({ repoRoot: "/repo/app", branch: "plan/a" }),
 		).toEqual(["-C", "/repo/app", "switch", "plan/a"]);

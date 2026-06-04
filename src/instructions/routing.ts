@@ -80,29 +80,23 @@ function executionInstructionKeys(step: PlannerStep): InstructionKey[] {
 	if (
 		step === "write_tdd_plan" ||
 		step === "write_tests" ||
-		step === "run_failing_tests" ||
-		step === "run_final_tests"
+		step === "run_failing_tests"
 	) {
-		return ["tdd"];
-	}
-
-	if (
-		step === "start_experiments" ||
-		step === "run_experiment" ||
-		step === "summarize_experiment" ||
-		step === "compact_experiment" ||
-		step === "select_experiment" ||
-		step === "merge_best_experiment"
-	) {
-		const keys: InstructionKey[] = ["experiment"];
-		if (step === "merge_best_experiment") {
-			keys.splice(1, 0, "git", "git-commit");
-		}
+		const keys: InstructionKey[] = ["tdd"];
+		if (step === "write_tests") keys.push("git-commit");
 		return keys;
 	}
 
+	if (step === "implement_task") {
+		return ["tdd", "git-commit"];
+	}
+
 	if (step === "refactor_task") {
-		return ["refactor"];
+		return ["refactor", "git-commit"];
+	}
+
+	if (step === "run_final_tests") {
+		return ["tdd", "refactor", "git-commit"];
 	}
 
 	if (

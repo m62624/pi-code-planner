@@ -19,6 +19,5 @@ export const DEFAULT_PLANNER_SETTINGS = {
 	compact: {
 		stage: true,
 		task: false,
-		experiment: false,
 	},
 } as const satisfies PlannerSettings;

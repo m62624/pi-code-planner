@@ -33,11 +33,7 @@ export interface TaskStoragePaths {
 	taskJson: string;
 	taskMd: string;
 	tddMd: string;
-	testsMd: string;
-	implementationMd: string;
 	refactorMd: string;
-	verifyMd: string;
-	experimentsDir: string;
 }
 
 export function createProjectStoragePaths(input: {
@@ -98,10 +94,6 @@ export function createTaskStoragePaths(
 		taskJson: join(taskDir, "task.json"),
 		taskMd: join(taskDir, "task.md"),
 		tddMd: join(taskDir, "tdd.md"),
-		testsMd: join(taskDir, "tests.md"),
-		implementationMd: join(taskDir, "implementation.md"),
 		refactorMd: join(taskDir, "refactor.md"),
-		verifyMd: join(taskDir, "verify.md"),
-		experimentsDir: join(taskDir, "experiments"),
 	};
 }

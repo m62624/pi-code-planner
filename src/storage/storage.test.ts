@@ -211,12 +211,7 @@ describe("plan state store", () => {
 				"write_tdd_plan",
 				"write_tests",
 				"run_failing_tests",
-				"start_experiments",
-				"run_experiment",
-				"summarize_experiment",
-				"compact_experiment",
-				"select_experiment",
-				"merge_best_experiment",
+				"implement_task",
 				"refactor_task",
 				"run_final_tests",
 				"merge_task_to_plan",
@@ -263,7 +258,7 @@ describe("plan state store", () => {
 			intake: 2,
 			discovery: 4,
 			planning: 7,
-			execution: 15,
+			execution: 10,
 			finalize: 4,
 			done: 8,
 			recovery: 6,
@@ -355,7 +350,6 @@ describe("plan state store", () => {
 			compactBoundaries: {
 				stage: true,
 				task: false,
-				experiment: false,
 			},
 		});
 	});

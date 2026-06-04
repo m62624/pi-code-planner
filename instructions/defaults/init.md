@@ -22,7 +22,7 @@ The normal entry point is `planner_create_plan` or `/planner-create`. The extens
 
 - Do not read source code for task understanding during init.
 - Do not edit project files.
-- Do not create tasks, task branches, experiment branches, or commits.
+- Do not create tasks, task branches, or commits.
 - Do not run raw git through shell.
 - Do not edit `project.json`, `plan.json`, `state.json`, or worktree indexes directly.
 - If bootstrap state is inconsistent, call `planner_status` and use recovery guidance.

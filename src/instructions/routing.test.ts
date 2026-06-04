@@ -17,15 +17,17 @@ describe("instruction routing", () => {
 		expect(keys("recovery", "inspect_git")).toEqual(["recovery", "git"]);
 	});
 
-	it("adds tdd, experiment, refactor, and git commit instructions for execution steps", () => {
+	it("adds tdd, refactor, and git commit instructions for execution steps", () => {
 		expect(keys("execution", "write_tdd_plan")).toEqual(["execution", "tdd"]);
-		expect(keys("execution", "run_experiment")).toEqual([
+		expect(keys("execution", "implement_task")).toEqual([
 			"execution",
-			"experiment",
+			"tdd",
+			"git-commit",
 		]);
 		expect(keys("execution", "refactor_task")).toEqual([
 			"execution",
 			"refactor",
+			"git-commit",
 		]);
 		expect(keys("execution", "merge_task_to_plan")).toEqual([
 			"execution",
@@ -47,7 +49,7 @@ describe("instruction routing", () => {
 			paths: createInstructionPaths(projectPaths),
 		});
 
-		expect(routing.keys).toEqual(["execution", "tdd"]);
+		expect(routing.keys).toEqual(["execution", "tdd", "git-commit"]);
 		expect(routing.entries[0]).toMatchObject({
 			key: "execution",
 			defaultPath:

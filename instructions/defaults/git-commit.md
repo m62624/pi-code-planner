@@ -27,17 +27,8 @@ docs: record <decision>
 
 Use the repository's existing convention when it is discoverable. Project append instructions may override language, prefix style, scope style, merge subject style, and team conventions.
 
-## Experiment Checkpoints
-
-Experiment commit messages should identify the attempted behavior or approach without pretending the candidate is final.
-
-```text
-feat: try <approach> for <task>
-```
-
 ## Merge Messages
 
-- Experiment -> task: identify selected attempt and task.
 - Refactor -> task: identify behavior-preserving cleanup.
 - Task -> plan: identify completed atomic task.
 - Plan -> output: identify accepted planner result.

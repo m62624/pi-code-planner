@@ -1,6 +1,5 @@
 export { EXTENSION_NAME, SCHEMA_VERSION } from "./constants";
 export {
-	experimentBranchName,
 	outputBranchName,
 	planBranchName,
 	refactorBranchName,
@@ -28,15 +27,12 @@ export {
 } from "./git/node-runner";
 export type { PlannerGitOperationResult } from "./git/planner-ops";
 export {
-	createAndSwitchExperimentBranch,
 	createAndSwitchRefactorBranch,
 	createAndSwitchTaskBranch,
 	deleteManagedBranch,
 	exportPlanToOutputBranch,
 	mergeRefactorToTask,
-	mergeSelectedExperimentToTask,
 	mergeTaskToPlan,
-	selectExperiment,
 } from "./git/planner-ops";
 export type {
 	GitBranchInput,

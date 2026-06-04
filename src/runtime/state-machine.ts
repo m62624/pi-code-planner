@@ -60,7 +60,6 @@ const INIT_STEPS_BEFORE_WORKTREE = new Set<InitStep>([
 const COMPACT_STEPS = new Set<PlannerStep>([
 	"compact_discovery",
 	"compact_planning",
-	"compact_experiment",
 	"compact_task",
 	"compact_finalize",
 ]);
@@ -71,11 +70,8 @@ export function isPlannerCompactEnabled(state: PlanStateRecord): boolean {
 	const boundaries = state.compactBoundaries ?? {
 		stage: true,
 		task: false,
-		experiment: false,
 	};
 	switch (state.step) {
-		case "compact_experiment":
-			return boundaries.experiment;
 		case "compact_task":
 			return boundaries.task;
 		case "compact_discovery":
@@ -130,12 +126,6 @@ export function getAllowedNextPlannerPositions(
 		return [
 			{ stage: "execution", step: "prepare_task" },
 			{ stage: "finalize", step: "verify_plan_branch" },
-		];
-	}
-	if (input.stage === "execution" && input.step === "select_experiment") {
-		return [
-			{ stage: "execution", step: "start_experiments" },
-			{ stage: "execution", step: "merge_best_experiment" },
 		];
 	}
 	if (input.stage === "finalize" && input.step === "enter_done") {

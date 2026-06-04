@@ -63,7 +63,7 @@ describe("simplified local-model workflow", () => {
 				stage: "execution",
 				step: "write_tests",
 			}),
-		).toEqual(["execution", "tdd"]);
+		).toEqual(["execution", "tdd", "git-commit"]);
 	});
 });
 

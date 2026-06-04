@@ -206,10 +206,8 @@ function assertAcceptedPlanReady(state: PlanStateRecord): void {
 			"Planner finish is blocked until required compact completes.",
 		);
 	}
-	if (state.activeTaskId || state.activeExperimentId) {
-		throw new Error(
-			"Planner finish is blocked while a task or experiment is active.",
-		);
+	if (state.activeTaskId) {
+		throw new Error("Planner finish is blocked while a task is active.");
 	}
 	if (state.currentBranch !== state.activeBranches.plan) {
 		throw new Error(
@@ -228,12 +226,8 @@ function requireWorktreePath(state: PlanStateRecord): string {
 function managedChildBranches(state: PlanStateRecord): string[] {
 	const branches = [
 		state.activeBranches.currentTask,
-		state.activeBranches.currentExperiment,
-		state.activeBranches.selectedExperiment,
 		...Object.values(state.managedBranches.tasks).flatMap((registry) => [
 			registry.task,
-			...registry.experiments,
-			registry.selectedExperiment,
 			registry.refactor,
 		]),
 	].filter((branch): branch is string => Boolean(branch));

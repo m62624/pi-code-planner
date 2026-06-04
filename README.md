@@ -145,7 +145,7 @@ The model becomes familiar with the project before implementation without indexi
 
 ### `execution`
 
-Execution handles one task at a time. Experiments are sequential implementation candidates, not parallel subagents.
+Execution handles one task at a time. TDD and refactor are mandatory parts of each task; tests are never split into standalone planner tasks.
 
 | Step | Purpose |
 | --- | --- |
@@ -153,13 +153,8 @@ Execution handles one task at a time. Experiments are sequential implementation 
 | `write_tdd_plan` | Record test strategy, mocks, fixtures, edge cases, and expected failing signal. |
 | `write_tests` | Write failing, mock, or contract tests before implementation. |
 | `run_failing_tests` | Prove that the tests detect missing behavior. |
-| `start_experiments` | Create one candidate branch. |
-| `run_experiment` | Implement one candidate, run checks, and commit. |
-| `summarize_experiment` | Record approach, diff, checks, risks, and tradeoffs. |
-| `compact_experiment` | Compact candidate context when enabled. |
-| `select_experiment` | Try another distinct candidate or select the best one. |
-| `merge_best_experiment` | Merge the selected candidate into the task branch. |
-| `refactor_task` | Challenge the selected code and simplify it without changing behavior. |
+| `implement_task` | Implement the tested behavior, run focused checks, and commit. |
+| `refactor_task` | Challenge the code and simplify it without changing behavior. |
 | `run_final_tests` | Run focused and broader task verification. |
 | `merge_task_to_plan` | Merge the verified task into the plan branch. |
 | `compact_task` | Compact the completed task when enabled. |
@@ -202,13 +197,12 @@ Recovery is non-destructive by default.
 
 ## Git Model 🌿
 
-Each plan owns one worktree. Tasks, experiments, and refactors are temporary branches inside it.
+Each plan owns one worktree. Tasks and refactors are temporary branches inside it.
 
 ```text
 base branch
   -> plan/<plan-id>
     -> task/<plan-id>/<task-id>
-      -> experiment/<plan-id>/<task-id>/<attempt-id>
       -> refactor/<plan-id>/<task-id>
   -> output/<plan-id>
 ```
@@ -219,7 +213,7 @@ Temporary branches are removed after their result is merged. After `/planner-fin
 git show output/<plan-id>
 ```
 
-While a plan is active, raw shell `git` is blocked for the model. Planner wrappers determine merge sources and targets from persisted state. The model chooses task ids and experiment ids, not arbitrary branch destinations.
+While a plan is active, raw shell `git` is blocked for the model. Planner wrappers determine merge sources and targets from persisted state. The model chooses task ids, not arbitrary branch destinations.
 
 Project commands such as tests, builds, linters, generators, and formatters should run from the worktree path reported by `planner_status`. Commands may still enter subdirectories inside that worktree when the project layout requires it.
 
@@ -260,14 +254,7 @@ getAgentDir()/extensions/pi-code-planner/
               task.json
               task.md
               tdd.md
-              tests.md
-              implementation.md
               refactor.md
-              verify.md
-              experiments/
-                <attempt-id>/
-                  experiment.json
-                  summary.md
 ```
 
 Key files:
@@ -325,8 +312,7 @@ Example:
   },
   "compact": {
     "stage": true,
-    "task": false,
-    "experiment": false
+    "task": false
   }
 }
 ```
@@ -344,8 +330,7 @@ Compact defaults are:
 ```json
 {
   "stage": true,
-  "task": false,
-  "experiment": false
+  "task": false
 }
 ```
 
@@ -387,7 +372,6 @@ finalize.md
 done.md
 recovery.md
 tdd.md
-experiment.md
 refactor.md
 git.md
 git-commit.md

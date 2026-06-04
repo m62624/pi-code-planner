@@ -1,11 +1,8 @@
 import {
-	createAndSwitchExperimentBranch,
 	createAndSwitchRefactorBranch,
 	createAndSwitchTaskBranch,
 	mergeRefactorToTask,
-	mergeSelectedExperimentToTask,
 	mergeTaskToPlan,
-	selectExperiment,
 } from "../git/planner-ops";
 import type { GitRunner } from "../git/runner";
 import type { PlannerWrapperTool } from "../guard/tool-policy";
@@ -29,9 +26,6 @@ export const PLANNER_GIT_TOOL_NAMES = [
 	"planner_git_init",
 	"planner_git_commit",
 	"planner_git_create_task_branch",
-	"planner_git_create_experiment_branch",
-	"planner_git_select_experiment",
-	"planner_git_merge_selected_experiment",
 	"planner_git_create_refactor_branch",
 	"planner_git_merge_refactor_to_task",
 	"planner_git_merge_task_to_plan",
@@ -87,12 +81,6 @@ export async function executePlannerGitTool(
 				return await commitGitTool(input, ready);
 			case "planner_git_create_task_branch":
 				return await createTaskBranchTool(input, ready);
-			case "planner_git_create_experiment_branch":
-				return await createExperimentBranchTool(input, ready);
-			case "planner_git_select_experiment":
-				return await selectExperimentTool(input, ready);
-			case "planner_git_merge_selected_experiment":
-				return await mergeSelectedExperimentTool(input, ready);
 			case "planner_git_create_refactor_branch":
 				return await createRefactorBranchTool(input, ready);
 			case "planner_git_merge_refactor_to_task":
@@ -220,71 +208,6 @@ async function createTaskBranchTool(
 	});
 }
 
-async function createExperimentBranchTool(
-	input: PlannerGitToolExecutionInput,
-	ready: ReadyGitContext,
-): Promise<PlannerGitToolExecutionResult> {
-	const taskId =
-		ready.state.activeTaskId ?? requiredString(input.params, "taskId");
-	const attemptId = requiredString(input.params, "attemptId");
-	return await runStateChangingGitOperation({
-		input,
-		ready,
-		text: `Planner experiment branch created for ${attemptId}.`,
-		operation: () =>
-			createAndSwitchExperimentBranch({
-				git: input.git,
-				state: ready.state,
-				planId: ready.planId,
-				taskId,
-				attemptId,
-			}),
-	});
-}
-
-async function selectExperimentTool(
-	input: PlannerGitToolExecutionInput,
-	ready: ReadyGitContext,
-): Promise<PlannerGitToolExecutionResult> {
-	const taskId =
-		ready.state.activeTaskId ?? requiredString(input.params, "taskId");
-	const attemptId = requiredString(input.params, "attemptId");
-	const result = await selectExperiment({
-		state: ready.state,
-		planId: ready.planId,
-		taskId,
-		attemptId,
-	});
-	await savePlanState(
-		input.fs,
-		ready.orchestrator.preflight.context.planPaths,
-		result.state,
-	);
-	return applied(input.toolName, `Planner selected experiment ${attemptId}.`, {
-		state: result.state,
-	});
-}
-
-async function mergeSelectedExperimentTool(
-	input: PlannerGitToolExecutionInput,
-	ready: ReadyGitContext,
-): Promise<PlannerGitToolExecutionResult> {
-	return await runStateChangingGitOperation({
-		input,
-		ready,
-		text: "Planner merged selected experiment into task branch.",
-		operation: () =>
-			mergeSelectedExperimentToTask({
-				git: input.git,
-				state: ready.state,
-				message: optionalMessage(
-					input.params,
-					"merge selected experiment into task",
-				),
-			}),
-	});
-}
-
 async function createRefactorBranchTool(
 	input: PlannerGitToolExecutionInput,
 	ready: ReadyGitContext,
@@ -333,7 +256,7 @@ async function mergeTaskTool(
 	return await runStateChangingGitOperation({
 		input,
 		ready,
-		text: "Planner merged task branch into plan branch. The merged task branch and any residual managed experiment/refactor branches for this task were deleted.",
+		text: "Planner merged task branch into plan branch. The merged task branch and any residual managed refactor branch for this task were deleted.",
 		operation: () =>
 			mergeTaskToPlan({
 				git: input.git,

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-	experimentBranchName,
 	outputBranchName,
 	planBranchName,
 	refactorBranchName,
@@ -11,9 +10,6 @@ describe("planner branch names", () => {
 	it("builds stable sanitized branch names from ids", () => {
 		expect(planBranchName("Plan A")).toBe("plan/plan-a");
 		expect(taskBranchName("Plan A", "Task 1")).toBe("task/plan-a/task-1");
-		expect(experimentBranchName("Plan A", "Task 1", "Attempt 2")).toBe(
-			"experiment/plan-a/task-1/attempt-2",
-		);
 		expect(refactorBranchName("Plan A", "Task 1")).toBe(
 			"refactor/plan-a/task-1",
 		);
@@ -24,13 +20,9 @@ describe("planner branch names", () => {
 		expect(planBranchName("watcher-json.timer.tools")).toBe(
 			"plan/watcher-json-timer-tools",
 		);
-		expect(
-			experimentBranchName(
-				"watcher-json.timer",
-				"llaner-status.-10.to",
-				"attempt",
-			),
-		).toBe("experiment/watcher-json-timer/llaner-status-10-to/attempt");
+		expect(taskBranchName("watcher-json.timer", "llaner-status.-10.to")).toBe(
+			"task/watcher-json-timer/llaner-status-10-to",
+		);
 	});
 
 	it("handles mixed special characters", () => {

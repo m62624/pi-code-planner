@@ -126,8 +126,6 @@ describe("planner git tools", () => {
 					base: "main",
 					plan: "plan/plan-a",
 					currentTask: "task/plan-a/task-1",
-					currentExperiment: null,
-					selectedExperiment: null,
 				},
 			},
 		});
@@ -171,8 +169,6 @@ describe("planner git tools", () => {
 					base: "main",
 					plan: "plan/plan-a",
 					currentTask: "task/plan-a/task-1",
-					currentExperiment: null,
-					selectedExperiment: null,
 				},
 			},
 		});
@@ -198,32 +194,28 @@ describe("planner git tools", () => {
 		expect(await readPlanState(fs, setup.planPaths)).toEqual(before);
 	});
 
-	it("keeps merge targets state-bound when merging selected experiment", async () => {
+	it("keeps merge targets state-bound when merging task into plan", async () => {
 		const fs = new MockPlannerFs();
 		const setup = await createGitToolSetup(fs, {
 			state: {
 				stage: "execution",
-				step: "merge_best_experiment",
+				step: "merge_task_to_plan",
 				stepStatus: "running",
 				activeTaskId: "task-1",
-				activeExperimentId: "attempt-a",
-				currentBranch: "experiment/plan-a/task-1/attempt-a",
+				currentBranch: "task/plan-a/task-1",
 				activeBranches: {
 					base: "main",
 					plan: "plan/plan-a",
 					currentTask: "task/plan-a/task-1",
-					currentExperiment: "experiment/plan-a/task-1/attempt-a",
-					selectedExperiment: "experiment/plan-a/task-1/attempt-a",
 				},
 				mergeTargets: {
-					experimentToTask: "task/plan-a/task-1",
 					taskToPlan: "plan/plan-a",
 					planToOutput: null,
 				},
 			},
 		});
 		const git = new MockGitRunner({
-			branch: "experiment/plan-a/task-1/attempt-a",
+			branch: "task/plan-a/task-1",
 			head: "abc123",
 		});
 
@@ -231,8 +223,8 @@ describe("planner git tools", () => {
 			fs,
 			git,
 			projectPaths: setup.projectPaths,
-			toolName: "planner_git_merge_selected_experiment",
-			params: { message: "merge attempt-a" },
+			toolName: "planner_git_merge_task_to_plan",
+			params: { message: "merge task-1" },
 		});
 
 		expect(result.status).toBe("applied");
@@ -240,21 +232,22 @@ describe("planner git tools", () => {
 			name: "switchBranch",
 			input: {
 				repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
-				branch: "task/plan-a/task-1",
+				branch: "plan/plan-a",
 			},
 		});
 		expect(git.calls).toContainEqual({
 			name: "merge",
 			input: {
 				repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
-				sourceBranch: "experiment/plan-a/task-1/attempt-a",
+				sourceBranch: "task/plan-a/task-1",
 				noFastForward: true,
-				message: "merge attempt-a",
+				message: "merge task-1",
 			},
 		});
 		expect(await readPlanState(fs, setup.planPaths)).toMatchObject({
-			currentBranch: "task/plan-a/task-1",
-			mergeTargets: { experimentToTask: null },
+			currentBranch: "plan/plan-a",
+			activeTaskId: null,
+			mergeTargets: { taskToPlan: null },
 		});
 	});
 

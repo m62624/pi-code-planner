@@ -51,7 +51,7 @@ At `planning/read_context`, load context in this order:
 - Do not edit production files.
 - Do not write tests yet.
 - Built-in project write/edit calls remain blocked. Shell remains available, but raw git is forbidden.
-- Do not create task or experiment branches.
+- Do not create task branches.
 - Do not reread the whole project unless recorded discovery context is insufficient.
 - Do not rely on chat memory; write durable facts to artifacts.
 

@@ -144,7 +144,6 @@ describe("planner plan tools", () => {
 			compactBoundaries: {
 				stage: true,
 				task: false,
-				experiment: false,
 			},
 		});
 		expect(fs.snapshot()[planPaths.planMd]).toBe("");

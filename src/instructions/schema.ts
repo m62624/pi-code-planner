@@ -8,7 +8,6 @@ export const INSTRUCTION_KEYS = [
 	"done",
 	"recovery",
 	"tdd",
-	"experiment",
 	"refactor",
 	"git",
 	"git-commit",

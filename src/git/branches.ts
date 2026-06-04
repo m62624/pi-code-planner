@@ -10,14 +10,6 @@ export function taskBranchName(planId: string, taskId: string): string {
 	return `task/${sanitizeBranchPart(planId)}/${sanitizeBranchPart(taskId)}`;
 }
 
-export function experimentBranchName(
-	planId: string,
-	taskId: string,
-	attemptId: string,
-): string {
-	return `experiment/${sanitizeBranchPart(planId)}/${sanitizeBranchPart(taskId)}/${sanitizeBranchPart(attemptId)}`;
-}
-
 export function refactorBranchName(planId: string, taskId: string): string {
 	return `refactor/${sanitizeBranchPart(planId)}/${sanitizeBranchPart(taskId)}`;
 }

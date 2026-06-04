@@ -34,14 +34,11 @@ describe("planner task store", () => {
 		expect(await fs.readText(result.paths.taskMd)).toContain(
 			"Invalid input returns a typed error.",
 		);
-		for (const artifact of [
-			"tdd.md",
-			"tests.md",
-			"implementation.md",
-			"refactor.md",
-			"verify.md",
-		]) {
+		for (const artifact of ["tdd.md", "refactor.md"]) {
 			expect(await fs.readText(join(result.paths.taskDir, artifact))).toBe("");
+		}
+		for (const artifact of ["tests.md", "implementation.md", "verify.md"]) {
+			expect(await fs.exists(join(result.paths.taskDir, artifact))).toBe(false);
 		}
 	});
 

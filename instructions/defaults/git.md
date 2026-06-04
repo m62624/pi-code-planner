@@ -10,9 +10,6 @@ Use git as the planner consistency layer without allowing the model to manipulat
 - `planner_git_init` initializes git only during controlled init.
 - `planner_git_commit` stages and commits the current atomic checkpoint.
 - `planner_git_create_task_branch` creates or switches the active task branch.
-- `planner_git_create_experiment_branch` creates or switches one attempt branch.
-- `planner_git_select_experiment` records the chosen attempt id.
-- `planner_git_merge_selected_experiment` merges state-selected experiment into current task.
 - `planner_git_create_refactor_branch` creates the refactor branch when required.
 - `planner_git_merge_refactor_to_task` merges refactor result into current task.
 - `planner_git_merge_task_to_plan` merges current task into protected plan branch.
@@ -25,7 +22,6 @@ Final export, worktree removal, temporary branch cleanup, planner artifact remov
 base branch
   -> plan/<plan-id>
     -> task/<plan-id>/<task-id>
-      -> experiment/<plan-id>/<task-id>/<attempt-id>
       -> refactor/<plan-id>/<task-id>
   -> output/<plan-id>
 ```
@@ -53,8 +49,6 @@ While a planner plan is active, the persisted worktree path reported by `planner
 
 ## Cleanup Rules
 
-- Unselected experiment branches are deleted after selected experiment merge.
-- Selected experiment branch is deleted after merge into task.
 - Refactor branch is deleted after merge into task.
 - Task branch is deleted after merge into plan.
 - Plan branch is protected from managed child cleanup.
@@ -64,13 +58,13 @@ While a planner plan is active, the persisted worktree path reported by `planner
 
 - Do not run `git` through shell.
 - Do not use shell aliases, scripts, or indirect commands to bypass planner git wrappers.
-- Built-in project write/edit calls are enabled only for the exact execution steps reported by `planner_status`: `write_tests`, `run_experiment`, and `refactor_task`. The planner does not infer file roles from names.
+- Built-in project write/edit calls are enabled only for the exact execution steps reported by `planner_status`: `write_tests`, `implement_task`, and `refactor_task`. The planner does not infer file roles from names.
 - Never edit the original checkout while a planner worktree is active. All project changes belong in the persisted worktree path.
 - Do not reset, force checkout, abort, delete, or discard changes without explicit user approval through recovery flow.
 
 ## manual-compact
 
-Preserve current branch, HEAD, dirty/conflict status, managed branch registry, merge targets, selected experiment, cleanup obligations, and exact next wrapper. After compaction, call `planner_status`.
+Preserve current branch, HEAD, dirty/conflict status, managed branch registry, merge targets, cleanup obligations, and exact next wrapper. After compaction, call `planner_status`.
 
 ## auto-compact
 

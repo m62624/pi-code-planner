@@ -45,11 +45,10 @@ export const PLANNER_STATUS_INVARIANTS = [
 	"Actual git branch must match state.currentBranch when currentBranch is set.",
 	"Git conflicts always block normal flow and require recovery.",
 	"Dirty worktree is allowed inside an active work step, but must be resolved before merge boundaries.",
-	"Merge targets come from state.json only. The model may choose taskId or experimentId, but not source/target merge branches.",
+	"Merge targets come from state.json only. The model may choose taskId, but not source/target merge branches.",
 	"Production behavior changes are allowed only in implementation/refactor steps that explicitly permit them.",
 	"Task branch cannot merge into plan before final task checks pass.",
 	"Next task cannot start before merge_task_to_plan and compact_task.",
-	"Experiment branches are temporary evidence. Non-selected experiment branches are deleted after selected experiment merge.",
 	"Task branch is temporary. It is deleted after it is merged into the plan branch.",
 	"Plan branch is protected. It is not deleted by managed child branch cleanup.",
 	"Done cleanup requires explicit user acceptance.",
@@ -123,7 +122,7 @@ export const PLANNER_STEP_RULES = {
 		allowedNow: ["Inspect git through planner wrappers if needed."],
 		forbiddenNow: [
 			"Do not create worktrees through shell git.",
-			"Do not create task or experiment branches here.",
+			"Do not create task branches here.",
 		],
 		exitCondition:
 			"Plan worktree exists and state.worktreePath/currentBranch are set.",
@@ -340,12 +339,12 @@ export const PLANNER_STEP_RULES = {
 			"Write failing/mock/contract tests before production implementation.",
 		requiredActions: [
 			"Write tests, fixtures, mocks, and required test harness wiring for the active task.",
-			"Record tests in tests.md. If project files changed, commit through planner_git_commit before continuing.",
+			"Append the test intent and changed test files to tdd.md. If project files changed, commit through planner_git_commit before continuing.",
 		],
 		allowedNow: ["Edit test files and necessary test integration files."],
 		forbiddenNow: ["Do not implement production behavior."],
 		exitCondition:
-			"tests.md records the tests, project files are committed, and tests are expected to fail or catch missing behavior.",
+			"tdd.md records the test coverage, project files are committed, and tests are expected to fail or catch missing behavior.",
 		nextInstruction: "Call planner_finish_step to open run_failing_tests.",
 	}),
 	run_failing_tests: stepRule("execution", "run_failing_tests", {
@@ -359,89 +358,23 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition:
 			"The failing/mock/contract signal is confirmed and documented.",
-		nextInstruction: "Call planner_finish_step to open start_experiments.",
+		nextInstruction: "Call planner_finish_step to open implement_task.",
 	}),
-	start_experiments: stepRule("execution", "start_experiments", {
-		objective: "Prepare experiment attempts for the active task.",
+	implement_task: stepRule("execution", "implement_task", {
+		objective: "Implement the active task on the task branch.",
 		requiredActions: [
-			"Create the next experiment branch through planner git wrappers and record attempt intent.",
-		],
-		allowedNow: [
-			"Use planner_git_create_experiment_branch and write experiment artifacts.",
-		],
-		forbiddenNow: [
-			"Do not merge experiments before they are summarized and selected.",
-		],
-		exitCondition: "An active experiment branch and attempt id are recorded.",
-		nextInstruction: "Call planner_finish_step to open run_experiment.",
-	}),
-	run_experiment: stepRule("execution", "run_experiment", {
-		objective:
-			"Implement one candidate solution in the active experiment branch.",
-		requiredActions: [
-			"Implement only this attempt's approach, run focused checks, then commit through planner git.",
+			"Implement only the behavior required by task.md and tdd.md.",
+			"Run focused checks, update tdd.md with the implementation/check result, then commit through planner_git_commit when project files changed.",
 		],
 		allowedNow: [
 			"Edit production/test files in scope, run checks, use planner_git_commit.",
 		],
-		forbiddenNow: ["Do not merge the experiment or delete branches here."],
-		exitCondition:
-			"Experiment implementation is committed and the worktree is clean.",
-		nextInstruction: "Call planner_finish_step to open summarize_experiment.",
-	}),
-	summarize_experiment: stepRule("execution", "summarize_experiment", {
-		objective: "Summarize experiment evidence.",
-		requiredActions: [
-			"Write summary with approach, checks, diff summary, tradeoffs, risks, and comparison data.",
-		],
-		allowedNow: [
-			"Write experiment summary artifacts and inspect planner git diff through wrappers.",
-		],
-		forbiddenNow: ["Do not select an experiment without comparable evidence."],
-		exitCondition: "Experiment summary is complete enough for selection.",
-		nextInstruction: "Call planner_finish_step to open compact_experiment.",
-	}),
-	compact_experiment: stepRule("execution", "compact_experiment", {
-		objective: "Compact the active experiment attempt.",
-		requiredActions: [
-			"Request Pi compact preserving attempt summary, checks, and comparison context.",
-		],
-		allowedNow: ["Compact flow only."],
-		forbiddenNow: ["Do not edit code while compact is required/pending."],
-		exitCondition:
-			"Compaction finished and resume context points back to planner_status.",
-		nextInstruction:
-			"Complete compact to open select_experiment. That decision step chooses another experiment or selected merge.",
-	}),
-	select_experiment: stepRule("execution", "select_experiment", {
-		objective:
-			"Decide whether to run another distinct experiment or select the best completed attempt.",
-		requiredActions: [
-			"Compare completed attempt summaries against task stop criteria.",
-			"If another distinct attempt is required, continue to execution/start_experiments.",
-			"If the attempt budget or stop criteria are satisfied, choose the best attempt id through planner_git_select_experiment and continue to merge_best_experiment.",
-		],
-		allowedNow: [
-			"Read experiment summaries, decide whether another attempt is required, and select an experiment id only when ready to merge.",
-		],
-		forbiddenNow: ["Do not specify merge source/target branches manually."],
-		exitCondition:
-			"Either another experiment is explicitly requested or state.activeBranches.selectedExperiment is set.",
-		nextInstruction:
-			"Complete with explicit next target: execution/start_experiments or execution/merge_best_experiment.",
-	}),
-	merge_best_experiment: stepRule("execution", "merge_best_experiment", {
-		objective: "Merge the selected experiment into the task branch.",
-		requiredActions: [
-			"Use planner_git_merge_selected_experiment; extension determines source and target from state.json.",
-		],
-		allowedNow: ["Use the selected experiment merge wrapper."],
 		forbiddenNow: [
-			"Do not use raw git merge.",
-			"Do not keep unselected experiment branches after merge.",
+			"Do not add speculative behavior outside task scope.",
+			"Do not merge the task into the plan here.",
 		],
 		exitCondition:
-			"Selected experiment is merged into task branch and experiment branches are cleaned.",
+			"Task implementation is committed and the worktree is clean.",
 		nextInstruction: "Call planner_finish_step to open refactor_task.",
 	}),
 	refactor_task: stepRule("execution", "refactor_task", {
@@ -782,7 +715,6 @@ export async function buildPlannerStatusText(
 		`- stepStatus: ${state.stepStatus}`,
 		`- nextStep: ${state.nextStep ?? "(none)"}`,
 		`- activeTaskId: ${state.activeTaskId ?? "(none)"}`,
-		`- activeExperimentId: ${state.activeExperimentId ?? "(none)"}`,
 		`- questionsSubmitted: ${String(state.questionsSubmitted)}`,
 		`- questionsResolved: ${String(state.questionsResolved)}`,
 		`- compactBoundaries: ${JSON.stringify(state.compactBoundaries)}`,
@@ -999,23 +931,8 @@ function formatPlannerArtifactLinks(
 			`- active task dir: ${taskDir}`,
 			`- active task.md: ${join(taskDir, "task.md")}`,
 			`- active tdd.md: ${join(taskDir, "tdd.md")}`,
-			`- active tests.md: ${join(taskDir, "tests.md")}`,
-			`- active implementation.md: ${join(taskDir, "implementation.md")}`,
 			`- active refactor.md: ${join(taskDir, "refactor.md")}`,
-			`- active verify.md: ${join(taskDir, "verify.md")}`,
 		);
-		if (state.activeExperimentId) {
-			const experimentDir = join(
-				taskDir,
-				"experiments",
-				state.activeExperimentId,
-			);
-			lines.push(
-				`- active experiment dir: ${experimentDir}`,
-				`- active experiment.json: ${join(experimentDir, "experiment.json")}`,
-				`- active experiment summary.md: ${join(experimentDir, "summary.md")}`,
-			);
-		}
 	}
 	return lines;
 }

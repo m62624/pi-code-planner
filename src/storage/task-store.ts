@@ -36,16 +36,10 @@ export async function upsertTaskArtifacts(
 			"acceptanceCriteria",
 		),
 	};
-	await fs.mkdirp(paths.experimentsDir);
+	await fs.mkdirp(paths.taskDir);
 	await writeJson(fs, paths.taskJson, record);
 	await fs.writeTextAtomic(paths.taskMd, formatTaskMarkdown(record));
-	for (const path of [
-		paths.tddMd,
-		paths.testsMd,
-		paths.implementationMd,
-		paths.refactorMd,
-		paths.verifyMd,
-	]) {
+	for (const path of [paths.tddMd, paths.refactorMd]) {
 		if (!(await fs.exists(path))) await fs.writeTextAtomic(path, "");
 	}
 	return { record, paths };

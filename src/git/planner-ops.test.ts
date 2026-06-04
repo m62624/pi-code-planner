@@ -4,15 +4,12 @@ import {
 	type PlanStateRecord,
 } from "../storage/schema";
 import {
-	createAndSwitchExperimentBranch,
 	createAndSwitchRefactorBranch,
 	createAndSwitchTaskBranch,
 	deleteManagedBranch,
 	exportPlanToOutputBranch,
 	mergeRefactorToTask,
-	mergeSelectedExperimentToTask,
 	mergeTaskToPlan,
-	selectExperiment,
 } from "./planner-ops";
 import type {
 	GitBranchInput,
@@ -125,96 +122,6 @@ describe("planner git operations", () => {
 				input: {
 					repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
 					branch: "task/plan-a/task-1",
-				},
-			},
-		]);
-	});
-
-	it("creates experiment branch from current task and merges selected experiment into task", async () => {
-		const git = new MockGitRunner();
-		const task = (
-			await createAndSwitchTaskBranch({
-				git,
-				state: baseState(),
-				planId: "plan-a",
-				taskId: "task-1",
-			})
-		).state;
-
-		const experiment = (
-			await createAndSwitchExperimentBranch({
-				git,
-				state: task,
-				planId: "plan-a",
-				taskId: "task-1",
-				attemptId: "attempt-a",
-			})
-		).state;
-		const secondExperiment = (
-			await createAndSwitchExperimentBranch({
-				git,
-				state: experiment,
-				planId: "plan-a",
-				taskId: "task-1",
-				attemptId: "attempt-b",
-			})
-		).state;
-		const selected = (
-			await selectExperiment({
-				state: secondExperiment,
-				planId: "plan-a",
-				taskId: "task-1",
-				attemptId: "attempt-a",
-			})
-		).state;
-		const merged = (
-			await mergeSelectedExperimentToTask({
-				git,
-				state: selected,
-				message: "merge selected experiment",
-			})
-		).state;
-
-		expect(selected.activeBranches.selectedExperiment).toBe(
-			"experiment/plan-a/task-1/attempt-a",
-		);
-		expect(merged.currentBranch).toBe("task/plan-a/task-1");
-		expect(merged.mergeTargets.experimentToTask).toBeNull();
-		expect(merged.managedBranches.tasks["task-1"]).toMatchObject({
-			experiments: [],
-			selectedExperiment: null,
-		});
-		expect(git.calls.slice(-4)).toEqual([
-			{
-				name: "switchBranch",
-				input: {
-					repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
-					branch: "task/plan-a/task-1",
-				},
-			},
-			{
-				name: "merge",
-				input: {
-					repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
-					sourceBranch: "experiment/plan-a/task-1/attempt-a",
-					noFastForward: true,
-					message: "merge selected experiment",
-				},
-			},
-			{
-				name: "deleteBranch",
-				input: {
-					repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
-					branch: "experiment/plan-a/task-1/attempt-a",
-					force: true,
-				},
-			},
-			{
-				name: "deleteBranch",
-				input: {
-					repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
-					branch: "experiment/plan-a/task-1/attempt-b",
-					force: true,
 				},
 			},
 		]);

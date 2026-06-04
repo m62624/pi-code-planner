@@ -92,7 +92,7 @@ describe("planner built-in Pi tool guard", () => {
 	it("allows write and edit only in execution steps that permit project changes", () => {
 		for (const step of [
 			"write_tests",
-			"run_experiment",
+			"implement_task",
 			"refactor_task",
 		] as const) {
 			expect(
@@ -135,7 +135,7 @@ describe("planner built-in Pi tool guard", () => {
 		const result = decision({
 			toolName: "edit",
 			path: "/repo/app/src/a.rs",
-			state: activeExecutionState("run_experiment"),
+			state: activeExecutionState("implement_task"),
 		});
 
 		expect(result.allow).toBe(false);
@@ -232,7 +232,7 @@ function activeExecutionState(
 		| "write_tdd_plan"
 		| "write_tests"
 		| "run_failing_tests"
-		| "run_experiment"
+		| "implement_task"
 		| "refactor_task"
 	>,
 ): PlannerBuiltinGuardState {
@@ -255,7 +255,7 @@ function stepFor(stage: PlannerStage): PlanStateRecord["step"] {
 		case "planning":
 			return "draft_plan";
 		case "execution":
-			return "run_experiment";
+			return "implement_task";
 		case "finalize":
 			return "verify_plan_branch";
 		case "done":

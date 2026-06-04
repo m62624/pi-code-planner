@@ -113,7 +113,6 @@ function normalizePlanState(state: PlanStateRecord): PlanStateRecord {
 		compactBoundaries: state.compactBoundaries ?? {
 			stage: true,
 			task: false,
-			experiment: false,
 		},
 	};
 }

@@ -3,7 +3,6 @@ import type {
 	PlanStateRecord,
 } from "../storage/schema";
 import {
-	experimentBranchName,
 	outputBranchName,
 	refactorBranchName,
 	taskBranchName,
@@ -34,137 +33,16 @@ export async function createAndSwitchTaskBranch(input: {
 			...withTaskBranchRegistry(input.state, input.taskId, (registry) => ({
 				...registry,
 				task: branch,
-				selectedExperiment: null,
 			})),
 			activeTaskId: input.taskId,
-			activeExperimentId: null,
 			activeBranches: {
 				...input.state.activeBranches,
 				currentTask: branch,
-				currentExperiment: null,
-				selectedExperiment: null,
 			},
 			currentBranch: branch,
 			mergeTargets: {
 				...input.state.mergeTargets,
 				taskToPlan: input.state.activeBranches.plan,
-				experimentToTask: null,
-			},
-		},
-	};
-}
-
-export async function createAndSwitchExperimentBranch(input: {
-	git: GitRunner;
-	state: PlanStateRecord;
-	planId: string;
-	taskId: string;
-	attemptId: string;
-}): Promise<PlannerGitOperationResult> {
-	const worktreePath = requireWorktreePath(input.state);
-	const taskBranch = requireCurrentTaskBranch(input.state);
-	const branch = experimentBranchName(
-		input.planId,
-		input.taskId,
-		input.attemptId,
-	);
-	await input.git.createBranch({
-		repoRoot: worktreePath,
-		branch,
-		fromRef: taskBranch,
-	});
-	await input.git.switchBranch({ repoRoot: worktreePath, branch });
-
-	return {
-		state: {
-			...withTaskBranchRegistry(input.state, input.taskId, (registry) => ({
-				...registry,
-				experiments: uniqueBranches([...registry.experiments, branch]),
-			})),
-			activeTaskId: input.taskId,
-			activeExperimentId: input.attemptId,
-			activeBranches: {
-				...input.state.activeBranches,
-				currentExperiment: branch,
-			},
-			currentBranch: branch,
-			mergeTargets: {
-				...input.state.mergeTargets,
-				experimentToTask: taskBranch,
-			},
-		},
-	};
-}
-
-export async function selectExperiment(input: {
-	state: PlanStateRecord;
-	planId: string;
-	taskId: string;
-	attemptId: string;
-}): Promise<PlannerGitOperationResult> {
-	const selectedExperiment = experimentBranchName(
-		input.planId,
-		input.taskId,
-		input.attemptId,
-	);
-	return {
-		state: {
-			...withTaskBranchRegistry(input.state, input.taskId, (registry) => ({
-				...registry,
-				selectedExperiment,
-			})),
-			activeExperimentId: input.attemptId,
-			activeBranches: {
-				...input.state.activeBranches,
-				selectedExperiment,
-			},
-		},
-	};
-}
-
-export async function mergeSelectedExperimentToTask(input: {
-	git: GitRunner;
-	state: PlanStateRecord;
-	message: string;
-}): Promise<PlannerGitOperationResult> {
-	const worktreePath = requireWorktreePath(input.state);
-	const taskId = requireActiveTaskId(input.state);
-	const taskBranch = requireCurrentTaskBranch(input.state);
-	const selectedExperiment = requireSelectedExperimentBranch(input.state);
-	const experiments = getTaskBranchRegistry(input.state, taskId).experiments;
-	await input.git.switchBranch({ repoRoot: worktreePath, branch: taskBranch });
-	await input.git.merge({
-		repoRoot: worktreePath,
-		sourceBranch: selectedExperiment,
-		noFastForward: true,
-		message: input.message,
-	});
-	for (const branch of uniqueBranches([selectedExperiment, ...experiments])) {
-		await deleteManagedBranch({
-			git: input.git,
-			repoRoot: worktreePath,
-			branch,
-			force: true,
-		});
-	}
-
-	return {
-		state: {
-			...withTaskBranchRegistry(input.state, taskId, (registry) => ({
-				...registry,
-				experiments: [],
-				selectedExperiment: null,
-			})),
-			activeExperimentId: null,
-			currentBranch: taskBranch,
-			activeBranches: {
-				...input.state.activeBranches,
-				currentExperiment: null,
-				selectedExperiment: null,
-			},
-			mergeTargets: {
-				...input.state.mergeTargets,
-				experimentToTask: null,
 			},
 		},
 	};
@@ -247,11 +125,7 @@ export async function mergeTaskToPlan(input: {
 		noFastForward: true,
 		message: input.message,
 	});
-	for (const branch of uniqueBranches([
-		...registry.experiments,
-		registry.selectedExperiment,
-		registry.refactor,
-	])) {
+	for (const branch of uniqueBranches([registry.refactor])) {
 		await deleteManagedBranch({
 			git: input.git,
 			repoRoot: worktreePath,
@@ -269,18 +143,14 @@ export async function mergeTaskToPlan(input: {
 		state: {
 			...removeTaskBranchRegistry(input.state, taskId),
 			activeTaskId: null,
-			activeExperimentId: null,
 			currentBranch: planBranch,
 			activeBranches: {
 				...input.state.activeBranches,
 				currentTask: null,
-				currentExperiment: null,
-				selectedExperiment: null,
 			},
 			mergeTargets: {
 				...input.state.mergeTargets,
 				taskToPlan: null,
-				experimentToTask: null,
 			},
 		},
 	};
@@ -362,13 +232,6 @@ function requireActiveTaskId(state: PlanStateRecord): string {
 	return state.activeTaskId;
 }
 
-function requireSelectedExperimentBranch(state: PlanStateRecord): string {
-	if (!state.activeBranches.selectedExperiment) {
-		throw new Error("Plan state has no selected experiment branch.");
-	}
-	return state.activeBranches.selectedExperiment;
-}
-
 function getTaskBranchRegistry(
 	state: PlanStateRecord,
 	taskId: string,
@@ -376,8 +239,6 @@ function getTaskBranchRegistry(
 	return (
 		state.managedBranches.tasks[taskId] ?? {
 			task: null,
-			experiments: [],
-			selectedExperiment: null,
 			refactor: null,
 		}
 	);
