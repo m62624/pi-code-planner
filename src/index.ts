@@ -18,7 +18,7 @@ import {
 	activatePlannerToolVisibility,
 	isPlanActive,
 	markPlannerToolVisibilityActive,
-	persistPlannerToolVisibilityActive,
+	persistPlannerToolVisibilityActiveToSession,
 	registerPlannerToolVisibility,
 	resetPlanActiveCache,
 } from "./index.tool-visibility";
@@ -430,15 +430,12 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					worktreePath,
 					parentSession: originalSessionFile,
 				});
+				await persistPlannerToolVisibilityActiveToSession({
+					fs,
+					sessionFile: session.sessionFile,
+				});
 				await ctx.switchSession(session.sessionFile, {
 					withSession: async (replacementCtx) => {
-						persistPlannerToolVisibilityActive(pi);
-						try {
-							activatePlannerToolVisibility(pi);
-						} catch {
-							// Pi may reset active tools during session replacement.
-							// before_provider_request will apply the active cache.
-						}
 						try {
 							await replacementCtx.sendUserMessage(
 								buildPlannerHandoffPrompt({
@@ -645,10 +642,12 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 						parentSession,
 					})
 				).sessionFile;
+			await persistPlannerToolVisibilityActiveToSession({
+				fs,
+				sessionFile: targetSessionFile,
+			});
 			await ctx.switchSession(targetSessionFile, {
 				withSession: async (replacementCtx) => {
-					persistPlannerToolVisibilityActive(pi);
-					activatePlannerToolVisibility(pi);
 					await replacementCtx.sendUserMessage(
 						buildPlannerResumePrompt({
 							planId,

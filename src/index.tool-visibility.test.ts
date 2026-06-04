@@ -7,11 +7,13 @@ import {
 	activatePlannerToolVisibility,
 	filterPlannerTools,
 	persistPlannerToolVisibilityActive,
+	persistPlannerToolVisibilityActiveToSession,
 	type RegisteredTool,
 	registerPlannerToolVisibility,
 	setPlanActive,
 	updateToolVisibility,
 } from "./index.tool-visibility";
+import type { PlannerFs } from "./storage/fs";
 
 describe("filterPlannerTools", () => {
 	let mockTools: RegisteredTool[];
@@ -234,5 +236,38 @@ describe("updateToolVisibility", () => {
 			"planner_status",
 			"planner_create_plan",
 		]);
+	});
+
+	it("persists planner tool visibility directly to a handoff session file", async () => {
+		let content = `${JSON.stringify({
+			type: "session",
+			version: 3,
+			id: "session-1",
+			timestamp: "2026-06-04T00:00:00.000Z",
+			cwd: "/repo/worktree",
+		})}\n`;
+		const fs = {
+			readText: async () => content,
+			writeTextAtomic: async (_path: string, next: string) => {
+				content = next;
+			},
+		} as PlannerFs;
+
+		await persistPlannerToolVisibilityActiveToSession({
+			fs,
+			sessionFile: "/sessions/plan.jsonl",
+			now: new Date("2026-06-04T01:00:00.000Z"),
+			id: "planner-tools-test",
+		});
+
+		const lines = content.trim().split("\n").map(JSON.parse);
+		expect(lines).toHaveLength(2);
+		expect(lines[1]).toMatchObject({
+			type: "custom",
+			customType: "planner-tool-visibility",
+			data: { active: true },
+			id: "planner-tools-test",
+			parentId: null,
+		});
 	});
 });

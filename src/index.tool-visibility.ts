@@ -3,6 +3,7 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { ALL_PLANNER_TOOL_NAMES } from "./guard/tool-policy";
+import type { PlannerFs } from "./storage/fs";
 
 export interface RegisteredTool {
 	name: string;
@@ -41,6 +42,35 @@ export function persistPlannerToolVisibilityActive(pi: ExtensionAPI): void {
 		PLANNER_TOOL_VISIBILITY_CUSTOM_TYPE,
 		{ active: true },
 	);
+}
+
+export async function persistPlannerToolVisibilityActiveToSession(input: {
+	fs: PlannerFs;
+	sessionFile: string;
+	now?: Date;
+	id?: string;
+}): Promise<void> {
+	planActiveCache = true;
+	const content = await input.fs.readText(input.sessionFile);
+	const entries = content
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.filter((line) => line.length > 0)
+		.map((line) => JSON.parse(line) as { type?: string; id?: string });
+	const parentId = entries
+		.slice(1)
+		.reverse()
+		.find((entry) => typeof entry.id === "string")?.id;
+	const entry = {
+		type: "custom",
+		customType: PLANNER_TOOL_VISIBILITY_CUSTOM_TYPE,
+		data: { active: true } satisfies PlannerToolVisibilityState,
+		id: input.id ?? `planner-tools-${Date.now().toString(36)}`,
+		parentId: parentId ?? null,
+		timestamp: (input.now ?? new Date()).toISOString(),
+	};
+	const nextContent = `${content.trimEnd()}\n${JSON.stringify(entry)}\n`;
+	await input.fs.writeTextAtomic(input.sessionFile, nextContent);
 }
 
 export function filterPlannerTools(tools: RegisteredTool[]): RegisteredTool[] {
