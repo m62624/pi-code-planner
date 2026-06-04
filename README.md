@@ -65,8 +65,8 @@ These are Pi slash commands for the user. The model has separate internal tools.
 | --- | --- |
 | `/planner-create` | Open a multiline request editor and create a new plan. |
 | `/planner-exit` | Return to the original project chat without finishing or deleting the active plan. |
-| `/planner-switch` | Open a TUI picker for plans in the current project. |
-| `/planner-switch <plan-id>` | Activate a plan directly and resume its most recent non-empty worktree chat. |
+| `/planner-resume` | Open a TUI picker for plans in the current project. |
+| `/planner-resume <plan-id>` | Activate a plan directly and resume its most recent non-empty worktree chat. |
 | `/planner-rename` | Open a TUI picker, then rename the selected plan title. |
 | `/planner-rename --id <plan-id> <title>` | Rename a plan directly without changing branches or paths. |
 | `/planner-delete` | Open a TUI picker and delete a selected plan after confirmation. |
@@ -77,9 +77,9 @@ These are Pi slash commands for the user. The model has separate internal tools.
 
 Each plan has its own worktree, Git branch, state file, and Pi JSONL history.
 
-Use `/planner-switch` for planner work. It updates the active plan, reopens the selected worktree session, restores the worktree CWD, and resumes its latest non-empty JSONL chat. It does not create an extra Git checkout: the worktree is already attached to the persisted planner branch.
+Use `/planner-resume` for planner work. It updates the active plan, reopens the selected worktree session, restores the worktree CWD, and resumes its latest non-empty JSONL chat. It does not create an extra Git checkout: the worktree is already attached to the persisted planner branch.
 
-Pi's built-in `/resume` starts in `Current Folder` scope. Press `Tab` to show `All` sessions, including worktree sessions. Directly resuming an inactive planner worktree through `/resume` is possible, but it does not update the planner's active plan record. Prefer `/planner-switch`.
+Pi's built-in `/resume` starts in `Current Folder` scope. Press `Tab` to show `All` sessions, including worktree sessions. Directly resuming an inactive planner worktree through `/resume` is possible, but it does not update the planner's active plan record. Prefer `/planner-resume`.
 
 ## State Machine 🧱
 

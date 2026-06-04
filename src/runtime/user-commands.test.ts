@@ -206,7 +206,7 @@ describe("planner user commands", () => {
 
 		for (const [commandName, params] of [
 			["planner_rename", { title: "New Title" }],
-			["planner_switch", { planId: "plan-a" }],
+			["planner_resume", { planId: "plan-a" }],
 			["planner_delete", { planId: "plan-a" }],
 		] as const) {
 			const result = await executePlannerUserCommand({
@@ -295,7 +295,7 @@ describe("planner user commands", () => {
 		).resolves.toMatchObject({ planId: "plan-b", title: "Background Plan" });
 	});
 
-	it("switches active plan when current and target worktrees are clean", async () => {
+	it("resumes another plan when current and target worktrees are clean", async () => {
 		const { fs, git, projectPaths } = await createProjectFixture({
 			activePlanId: "plan-a",
 		});
@@ -304,7 +304,7 @@ describe("planner user commands", () => {
 			fs,
 			git,
 			projectPaths,
-			commandName: "planner_switch",
+			commandName: "planner_resume",
 			params: { planId: "plan-b" },
 		});
 
@@ -321,7 +321,7 @@ describe("planner user commands", () => {
 		});
 	});
 
-	it("returns worktreePath when switching to the already active plan", async () => {
+	it("returns worktreePath when resuming the already active plan", async () => {
 		const { fs, git, projectPaths } = await createProjectFixture({
 			activePlanId: "plan-a",
 		});
@@ -330,7 +330,7 @@ describe("planner user commands", () => {
 			fs,
 			git,
 			projectPaths,
-			commandName: "planner_switch",
+			commandName: "planner_resume",
 			params: { planId: "plan-a" },
 		});
 
@@ -340,7 +340,7 @@ describe("planner user commands", () => {
 		});
 	});
 
-	it("blocks switching away from a dirty active plan", async () => {
+	it("blocks resuming another plan from a dirty active plan", async () => {
 		const { fs, git, projectPaths } = await createProjectFixture({
 			activePlanId: "plan-a",
 		});
@@ -350,7 +350,7 @@ describe("planner user commands", () => {
 			fs,
 			git,
 			projectPaths,
-			commandName: "planner_switch",
+			commandName: "planner_resume",
 			params: { planId: "plan-b" },
 		});
 

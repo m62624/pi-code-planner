@@ -33,7 +33,7 @@ export function refreshPlanActiveCacheSync(
 	_cwd: string,
 ): boolean {
 	// Do NOT auto-activate plan. activePlanId is only set via
-	// /planner-create or /planner-switch. On session start (including
+	// /planner-create or /planner-resume. On session start (including
 	// resumed sessions) the plan must NOT be auto-activated.
 	planActiveCache = false;
 	updateToolVisibility(pi);
@@ -46,7 +46,7 @@ export async function refreshPlanActiveCache(
 	_cwd: string,
 ): Promise<boolean> {
 	// Do NOT auto-activate plan. activePlanId is only set via
-	// /planner-create or /planner-switch. On session start the plan
+	// /planner-create or /planner-resume. On session start the plan
 	// must NOT be auto-activated.
 	planActiveCache = false;
 	updateToolVisibility(pi);
@@ -76,12 +76,12 @@ export function registerPlannerToolVisibility(pi: ExtensionAPI): void {
 	// on session_start (first session) and before_provider_request.
 
 	// Do NOT auto-activate plan on session start. Plan is only activated
-	// when explicitly set via /planner-create or /planner-switch.
+	// when explicitly set via /planner-create or /planner-resume.
 	// These commands call activatePlannerToolVisibility(pi).
 
 	// On session start: apply current planActiveCache state to hide/show tools.
 	// On fresh start planActiveCache = false → tools hidden.
-	// After /planner-create /planner-switch planActiveCache = true → tools shown.
+	// After /planner-create /planner-resume planActiveCache = true → tools shown.
 	pi.on("session_start", async (_event, _ctx) => {
 		updateToolVisibility(pi);
 	});

@@ -129,8 +129,8 @@ describe("planner plan naming", () => {
 
 	it("creates concise plan descriptions from raw requests", () => {
 		expect(
-			createPlannerPlanDescription("  Fix   the planner switch UI  "),
-		).toBe("Fix the planner switch UI");
+			createPlannerPlanDescription("  Fix   the planner resume UI  "),
+		).toBe("Fix the planner resume UI");
 		expect(createPlannerPlanDescription("x".repeat(220))).toHaveLength(160);
 	});
 });

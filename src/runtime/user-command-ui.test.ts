@@ -89,10 +89,10 @@ describe("planner user command UI helpers", () => {
 				plan({
 					planId: "plan-a",
 					title: "Plan A",
-					description: "Fix planner switch",
+					description: "Fix planner resume",
 				}),
 			),
-		).toContain("Plan A :: Fix planner switch");
+		).toContain("Plan A :: Fix planner resume");
 	});
 
 	it("selects plan id by the selected TUI label", async () => {
@@ -104,7 +104,7 @@ describe("planner user command UI helpers", () => {
 			selectPlannerPlanIdFromList({
 				ui,
 				plans,
-				title: "Switch planner plan",
+				title: "Resume planner plan",
 			}),
 		).resolves.toBe("plan-b");
 		expect(ui.selectCalls[0]?.options).toHaveLength(2);
@@ -117,7 +117,7 @@ describe("planner user command UI helpers", () => {
 			selectPlannerPlanIdFromList({
 				ui,
 				plans: [],
-				title: "Switch planner plan",
+				title: "Resume planner plan",
 			}),
 		).resolves.toBeNull();
 		expect(ui.notifications).toEqual([
@@ -136,7 +136,7 @@ describe("planner user command UI helpers", () => {
 					agentDir: "/agent",
 					projectRoot: "/repo/app",
 				}),
-				title: "Switch planner plan",
+				title: "Resume planner plan",
 			}),
 		).resolves.toBeNull();
 		expect(ui.selectCalls).toEqual([]);

@@ -23,7 +23,7 @@ import { createWorktreeProjectIndexPath } from "../storage/worktree-index";
 export type PlannerUserCommandName =
 	| "planner_get_plan_list"
 	| "planner_rename"
-	| "planner_switch"
+	| "planner_resume"
 	| "planner_delete";
 
 export interface PlannerUserCommandInput {
@@ -63,8 +63,8 @@ export async function executePlannerUserCommand(
 				return await listPlans(input);
 			case "planner_rename":
 				return await renamePlan(input);
-			case "planner_switch":
-				return await switchPlan(input);
+			case "planner_resume":
+				return await resumePlan(input);
 			case "planner_delete":
 				return await deletePlan(input);
 		}
@@ -153,7 +153,7 @@ async function renamePlan(
 	});
 }
 
-async function switchPlan(
+async function resumePlan(
 	input: PlannerUserCommandInput,
 ): Promise<PlannerUserCommandResult> {
 	const params = asObject(input.params);
@@ -237,7 +237,7 @@ async function switchPlan(
 		input.projectPaths,
 		targetPlanId,
 	);
-	return applied(input.commandName, `Planner plan switched: ${targetPlanId}.`, {
+	return applied(input.commandName, `Planner plan resumed: ${targetPlanId}.`, {
 		project: nextProject,
 		target,
 		worktreePath: target.state.worktreePath,
@@ -404,13 +404,13 @@ async function assertPlanSwitchable(input: {
 	if (input.state.stepStatus === "running") {
 		return {
 			allow: false,
-			reason: `Planner plan is running and cannot be switched/deleted: ${input.planId}.`,
+			reason: `Planner plan is running and cannot be resumed/deleted: ${input.planId}.`,
 		};
 	}
 	if (input.state.requiresUserDecision || input.state.broken) {
 		return {
 			allow: false,
-			reason: `Planner plan requires recovery/user decision before switch/delete: ${input.planId}.`,
+			reason: `Planner plan requires recovery/user decision before resume/delete: ${input.planId}.`,
 		};
 	}
 	if (!input.state.worktreePath) {
@@ -425,7 +425,7 @@ async function assertPlanSwitchable(input: {
 	if (status.trim().length > 0) {
 		return {
 			allow: false,
-			reason: `Planner plan has dirty worktree and cannot be switched/deleted: ${input.planId}.`,
+			reason: `Planner plan has dirty worktree and cannot be resumed/deleted: ${input.planId}.`,
 		};
 	}
 	return { allow: true };

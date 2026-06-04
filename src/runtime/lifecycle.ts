@@ -57,7 +57,7 @@ export function decidePlannerLifecycleNext(
 				requiredTransition: null,
 				reason: preflight.decision.reason ?? "No active planner plan.",
 				modelMessage:
-					"No planner plan is active. Do not use planner workflow tools unless the user asks to create or switch a plan.",
+					"No planner plan is active. Do not use planner workflow tools unless the user asks to create or resume a plan.",
 			};
 		case "require_recovery":
 			return {

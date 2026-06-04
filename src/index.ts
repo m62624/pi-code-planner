@@ -552,8 +552,8 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.registerCommand("planner-switch", {
-		description: "Switch to another planner plan in the current project.",
+	pi.registerCommand("planner-resume", {
+		description: "Resume a planner plan in the current project.",
 		handler: async (args, ctx) => {
 			await ctx.waitForIdle();
 			const fs = createNodeFs();
@@ -569,17 +569,17 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					ui: ctx.ui,
 					fs,
 					projectPaths,
-					title: "Switch planner plan",
+					title: "Resume planner plan",
 				}));
 			if (!planId) {
-				ctx.ui.notify("Planner switch cancelled.", "info");
+				ctx.ui.notify("Planner resume cancelled.", "info");
 				return;
 			}
 			const result = await executePlannerUserCommand({
 				fs,
 				git: new NodeGitRunner(),
 				projectPaths,
-				commandName: "planner_switch",
+				commandName: "planner_resume",
 				params: { planId },
 			});
 			if (result.status !== "applied") {
@@ -591,7 +591,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				worktreePath?: string | null;
 			};
 			if (!details.worktreePath) {
-				ctx.ui.notify("Planner switch did not return worktreePath.", "error");
+				ctx.ui.notify("Planner resume did not return worktreePath.", "error");
 				return;
 			}
 			const worktreePath = details.worktreePath;
@@ -753,7 +753,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					);
 					deleteWorktreeSessions = await ctx.ui.confirm(
 						"Delete completed worktree chat?",
-						"The original Pi JSONL session is missing. Delete the completed planner worktree chat history after switching to a replacement project-root session?",
+						"The original Pi JSONL session is missing. Delete the completed planner worktree chat history after resuming a replacement project-root session?",
 					);
 					fallbackSession = await createPlannerHandoffSession({
 						fs,
@@ -1434,7 +1434,7 @@ async function readPlannerBuiltinGuardState(
 		});
 		const context = await readActivePlanContext({ fs, projectPaths });
 		// Use isPlanActive() instead of activePlanId to determine if plan is active.
-		// This ensures the guard is only active when /planner-create or /planner-switch
+		// This ensures the guard is only active when /planner-create or /planner-resume
 		// explicitly activates the plan. On fresh session start (project root),
 		// isPlanActive() returns false and the guard stays inactive.
 		const active = isPlanActive();
@@ -1695,7 +1695,7 @@ function buildPlannerExitPrompt(input: {
 		`Planner worktree: ${input.worktreePath}`,
 		"",
 		"Do not continue planner work in this original checkout.",
-		"Use /planner-switch to return to the planner worktree session.",
+		"Use /planner-resume to return to the planner worktree session.",
 		"Use /planner-finish only after the plan is complete and ready for export/cleanup.",
 	].join("\n");
 }
