@@ -23,6 +23,10 @@ export function activatePlannerToolVisibility(pi: ExtensionAPI): void {
 	updateToolVisibility(pi);
 }
 
+export function markPlannerToolVisibilityActive(): void {
+	planActiveCache = true;
+}
+
 export function filterPlannerTools(tools: RegisteredTool[]): RegisteredTool[] {
 	return tools.filter((tool) => !plannerNames.has(tool.name));
 }

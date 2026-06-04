@@ -17,6 +17,7 @@ import {
 import {
 	activatePlannerToolVisibility,
 	isPlanActive,
+	markPlannerToolVisibilityActive,
 	registerPlannerToolVisibility,
 	resetPlanActiveCache,
 } from "./index.tool-visibility";
@@ -395,7 +396,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					ctx.ui.notify(result.text, "error");
 					return;
 				}
-				activatePlannerToolVisibility(pi);
+				markPlannerToolVisibilityActive();
 
 				const details = result.details as {
 					state?: { worktreePath?: string | null };
@@ -430,13 +431,30 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				});
 				await ctx.switchSession(session.sessionFile, {
 					withSession: async (replacementCtx) => {
-						activatePlannerToolVisibility(pi);
-						await replacementCtx.sendUserMessage(
-							buildPlannerHandoffPrompt({
-								planId: createdPlanId,
-								worktreePath,
-							}),
-						);
+						markPlannerToolVisibilityActive();
+						try {
+							activatePlannerToolVisibility(pi);
+						} catch {
+							// Pi may reset active tools during session replacement.
+							// before_provider_request will apply the active cache.
+						}
+						try {
+							await replacementCtx.sendUserMessage(
+								buildPlannerHandoffPrompt({
+									planId: createdPlanId,
+									worktreePath,
+								}),
+							);
+						} catch (error) {
+							try {
+								replacementCtx.ui.notify(
+									`Planner handoff message failed: ${errorMessage(error)}. Call planner_status manually.`,
+									"warning",
+								);
+							} catch {
+								// Ignore stale replacement UI context.
+							}
+						}
 					},
 				});
 			} catch (error) {
