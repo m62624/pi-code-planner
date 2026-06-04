@@ -160,6 +160,14 @@ export const PLANNER_STAGE_STEPS = {
 	],
 } as const satisfies Record<PlannerStage, readonly PlannerStep[]>;
 
+export const PLANNER_STAGE_VALUES = Object.keys(
+	PLANNER_STAGE_STEPS,
+) as PlannerStage[];
+
+export const PLANNER_STEP_VALUES = Object.values(PLANNER_STAGE_STEPS).flatMap(
+	(steps) => [...steps],
+) as PlannerStep[];
+
 export type StepStatus =
 	| "pending"
 	| "running"

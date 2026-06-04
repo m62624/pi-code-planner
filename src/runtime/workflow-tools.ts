@@ -7,7 +7,12 @@ import {
 	type ProjectStoragePaths,
 } from "../storage/paths";
 import { readPlanRecord } from "../storage/plan-store";
-import type { PlanStateRecord } from "../storage/schema";
+import {
+	PLANNER_STAGE_STEPS,
+	type PlannerStage,
+	type PlannerStep,
+	type PlanStateRecord,
+} from "../storage/schema";
 import type { PlannerGitReality } from "./git-state-sync";
 import {
 	decidePlannerLifecycleNext,
@@ -57,7 +62,25 @@ export interface PlannerWorkflowToolExecutionResult {
 export async function executePlannerWorkflowTool(
 	input: PlannerWorkflowToolExecutionInput,
 ): Promise<PlannerWorkflowToolExecutionResult> {
-	const transition = workflowToolTransition(input.toolName, input.params);
+	let transition: PlannerStateTransition;
+	try {
+		transition = workflowToolTransition(input.toolName, input.params);
+	} catch (error) {
+		transition = fallbackWorkflowToolTransition(input.toolName);
+		const result: PlannerStateTransitionResult = {
+			status: "blocked",
+			code: "runtime_blocked",
+			transition,
+			reason: errorMessage(error),
+			state: null,
+		};
+		return {
+			text: formatWorkflowToolResult(result, null),
+			transition,
+			result,
+			lifecycle: null,
+		};
+	}
 	const orchestrator = await runPlannerOrchestrator(input);
 	const gate = checkPlannerOrchestratorToolAllowed({
 		orchestrator,
@@ -121,6 +144,39 @@ export async function executePlannerWorkflowTool(
 		result,
 		lifecycle,
 	};
+}
+
+function fallbackWorkflowToolTransition(
+	toolName: PlannerWorkflowToolName,
+): PlannerStateTransition {
+	switch (toolName) {
+		case "planner_start_step":
+			return { type: "start_step" };
+		case "planner_finish_step":
+			return { type: "finish_step" };
+		case "planner_advance_step":
+			return { type: "advance_step" };
+		case "planner_fail_step":
+			return { type: "fail_step", reason: "Invalid tool parameters." };
+		case "planner_block_step":
+			return { type: "block_step", reason: "Invalid tool parameters." };
+		case "planner_retry_step":
+			return { type: "retry_step" };
+		case "planner_request_compact":
+			return { type: "request_compact" };
+		case "planner_complete_compact":
+			return { type: "complete_compact" };
+		case "planner_enter_recovery":
+			return {
+				type: "enter_recovery",
+				reason: "Invalid tool parameters.",
+			};
+		case "planner_resume_after_recovery":
+			return {
+				type: "resume_after_recovery",
+				target: { stage: "recovery", step: "read_state" },
+			};
+	}
 }
 
 async function validateWorkflowExit(input: {
@@ -355,7 +411,12 @@ export function workflowToolTransition(
 			return nextStage && nextStep
 				? {
 						type: "finish_step",
-						next: { stage: nextStage as never, step: nextStep as never },
+						next: parsePlannerPosition({
+							stage: nextStage,
+							step: nextStep,
+							stageParam: "nextStage",
+							stepParam: "nextStep",
+						}),
 					}
 				: { type: "finish_step" };
 		}
@@ -392,12 +453,46 @@ export function workflowToolTransition(
 		case "planner_resume_after_recovery":
 			return {
 				type: "resume_after_recovery",
-				target: {
-					stage: stringOrUndefined(object.targetStage) as never,
-					step: stringOrUndefined(object.targetStep) as never,
-				},
+				target: parsePlannerPosition({
+					stage: stringOrUndefined(object.targetStage),
+					step: stringOrUndefined(object.targetStep),
+					stageParam: "targetStage",
+					stepParam: "targetStep",
+				}),
 			};
 	}
+}
+
+function parsePlannerPosition(input: {
+	stage: string | undefined;
+	step: string | undefined;
+	stageParam: string;
+	stepParam: string;
+}): { stage: PlannerStage; step: PlannerStep } {
+	const stages = Object.keys(PLANNER_STAGE_STEPS) as PlannerStage[];
+	if (!input.stage || !isPlannerStage(input.stage)) {
+		throw new Error(
+			`${input.stageParam} must be one of: ${stages.join(", ")}.`,
+		);
+	}
+	const steps = PLANNER_STAGE_STEPS[input.stage];
+	if (!input.step || !isPlannerStepInStage(input.stage, input.step)) {
+		throw new Error(
+			`${input.stepParam} must be one of ${input.stage} steps: ${steps.join(", ")}.`,
+		);
+	}
+	return { stage: input.stage, step: input.step };
+}
+
+function isPlannerStage(value: string): value is PlannerStage {
+	return Object.hasOwn(PLANNER_STAGE_STEPS, value);
+}
+
+function isPlannerStepInStage(
+	stage: PlannerStage,
+	step: string,
+): step is PlannerStep {
+	return (PLANNER_STAGE_STEPS[stage] as readonly string[]).includes(step);
 }
 
 function formatWorkflowToolResult(
@@ -452,4 +547,8 @@ function stringOrUndefined(value: unknown): string | undefined {
 
 function booleanOrUndefined(value: unknown): boolean | undefined {
 	return typeof value === "boolean" ? value : undefined;
+}
+
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
 }

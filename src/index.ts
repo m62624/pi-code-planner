@@ -107,6 +107,7 @@ import {
 	ensureProjectRecord,
 	readProjectRecordIfExists,
 } from "./storage/project-store";
+import { PLANNER_STAGE_VALUES, PLANNER_STEP_VALUES } from "./storage/schema";
 import { readPlanStateIfExists } from "./storage/state-store";
 import {
 	bindWorktreeOriginalSession,
@@ -228,8 +229,18 @@ const TASK_UPSERT_TOOL_PARAMETERS = {
 const COMPLETE_STEP_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {
-		nextStage: { type: "string" },
-		nextStep: { type: "string" },
+		nextStage: {
+			type: "string",
+			enum: PLANNER_STAGE_VALUES,
+			description:
+				"Exact planner stage id. Use only the enum value reported by planner_status, for example finalize, not finalization.",
+		},
+		nextStep: {
+			type: "string",
+			enum: PLANNER_STEP_VALUES,
+			description:
+				"Exact planner step id. Must belong to nextStage and be one of the allowed next targets reported by planner_status.",
+		},
 	},
 	additionalProperties: false,
 } as const;
@@ -256,8 +267,17 @@ const BLOCK_STEP_TOOL_PARAMETERS = {
 const RESUME_RECOVERY_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {
-		targetStage: { type: "string" },
-		targetStep: { type: "string" },
+		targetStage: {
+			type: "string",
+			enum: PLANNER_STAGE_VALUES,
+			description:
+				"Exact recovery target stage id. Use only persisted stage ids from planner_status.",
+		},
+		targetStep: {
+			type: "string",
+			enum: PLANNER_STEP_VALUES,
+			description: "Exact recovery target step id. Must belong to targetStage.",
+		},
 	},
 	required: ["targetStage", "targetStep"],
 	additionalProperties: false,
