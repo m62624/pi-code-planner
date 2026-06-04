@@ -417,7 +417,7 @@ describe("planner plan tools", () => {
 		});
 	});
 
-	it("generates a deterministic id from the raw request when planId is omitted", async () => {
+	it("generates a compact unique id from the raw request when planId is omitted", async () => {
 		const fs = new MockPlannerFs();
 		await seedInstructionDefaults(fs, BUNDLED_INSTRUCTION_DEFAULTS_DIR);
 		const projectPaths = createProjectStoragePaths({
@@ -438,7 +438,9 @@ describe("planner plan tools", () => {
 		expect(result.status).toBe("applied");
 		expect(result.text).toContain("Plan: audit-safe");
 		await expect(readProjectRecord(fs, projectPaths)).resolves.toMatchObject({
-			activePlanId: "audit-safe",
+			activePlanId: expect.stringMatching(
+				/^audit-safe-find-command-[a-f0-9]{8}$/,
+			),
 		});
 	});
 });

@@ -14,11 +14,10 @@ import {
 	type PlannerBuiltinToolCall,
 } from "./guard/project-mutation";
 import {
+	activatePlannerToolVisibility,
 	isPlanActive,
 	registerPlannerToolVisibility,
 	resetPlanActiveCache,
-	setPlanActive,
-	updateToolVisibility,
 } from "./index.tool-visibility";
 import { syncBundledInstructionFiles } from "./instructions/defaults";
 import { createInstructionPaths } from "./instructions/paths";
@@ -384,8 +383,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					ctx.ui.notify(result.text, "error");
 					return;
 				}
-				setPlanActive(true);
-				updateToolVisibility(pi);
+				activatePlannerToolVisibility(pi);
 
 				const details = result.details as {
 					state?: { worktreePath?: string | null };
@@ -420,6 +418,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				});
 				await ctx.switchSession(session.sessionFile, {
 					withSession: async (replacementCtx) => {
+						activatePlannerToolVisibility(pi);
 						await replacementCtx.sendUserMessage(
 							buildPlannerHandoffPrompt({
 								planId: createdPlanId,
@@ -503,8 +502,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				ctx.ui.notify(result.text, "error");
 				return;
 			}
-			setPlanActive(true);
-			updateToolVisibility(pi);
+			activatePlannerToolVisibility(pi);
 			const details = result.details as {
 				worktreePath?: string | null;
 			};
@@ -539,6 +537,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				).sessionFile;
 			await ctx.switchSession(targetSessionFile, {
 				withSession: async (replacementCtx) => {
+					activatePlannerToolVisibility(pi);
 					await replacementCtx.sendUserMessage(
 						buildPlannerResumePrompt({
 							planId,
@@ -766,8 +765,7 @@ function registerPlannerTools(
 				});
 
 				if (result.status === "applied") {
-					setPlanActive(true);
-					updateToolVisibility(pi);
+					activatePlannerToolVisibility(pi);
 				}
 
 				return {

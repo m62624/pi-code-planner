@@ -18,6 +18,11 @@ export function setPlanActive(active: boolean): void {
 	planActiveCache = active;
 }
 
+export function activatePlannerToolVisibility(pi: ExtensionAPI): void {
+	planActiveCache = true;
+	updateToolVisibility(pi);
+}
+
 export function filterPlannerTools(tools: RegisteredTool[]): RegisteredTool[] {
 	return tools.filter((tool) => !plannerNames.has(tool.name));
 }
@@ -72,7 +77,7 @@ export function registerPlannerToolVisibility(pi: ExtensionAPI): void {
 
 	// Do NOT auto-activate plan on session start. Plan is only activated
 	// when explicitly set via /planner-create or /planner-switch.
-	// These commands call setPlanActive(true) + updateToolVisibility(pi).
+	// These commands call activatePlannerToolVisibility(pi).
 
 	// On session start: apply current planActiveCache state to hide/show tools.
 	// On fresh start planActiveCache = false → tools hidden.

@@ -1,4 +1,6 @@
-import { sanitizeIdPart } from "../storage/ids";
+import { compactIdPart } from "../storage/ids";
+
+const BRANCH_PART_CHARS = 32;
 
 export function planBranchName(planId: string): string {
 	return `plan/${sanitizeBranchPart(planId)}`;
@@ -25,10 +27,5 @@ export function outputBranchName(planId: string): string {
 }
 
 function sanitizeBranchPart(value: string): string {
-	return (
-		sanitizeIdPart(value)
-			.replace(/\./g, "-")
-			.replace(/-+/g, "-")
-			.replace(/^-+|-+$/g, "") || "unnamed"
-	);
+	return compactIdPart(value, BRANCH_PART_CHARS) || "unnamed";
 }

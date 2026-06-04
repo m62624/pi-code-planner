@@ -4,8 +4,11 @@ import {
 	PLANNER_WRAPPER_TOOLS,
 } from "./guard/tool-policy";
 import {
+	activatePlannerToolVisibility,
 	filterPlannerTools,
 	type RegisteredTool,
+	registerPlannerToolVisibility,
+	setPlanActive,
 	updateToolVisibility,
 } from "./index.tool-visibility";
 
@@ -131,12 +134,18 @@ describe("filterPlannerTools", () => {
 });
 
 describe("updateToolVisibility", () => {
-	it("sets active tools on the pi instance", () => {
-		const mockTools = [
+	let mockTools: RegisteredTool[];
+
+	beforeEach(() => {
+		setPlanActive(false);
+		mockTools = [
 			{ name: "bash" },
 			{ name: "planner_status" },
 			{ name: "planner_create_plan" },
 		];
+	});
+
+	it("sets active tools on the pi instance", () => {
 		const activeTools: string[][] = [];
 		const mockPi = {
 			getAllTools: () => mockTools,
@@ -148,5 +157,44 @@ describe("updateToolVisibility", () => {
 		updateToolVisibility(mockPi);
 		expect(activeTools).toHaveLength(1);
 		expect(activeTools[0]).toEqual(["bash"]);
+	});
+
+	it("shows all tools after explicit planner activation", () => {
+		const activeTools: string[][] = [];
+		const mockPi = {
+			getAllTools: () => mockTools,
+			setActiveTools: (names: string[]) => {
+				activeTools.push(names);
+			},
+		} as unknown as ExtensionAPI;
+
+		activatePlannerToolVisibility(mockPi);
+
+		expect(activeTools).toEqual([
+			["bash", "planner_status", "planner_create_plan"],
+		]);
+	});
+
+	it("does not hide planner tools on session_start after explicit activation", async () => {
+		const activeTools: string[][] = [];
+		const handlers: Record<string, () => Promise<void>> = {};
+		const mockPi = {
+			getAllTools: () => mockTools,
+			setActiveTools: (names: string[]) => {
+				activeTools.push(names);
+			},
+			on: (event: string, handler: () => Promise<void>) => {
+				handlers[event] = handler;
+			},
+		} as unknown as ExtensionAPI;
+
+		registerPlannerToolVisibility(mockPi);
+		activatePlannerToolVisibility(mockPi);
+		await handlers.session_start();
+
+		expect(activeTools).toEqual([
+			["bash", "planner_status", "planner_create_plan"],
+			["bash", "planner_status", "planner_create_plan"],
+		]);
 	});
 });

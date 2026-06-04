@@ -81,30 +81,38 @@ describe("planner plan naming", () => {
 		).toThrow("Invalid planner id");
 	});
 
-	it("generates deterministic id from request", () => {
+	it("generates a compact unique id from request", () => {
 		expect(
 			resolvePlannerPlanId({
 				request: "Fix approval find command",
 				project: projectWithPlans([]),
 			}),
-		).toBe("fix-approv");
+		).toMatch(/^fix-approval-find-command-[a-f0-9]{8}$/);
 	});
 
-	it("adds short uuid suffix when generated id already exists", () => {
+	it("keeps generated ids unique with a short uuid suffix", () => {
 		const result = resolvePlannerPlanId({
 			request: "Fix approval find command",
-			project: projectWithPlans(["fix-approv"]),
+			project: projectWithPlans(["fix-approval-find-command"]),
 		});
-		expect(result).toMatch(/^fix-approv-[a-f0-9]{8}$/);
+		expect(result).toMatch(/^fix-approval-find-command-[a-f0-9]{8}$/);
 	});
 
-	it("uses uuid suffix first, numeric as last resort", () => {
-		// UUID suffix is tried first and almost never collides
+	it("uses uuid suffix for generated ids", () => {
 		const result = resolvePlannerPlanId({
 			request: "Fix approval find command",
-			project: projectWithPlans(["fix-approv"]),
+			project: projectWithPlans(["fix-approval-find-command"]),
 		});
-		expect(result).toMatch(/^fix-approv-[a-f0-9]{8}$/);
+		expect(result).toMatch(/^fix-approval-find-command-[a-f0-9]{8}$/);
+	});
+
+	it("removes dots from generated path ids", () => {
+		const result = resolvePlannerPlanId({
+			request: "watcher json.timer tools",
+			project: projectWithPlans([]),
+		});
+		expect(result).toMatch(/^watcher-json-timer-tools-[a-f0-9]{8}$/);
+		expect(result).not.toContain(".");
 	});
 
 	it("keeps generated ids and titles bounded for multiline requests", () => {

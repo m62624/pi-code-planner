@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { sanitizeIdPart } from "../storage/ids";
+import { compactIdPart, sanitizePathIdPart } from "../storage/ids";
 import type { ProjectRecord } from "../storage/schema";
 
 export interface PlannerCreateCommandArgs {
@@ -9,7 +9,8 @@ export interface PlannerCreateCommandArgs {
 
 const MAX_GENERATED_PLAN_TITLE_LENGTH = 80;
 const MAX_GENERATED_PLAN_TITLE_WORDS = 6;
-const PLAN_PREFIX_CHARS = 10;
+const PLAN_PREFIX_CHARS = 28;
+const REQUESTED_PLAN_ID_CHARS = 40;
 const PLAN_UUID_SUFFIX_LENGTH = 8;
 
 export function parsePlannerCreateCommandArgs(
@@ -57,7 +58,7 @@ export function resolvePlannerPlanId(input: {
 	project: ProjectRecord;
 }): string {
 	const requested = input.requestedPlanId
-		? sanitizeIdPart(input.requestedPlanId)
+		? compactIdPart(input.requestedPlanId, REQUESTED_PLAN_ID_CHARS)
 		: "";
 	if (input.requestedPlanId && requested.length === 0) {
 		throw new TypeError(`Invalid planner id: ${input.requestedPlanId}`);
@@ -68,46 +69,30 @@ export function resolvePlannerPlanId(input: {
 		if (!existing.has(requested)) {
 			return requested;
 		}
-		// Requested planId already exists — append UUID suffix for uniqueness.
-		const suffix = randomUUID().slice(0, PLAN_UUID_SUFFIX_LENGTH);
-		const candidate = `${requested}-${suffix}`;
-		if (!existing.has(candidate)) {
-			return candidate;
-		}
-		return `${requested}-${suffix}`;
+		return createUniqueIdWithUuid(
+			compactIdPart(requested, PLAN_PREFIX_CHARS),
+			existing,
+		);
 	}
 
 	const prefix = generatePlanPrefix(input.request);
-	if (!existing.has(prefix)) {
-		return prefix;
-	}
-
-	// Always append a UUID-based suffix for uniqueness (safe in CI)
-	const suffix = randomUUID().slice(0, PLAN_UUID_SUFFIX_LENGTH);
-	const candidate = `${prefix}-${suffix}`;
-	if (!existing.has(candidate)) {
-		return candidate;
-	}
-
-	// Collision: try with a counter (extremely unlikely)
-	for (let counter = 2; counter < 1000; counter += 1) {
-		const candidate = `${prefix}-${counter}`;
-		if (!existing.has(candidate)) {
-			return candidate;
-		}
-	}
-
-	throw new Error(
-		`Unable to allocate unique planner id for request: ${input.request}`,
-	);
+	return createUniqueIdWithUuid(prefix, existing);
 }
 
 function generatePlanPrefix(request: string): string {
-	const sanitized = sanitizeIdPart(request);
-	if (sanitized.length <= PLAN_PREFIX_CHARS) {
-		return sanitized || "plan";
+	return compactIdPart(
+		sanitizePathIdPart(request) || "plan",
+		PLAN_PREFIX_CHARS,
+	);
+}
+
+function createUniqueIdWithUuid(prefix: string, existing: Set<string>): string {
+	for (let attempt = 0; attempt < 100; attempt += 1) {
+		const suffix = randomUUID().slice(0, PLAN_UUID_SUFFIX_LENGTH);
+		const candidate = `${prefix}-${suffix}`;
+		if (!existing.has(candidate)) return candidate;
 	}
-	return sanitized.slice(0, PLAN_PREFIX_CHARS);
+	throw new Error(`Unable to allocate unique planner id for prefix: ${prefix}`);
 }
 
 export function createPlannerPlanTitle(request: string): string {

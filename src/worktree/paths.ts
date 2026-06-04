@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { compactIdPart } from "../storage/ids";
 import type { ProjectStoragePaths } from "../storage/paths";
+
+const WORKTREE_ID_CHARS = 32;
 
 export type WorktreeLocationKind = "project-local" | "custom";
 
@@ -16,7 +19,8 @@ export function createProjectLocalWorktreeLocation(
 	planId: string,
 ): WorktreeLocation {
 	const root = join(projectPaths.projectLocalDir, "worktrees");
-	const path = join(root, planId);
+	const pathId = compactIdPart(planId, WORKTREE_ID_CHARS);
+	const path = join(root, pathId);
 	if (!existsSync(path)) {
 		return {
 			kind: "project-local",
@@ -28,7 +32,7 @@ export function createProjectLocalWorktreeLocation(
 	// This avoids confusion with numeric suffixes and ensures uniqueness.
 	for (let attempt = 0; attempt < 100; attempt += 1) {
 		const suffix = randomUUID().slice(0, 8);
-		const candidate = join(root, `${planId}-${suffix}`);
+		const candidate = join(root, `${pathId}-${suffix}`);
 		if (!existsSync(candidate)) {
 			return {
 				kind: "project-local",
@@ -48,7 +52,8 @@ export function createCustomWorktreeLocation(input: {
 	planId: string;
 }): WorktreeLocation {
 	const root = join(input.root, input.projectId);
-	const path = join(root, input.planId);
+	const pathId = compactIdPart(input.planId, WORKTREE_ID_CHARS);
+	const path = join(root, pathId);
 	if (!existsSync(path)) {
 		return {
 			kind: "custom",
@@ -59,7 +64,7 @@ export function createCustomWorktreeLocation(input: {
 	// Path already exists — generate a unique suffix using UUID.
 	for (let attempt = 0; attempt < 100; attempt += 1) {
 		const suffix = randomUUID().slice(0, 8);
-		const candidate = join(root, `${input.planId}-${suffix}`);
+		const candidate = join(root, `${pathId}-${suffix}`);
 		if (!existsSync(candidate)) {
 			return {
 				kind: "custom",
