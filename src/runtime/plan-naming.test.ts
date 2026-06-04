@@ -9,12 +9,15 @@ import {
 	validatePlannerPlanTitle,
 } from "./plan-naming";
 
-function projectWithPlans(planIds: string[]): ProjectRecord {
+function projectWithPlans(
+	planIds: string[],
+	displayName = "app",
+): ProjectRecord {
 	return {
 		schemaVersion: SCHEMA_VERSION,
 		projectId: "project-a",
 		projectRoot: "/repo/app",
-		displayName: "app",
+		displayName,
 		activePlanId: null,
 		plans: planIds.map((planId) => ({
 			planId,
@@ -71,7 +74,7 @@ describe("planner plan naming", () => {
 				request: "Fix approval find command",
 				project: projectWithPlans([]),
 			}),
-		).toMatch(/^fix-approval-find-command-[a-f0-9]{8}$/);
+		).toMatch(/^fix-approval-find-[a-f0-9]{8}$/);
 	});
 
 	it("keeps generated ids unique with a short uuid suffix", () => {
@@ -79,7 +82,7 @@ describe("planner plan naming", () => {
 			request: "Fix approval find command",
 			project: projectWithPlans(["fix-approval-find-command"]),
 		});
-		expect(result).toMatch(/^fix-approval-find-command-[a-f0-9]{8}$/);
+		expect(result).toMatch(/^fix-approval-find-[a-f0-9]{8}$/);
 	});
 
 	it("uses uuid suffix for generated ids", () => {
@@ -87,7 +90,7 @@ describe("planner plan naming", () => {
 			request: "Fix approval find command",
 			project: projectWithPlans(["fix-approval-find-command"]),
 		});
-		expect(result).toMatch(/^fix-approval-find-command-[a-f0-9]{8}$/);
+		expect(result).toMatch(/^fix-approval-find-[a-f0-9]{8}$/);
 	});
 
 	it("removes dots from generated path ids", () => {
@@ -97,6 +100,15 @@ describe("planner plan naming", () => {
 		});
 		expect(result).toMatch(/^watcher-json-timer-tools-[a-f0-9]{8}$/);
 		expect(result).not.toContain(".");
+	});
+
+	it("drops the project name prefix and adjacent duplicate words from generated ids", () => {
+		const result = resolvePlannerPlanId({
+			request: "pi-planner planner compact gate",
+			project: projectWithPlans([], "pi-planner"),
+		});
+		expect(result).toMatch(/^planner-compact-gate-[a-f0-9]{8}$/);
+		expect(result).not.toContain("pi-planner-planner");
 	});
 
 	it("keeps generated ids and titles bounded for multiline requests", () => {
@@ -131,6 +143,6 @@ describe("planner plan naming", () => {
 		expect(
 			createPlannerPlanDescription("  Fix   the planner resume UI  "),
 		).toBe("Fix the planner resume UI");
-		expect(createPlannerPlanDescription("x".repeat(220))).toHaveLength(160);
+		expect(createPlannerPlanDescription("x".repeat(220))).toHaveLength(90);
 	});
 });

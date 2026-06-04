@@ -80,10 +80,10 @@ describe("planner user command UI helpers", () => {
 					step: "write_tests",
 				}),
 			),
-		).toBe("* plan-a [active] execution/write_tests - Plan A");
+		).toBe("* Plan A [active] execution/write_tests\n  id: plan-a");
 	});
 
-	it("formats plan descriptions in switch options", () => {
+	it("formats plan descriptions on a new line in resume options", () => {
 		expect(
 			planOptionLabel(
 				plan({
@@ -92,7 +92,9 @@ describe("planner user command UI helpers", () => {
 					description: "Fix planner resume",
 				}),
 			),
-		).toContain("Plan A :: Fix planner resume");
+		).toBe(
+			"- Plan A [active] discovery/scan_project_structure\n  id: plan-a - Fix planner resume",
+		);
 	});
 
 	it("selects plan id by the selected TUI label", async () => {

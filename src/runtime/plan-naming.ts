@@ -8,8 +8,8 @@ export interface PlannerCreateCommandArgs {
 
 const MAX_GENERATED_PLAN_TITLE_LENGTH = 80;
 const MAX_GENERATED_PLAN_TITLE_WORDS = 6;
-const MAX_PLAN_DESCRIPTION_LENGTH = 160;
-const PLAN_PREFIX_CHARS = 28;
+const MAX_PLAN_DESCRIPTION_LENGTH = 90;
+const PLAN_PREFIX_CHARS = 24;
 const REQUESTED_PLAN_ID_CHARS = 40;
 const PLAN_UUID_SUFFIX_LENGTH = 8;
 
@@ -56,15 +56,31 @@ export function resolvePlannerPlanId(input: {
 		);
 	}
 
-	const prefix = generatePlanPrefix(input.request);
+	const prefix = generatePlanPrefix(input.request, input.project.displayName);
 	return createUniqueIdWithUuid(prefix, existing);
 }
 
-function generatePlanPrefix(request: string): string {
-	return compactIdPart(
-		sanitizePathIdPart(request) || "plan",
-		PLAN_PREFIX_CHARS,
-	);
+function generatePlanPrefix(
+	request: string,
+	projectDisplayName: string,
+): string {
+	const requestId = sanitizePathIdPart(request);
+	const projectId = sanitizePathIdPart(projectDisplayName);
+	const withoutProjectPrefix =
+		projectId && requestId.startsWith(`${projectId}-`)
+			? requestId.slice(projectId.length + 1)
+			: requestId;
+	const deduped = dedupeAdjacentIdTokens(withoutProjectPrefix);
+	return compactIdPart(deduped || requestId || "plan", PLAN_PREFIX_CHARS);
+}
+
+function dedupeAdjacentIdTokens(value: string): string {
+	const tokens = value.split("-").filter(Boolean);
+	const deduped: string[] = [];
+	for (const token of tokens) {
+		if (deduped.at(-1) !== token) deduped.push(token);
+	}
+	return deduped.join("-");
 }
 
 function createUniqueIdWithUuid(prefix: string, existing: Set<string>): string {
@@ -93,6 +109,14 @@ export function createPlannerPlanTitle(request: string): string {
 
 export function createPlannerPlanDescription(request: string): string {
 	const normalized = request.trim().replace(/\s+/g, " ");
+	return validatePlannerPlanDescription(normalized);
+}
+
+export function validatePlannerPlanDescription(description: string): string {
+	const normalized = description.trim().replace(/\s+/g, " ");
+	if (!normalized) {
+		throw new TypeError("description must be a non-empty string.");
+	}
 	if (normalized.length <= MAX_PLAN_DESCRIPTION_LENGTH) return normalized;
 	return `${normalized.slice(0, MAX_PLAN_DESCRIPTION_LENGTH - 3).trimEnd()}...`;
 }

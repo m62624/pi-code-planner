@@ -155,8 +155,13 @@ const GOAL_SUBMIT_TOOL_PARAMETERS = {
 			description:
 				"Short proposed plan title. Prefer a concise English phrase unless the user requested another language. The user reviews this title together with goal.md.",
 		},
+		description: {
+			type: "string",
+			description:
+				"Very short planner-list description generated from the normalized goal. One concise sentence, at most 90 characters.",
+		},
 	},
-	required: ["content", "title"],
+	required: ["content", "title", "description"],
 	additionalProperties: false,
 } as const;
 
@@ -1226,7 +1231,7 @@ function goalToolLabel(toolName: PlannerGoalToolName): string {
 function goalToolDescription(toolName: PlannerGoalToolName): string {
 	switch (toolName) {
 		case "planner_goal_submit":
-			return "Write the normalized goal.md draft and wait for explicit user review. Does not allow discovery.";
+			return "Write the normalized goal.md draft, short title, and short planner-list description. Waits for explicit user review and does not allow discovery.";
 		case "planner_goal_decide":
 			return "Record explicit user approval or revision feedback for goal.md. Approval opens discovery; revision returns to goal drafting.";
 	}

@@ -70,6 +70,7 @@ describe("planner goal tools", () => {
 			params: {
 				content: "# Goal\n\nAudit the safe find command.",
 				title: "Audit safe find handling",
+				description: "Audit safe find command handling.",
 			},
 		});
 
@@ -86,13 +87,23 @@ describe("planner goal tools", () => {
 		});
 		expect(result.text).toContain("explicitly approve");
 		expect(result.text).toContain("Audit safe find handling");
+		expect(result.text).toContain("Audit safe find command handling.");
 		await expect(
 			readPlanRecord(setup.fs, setup.planPaths),
-		).resolves.toMatchObject({ title: "Audit safe find handling" });
+		).resolves.toMatchObject({
+			title: "Audit safe find handling",
+			description: "Audit safe find command handling.",
+		});
 		await expect(
 			readProjectRecord(setup.fs, setup.projectPaths),
 		).resolves.toMatchObject({
-			plans: [{ planId: "plan-a", title: "Audit safe find handling" }],
+			plans: [
+				{
+					planId: "plan-a",
+					title: "Audit safe find handling",
+					description: "Audit safe find command handling.",
+				},
+			],
 		});
 	});
 
@@ -161,7 +172,11 @@ describe("planner goal tools", () => {
 		const result = await executePlannerGoalTool({
 			...setup,
 			toolName: "planner_goal_submit",
-			params: { content: "# Goal\n\nToo late.", title: "Too late" },
+			params: {
+				content: "# Goal\n\nToo late.",
+				title: "Too late",
+				description: "Too late.",
+			},
 		});
 
 		expect(result.status).toBe("blocked");

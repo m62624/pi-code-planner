@@ -80,6 +80,13 @@ export function planOptionLabel(plan: PlannerListEntry): string {
 	const position =
 		plan.stage && plan.step ? `${plan.stage}/${plan.step}` : "missing";
 	const broken = plan.reason ? ` (${plan.reason})` : "";
-	const description = plan.description ? ` :: ${plan.description}` : "";
-	return `${marker} ${plan.planId} [${plan.status}] ${position} - ${plan.title}${description}${broken}`;
+	const firstLine = `${marker} ${plan.title} [${plan.status}] ${position}`;
+	const secondLine = [
+		`id: ${plan.planId}`,
+		plan.description ?? null,
+		broken || null,
+	]
+		.filter(Boolean)
+		.join(" - ");
+	return `${firstLine}\n  ${secondLine}`;
 }

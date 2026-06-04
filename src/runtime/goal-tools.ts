@@ -8,7 +8,10 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
-import { validatePlannerPlanTitle } from "./plan-naming";
+import {
+	validatePlannerPlanDescription,
+	validatePlannerPlanTitle,
+} from "./plan-naming";
 import {
 	advancePlannerStep,
 	completePlannerStep,
@@ -63,14 +66,19 @@ export async function executePlannerGoalTool(
 	if (input.toolName === "planner_goal_submit") {
 		const content = requiredString(params, "content");
 		const title = validatePlannerPlanTitle(requiredString(params, "title"));
+		const description = validatePlannerPlanDescription(
+			requiredString(params, "description"),
+		);
 		await input.fs.writeTextAtomic(planPaths.goalMd, `${content.trim()}\n`);
 		const plan = await updatePlanRecord(input.fs, planPaths, (record) => ({
 			...record,
 			title,
+			description,
 		}));
 		await upsertProjectPlanSummary(input.fs, input.projectPaths, {
 			planId: plan.planId,
 			title,
+			description,
 			status: plan.status === "draft" ? "active" : plan.status,
 		});
 		const next = startPlannerStep(
@@ -85,13 +93,14 @@ export async function executePlannerGoalTool(
 				"",
 				"## Goal Draft For User Review",
 				`Proposed plan title: ${title}`,
+				`Planner list description: ${description}`,
 				"",
 				content.trim(),
 				"",
 				"Ask the user to review the goal and explicitly approve it or request revision.",
 				"After the user answers, call planner_goal_decide.",
 			].join("\n"),
-			{ state: next, goalMd: planPaths.goalMd, title },
+			{ state: next, goalMd: planPaths.goalMd, title, description },
 		);
 	}
 
