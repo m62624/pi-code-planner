@@ -18,6 +18,7 @@ import {
 	activatePlannerToolVisibility,
 	isPlanActive,
 	markPlannerToolVisibilityActive,
+	persistPlannerToolVisibilityActive,
 	registerPlannerToolVisibility,
 	resetPlanActiveCache,
 } from "./index.tool-visibility";
@@ -431,7 +432,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				});
 				await ctx.switchSession(session.sessionFile, {
 					withSession: async (replacementCtx) => {
-						markPlannerToolVisibilityActive();
+						persistPlannerToolVisibilityActive(pi);
 						try {
 							activatePlannerToolVisibility(pi);
 						} catch {
@@ -607,7 +608,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				ctx.ui.notify(result.text, "error");
 				return;
 			}
-			activatePlannerToolVisibility(pi);
+			markPlannerToolVisibilityActive();
 			const details = result.details as {
 				worktreePath?: string | null;
 			};
@@ -646,6 +647,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				).sessionFile;
 			await ctx.switchSession(targetSessionFile, {
 				withSession: async (replacementCtx) => {
+					persistPlannerToolVisibilityActive(pi);
 					activatePlannerToolVisibility(pi);
 					await replacementCtx.sendUserMessage(
 						buildPlannerResumePrompt({

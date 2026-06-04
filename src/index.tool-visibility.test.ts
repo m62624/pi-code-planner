@@ -6,6 +6,7 @@ import {
 import {
 	activatePlannerToolVisibility,
 	filterPlannerTools,
+	persistPlannerToolVisibilityActive,
 	type RegisteredTool,
 	registerPlannerToolVisibility,
 	setPlanActive,
@@ -195,6 +196,43 @@ describe("updateToolVisibility", () => {
 		expect(activeTools).toEqual([
 			["bash", "planner_status", "planner_create_plan"],
 			["bash", "planner_status", "planner_create_plan"],
+		]);
+	});
+
+	it("restores planner tools from the session visibility marker", async () => {
+		const activeTools: string[][] = [];
+		const entries: unknown[] = [];
+		const handlers: Record<
+			string,
+			(_event?: unknown, ctx?: unknown) => Promise<void>
+		> = {};
+		const mockPi = {
+			getAllTools: () => mockTools,
+			setActiveTools: (names: string[]) => {
+				activeTools.push(names);
+			},
+			appendEntry: (customType: string, data: unknown) => {
+				entries.push({ type: "custom", customType, data });
+			},
+			on: (event: string, handler: () => Promise<void>) => {
+				handlers[event] = handler;
+			},
+		} as unknown as ExtensionAPI;
+		const mockCtx = {
+			sessionManager: {
+				getBranch: () => entries,
+			},
+		};
+
+		persistPlannerToolVisibilityActive(mockPi);
+		setPlanActive(false);
+		registerPlannerToolVisibility(mockPi);
+		await handlers.session_start(undefined, mockCtx);
+
+		expect(activeTools.at(-1)).toEqual([
+			"bash",
+			"planner_status",
+			"planner_create_plan",
 		]);
 	});
 });

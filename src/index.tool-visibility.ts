@@ -1,4 +1,7 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type {
+	ExtensionAPI,
+	ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import { ALL_PLANNER_TOOL_NAMES } from "./guard/tool-policy";
 
 export interface RegisteredTool {
@@ -6,6 +9,11 @@ export interface RegisteredTool {
 }
 
 const plannerNames: Set<string> = new Set(ALL_PLANNER_TOOL_NAMES);
+const PLANNER_TOOL_VISIBILITY_CUSTOM_TYPE = "planner-tool-visibility";
+
+interface PlannerToolVisibilityState {
+	active: boolean;
+}
 
 /** Cached plan active state — false by default, updated after planner commands. */
 let planActiveCache: boolean = false;
@@ -25,6 +33,14 @@ export function activatePlannerToolVisibility(pi: ExtensionAPI): void {
 
 export function markPlannerToolVisibilityActive(): void {
 	planActiveCache = true;
+}
+
+export function persistPlannerToolVisibilityActive(pi: ExtensionAPI): void {
+	planActiveCache = true;
+	pi.appendEntry<PlannerToolVisibilityState>(
+		PLANNER_TOOL_VISIBILITY_CUSTOM_TYPE,
+		{ active: true },
+	);
 }
 
 export function filterPlannerTools(tools: RegisteredTool[]): RegisteredTool[] {
@@ -73,6 +89,28 @@ export function updateToolVisibility(pi: ExtensionAPI): void {
 	pi.setActiveTools(toolNames);
 }
 
+function restorePlannerToolVisibilityFromSession(ctx?: ExtensionContext): void {
+	if (!ctx) return;
+	const branchEntries = ctx.sessionManager.getBranch();
+	let savedActive: boolean | undefined;
+
+	for (const entry of branchEntries) {
+		if (
+			entry.type === "custom" &&
+			entry.customType === PLANNER_TOOL_VISIBILITY_CUSTOM_TYPE
+		) {
+			const data = entry.data as PlannerToolVisibilityState | undefined;
+			if (typeof data?.active === "boolean") {
+				savedActive = data.active;
+			}
+		}
+	}
+
+	if (typeof savedActive === "boolean") {
+		planActiveCache = savedActive;
+	}
+}
+
 export function registerPlannerToolVisibility(pi: ExtensionAPI): void {
 	// Do NOT call updateToolVisibility synchronously during extension load.
 	// pi.getAllTools() / pi.setActiveTools() are action methods that cannot
@@ -86,7 +124,8 @@ export function registerPlannerToolVisibility(pi: ExtensionAPI): void {
 	// On session start: apply current planActiveCache state to hide/show tools.
 	// On fresh start planActiveCache = false → tools hidden.
 	// After /planner-create /planner-resume planActiveCache = true → tools shown.
-	pi.on("session_start", async (_event, _ctx) => {
+	pi.on("session_start", async (_event, ctx) => {
+		restorePlannerToolVisibilityFromSession(ctx);
 		updateToolVisibility(pi);
 	});
 
