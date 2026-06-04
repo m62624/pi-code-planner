@@ -67,13 +67,13 @@ export async function inspectAcceptedPlan(input: {
 	});
 	if (actualBranch !== state.activeBranches.plan) {
 		throw new Error(
-			`Planner accept requires plan branch ${state.activeBranches.plan}, but worktree is on ${actualBranch}.`,
+			`Planner finish requires plan branch ${state.activeBranches.plan}, but worktree is on ${actualBranch}.`,
 		);
 	}
 	const status = await input.git.statusPorcelain({ repoRoot: worktreePath });
 	if (status.trim().length > 0) {
 		throw new Error(
-			"Planner accept requires a clean worktree. Commit the accepted result through planner tools first.",
+			"Planner finish requires a clean worktree. Commit the accepted result through planner tools first.",
 		);
 	}
 	const worktreeIndex = await readWorktreeProjectIndexIfExists({
@@ -190,37 +190,37 @@ function assertAcceptedPlanReady(state: PlanStateRecord): void {
 			state.step === "await_user_acceptance");
 	if (!acceptsExplicitUserCommand) {
 		throw new Error(
-			`Planner accept is allowed only after result presentation at done/present_result or done/await_user_acceptance, not ${state.stage}/${state.step}.`,
+			`Planner finish is allowed only after result presentation at done/present_result or done/await_user_acceptance, not ${state.stage}/${state.step}.`,
 		);
 	}
 	if (state.stepStatus === "blocked" || state.stepStatus === "failed") {
 		throw new Error(
-			`Planner accept is blocked while ${state.stage}/${state.step} is ${state.stepStatus}.`,
+			`Planner finish is blocked while ${state.stage}/${state.step} is ${state.stepStatus}.`,
 		);
 	}
 	if (state.broken || state.requiresUserDecision) {
-		throw new Error("Planner accept is blocked until recovery is complete.");
+		throw new Error("Planner finish is blocked until recovery is complete.");
 	}
 	if (state.requiresCompact) {
 		throw new Error(
-			"Planner accept is blocked until required compact completes.",
+			"Planner finish is blocked until required compact completes.",
 		);
 	}
 	if (state.activeTaskId || state.activeExperimentId) {
 		throw new Error(
-			"Planner accept is blocked while a task or experiment is active.",
+			"Planner finish is blocked while a task or experiment is active.",
 		);
 	}
 	if (state.currentBranch !== state.activeBranches.plan) {
 		throw new Error(
-			"Planner accept requires state.json to point at the plan branch.",
+			"Planner finish requires state.json to point at the plan branch.",
 		);
 	}
 }
 
 function requireWorktreePath(state: PlanStateRecord): string {
 	if (!state.worktreePath) {
-		throw new Error("Planner accept requires state.worktreePath.");
+		throw new Error("Planner finish requires state.worktreePath.");
 	}
 	return state.worktreePath;
 }

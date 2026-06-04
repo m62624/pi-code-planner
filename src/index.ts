@@ -1,3 +1,4 @@
+import { isAbsolute, relative, resolve } from "node:path";
 import {
 	type ExtensionAPI,
 	type ExtensionCommandContext,
@@ -98,9 +99,17 @@ import {
 	selectPlannerResumeSessionFile,
 } from "./session/handoff";
 import { createNodeFs } from "./storage/fs";
+import { createPlanStoragePaths } from "./storage/paths";
 import { resolveProjectStoragePaths } from "./storage/project-resolver";
-import { ensureProjectRecord } from "./storage/project-store";
-import { bindWorktreeOriginalSession } from "./storage/worktree-index";
+import {
+	ensureProjectRecord,
+	readProjectRecordIfExists,
+} from "./storage/project-store";
+import { readPlanStateIfExists } from "./storage/state-store";
+import {
+	bindWorktreeOriginalSession,
+	readWorktreeProjectIndexIfExists,
+} from "./storage/worktree-index";
 
 export * from "./public-api";
 
@@ -441,6 +450,81 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 		},
 	});
 
+	pi.registerCommand("planner-exit", {
+		description:
+			"Return from the active planner worktree session to the original project chat without finishing or deleting the plan.",
+		handler: async (_args, ctx) => {
+			await ctx.waitForIdle();
+			const fs = createNodeFs();
+			const agentDir = getAgentDir();
+			const projectPaths = await resolveProjectStoragePaths({
+				fs,
+				agentDir,
+				cwd: ctx.cwd,
+			});
+			try {
+				const project = await readProjectRecordIfExists(fs, projectPaths);
+				if (!project?.activePlanId) {
+					ctx.ui.notify("No active planner plan to exit.", "info");
+					resetPlanActiveCache(pi);
+					return;
+				}
+				const activePlanId = project.activePlanId;
+				const planPaths = createPlanStoragePaths(projectPaths, activePlanId);
+				const state = await readPlanStateIfExists(fs, planPaths);
+				const worktreePath = state?.worktreePath;
+				if (!worktreePath) {
+					ctx.ui.notify("Active planner plan has no worktree path.", "error");
+					return;
+				}
+				const index = await readWorktreeProjectIndexIfExists({
+					fs,
+					agentDir,
+					worktreePath,
+				});
+				const targetSessionFile = await resolveProjectSessionForHandoff({
+					fs,
+					agentDir,
+					projectRoot: projectPaths.projectRoot,
+					originalSessionFile: index?.originalSessionFile ?? null,
+					parentSession: ctx.sessionManager.getSessionFile(),
+				});
+				if (!targetSessionFile.sessionFile) {
+					ctx.ui.notify(
+						"Planner exit could not resolve a project session for handoff.",
+						"error",
+					);
+					return;
+				}
+				await ctx.switchSession(targetSessionFile.sessionFile, {
+					withSession: async (replacementCtx) => {
+						if (targetSessionFile.recovered) {
+							replacementCtx.ui.notify(
+								"Original Pi JSONL session path was missing or stale. Planner returned to an existing project-root session.",
+								"warning",
+							);
+						}
+						if (targetSessionFile.created) {
+							replacementCtx.ui.notify(
+								"Original Pi JSONL session was missing. Planner created a replacement project-root session.",
+								"warning",
+							);
+						}
+						await replacementCtx.sendUserMessage(
+							buildPlannerExitPrompt({
+								planId: activePlanId,
+								worktreePath,
+							}),
+						);
+					},
+				});
+				resetPlanActiveCache(pi);
+			} catch (error) {
+				ctx.ui.notify(`Planner exit failed: ${errorMessage(error)}`, "error");
+			}
+		},
+	});
+
 	pi.registerCommand("planner-rename", {
 		description:
 			"Rename a planner plan title without changing its stable plan id.",
@@ -519,8 +603,12 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				projectRoot: projectPaths.projectRoot,
 				projectId: projectPaths.projectId,
 				planId,
-				originalSessionFile:
-					ctx.cwd === projectPaths.projectRoot ? parentSession : null,
+				originalSessionFile: isPathInsideOrEqual(
+					ctx.cwd,
+					projectPaths.projectRoot,
+				)
+					? parentSession
+					: null,
 			});
 			const existingSessionFile = selectPlannerResumeSessionFile(
 				await SessionManager.list(worktreePath),
@@ -616,9 +704,9 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.registerCommand("planner-accept", {
+	pi.registerCommand("planner-finish", {
 		description:
-			"Accept the completed planner result, keep one output branch, clean temporary planner state, and return to the original project session.",
+			"Finish the completed planner result, keep one output branch, clean temporary planner state, and return to the original project session.",
 		handler: async (_args, ctx) => {
 			await ctx.waitForIdle();
 			const fs = createNodeFs();
@@ -641,16 +729,24 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					projectPaths,
 				});
 				const confirmed = await ctx.ui.confirm(
-					"Accept planner result?",
+					"Finish planner result?",
 					`Export ${preview.state.activeBranches.plan} to ${preview.outputBranch}, remove temporary planner files and worktree, and return to the original project session?`,
 				);
 				if (!confirmed) {
-					ctx.ui.notify("Planner acceptance cancelled.", "info");
+					ctx.ui.notify("Planner finish cancelled.", "info");
 					return;
 				}
 
 				let deleteWorktreeSessions = true;
-				if (!preview.originalSessionExists) {
+				const projectSession = await resolveProjectSessionForHandoff({
+					fs,
+					agentDir,
+					projectRoot: projectPaths.projectRoot,
+					originalSessionFile: preview.originalSessionFile,
+					parentSession: ctx.sessionManager.getSessionFile(),
+					createIfMissing: false,
+				});
+				if (!projectSession.sessionFile) {
 					ctx.ui.notify(
 						"Original Pi JSONL session is missing. Planner will create a replacement project-root session before cleanup.",
 						"warning",
@@ -665,6 +761,11 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 						worktreePath: projectPaths.projectRoot,
 						parentSession: ctx.sessionManager.getSessionFile(),
 					});
+				} else if (projectSession.recovered) {
+					ctx.ui.notify(
+						"Saved original Pi JSONL session path is missing or stale. Planner found another project-root session and will return there.",
+						"warning",
+					);
 				}
 
 				const finalized = await finalizeAcceptedPlan({
@@ -673,13 +774,12 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					projectPaths,
 				});
 				acceptedPlanFinalized = true;
-				const targetSessionFile =
-					preview.originalSessionExists && preview.originalSessionFile
-						? preview.originalSessionFile
-						: fallbackSession?.sessionFile;
+				const targetSessionFile = projectSession.sessionFile
+					? projectSession.sessionFile
+					: fallbackSession?.sessionFile;
 				if (!targetSessionFile) {
 					throw new Error(
-						"Planner accepted the result but could not resolve a project session for handoff.",
+						"Planner finished the result but could not resolve a project session for handoff.",
 					);
 				}
 				await ctx.switchSession(targetSessionFile, {
@@ -697,7 +797,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 							buildAcceptedPlanCompletionPrompt({
 								planId: finalized.planId,
 								outputBranch: finalized.outputBranch,
-								originalSessionMissing: !preview.originalSessionExists,
+								originalSessionMissing: !projectSession.sessionFile,
 								preservedWorktreeChatDir: deleteWorktreeSessions
 									? null
 									: finalized.worktreeSessionDir,
@@ -713,7 +813,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 						fallbackSession.sessionFile,
 					);
 				}
-				ctx.ui.notify(`Planner accept failed: ${errorMessage(error)}`, "error");
+				ctx.ui.notify(`Planner finish failed: ${errorMessage(error)}`, "error");
 			}
 		},
 	});
@@ -1517,6 +1617,94 @@ async function resolveDeleteCommandArgs(input: {
 		return null;
 	}
 	return { planId: selected, deleteActive: isActive };
+}
+
+async function resolveProjectSessionForHandoff(input: {
+	fs: ReturnType<typeof createNodeFs>;
+	agentDir: string;
+	projectRoot: string;
+	originalSessionFile?: string | null;
+	parentSession?: string | null;
+	createIfMissing?: boolean;
+}): Promise<{
+	sessionFile: string | null;
+	recovered: boolean;
+	created: boolean;
+}> {
+	if (
+		input.originalSessionFile &&
+		(await input.fs.exists(input.originalSessionFile))
+	) {
+		return {
+			sessionFile: input.originalSessionFile,
+			recovered: false,
+			created: false,
+		};
+	}
+
+	const existingProjectSession = selectPlannerResumeSessionFile(
+		await listProjectSessionsSafely(input.projectRoot),
+	);
+	if (existingProjectSession) {
+		return {
+			sessionFile: existingProjectSession,
+			recovered: Boolean(input.originalSessionFile),
+			created: false,
+		};
+	}
+
+	if (input.createIfMissing === false) {
+		return {
+			sessionFile: null,
+			recovered: false,
+			created: false,
+		};
+	}
+
+	const replacement = await createPlannerHandoffSession({
+		fs: input.fs,
+		agentDir: input.agentDir,
+		worktreePath: input.projectRoot,
+		parentSession: input.parentSession,
+	});
+	return {
+		sessionFile: replacement.sessionFile,
+		recovered: false,
+		created: true,
+	};
+}
+
+async function listProjectSessionsSafely(
+	projectRoot: string,
+): Promise<Awaited<ReturnType<typeof SessionManager.list>>> {
+	try {
+		return await SessionManager.list(projectRoot);
+	} catch {
+		return [];
+	}
+}
+
+function buildPlannerExitPrompt(input: {
+	planId: string;
+	worktreePath: string;
+}): string {
+	return [
+		"[SYSTEM_INSTRUCTIONS]",
+		"",
+		`Planner plan ${input.planId} is still active but this chat has returned to the original project session.`,
+		`Planner worktree: ${input.worktreePath}`,
+		"",
+		"Do not continue planner work in this original checkout.",
+		"Use /planner-switch to return to the planner worktree session.",
+		"Use /planner-finish only after the plan is complete and ready for export/cleanup.",
+	].join("\n");
+}
+
+function isPathInsideOrEqual(path: string, root: string): boolean {
+	const resolvedPath = resolve(path);
+	const resolvedRoot = resolve(root);
+	const rel = relative(resolvedRoot, resolvedPath);
+	return rel.length === 0 || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
 function notifyPlannerCommandResult(

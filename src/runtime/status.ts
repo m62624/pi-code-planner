@@ -573,7 +573,7 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition: "User has enough information to accept or request changes.",
 		nextInstruction:
-			"After presenting the result, call planner_finish_step immediately to open await_user_acceptance. The user may also run /planner-accept directly as an explicit acceptance command.",
+			"After presenting the result, call planner_finish_step immediately to open await_user_acceptance. The user may also run /planner-finish directly as an explicit acceptance command.",
 	}),
 	await_user_acceptance: stepRule("done", "await_user_acceptance", {
 		objective: "Wait for explicit user decision.",
@@ -584,7 +584,7 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition: "User decision is explicit.",
 		nextInstruction:
-			"If the user accepts, ask the user to run /planner-accept. If the user requests changes, complete with explicit next target done/handle_change_request.",
+			"If the user accepts, ask the user to run /planner-finish. If the user requests changes, complete with explicit next target done/handle_change_request.",
 	}),
 	handle_change_request: stepRule("done", "handle_change_request", {
 		objective: "Record requested changes and return to planning.",
@@ -600,62 +600,62 @@ export const PLANNER_STEP_RULES = {
 		nextInstruction: "Complete with next target planning/read_context.",
 	}),
 	prepare_output_branch: stepRule("done", "prepare_output_branch", {
-		objective: "Internal /planner-accept phase: prepare output branch.",
+		objective: "Internal /planner-finish phase: prepare output branch.",
 		requiredActions: [
-			"Do not enter this phase manually. /planner-accept performs it atomically after explicit user approval.",
+			"Do not enter this phase manually. /planner-finish performs it atomically after explicit user approval.",
 		],
-		allowedNow: ["Internal /planner-accept execution only."],
+		allowedNow: ["Internal /planner-finish execution only."],
 		forbiddenNow: ["Do not delete worktree before export succeeds."],
 		exitCondition: "Output branch target is prepared.",
 		nextInstruction:
-			"Run /planner-accept from done/await_user_acceptance instead.",
+			"Run /planner-finish from done/await_user_acceptance instead.",
 	}),
 	merge_or_export_result: stepRule("done", "merge_or_export_result", {
-		objective: "Internal /planner-accept phase: export the accepted result.",
+		objective: "Internal /planner-finish phase: export the accepted result.",
 		requiredActions: [
-			"Do not enter this phase manually. /planner-accept exports the plan branch.",
+			"Do not enter this phase manually. /planner-finish exports the plan branch.",
 		],
-		allowedNow: ["Internal /planner-accept execution only."],
+		allowedNow: ["Internal /planner-finish execution only."],
 		forbiddenNow: ["Do not ask the model to choose arbitrary merge branches."],
 		exitCondition: "Output branch contains the accepted plan result.",
 		nextInstruction:
-			"Run /planner-accept from done/await_user_acceptance instead.",
+			"Run /planner-finish from done/await_user_acceptance instead.",
 	}),
 	cleanup_worktree: stepRule("done", "cleanup_worktree", {
 		objective:
-			"Internal /planner-accept phase: remove temporary planner state.",
+			"Internal /planner-finish phase: remove temporary planner state.",
 		requiredActions: [
-			"Do not enter this phase manually. /planner-accept removes the worktree and temporary branches after export succeeds.",
+			"Do not enter this phase manually. /planner-finish removes the worktree and temporary branches after export succeeds.",
 		],
-		allowedNow: ["Internal /planner-accept execution only."],
+		allowedNow: ["Internal /planner-finish execution only."],
 		forbiddenNow: [
 			"Do not delete the protected plan branch through child branch cleanup.",
 		],
 		exitCondition: "Worktree and managed child branches are cleaned.",
 		nextInstruction:
-			"Run /planner-accept from done/await_user_acceptance instead.",
+			"Run /planner-finish from done/await_user_acceptance instead.",
 	}),
 	mark_done: stepRule("done", "mark_done", {
-		objective: "Internal /planner-accept phase: mark the plan finished.",
+		objective: "Internal /planner-finish phase: mark the plan finished.",
 		requiredActions: [
-			"Do not enter this phase manually. /planner-accept clears the active plan record after cleanup.",
+			"Do not enter this phase manually. /planner-finish clears the active plan record after cleanup.",
 		],
-		allowedNow: ["Internal /planner-accept execution only."],
+		allowedNow: ["Internal /planner-finish execution only."],
 		forbiddenNow: ["Do not leave activePlanId pointing to a cleaned plan."],
 		exitCondition: "Project storage no longer has this plan active.",
 		nextInstruction:
-			"Run /planner-accept from done/await_user_acceptance instead.",
+			"Run /planner-finish from done/await_user_acceptance instead.",
 	}),
 	cleanup_plan_files: stepRule("done", "cleanup_plan_files", {
-		objective: "Internal /planner-accept phase: remove completed plan files.",
+		objective: "Internal /planner-finish phase: remove completed plan files.",
 		requiredActions: [
-			"Do not enter this phase manually. /planner-accept deletes plans/<plan-id>/ artifacts after accepted export.",
+			"Do not enter this phase manually. /planner-finish deletes plans/<plan-id>/ artifacts after accepted export.",
 		],
-		allowedNow: ["Internal /planner-accept execution only."],
+		allowedNow: ["Internal /planner-finish execution only."],
 		forbiddenNow: ["Do not remove plan files before mark_done."],
 		exitCondition: "Plan files are removed and no active plan references them.",
 		nextInstruction:
-			"Run /planner-accept from done/await_user_acceptance instead.",
+			"Run /planner-finish from done/await_user_acceptance instead.",
 	}),
 
 	read_state: stepRule("recovery", "read_state", {

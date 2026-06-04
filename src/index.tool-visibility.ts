@@ -53,7 +53,7 @@ export async function refreshPlanActiveCache(
 	return false;
 }
 
-/** Reset the cache to inactive (called after /planner-accept, /planner-delete). */
+/** Reset the cache to inactive (called after /planner-finish, /planner-delete). */
 export function resetPlanActiveCache(pi: ExtensionAPI): void {
 	planActiveCache = false;
 	updateToolVisibility(pi);

@@ -12,33 +12,33 @@ Present the verified plan result, wait for an explicit user decision, then eithe
 2. `await_user_acceptance`
    - Ask the user to accept the result or request changes.
    - Never decide on behalf of the user.
-   - If the user accepts, ask the user to run `/planner-accept`.
-   - `/planner-accept` atomically performs the remaining export, cleanup, and Pi session handoff. Do not try to reproduce that cleanup through model tools.
+   - If the user accepts, ask the user to run `/planner-finish`.
+   - `/planner-finish` atomically performs the remaining export, cleanup, and Pi session handoff. Do not try to reproduce that cleanup through model tools.
 3. `handle_change_request`
    - Record user feedback in durable artifacts.
    - Return to `planning/read_context` in the same plan worktree and branch.
 4. `prepare_output_branch`
-   - Internal `/planner-accept` phase: prepare the output branch in the original repository.
+   - Internal `/planner-finish` phase: prepare the output branch in the original repository.
 5. `merge_or_export_result`
-   - Internal `/planner-accept` phase: export the plan branch result.
+   - Internal `/planner-finish` phase: export the plan branch result.
 6. `cleanup_worktree`
-   - Internal `/planner-accept` phase: remove the temporary worktree and safe-to-delete managed child branches.
+   - Internal `/planner-finish` phase: remove the temporary worktree and safe-to-delete managed child branches.
 7. `mark_done`
-   - Internal `/planner-accept` phase: clear active plan state and mark the result complete.
+   - Internal `/planner-finish` phase: clear active plan state and mark the result complete.
 8. `cleanup_plan_files`
-   - Internal `/planner-accept` phase: remove completed plan artifacts only after `mark_done`.
+   - Internal `/planner-finish` phase: remove completed plan artifacts only after `mark_done`.
 
 ## Acceptance Rules
 
-- `/planner-accept` is an explicit user acceptance command. It may safely finalize directly after `present_result` or during `await_user_acceptance` when all runtime gates are clean.
+- `/planner-finish` is an explicit user acceptance command. It may safely finalize directly after `present_result` or during `await_user_acceptance` when all runtime gates are clean.
 - No production edits are allowed in done.
 - Change requests preserve the worktree and return to planning.
 - Cleanup requires explicit acceptance.
 - During normal work the protected plan branch is never deleted by managed child cleanup.
-- After successful `/planner-accept`, the temporary plan branch is removed because its result is already exported.
+- After successful `/planner-finish`, the temporary plan branch is removed because its result is already exported.
 - The user keeps exactly one output branch in the original repository and decides whether to merge, rebase, or delete it.
-- If the original Pi JSONL session exists, `/planner-accept` returns to it and removes the completed worktree chat.
-- If the original Pi JSONL session is missing, `/planner-accept` warns the user, creates a replacement project-root session, and asks whether to remove the completed worktree chat.
+- If the original Pi JSONL session exists, `/planner-finish` returns to it and removes the completed worktree chat.
+- If the original Pi JSONL session is missing, `/planner-finish` warns the user, creates a replacement project-root session, and asks whether to remove the completed worktree chat.
 - Raw git is forbidden.
 
 ## Change Request Reload

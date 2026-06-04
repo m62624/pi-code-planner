@@ -1,8 +1,8 @@
-> ⚠️ This repository is an experiment built with Pi Code and Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf for local coding work. The project may contain non-professional design choices, rough edges, or mistakes. Use it at your own risk.
+> ⚠️ This repository is an experiment built with Pi Code and Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf for local coding work. It is maintained with local AI assistance and may contain non-professional design choices, rough edges, broken behavior, or mistakes. Use it at your own risk.
 
 # pi-code-planner 🧭
 
-`pi-code-planner` is an experimental [Pi Code](https://github.com/badlogic/pi-mono) extension for coding with local language models on consumer hardware.
+`pi-code-planner` is an experimental [Pi Code](https://github.com/badlogic/pi-mono) extension for local coding models. It wraps a small deterministic state machine around a stochastic model so long coding tasks can survive compaction, Git branching, and user approval steps.
 
 Install it directly from GitHub:
 
@@ -16,7 +16,7 @@ Then open Pi inside a Git project and run:
 /planner-create
 ```
 
-Pi opens a multiline editor. Describe the outcome you want. The extension creates an isolated worktree, moves Pi into that worktree session, and starts a deterministic workflow around the model.
+Pi opens a multiline editor. Describe the outcome you want. The extension creates an isolated worktree, moves Pi into that worktree session, and starts the planner workflow.
 
 **Note:** If `Shift+Enter` does not insert a new line in the `/planner-create` editor, create `~/.pi/agent/keybindings.json` with the following content to bind `Ctrl+J` as the new line shortcut:
 ```json
@@ -28,23 +28,11 @@ After editing the file, run `/reload` in Pi to apply the changes.
 
 ## Why Pi? 🪶
 
-Pi was chosen as the harness because it is intentionally small. It does not assume that every coding agent has cloud-scale context, many concurrent subagents, or a large infrastructure budget.
+Pi was chosen because it is intentionally small. It does not assume cloud-scale context, many subagents, or extra infrastructure. That matters on consumer hardware where KV cache, RAM, VRAM, and prompt length are constrained.
 
-That matters for local models. On a single consumer machine, KV cache, RAM, VRAM, and prompt length are constrained. A local model may write focused code well but still lose project context after compaction, skip verification, repeat work, or confuse Git state during a long task. Running many subagents can make those limits worse.
+This extension adds the minimum structure a local model often lacks during long work: persisted state, one isolated Git worktree per plan, stage-specific instructions, controlled Git wrappers, recovery checks, and `planner_status` as the model-facing source of truth.
 
-`pi-code-planner` adds only the structure needed to help a local model stay oriented:
-
-- one persisted state machine;
-- one isolated Git worktree per plan;
-- explicit discovery before implementation;
-- concise discovery artifacts that survive compaction;
-- tests-first task execution;
-- controlled Git wrappers;
-- recovery checks when persisted state and repository reality disagree;
-- `planner_status` as the model-facing source of truth;
-- dynamic model tool scope so a local model sees only the planner wrappers allowed at its exact persisted state.
-
-This is not a guarantee of better output. The extension can also make results worse by adding overhead or constraining the model at the wrong time. It is an experiment in controlling a small stochastic coding model with deterministic code around it.
+This is not a guarantee of better output. The extension can make results worse by adding overhead or constraining the model at the wrong time. It is an experiment, not a stable product.
 
 The extension was tested primarily with `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf`, but the workflow is model-agnostic.
 
@@ -76,13 +64,14 @@ These are Pi slash commands for the user. The model has separate internal tools.
 | Command | Purpose |
 | --- | --- |
 | `/planner-create` | Open a multiline request editor and create a new plan. |
+| `/planner-exit` | Return to the original project chat without finishing or deleting the active plan. |
 | `/planner-switch` | Open a TUI picker for plans in the current project. |
 | `/planner-switch <plan-id>` | Activate a plan directly and resume its most recent non-empty worktree chat. |
 | `/planner-rename` | Open a TUI picker, then rename the selected plan title. |
 | `/planner-rename --id <plan-id> <title>` | Rename a plan directly without changing branches or paths. |
 | `/planner-delete` | Open a TUI picker and delete a selected plan after confirmation. |
 | `/planner-delete <plan-id>` | Delete a plan directly after confirmation. Active plans are moved through a safe handoff session first. |
-| `/planner-accept` | Accept a completed plan, export `output/<plan-id>`, remove temporary planner state, and return Pi to the original project session. |
+| `/planner-finish` | Finish a completed plan, export `output/<plan-id>`, remove temporary planner state, and return Pi to the original project session. |
 
 ### Planner Switch And Pi Resume
 
@@ -192,7 +181,7 @@ Execution handles one task at a time. Experiments are sequential implementation 
 | `present_result` | Show the verified result. |
 | `await_user_acceptance` | Wait for explicit acceptance or requested changes. |
 | `handle_change_request` | Record feedback and return to planning in the same worktree. |
-| `prepare_output_branch` | Internal `/planner-accept` phase. |
+| `prepare_output_branch` | Internal `/planner-finish` phase. |
 | `merge_or_export_result` | Export one squashed ordinary commit on `output/<plan-id>`. |
 | `cleanup_worktree` | Remove temporary worktree and managed child branches. |
 | `mark_done` | Clear active planner state. |
@@ -224,7 +213,7 @@ base branch
   -> output/<plan-id>
 ```
 
-Temporary branches are removed after their result is merged. After `/planner-accept`, the user keeps one ordinary `output/<plan-id>` branch with one squashed result commit:
+Temporary branches are removed after their result is merged. After `/planner-finish`, the user keeps one ordinary `output/<plan-id>` branch with one squashed result commit:
 
 ```bash
 git show output/<plan-id>
