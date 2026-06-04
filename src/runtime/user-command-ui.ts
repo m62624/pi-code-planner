@@ -55,7 +55,7 @@ export async function confirmPlannerDelete(input: {
 	return await input.ui.confirm(
 		input.active ? "Delete active planner plan?" : "Delete planner plan?",
 		input.active
-			? `This will force-delete the active planner plan "${input.planId}", remove its worktree and related worktree chats, and abandon current planner progress.`
+			? `This will delete the active planner plan "${input.planId}", remove its worktree and related worktree chats, and abandon current planner progress.`
 			: `Delete planner plan "${input.planId}", its worktree, planner files, and related worktree chats?`,
 		input.active ? { timeout: 10_000 } : undefined,
 	);
@@ -80,5 +80,6 @@ export function planOptionLabel(plan: PlannerListEntry): string {
 	const position =
 		plan.stage && plan.step ? `${plan.stage}/${plan.step}` : "missing";
 	const broken = plan.reason ? ` (${plan.reason})` : "";
-	return `${marker} ${plan.planId} [${plan.status}] ${position} - ${plan.title}${broken}`;
+	const description = plan.description ? ` :: ${plan.description}` : "";
+	return `${marker} ${plan.planId} [${plan.status}] ${position} - ${plan.title}${description}${broken}`;
 }

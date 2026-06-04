@@ -57,6 +57,7 @@ function plan(
 	return {
 		planId: input.planId,
 		title: input.title ?? input.planId,
+		description: input.description ?? null,
 		status: input.status ?? "active",
 		active: input.active ?? false,
 		stage: input.stage ?? "discovery",
@@ -80,6 +81,18 @@ describe("planner user command UI helpers", () => {
 				}),
 			),
 		).toBe("* plan-a [active] execution/write_tests - Plan A");
+	});
+
+	it("formats plan descriptions in switch options", () => {
+		expect(
+			planOptionLabel(
+				plan({
+					planId: "plan-a",
+					title: "Plan A",
+					description: "Fix planner switch",
+				}),
+			),
+		).toContain("Plan A :: Fix planner switch");
 	});
 
 	it("selects plan id by the selected TUI label", async () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SCHEMA_VERSION } from "../constants";
 import type { ProjectRecord } from "../storage/schema";
 import {
+	createPlannerPlanDescription,
 	createPlannerPlanTitle,
 	parsePlannerCreateCommandArgs,
 	resolvePlannerPlanId,
@@ -18,6 +19,7 @@ function projectWithPlans(planIds: string[]): ProjectRecord {
 		plans: planIds.map((planId) => ({
 			planId,
 			title: planId,
+			description: planId,
 			status: "active",
 		})),
 	};
@@ -30,35 +32,17 @@ describe("planner plan naming", () => {
 		});
 	});
 
-	it("parses explicit id before the request", () => {
+	it("rejects create id flags", () => {
 		expect(
 			parsePlannerCreateCommandArgs(
 				"--id approval-find Fix approval find command",
 			),
-		).toEqual({
-			planId: "approval-find",
-			request: "Fix approval find command",
-		});
-	});
-
-	it("parses explicit id assignment and quoted request", () => {
-		expect(
-			parsePlannerCreateCommandArgs('--id=approval-find "Fix find command"'),
-		).toEqual({
-			planId: "approval-find",
-			request: "Fix find command",
-		});
+		).toBeNull();
+		expect(parsePlannerCreateCommandArgs("--id=approval-find")).toBeNull();
 	});
 
 	it("allows the multiline editor to collect a missing request", () => {
 		expect(parsePlannerCreateCommandArgs("")).toEqual({});
-		expect(parsePlannerCreateCommandArgs("--id plan-a")).toEqual({
-			planId: "plan-a",
-		});
-	});
-
-	it("rejects malformed id flag", () => {
-		expect(parsePlannerCreateCommandArgs("--id")).toBeNull();
 	});
 
 	it("uses sanitized explicit id when provided", () => {
@@ -141,5 +125,12 @@ describe("planner plan naming", () => {
 		expect(() => validatePlannerPlanTitle(" \n ")).toThrow(
 			"title must be a non-empty string",
 		);
+	});
+
+	it("creates concise plan descriptions from raw requests", () => {
+		expect(
+			createPlannerPlanDescription("  Fix   the planner switch UI  "),
+		).toBe("Fix the planner switch UI");
+		expect(createPlannerPlanDescription("x".repeat(220))).toHaveLength(160);
 	});
 });

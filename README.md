@@ -76,13 +76,12 @@ These are Pi slash commands for the user. The model has separate internal tools.
 | Command | Purpose |
 | --- | --- |
 | `/planner-create` | Open a multiline request editor and create a new plan. |
-| `/planner-create --id <plan-id>` | Create a plan with an explicit stable id. Without `--id`, a deterministic id is generated from the request. |
 | `/planner-switch` | Open a TUI picker for plans in the current project. |
 | `/planner-switch <plan-id>` | Activate a plan directly and resume its most recent non-empty worktree chat. |
 | `/planner-rename` | Open a TUI picker, then rename the selected plan title. |
 | `/planner-rename --id <plan-id> <title>` | Rename a plan directly without changing branches or paths. |
 | `/planner-delete` | Open a TUI picker and delete a selected plan after confirmation. |
-| `/planner-delete --force-active <plan-id>` | Explicit escape hatch: remove an active plan, its worktree, planner files, and managed child branches. |
+| `/planner-delete <plan-id>` | Delete a plan directly after confirmation. Active plans are moved through a safe handoff session first. |
 | `/planner-accept` | Accept a completed plan, export `output/<plan-id>`, remove temporary planner state, and return Pi to the original project session. |
 
 ### Planner Switch And Pi Resume

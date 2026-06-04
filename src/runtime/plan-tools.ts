@@ -33,6 +33,7 @@ import {
 } from "../worktree/paths";
 import { inspectPlannerGitReality } from "./git-state-sync";
 import {
+	createPlannerPlanDescription,
 	createPlannerPlanTitle,
 	resolvePlannerPlanId,
 	validatePlannerPlanTitle,
@@ -78,6 +79,9 @@ async function createPlanTool(
 	const title =
 		optionalString(params, "title") ?? createPlannerPlanTitle(request);
 	const validatedTitle = validatePlannerPlanTitle(title);
+	const description =
+		optionalString(params, "description") ??
+		createPlannerPlanDescription(request);
 	const project = await ensureProjectRecord(input.fs, input.projectPaths);
 	const planId = resolvePlannerPlanId({
 		requestedPlanId: optionalString(params, "planId") ?? undefined,
@@ -114,6 +118,7 @@ async function createPlanTool(
 	const plan = createPlanRecord({
 		planId,
 		title: validatedTitle,
+		description,
 		status: "active",
 	});
 	const settings = await loadEffectivePlannerSettings({
@@ -171,6 +176,7 @@ async function createPlanTool(
 	await upsertProjectPlanSummary(input.fs, input.projectPaths, {
 		planId,
 		title: validatedTitle,
+		description,
 		status: "active",
 	});
 	const nextProject = await setActivePlan(input.fs, input.projectPaths, planId);
@@ -181,6 +187,7 @@ async function createPlanTool(
 			"Planner plan created.",
 			`Plan: ${planId}`,
 			`Provisional title: ${validatedTitle}`,
+			`Description: ${description}`,
 			`Base branch: ${baseBranch}`,
 			`Worktree: ${worktreeLocation}`,
 			"Next: switch/open Pi in the planner worktree session, call planner_status, draft goal.md in your own words, and wait for explicit user approval before discovery. Ask evidence-based clarification questions only after discovery.",

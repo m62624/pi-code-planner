@@ -170,6 +170,7 @@ export type StepStatus =
 export interface ProjectPlanSummary {
 	planId: string;
 	title: string;
+	description?: string;
 	status: PlanSummaryStatus;
 }
 
@@ -202,6 +203,7 @@ export interface PlanRecord {
 	schemaVersion: typeof SCHEMA_VERSION;
 	planId: string;
 	title: string;
+	description?: string;
 	status: PlanStatus;
 	tasks: PlanTaskSummary[];
 }
@@ -278,6 +280,7 @@ export function createEmptyProjectRecord(input: {
 export function createPlanRecord(input: {
 	planId: string;
 	title: string;
+	description?: string;
 	status?: PlanStatus;
 	tasks?: PlanTaskSummary[];
 }): PlanRecord {
@@ -285,6 +288,7 @@ export function createPlanRecord(input: {
 		schemaVersion: SCHEMA_VERSION,
 		planId: input.planId,
 		title: input.title,
+		...(input.description ? { description: input.description } : {}),
 		status: input.status ?? "draft",
 		tasks: input.tasks ?? [],
 	};

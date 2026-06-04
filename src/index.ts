@@ -113,13 +113,17 @@ const EMPTY_TOOL_PARAMETERS = {
 const CREATE_PLAN_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {
-		planId: { type: "string" },
 		request: {
 			type: "string",
 			description:
 				"The user's raw requested outcome. Do not replace it with a short title.",
 		},
 		title: { type: "string" },
+		description: {
+			type: "string",
+			description:
+				"Optional short user-facing summary shown in planner lists. Keep it concise.",
+		},
 		baseBranch: { type: "string" },
 	},
 	required: ["request"],
@@ -323,15 +327,12 @@ function registerInstructionDefaultsSync(pi: ExtensionAPI): void {
 function registerPlannerCommands(pi: ExtensionAPI): void {
 	pi.registerCommand("planner-create", {
 		description:
-			"Open a multiline planner request editor, then create a worktree plan. Optional: --id <plan-id>.",
+			"Open a multiline planner request editor, then create a worktree plan.",
 		handler: async (args, ctx) => {
 			await ctx.waitForIdle();
 			const parsed = parsePlannerCreateCommandArgs(args);
 			if (!parsed) {
-				ctx.ui.notify(
-					"Usage: /planner-create [--id <plan-id>] [initial request text]",
-					"error",
-				);
+				ctx.ui.notify("Usage: /planner-create [initial request text]", "error");
 				return;
 			}
 
@@ -360,7 +361,6 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				let planId: string;
 				try {
 					planId = resolvePlannerPlanId({
-						requestedPlanId: parsed.planId,
 						request: normalizedRequest,
 						project,
 					});
@@ -550,7 +550,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 	});
 
 	pi.registerCommand("planner-delete", {
-		description: "Delete a planner plan. Active plans require --force-active.",
+		description: "Delete a planner plan after confirmation.",
 		handler: async (args, ctx) => {
 			await ctx.waitForIdle();
 			const fs = createNodeFs();
@@ -567,7 +567,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				projectPaths,
 			});
 			if (!parsed) return;
-			if (parsed.forceActive) {
+			if (parsed.deleteActive) {
 				const handoffCwd = (await fs.exists(projectPaths.projectRoot))
 					? projectPaths.projectRoot
 					: agentDir;
@@ -592,7 +592,6 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 							commandName: "planner_delete",
 							params: {
 								planId: parsed.planId,
-								forceActive: true,
 								deleteSessions: true,
 							},
 						});
@@ -1377,24 +1376,51 @@ function parseSinglePlanIdArg(args: string): string | null {
 
 function parsePlannerDeleteCommandArgs(
 	args: string,
-): { planId: string; forceActive: boolean } | null {
+): { planId: string } | null {
 	const tokens = args.trim().split(/\s+/).filter(Boolean);
 	if (tokens.length === 0) {
 		return null;
 	}
-	let forceActive = false;
 	const planIds: string[] = [];
 	for (const token of tokens) {
-		if (token === "--force-active") {
-			forceActive = true;
-			continue;
-		}
 		if (token.startsWith("--")) {
 			return null;
 		}
 		planIds.push(token);
 	}
-	return planIds.length === 1 ? { planId: planIds[0], forceActive } : null;
+	return planIds.length === 1 ? { planId: planIds[0] } : null;
+}
+
+function parsePlannerRenameCommandArgs(
+	args: string,
+): { planId?: string; title?: string } | null {
+	const tokens = args.trim().split(/\s+/).filter(Boolean);
+	if (tokens.length === 0) return {};
+	let planId: string | undefined;
+	const titleParts: string[] = [];
+	for (let index = 0; index < tokens.length; index += 1) {
+		const token = tokens[index];
+		if (token === "--id") {
+			const value = tokens[index + 1];
+			if (!value || value.startsWith("--")) return null;
+			planId = value;
+			index += 1;
+			continue;
+		}
+		if (token.startsWith("--id=")) {
+			const value = token.slice("--id=".length);
+			if (!value) return null;
+			planId = value;
+			continue;
+		}
+		if (token.startsWith("--")) return null;
+		titleParts.push(token);
+	}
+	const title = titleParts.join(" ").trim();
+	return {
+		...(planId ? { planId } : {}),
+		...(title ? { title } : {}),
+	};
 }
 
 async function resolveRenameCommandArgs(input: {
@@ -1403,9 +1429,16 @@ async function resolveRenameCommandArgs(input: {
 	fs: ReturnType<typeof createNodeFs>;
 	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
 }): Promise<{ planId?: string; title: string } | null> {
-	const parsed = parsePlannerCreateCommandArgs(input.args);
-	if (parsed?.request) {
-		return { planId: parsed.planId, title: parsed.request };
+	const parsed = parsePlannerRenameCommandArgs(input.args);
+	if (!parsed) {
+		input.ctx.ui.notify(
+			"Usage: /planner-rename [--id <plan-id>] [title]",
+			"error",
+		);
+		return null;
+	}
+	if (parsed.title) {
+		return { planId: parsed.planId, title: parsed.title };
 	}
 
 	const planId = await selectPlannerPlanId({
@@ -1430,16 +1463,32 @@ async function resolveDeleteCommandArgs(input: {
 	ctx: ExtensionCommandContext;
 	fs: ReturnType<typeof createNodeFs>;
 	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
-}): Promise<{ planId: string; forceActive: boolean } | null> {
+}): Promise<{ planId: string; deleteActive: boolean } | null> {
 	const direct = parsePlannerDeleteCommandArgs(input.args);
 	if (direct) {
-		return direct;
+		const { project, plans } = await readPlannerPlanList({
+			fs: input.fs,
+			projectPaths: input.projectPaths,
+		});
+		const plan = plans.find((entry) => entry.planId === direct.planId);
+		if (plan) {
+			const confirmed = await confirmPlannerDelete({
+				ui: input.ctx.ui,
+				planId: direct.planId,
+				active: plan.active,
+			});
+			if (!confirmed) {
+				input.ctx.ui.notify("Planner delete cancelled.", "info");
+				return null;
+			}
+		}
+		return {
+			planId: direct.planId,
+			deleteActive: project?.activePlanId === direct.planId,
+		};
 	}
 	if (input.args.trim().length > 0) {
-		input.ctx.ui.notify(
-			"Usage: /planner-delete [--force-active] <plan-id>",
-			"error",
-		);
+		input.ctx.ui.notify("Usage: /planner-delete [plan-id]", "error");
 		return null;
 	}
 
@@ -1467,7 +1516,7 @@ async function resolveDeleteCommandArgs(input: {
 		input.ctx.ui.notify("Planner delete cancelled.", "info");
 		return null;
 	}
-	return { planId: selected, forceActive: isActive };
+	return { planId: selected, deleteActive: isActive };
 }
 
 function notifyPlannerCommandResult(

@@ -3,12 +3,12 @@ import { compactIdPart, sanitizePathIdPart } from "../storage/ids";
 import type { ProjectRecord } from "../storage/schema";
 
 export interface PlannerCreateCommandArgs {
-	planId?: string;
 	request?: string;
 }
 
 const MAX_GENERATED_PLAN_TITLE_LENGTH = 80;
 const MAX_GENERATED_PLAN_TITLE_WORDS = 6;
+const MAX_PLAN_DESCRIPTION_LENGTH = 160;
 const PLAN_PREFIX_CHARS = 28;
 const REQUESTED_PLAN_ID_CHARS = 40;
 const PLAN_UUID_SUFFIX_LENGTH = 8;
@@ -21,33 +21,14 @@ export function parsePlannerCreateCommandArgs(
 		return {};
 	}
 
-	let planId: string | undefined;
 	const requestParts: string[] = [];
-	for (let index = 0; index < tokens.length; index += 1) {
-		const token = tokens[index];
-		if (token === "--id") {
-			const value = tokens[index + 1];
-			if (!value || value.startsWith("--")) {
-				return null;
-			}
-			planId = value;
-			index += 1;
-			continue;
-		}
-		if (token.startsWith("--id=")) {
-			const value = token.slice("--id=".length);
-			if (!value) {
-				return null;
-			}
-			planId = value;
-			continue;
-		}
+	for (const token of tokens) {
+		if (token.startsWith("--")) return null;
 		requestParts.push(token);
 	}
 
 	const request = requestParts.join(" ").trim();
 	return {
-		...(planId ? { planId } : {}),
 		...(request.length > 0 ? { request } : {}),
 	};
 }
@@ -108,6 +89,12 @@ export function createPlannerPlanTitle(request: string): string {
 			? compact
 			: `${compact.slice(0, MAX_GENERATED_PLAN_TITLE_LENGTH - 3).trimEnd()}...`,
 	);
+}
+
+export function createPlannerPlanDescription(request: string): string {
+	const normalized = request.trim().replace(/\s+/g, " ");
+	if (normalized.length <= MAX_PLAN_DESCRIPTION_LENGTH) return normalized;
+	return `${normalized.slice(0, MAX_PLAN_DESCRIPTION_LENGTH - 3).trimEnd()}...`;
 }
 
 export function validatePlannerPlanTitle(title: string): string {

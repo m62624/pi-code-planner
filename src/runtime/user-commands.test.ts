@@ -361,7 +361,7 @@ describe("planner user commands", () => {
 		});
 	});
 
-	it("force-deletes active plan, clears active id, and removes worktree chat sessions", async () => {
+	it("deletes active plan, clears active id, and removes worktree chat sessions", async () => {
 		const { fs, git, projectPaths } = await createProjectFixture({
 			activePlanId: "plan-a",
 		});
@@ -387,7 +387,6 @@ describe("planner user commands", () => {
 			commandName: "planner_delete",
 			params: {
 				planId: "plan-a",
-				forceActive: true,
 				deleteSessions: true,
 			},
 		});
@@ -413,7 +412,7 @@ describe("planner user commands", () => {
 		);
 	});
 
-	it("force-deletes active planner storage best-effort when original project root is gone", async () => {
+	it("deletes active planner storage best-effort when original project root is gone", async () => {
 		const { fs, git, projectPaths } = await createProjectFixture({
 			activePlanId: "plan-a",
 		});
@@ -443,7 +442,6 @@ describe("planner user commands", () => {
 			commandName: "planner_delete",
 			params: {
 				planId: "plan-a",
-				forceActive: true,
 				deleteSessions: true,
 			},
 		});

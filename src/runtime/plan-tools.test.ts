@@ -119,6 +119,7 @@ describe("planner plan tools", () => {
 				{
 					planId: "api-audit",
 					title: "Audit approval modes",
+					description: "Audit why approval modes blocks a safe find command.",
 					status: "active",
 				},
 			],
@@ -126,6 +127,7 @@ describe("planner plan tools", () => {
 		await expect(readPlanRecord(fs, planPaths)).resolves.toMatchObject({
 			planId: "api-audit",
 			title: "Audit approval modes",
+			description: "Audit why approval modes blocks a safe find command.",
 			status: "active",
 			tasks: [],
 		});

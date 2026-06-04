@@ -44,6 +44,7 @@ export interface PlannerUserCommandResult {
 export interface PlannerListEntry {
 	planId: string;
 	title: string;
+	description: string | null;
 	status: PlanSummaryStatus;
 	active: boolean;
 	stage: string | null;
@@ -337,6 +338,7 @@ async function buildPlanList(
 		entries.push({
 			planId: summary.planId,
 			title: plan?.title ?? summary.title,
+			description: plan?.description ?? summary.description ?? null,
 			status: summary.status,
 			active: project.activePlanId === summary.planId,
 			stage: state?.stage ?? null,
@@ -366,6 +368,7 @@ function formatPlanList(plans: readonly PlannerListEntry[]): string {
 				`[${plan.status}]`,
 				plan.stage && plan.step ? `${plan.stage}/${plan.step}` : "missing",
 				`- ${plan.title}`,
+				plan.description ? `:: ${plan.description}` : "",
 				plan.reason ? `(${plan.reason})` : "",
 			]
 				.filter(Boolean)
