@@ -515,6 +515,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					);
 					return;
 				}
+				resetPlanActiveCache(pi);
 				await ctx.switchSession(targetSessionFile.sessionFile, {
 					withSession: async (replacementCtx) => {
 						if (targetSessionFile.recovered) {
@@ -537,9 +538,12 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 						);
 					},
 				});
-				resetPlanActiveCache(pi);
 			} catch (error) {
-				ctx.ui.notify(`Planner exit failed: ${errorMessage(error)}`, "error");
+				await safeNotify(
+					ctx,
+					`Planner exit failed: ${errorMessage(error)}`,
+					"error",
+				);
 			}
 		},
 	});
@@ -693,6 +697,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					worktreePath: handoffCwd,
 					parentSession: ctx.sessionManager.getSessionFile(),
 				});
+				resetPlanActiveCache(pi);
 				await ctx.switchSession(session.sessionFile, {
 					withSession: async (replacementCtx) => {
 						const result = await executePlannerUserCommand({
@@ -804,6 +809,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 						"Planner finished the result but could not resolve a project session for handoff.",
 					);
 				}
+				resetPlanActiveCache(pi);
 				await ctx.switchSession(targetSessionFile, {
 					withSession: async (replacementCtx) => {
 						if (fallbackSession) {
@@ -827,7 +833,6 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 						);
 					},
 				});
-				resetPlanActiveCache(pi);
 			} catch (error) {
 				if (fallbackSession && !acceptedPlanFinalized) {
 					await removePlannerHandoffBootstrapFile(
