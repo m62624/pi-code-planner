@@ -338,27 +338,30 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 		description:
 			"Open a multiline planner request editor, then create a worktree plan.",
 		handler: async (args, ctx) => {
-			await ctx.waitForIdle();
-			const parsed = parsePlannerCreateCommandArgs(args);
-			if (!parsed) {
-				ctx.ui.notify("Usage: /planner-create [initial request text]", "error");
-				return;
-			}
-
-			// ctx.ui.editor is async and may span a session replacement
-			// (e.g. ESC → "Resumed session"). Post-editor work may throw
-			// a stale-cx error; catch and treat as cancellation.
-			const request = await ctx.ui.editor(
-				"Describe the requested outcome",
-				parsed.request ?? "",
-			);
-			if (!request?.trim()) {
-				ctx.ui.notify("Planner creation cancelled.", "info");
-				return;
-			}
-			const normalizedRequest = request.trim();
-
 			try {
+				await ctx.waitForIdle();
+				const parsed = parsePlannerCreateCommandArgs(args);
+				if (!parsed) {
+					ctx.ui.notify(
+						"Usage: /planner-create [initial request text]",
+						"error",
+					);
+					return;
+				}
+
+				// ctx.ui.editor is async and may span a session replacement
+				// (e.g. ESC → "Resumed session"). Keep editor and post-editor
+				// work inside this guard so stale ctx errors cannot crash Pi.
+				const request = await ctx.ui.editor(
+					"Describe the requested outcome",
+					parsed.request ?? "",
+				);
+				if (!request?.trim()) {
+					await safeNotify(ctx, "Planner creation cancelled.", "info");
+					return;
+				}
+				const normalizedRequest = request.trim();
+
 				const fs = createNodeFs();
 				const agentDir = getAgentDir();
 				const projectPaths = await resolveProjectStoragePaths({
@@ -442,9 +445,9 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				// the editor UI.
 				const msg = error instanceof Error ? error.message : String(error);
 				if (msg.includes("stale")) {
-					ctx.ui.notify("Planner creation cancelled.", "info");
+					await safeNotify(ctx, "Planner creation cancelled.", "info");
 				} else {
-					ctx.ui.notify(msg, "error");
+					await safeNotify(ctx, msg, "error");
 				}
 			}
 		},
@@ -1705,6 +1708,18 @@ function isPathInsideOrEqual(path: string, root: string): boolean {
 	const resolvedRoot = resolve(root);
 	const rel = relative(resolvedRoot, resolvedPath);
 	return rel.length === 0 || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+async function safeNotify(
+	ctx: ExtensionCommandContext,
+	message: string,
+	type?: "info" | "warning" | "error",
+): Promise<void> {
+	try {
+		ctx.ui.notify(message, type);
+	} catch {
+		// Stale command contexts may reject UI calls after editor/session changes.
+	}
 }
 
 function notifyPlannerCommandResult(
