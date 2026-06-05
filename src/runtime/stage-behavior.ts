@@ -322,7 +322,11 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["tdd.md"],
 		updatedArtifacts: ["refactor.md"],
 		requiredGates: ["task_implemented"],
-		expectedTools: ["planner_git_commit", "planner_report_stuck"],
+		expectedTools: [
+			"planner_refactor_review",
+			"planner_git_commit",
+			"planner_report_stuck",
+		],
 		commitPolicy: "allowed_if_dirty",
 		compactPolicy: "not_allowed",
 	}),

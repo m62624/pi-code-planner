@@ -275,6 +275,14 @@ export {
 	PLANNER_RECOVERY_TOOL_NAMES,
 } from "./runtime/recovery-tools";
 export type {
+	PlannerRefactorToolExecutionResult,
+	PlannerRefactorToolName,
+} from "./runtime/refactor-tools";
+export {
+	executePlannerRefactorTool,
+	PLANNER_REFACTOR_TOOL_NAMES,
+} from "./runtime/refactor-tools";
+export type {
 	PlannerBehaviorAction,
 	PlannerBehaviorArtifact,
 	PlannerBehaviorGate,

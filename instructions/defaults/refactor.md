@@ -15,7 +15,7 @@ KISS does not mean avoiding advanced language features. Traits, interfaces, gene
    - Is any code duplicated, speculative, over-generalized, or implemented for future use rather than the current task?
    - Does the implementation match existing project conventions and confirmed user decisions?
    - Are signatures and effects still as small and explicit as possible?
-4. Write `refactor.md` with the required structured review template below. A passing test, linter, formatter, or build is not a refactor review.
+4. Call `planner_refactor_review` with concrete review fields. The wrapper writes `refactor.md` in the required format. A passing test, linter, formatter, or build is not a refactor review.
 5. Apply only behavior-preserving changes.
 6. Run focused tests from the worktree path reported by `planner_status` after each meaningful refactor group.
 7. Commit through planner wrappers if files changed.
@@ -39,7 +39,7 @@ Refactor is complete only when `refactor.md` passes the structured review gate, 
 
 ## Required refactor.md Format
 
-Use these exact level-two headings. Fill every section with concrete observations from the active task diff.
+Do not hand-write this file when `planner_refactor_review` is available. Pass semantic fields to the tool and let the wrapper write these exact level-two headings. Fill every field with concrete observations from the active task diff.
 
 ```md
 # Refactor Review

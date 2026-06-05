@@ -385,7 +385,7 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Read the selected implementation and inspect the planner-controlled diff.",
 			"Question unnecessary abstraction, duplication, speculative flexibility, premature generalization, and code that exists for imagined future work rather than the current task.",
-			"Write refactor.md using the required review sections: Changed Surface, Complexity, Duplication, Naming And Boundaries, Edge Cases, Refactor Decision, and either Changes Applied or Why Kept.",
+			"Call planner_refactor_review with semantic review fields; the wrapper writes the required refactor.md format.",
 			"A passing test, linter, formatter, or build is not a refactor review.",
 			"Commit if project files changed.",
 		],

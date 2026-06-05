@@ -12,6 +12,7 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_questions_submit",
 	"planner_questions_resolve",
 	"planner_task_upsert",
+	"planner_refactor_review",
 	"planner_report_stuck",
 	"planner_git_inspect",
 	"planner_git_init",
@@ -101,6 +102,7 @@ const STEP_ALLOWED_TOOLS = {
 		],
 		refactor_task: [
 			"planner_git_inspect",
+			"planner_refactor_review",
 			"planner_git_commit",
 			"planner_git_create_refactor_branch",
 			"planner_git_merge_refactor_to_task",

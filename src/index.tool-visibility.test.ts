@@ -128,9 +128,10 @@ describe("filterPlannerTools", () => {
 		}
 	});
 
-	it("ALL_PLANNER_TOOL_NAMES has exactly 27 tools", () => {
-		expect(ALL_PLANNER_TOOL_NAMES).toHaveLength(27);
+	it("ALL_PLANNER_TOOL_NAMES has exactly 28 tools", () => {
+		expect(ALL_PLANNER_TOOL_NAMES).toHaveLength(28);
 		expect(ALL_PLANNER_TOOL_NAMES).toContain("planner_report_stuck");
+		expect(ALL_PLANNER_TOOL_NAMES).toContain("planner_refactor_review");
 	});
 });
 

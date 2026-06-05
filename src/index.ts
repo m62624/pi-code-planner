@@ -80,6 +80,11 @@ import {
 	type PlannerRecoveryToolName,
 } from "./runtime/recovery-tools";
 import {
+	executePlannerRefactorTool,
+	PLANNER_REFACTOR_TOOL_NAMES,
+	type PlannerRefactorToolName,
+} from "./runtime/refactor-tools";
+import {
 	buildPlannerStuckCompactInstructions,
 	executePlannerStuckTool,
 	PLANNER_STUCK_TOOL_NAMES,
@@ -274,6 +279,62 @@ const STUCK_REPORT_TOOL_PARAMETERS = {
 		},
 	},
 	required: ["reason", "lastAttempt", "nextDebugPlan"],
+	additionalProperties: false,
+} as const;
+
+const REFACTOR_REVIEW_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		changedSurface: {
+			type: "string",
+			description:
+				"Concrete summary of changed files, touched behavior, and public API surface from the active task diff.",
+		},
+		complexity: {
+			type: "string",
+			description:
+				"Concrete complexity review: unnecessary abstraction, over-generalization, and simpler alternatives considered.",
+		},
+		duplication: {
+			type: "string",
+			description:
+				"Concrete duplication review: new duplication, existing duplication touched, and extraction/keep decision.",
+		},
+		namingAndBoundaries: {
+			type: "string",
+			description:
+				"Concrete naming, module/API boundary, and scope-leak review.",
+		},
+		edgeCases: {
+			type: "string",
+			description:
+				"Concrete edge-case review: validation, error handling, state consistency, and regression risk.",
+		},
+		decision: {
+			type: "string",
+			enum: ["changed", "kept"],
+			description:
+				"Use changed when behavior-preserving refactor edits were applied. Use kept only when the actual diff was reviewed and no safe simplification should be made.",
+		},
+		changesApplied: {
+			type: "string",
+			description:
+				"Required when decision is changed. Describe behavior-preserving refactor edits.",
+		},
+		whyKept: {
+			type: "string",
+			description:
+				"Required when decision is kept. Explain why changing the actual diff would add complexity or make code worse.",
+		},
+	},
+	required: [
+		"changedSurface",
+		"complexity",
+		"duplication",
+		"namingAndBoundaries",
+		"edgeCases",
+		"decision",
+	],
 	additionalProperties: false,
 } as const;
 
@@ -1140,6 +1201,37 @@ function registerPlannerTools(
 		});
 	}
 
+	for (const toolName of PLANNER_REFACTOR_TOOL_NAMES) {
+		pi.registerTool({
+			name: toolName,
+			label: refactorToolLabel(toolName),
+			description: refactorToolDescription(toolName),
+			promptSnippet:
+				"Use planner_refactor_review during execution/refactor_task after inspecting the task diff. Pass semantic review fields; the wrapper writes refactor.md.",
+			parameters: REFACTOR_REVIEW_TOOL_PARAMETERS as never,
+			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const fs = createNodeFs();
+				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				await recordPlannerToolActivityForProject({
+					fs,
+					projectPaths,
+					now: Date.now(),
+				});
+				const result = await executePlannerRefactorTool({
+					fs,
+					git: new NodeGitRunner(),
+					projectPaths,
+					toolName,
+					params,
+				});
+				return {
+					content: [{ type: "text", text: result.text }],
+					details: result,
+				};
+			},
+		});
+	}
+
 	for (const toolName of PLANNER_WORKFLOW_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
@@ -1604,6 +1696,20 @@ function stuckToolDescription(toolName: PlannerStuckToolName): string {
 	switch (toolName) {
 		case "planner_report_stuck":
 			return "Record a stuck execution attempt with full git diff artifacts and start a planner compact for a different debug attempt.";
+	}
+}
+
+function refactorToolLabel(toolName: PlannerRefactorToolName): string {
+	switch (toolName) {
+		case "planner_refactor_review":
+			return "Planner Refactor Review";
+	}
+}
+
+function refactorToolDescription(toolName: PlannerRefactorToolName): string {
+	switch (toolName) {
+		case "planner_refactor_review":
+			return "Write the structured refactor.md review from semantic fields during execution/refactor_task.";
 	}
 }
 

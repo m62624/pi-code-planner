@@ -11,6 +11,17 @@ const REQUIRED_REFACTOR_SECTIONS = [
 
 export type RefactorDecision = "changed" | "kept";
 
+export interface RefactorReviewInput {
+	changedSurface: string;
+	complexity: string;
+	duplication: string;
+	namingAndBoundaries: string;
+	edgeCases: string;
+	decision: RefactorDecision;
+	changesApplied: string | null;
+	whyKept: string | null;
+}
+
 export interface RefactorReviewValidation {
 	valid: boolean;
 	reason: string | null;
@@ -78,6 +89,39 @@ export function validateRefactorReviewMarkdown(
 	}
 
 	return { valid: true, reason: null, decision };
+}
+
+export function formatRefactorReviewMarkdown(
+	input: RefactorReviewInput,
+): string {
+	return [
+		"# Refactor Review",
+		"",
+		"## Changed Surface",
+		input.changedSurface.trim(),
+		"",
+		"## Complexity",
+		input.complexity.trim(),
+		"",
+		"## Duplication",
+		input.duplication.trim(),
+		"",
+		"## Naming And Boundaries",
+		input.namingAndBoundaries.trim(),
+		"",
+		"## Edge Cases",
+		input.edgeCases.trim(),
+		"",
+		"## Refactor Decision",
+		`Decision: ${input.decision}`,
+		"",
+		"## Changes Applied",
+		input.changesApplied?.trim() || "- (not applicable)",
+		"",
+		"## Why Kept",
+		input.whyKept?.trim() || "- (not applicable)",
+		"",
+	].join("\n");
 }
 
 function parseLevelTwoSections(text: string): Map<string, string> {
