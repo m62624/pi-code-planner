@@ -158,10 +158,22 @@ Example:
 
 ```json
 {
-  "worktree": { "mode": "custom", "root": "/mnt/fast/pi-worktrees" },
-  "compact": { "stage": true, "task": false }
+	"worktree": { "mode": "custom", "root": "/mnt/fast/pi-worktrees" },
+	"compact": { "stage": true, "task": false },
+	"idle": { "enabled": true, "timeoutMinutes": 10 },
+	"metadata": { "descriptionLanguage": "English" }
 }
 ```
+
+`metadata.descriptionLanguage` controls only the short planner-list description generated through `planner_goal_submit`. Plan ids, branches, and worktree paths stay ASCII/Git-safe.
+
+### Idle Timer
+
+The idle watchdog is a planner wake-up timer, not a recovery engine. It sends a queued `[SYSTEM_INSTRUCTIONS]` follow-up when an active plan has had no planner/tool calls for `idle.timeoutMinutes`.
+
+It runs only while a planner step is `running`, the plan was activated through `/planner-create` or `/planner-resume`, and the plan is not waiting for user input, recovery, or compact.
+
+It is disabled on `done`, `recovery`, `compact_*`, user approval/acceptance waits, and discovery questions that are already waiting for answers. In `execution`, it runs only on TDD/check/implementation/refactor steps. If the model is truly stuck, it should call `planner_report_stuck`, which saves diff artifacts and starts a controlled compact.
 
 Instruction append files can be placed under:
 

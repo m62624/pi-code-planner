@@ -177,7 +177,7 @@ const GOAL_SUBMIT_TOOL_PARAMETERS = {
 		description: {
 			type: "string",
 			description:
-				"Very short planner-list description generated from the normalized goal. One concise sentence, at most 90 characters.",
+				"Very short planner-list description generated from the normalized goal. Use the metadata.descriptionLanguage reported by planner_status. One concise sentence, at most 90 characters.",
 		},
 	},
 	required: ["content", "title", "description"],
@@ -475,9 +475,17 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				const details = result.details as {
 					state?: { worktreePath?: string | null };
 					plan?: { planId?: string };
+					settings?: {
+						effective?: {
+							metadata?: { descriptionLanguage?: string };
+						};
+					};
 				};
 				const worktreePath = details.state?.worktreePath;
 				const createdPlanId = details.plan?.planId ?? planId;
+				const descriptionLanguage =
+					details.settings?.effective?.metadata?.descriptionLanguage ??
+					"English";
 				if (!worktreePath) {
 					ctx.ui.notify(
 						"Planner plan was created without worktreePath.",
@@ -514,6 +522,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 								buildPlannerHandoffPrompt({
 									planId: createdPlanId,
 									worktreePath,
+									descriptionLanguage,
 								}),
 								FOLLOW_UP_MESSAGE_OPTIONS,
 							);

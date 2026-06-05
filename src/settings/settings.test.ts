@@ -22,11 +22,14 @@ describe("planner settings", () => {
 			enabled: true,
 			timeoutMinutes: 10,
 		});
+		expect(settings.effective.metadata).toEqual({
+			descriptionLanguage: "English",
+		});
 		expect(settings.worktreeSource).toBe("global");
 		expect(
 			fs.snapshot()["/agent/extensions/pi-code-planner/settings.json"],
 		).toBe(
-			'{\n  "worktree": {\n    "mode": "project-local"\n  },\n  "compact": {\n    "stage": true,\n    "task": false\n  },\n  "idle": {\n    "enabled": true,\n    "timeoutMinutes": 10\n  }\n}\n',
+			'{\n  "worktree": {\n    "mode": "project-local"\n  },\n  "compact": {\n    "stage": true,\n    "task": false\n  },\n  "idle": {\n    "enabled": true,\n    "timeoutMinutes": 10\n  },\n  "metadata": {\n    "descriptionLanguage": "English"\n  }\n}\n',
 		);
 	});
 
@@ -149,5 +152,44 @@ describe("planner settings", () => {
 		await expect(
 			loadEffectivePlannerSettings({ fs, projectPaths }),
 		).rejects.toThrow("timeoutMinutes");
+	});
+
+	it("lets project metadata settings override description language", async () => {
+		const fs = new MockPlannerFs();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		await fs.writeTextAtomic(
+			"/agent/extensions/pi-code-planner/settings.json",
+			'{ "metadata": { "descriptionLanguage": "English" } }\n',
+		);
+		await fs.writeTextAtomic(
+			"/repo/app/.pi/pi-code-planner/settings.json",
+			'{ "metadata": { "descriptionLanguage": "Russian" } }\n',
+		);
+
+		const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
+
+		expect(settings.effective.metadata).toEqual({
+			descriptionLanguage: "Russian",
+		});
+		expect(settings.metadataSource).toBe("project");
+	});
+
+	it("rejects empty metadata description language", async () => {
+		const fs = new MockPlannerFs();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		await fs.writeTextAtomic(
+			"/agent/extensions/pi-code-planner/settings.json",
+			'{ "metadata": { "descriptionLanguage": " " } }\n',
+		);
+
+		await expect(
+			loadEffectivePlannerSettings({ fs, projectPaths }),
+		).rejects.toThrow("descriptionLanguage");
 	});
 });

@@ -102,13 +102,24 @@ describe("planner plan naming", () => {
 		expect(result).not.toContain(".");
 	});
 
-	it("drops the project name prefix and adjacent duplicate words from generated ids", () => {
+	it("uses the project name plus meaningful request words for generated ids", () => {
 		const result = resolvePlannerPlanId({
 			request: "pi-planner planner compact gate",
 			project: projectWithPlans([], "pi-planner"),
 		});
-		expect(result).toMatch(/^planner-compact-gate-[a-f0-9]{8}$/);
+		expect(result).toMatch(/^pi-planner-compact-gate-[a-f0-9]{8}$/);
 		expect(result).not.toContain("pi-planner-planner");
+	});
+
+	it("drops generic planner-control words before creating worktree-safe ids", () => {
+		const result = resolvePlannerPlanId({
+			request:
+				"Я хочу большой planner-controlled TDD workflow for crate approx_int approximation quality report",
+			project: projectWithPlans([], "approx_int"),
+		});
+		expect(result).toMatch(/^approx-int-quality-[a-f0-9]{8}$/);
+		expect(result).not.toContain("planner-controlled");
+		expect(result).not.toContain("approx-int-approx");
 	});
 
 	it("keeps generated ids and titles bounded for multiline requests", () => {

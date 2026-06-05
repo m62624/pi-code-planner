@@ -5,6 +5,7 @@ import type {
 	InstructionContent,
 	InstructionKey,
 } from "../instructions/schema";
+import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerFs } from "../storage/fs";
 import type { PlannerStage, PlannerStep } from "../storage/schema";
 import {
@@ -145,7 +146,8 @@ export const PLANNER_STEP_RULES = {
 			"Read request.md.",
 			"Write goal.md in your own words with outcome, assumptions, non-goals, and constraints.",
 			"Propose a short user-facing title. Prefer concise English unless the user requested another language.",
-			"Call planner_goal_submit with the full goal markdown and proposed title.",
+			"Propose a very short planner-list description in the metadata.descriptionLanguage reported by planner_status.",
+			"Call planner_goal_submit with the full goal markdown, proposed title, and proposed description.",
 		],
 		allowedNow: ["Use planner_goal_submit only after the draft is complete."],
 		forbiddenNow: [
@@ -703,6 +705,10 @@ export async function buildPlannerStatusText(
 		behavior,
 		tools: preflight.decision.allowedTools,
 	});
+	const settings = await loadEffectivePlannerSettings({
+		fs: input.fs,
+		projectPaths: preflight.context.projectPaths,
+	});
 	const instructionBundle = await readCurrentStageInstruction(
 		input.fs,
 		preflight,
@@ -727,6 +733,11 @@ export async function buildPlannerStatusText(
 		`- requiresUserDecision: ${String(state.requiresUserDecision)}`,
 		`- broken: ${String(state.broken)}`,
 		`- blockedReason: ${state.blockedReason ?? "(none)"}`,
+		"",
+		"## Effective Settings",
+		`- metadata.descriptionLanguage: ${settings.effective.metadata.descriptionLanguage}`,
+		`- idle.enabled: ${String(settings.effective.idle.enabled)}`,
+		`- idle.timeoutMinutes: ${settings.effective.idle.timeoutMinutes}`,
 		"",
 		"## Git And Worktree",
 		`- worktree: ${state.worktreePath ?? "(none)"}`,

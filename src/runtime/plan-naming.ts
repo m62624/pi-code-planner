@@ -12,6 +12,45 @@ const MAX_PLAN_DESCRIPTION_LENGTH = 90;
 const PLAN_PREFIX_CHARS = 24;
 const REQUESTED_PLAN_ID_CHARS = 40;
 const PLAN_UUID_SUFFIX_LENGTH = 8;
+const MAX_IDEA_TOKENS = 4;
+
+const GENERIC_PROJECT_NAMES = new Set(["app", "project", "repo", "repository"]);
+const GENERIC_PLAN_TOKENS = new Set([
+	"planner",
+	"controlled",
+	"workflow",
+	"work",
+	"task",
+	"tasks",
+	"project",
+	"repo",
+	"repository",
+	"crate",
+	"library",
+	"package",
+	"code",
+	"local",
+	"model",
+	"llm",
+	"agent",
+	"tdd",
+	"big",
+	"long",
+	"many",
+	"mega",
+	"large",
+	"small",
+	"new",
+	"todo",
+	"for",
+	"the",
+	"and",
+	"with",
+	"from",
+	"into",
+	"this",
+	"that",
+]);
 
 export function parsePlannerCreateCommandArgs(
 	args: string,
@@ -64,14 +103,16 @@ function generatePlanPrefix(
 	request: string,
 	projectDisplayName: string,
 ): string {
-	const requestId = sanitizePathIdPart(request);
-	const projectId = sanitizePathIdPart(projectDisplayName);
-	const withoutProjectPrefix =
-		projectId && requestId.startsWith(`${projectId}-`)
-			? requestId.slice(projectId.length + 1)
-			: requestId;
-	const deduped = dedupeAdjacentIdTokens(withoutProjectPrefix);
-	return compactIdPart(deduped || requestId || "plan", PLAN_PREFIX_CHARS);
+	const requestTokens = tokenizeId(request);
+	const projectTokens = meaningfulProjectTokens(projectDisplayName);
+	const ideaTokens = meaningfulIdeaTokens(requestTokens, projectTokens);
+	const joined = dedupeAdjacentIdTokens(
+		[...projectTokens, ...ideaTokens].join("-"),
+	);
+	const fallback = dedupeAdjacentIdTokens(
+		requestTokens.filter((token) => !GENERIC_PLAN_TOKENS.has(token)).join("-"),
+	);
+	return compactIdPart(joined || fallback || "plan", PLAN_PREFIX_CHARS);
 }
 
 function dedupeAdjacentIdTokens(value: string): string {
@@ -81,6 +122,49 @@ function dedupeAdjacentIdTokens(value: string): string {
 		if (deduped.at(-1) !== token) deduped.push(token);
 	}
 	return deduped.join("-");
+}
+
+function tokenizeId(value: string): string[] {
+	return sanitizePathIdPart(value)
+		.replace(/_/g, "-")
+		.split("-")
+		.filter(Boolean);
+}
+
+function meaningfulProjectTokens(projectDisplayName: string): string[] {
+	const tokens = tokenizeId(projectDisplayName);
+	if (
+		tokens.length === 0 ||
+		tokens.every((token) => GENERIC_PROJECT_NAMES.has(token))
+	) {
+		return [];
+	}
+	return tokens.filter((token) => token.length > 1).slice(0, 3);
+}
+
+function meaningfulIdeaTokens(
+	requestTokens: readonly string[],
+	projectTokens: readonly string[],
+): string[] {
+	const projectTokenSet = new Set(projectTokens);
+	const idea: string[] = [];
+	for (const token of requestTokens) {
+		if (token.length <= 2 && !/^\d+$/.test(token)) continue;
+		if (GENERIC_PLAN_TOKENS.has(token)) continue;
+		if (projectTokenSet.has(token)) continue;
+		if (
+			[...projectTokenSet].some(
+				(projectToken) =>
+					projectToken.length >= 4 && token.startsWith(projectToken),
+			)
+		) {
+			continue;
+		}
+		if (idea.at(-1) === token) continue;
+		idea.push(token);
+		if (idea.length >= MAX_IDEA_TOKENS) break;
+	}
+	return idea;
 }
 
 function createUniqueIdWithUuid(prefix: string, existing: Set<string>): string {

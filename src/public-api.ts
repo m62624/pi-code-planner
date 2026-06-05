@@ -383,6 +383,7 @@ export type { PlannerSettingsPaths } from "./settings/paths";
 export { createPlannerSettingsPaths } from "./settings/paths";
 export type {
 	PlannerIdleSettings,
+	PlannerMetadataSettings,
 	PlannerSettings,
 	PlannerSettingsFile,
 	WorktreeSettings,

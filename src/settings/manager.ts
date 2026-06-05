@@ -17,6 +17,7 @@ export interface EffectivePlannerSettings {
 	worktreeSource: "project" | "global" | "default";
 	compactSource: "project" | "global" | "default";
 	idleSource: "project" | "global" | "default";
+	metadataSource: "project" | "global" | "default";
 }
 
 export async function loadEffectivePlannerSettings(input: {
@@ -65,15 +66,26 @@ export async function loadEffectivePlannerSettings(input: {
 		...(global.idle ?? {}),
 		...(project?.idle ?? {}),
 	};
+	const metadataSource = project?.metadata
+		? "project"
+		: global.metadata
+			? "global"
+			: "default";
+	const metadata = {
+		...DEFAULT_PLANNER_SETTINGS.metadata,
+		...(global.metadata ?? {}),
+		...(project?.metadata ?? {}),
+	};
 
 	return {
 		paths,
 		global,
 		project,
-		effective: { worktree, compact, idle },
+		effective: { worktree, compact, idle, metadata },
 		worktreeSource,
 		compactSource,
 		idleSource,
+		metadataSource,
 	};
 }
 
@@ -105,6 +117,9 @@ function normalizeSettingsFile(
 		...(record.idle === undefined
 			? {}
 			: { idle: normalizeIdleSettings(record.idle, path) }),
+		...(record.metadata === undefined
+			? {}
+			: { metadata: normalizeMetadataSettings(record.metadata, path) }),
 	};
 }
 
@@ -163,6 +178,30 @@ function positiveNumber(value: unknown, key: string, path: string): number {
 		);
 	}
 	return value;
+}
+
+function normalizeMetadataSettings(
+	value: unknown,
+	path: string,
+): PlannerSettingsFile["metadata"] {
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		throw new TypeError(`Planner metadata settings must be an object: ${path}`);
+	}
+	const record = value as Record<string, unknown>;
+	if (
+		record.descriptionLanguage !== undefined &&
+		(typeof record.descriptionLanguage !== "string" ||
+			record.descriptionLanguage.trim().length === 0)
+	) {
+		throw new TypeError(
+			`Planner metadata setting descriptionLanguage must be a non-empty string: ${path}`,
+		);
+	}
+	return {
+		...(typeof record.descriptionLanguage === "string"
+			? { descriptionLanguage: record.descriptionLanguage.trim() }
+			: {}),
+	};
 }
 
 function normalizeWorktreeSettings(
