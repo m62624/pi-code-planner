@@ -87,7 +87,7 @@ describe("planner compact runtime", () => {
 	it("queues post-compact instructions behind pending user messages", () => {
 		const calls: Array<{
 			message: string;
-			options?: { deliverAs: "followUp" };
+			options?: { streamingBehavior: "followUp" };
 		}> = [];
 
 		expect(
@@ -103,7 +103,7 @@ describe("planner compact runtime", () => {
 		expect(calls).toEqual([
 			{
 				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
-				options: { deliverAs: "followUp" },
+				options: { streamingBehavior: "followUp" },
 			},
 		]);
 	});
@@ -111,7 +111,7 @@ describe("planner compact runtime", () => {
 	it("starts post-compact instructions immediately only when Pi is idle and the queue is empty", () => {
 		const calls: Array<{
 			message: string;
-			options?: { deliverAs: "followUp" };
+			options?: { streamingBehavior: "followUp" };
 		}> = [];
 
 		expect(
@@ -132,7 +132,7 @@ describe("planner compact runtime", () => {
 	it("queues post-compact instructions while Pi is still processing", () => {
 		const calls: Array<{
 			message: string;
-			options?: { deliverAs: "followUp" };
+			options?: { streamingBehavior: "followUp" };
 		}> = [];
 
 		expect(
@@ -148,7 +148,36 @@ describe("planner compact runtime", () => {
 		expect(calls).toEqual([
 			{
 				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
-				options: { deliverAs: "followUp" },
+				options: { streamingBehavior: "followUp" },
+			},
+		]);
+	});
+
+	it("falls back to follow-up when idle state races with active processing", () => {
+		const calls: Array<{
+			message: string;
+			options?: { streamingBehavior: "followUp" };
+		}> = [];
+
+		expect(
+			enqueuePlannerPostCompactMessage({
+				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
+				isIdle: true,
+				hasPendingMessages: false,
+				sendUserMessage(message, options) {
+					if (!options) {
+						throw new Error(
+							'Agent is already processing. Specify streamingBehavior ("steer" or "followUp") to queue the message.',
+						);
+					}
+					calls.push({ message, options });
+				},
+			}),
+		).toBe("followUp");
+		expect(calls).toEqual([
+			{
+				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
+				options: { streamingBehavior: "followUp" },
 			},
 		]);
 	});

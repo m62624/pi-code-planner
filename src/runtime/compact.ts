@@ -164,15 +164,26 @@ export function enqueuePlannerPostCompactMessage(input: {
 	hasPendingMessages: boolean;
 	sendUserMessage: (
 		message: string,
-		options?: { deliverAs: "followUp" },
+		options?: { streamingBehavior: "followUp" },
 	) => void;
 }): PlannerPostCompactDelivery {
 	if (input.isIdle && !input.hasPendingMessages) {
-		input.sendUserMessage(input.message);
-		return "immediate";
+		try {
+			input.sendUserMessage(input.message);
+			return "immediate";
+		} catch (error) {
+			if (!isAgentAlreadyProcessingError(error)) throw error;
+		}
 	}
-	input.sendUserMessage(input.message, { deliverAs: "followUp" });
+	input.sendUserMessage(input.message, { streamingBehavior: "followUp" });
 	return "followUp";
+}
+
+function isAgentAlreadyProcessingError(error: unknown): boolean {
+	return (
+		error instanceof Error &&
+		error.message.toLowerCase().includes("agent is already processing")
+	);
 }
 
 export function formatPlannerCompactFailure(error: Error): string {

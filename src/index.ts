@@ -142,6 +142,10 @@ const CREATE_PLAN_TOOL_PARAMETERS = {
 	additionalProperties: false,
 } as const;
 
+const FOLLOW_UP_MESSAGE_OPTIONS = {
+	streamingBehavior: "followUp",
+} as unknown as { deliverAs: "followUp" };
+
 const GOAL_SUBMIT_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {
@@ -457,6 +461,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 									planId: createdPlanId,
 									worktreePath,
 								}),
+								FOLLOW_UP_MESSAGE_OPTIONS,
 							);
 						} catch (error) {
 							try {
@@ -550,6 +555,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 								planId: activePlanId,
 								worktreePath,
 							}),
+							FOLLOW_UP_MESSAGE_OPTIONS,
 						);
 					},
 				});
@@ -672,6 +678,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 							planId,
 							worktreePath,
 						}),
+						FOLLOW_UP_MESSAGE_OPTIONS,
 					);
 				},
 			});
@@ -845,6 +852,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 									? null
 									: finalized.worktreeSessionDir,
 							}),
+							FOLLOW_UP_MESSAGE_OPTIONS,
 						);
 					},
 				});
@@ -1121,7 +1129,7 @@ function registerPlannerCompactEvents(
 			isIdle: ctx.isIdle(),
 			hasPendingMessages: ctx.hasPendingMessages(),
 			sendUserMessage: (content, options) =>
-				pi.sendUserMessage(content, options),
+				pi.sendUserMessage(content, options as never),
 		});
 	});
 }
