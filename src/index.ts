@@ -1355,13 +1355,17 @@ async function runPlannerIdleWatchdogTick(
 }
 
 async function recordPlannerToolActivityForCwd(cwd: string): Promise<void> {
-	const fs = createNodeFs();
-	const projectPaths = await createRuntimeProjectPaths(cwd);
-	await recordPlannerToolActivityForProject({
-		fs,
-		projectPaths,
-		now: Date.now(),
-	});
+	try {
+		const fs = createNodeFs();
+		const projectPaths = await createRuntimeProjectPaths(cwd);
+		await recordPlannerToolActivityForProject({
+			fs,
+			projectPaths,
+			now: Date.now(),
+		});
+	} catch {
+		// Activity timestamps are advisory; planner state remains authoritative.
+	}
 }
 
 async function recordPlannerToolActivityForProject(input: {
@@ -1369,16 +1373,20 @@ async function recordPlannerToolActivityForProject(input: {
 	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
 	now: number;
 }): Promise<void> {
-	const context = await readActivePlanContext({
-		fs: input.fs,
-		projectPaths: input.projectPaths,
-	});
-	if (context.status !== "ready") {
-		return;
+	try {
+		const context = await readActivePlanContext({
+			fs: input.fs,
+			projectPaths: input.projectPaths,
+		});
+		if (context.status !== "ready") {
+			return;
+		}
+		await updatePlanState(input.fs, context.planPaths, (state) =>
+			markPlannerToolActivity(state, input.now),
+		);
+	} catch {
+		// Activity timestamps must never block the actual planner tool result.
 	}
-	await updatePlanState(input.fs, context.planPaths, (state) =>
-		markPlannerToolActivity(state, input.now),
-	);
 }
 
 async function maybeStartPlannerControlledCompact(input: {

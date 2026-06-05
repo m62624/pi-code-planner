@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
 	mkdir,
 	readdir,
@@ -62,7 +63,7 @@ export function createNodeFs(): PlannerFs {
 		},
 		async writeTextAtomic(path, content) {
 			await mkdir(dirname(path), { recursive: true });
-			const tempPath = `${path}.tmp-${process.pid}-${Date.now()}`;
+			const tempPath = `${path}.tmp-${process.pid}-${Date.now()}-${randomUUID()}`;
 			await writeFile(tempPath, content, "utf8");
 			await rename(tempPath, path);
 		},

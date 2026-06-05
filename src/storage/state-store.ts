@@ -8,6 +8,8 @@ import type {
 	StepStatus,
 } from "./schema";
 
+const stateWriteLocks = new Map<string, Promise<void>>();
+
 export async function initializePlanState(
 	fs: PlannerFs,
 	paths: PlanStoragePaths,
@@ -39,6 +41,16 @@ export async function savePlanState(
 	paths: PlanStoragePaths,
 	state: PlanStateRecord,
 ): Promise<void> {
+	await withStateWriteLock(paths.stateJson, async () => {
+		await writePlanStateUnlocked(fs, paths, state);
+	});
+}
+
+async function writePlanStateUnlocked(
+	fs: PlannerFs,
+	paths: PlanStoragePaths,
+	state: PlanStateRecord,
+): Promise<void> {
 	await fs.mkdirp(paths.planDir);
 	await writeJson(fs, paths.stateJson, state);
 }
@@ -48,10 +60,14 @@ export async function updatePlanState(
 	paths: PlanStoragePaths,
 	update: (state: PlanStateRecord) => PlanStateRecord,
 ): Promise<PlanStateRecord> {
-	const current = await readPlanState(fs, paths);
-	const next = update(current);
-	await savePlanState(fs, paths, next);
-	return next;
+	return await withStateWriteLock(paths.stateJson, async () => {
+		const current = normalizePlanState(
+			await readJson<PlanStateRecord>(fs, paths.stateJson),
+		);
+		const next = update(current);
+		await writePlanStateUnlocked(fs, paths, next);
+		return next;
+	});
 }
 
 export async function setPlanStep(
@@ -120,4 +136,26 @@ function normalizePlanState(state: PlanStateRecord): PlanStateRecord {
 		lastStuckReportPath: state.lastStuckReportPath ?? null,
 		lastStuckAttemptId: state.lastStuckAttemptId ?? null,
 	};
+}
+
+async function withStateWriteLock<T>(
+	stateJson: string,
+	operation: () => Promise<T>,
+): Promise<T> {
+	const previous = stateWriteLocks.get(stateJson) ?? Promise.resolve();
+	let release!: () => void;
+	const current = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	const queued = previous.then(() => current);
+	stateWriteLocks.set(stateJson, queued);
+	await previous;
+	try {
+		return await operation();
+	} finally {
+		release();
+		if (stateWriteLocks.get(stateJson) === queued) {
+			stateWriteLocks.delete(stateJson);
+		}
+	}
 }

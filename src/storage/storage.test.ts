@@ -410,4 +410,30 @@ describe("plan state store", () => {
 		expect(updated.worktreePath).toBe("/repo/app/.pi/worktrees/plan-a");
 		expect(updated.currentBranch).toBe("plan/plan-a");
 	});
+
+	it("serializes concurrent state updates for the same plan file", async () => {
+		const fs = new MockPlannerFs();
+		const project = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(project, "plan-a");
+		await initializePlanState(
+			fs,
+			planPaths,
+			createInitialPlanState({ baseBranch: "main", planBranch: "plan/plan-a" }),
+		);
+
+		await Promise.all(
+			Array.from({ length: 20 }, (_, index) =>
+				updatePlanState(fs, planPaths, (state) => ({
+					...state,
+					lastPlannerToolCallAt: (state.lastPlannerToolCallAt ?? 0) + index + 1,
+				})),
+			),
+		);
+
+		const state = await readPlanState(fs, planPaths);
+		expect(state.lastPlannerToolCallAt).toBe(210);
+	});
 });
