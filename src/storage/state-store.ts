@@ -114,5 +114,10 @@ function normalizePlanState(state: PlanStateRecord): PlanStateRecord {
 			stage: true,
 			task: false,
 		},
+		lastPlannerToolCallAt: state.lastPlannerToolCallAt ?? null,
+		lastIdleWakeAt: state.lastIdleWakeAt ?? null,
+		idleWakeInFlight: state.idleWakeInFlight ?? false,
+		lastStuckReportPath: state.lastStuckReportPath ?? null,
+		lastStuckAttemptId: state.lastStuckAttemptId ?? null,
 	};
 }

@@ -16,6 +16,7 @@ export interface EffectivePlannerSettings {
 	effective: PlannerSettings;
 	worktreeSource: "project" | "global" | "default";
 	compactSource: "project" | "global" | "default";
+	idleSource: "project" | "global" | "default";
 }
 
 export async function loadEffectivePlannerSettings(input: {
@@ -54,14 +55,25 @@ export async function loadEffectivePlannerSettings(input: {
 		...(global.compact ?? {}),
 		...(project?.compact ?? {}),
 	};
+	const idleSource = project?.idle
+		? "project"
+		: global.idle
+			? "global"
+			: "default";
+	const idle = {
+		...DEFAULT_PLANNER_SETTINGS.idle,
+		...(global.idle ?? {}),
+		...(project?.idle ?? {}),
+	};
 
 	return {
 		paths,
 		global,
 		project,
-		effective: { worktree, compact },
+		effective: { worktree, compact, idle },
 		worktreeSource,
 		compactSource,
+		idleSource,
 	};
 }
 
@@ -90,6 +102,9 @@ function normalizeSettingsFile(
 		...(record.compact === undefined
 			? {}
 			: { compact: normalizeCompactSettings(record.compact, path) }),
+		...(record.idle === undefined
+			? {}
+			: { idle: normalizeIdleSettings(record.idle, path) }),
 	};
 }
 
@@ -112,6 +127,42 @@ function normalizeCompactSettings(
 		...(typeof record.stage === "boolean" ? { stage: record.stage } : {}),
 		...(typeof record.task === "boolean" ? { task: record.task } : {}),
 	};
+}
+
+function normalizeIdleSettings(
+	value: unknown,
+	path: string,
+): PlannerSettingsFile["idle"] {
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		throw new TypeError(`Planner idle settings must be an object: ${path}`);
+	}
+	const record = value as Record<string, unknown>;
+	if (record.enabled !== undefined && typeof record.enabled !== "boolean") {
+		throw new TypeError(
+			`Planner idle setting enabled must be boolean: ${path}`,
+		);
+	}
+	return {
+		...(typeof record.enabled === "boolean" ? { enabled: record.enabled } : {}),
+		...(record.timeoutMinutes === undefined
+			? {}
+			: {
+					timeoutMinutes: positiveNumber(
+						record.timeoutMinutes,
+						"timeoutMinutes",
+						path,
+					),
+				}),
+	};
+}
+
+function positiveNumber(value: unknown, key: string, path: string): number {
+	if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+		throw new TypeError(
+			`Planner idle setting ${key} must be a positive number: ${path}`,
+		);
+	}
+	return value;
 }
 
 function normalizeWorktreeSettings(

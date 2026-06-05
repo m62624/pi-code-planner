@@ -52,6 +52,12 @@ import {
 	PLANNER_GOAL_TOOL_NAMES,
 	type PlannerGoalToolName,
 } from "./runtime/goal-tools";
+import {
+	evaluatePlannerIdleWake,
+	initializePlannerToolActivity,
+	markPlannerIdleWakeQueued,
+	markPlannerToolActivity,
+} from "./runtime/idle-watchdog";
 import { runPlannerOrchestrator } from "./runtime/orchestrator";
 import {
 	parsePlannerCreateCommandArgs,
@@ -73,6 +79,12 @@ import {
 	PLANNER_RECOVERY_TOOL_NAMES,
 	type PlannerRecoveryToolName,
 } from "./runtime/recovery-tools";
+import {
+	buildPlannerStuckCompactInstructions,
+	executePlannerStuckTool,
+	PLANNER_STUCK_TOOL_NAMES,
+	type PlannerStuckToolName,
+} from "./runtime/stuck-tools";
 import {
 	executePlannerTaskTool,
 	PLANNER_TASK_TOOL_NAMES,
@@ -100,6 +112,7 @@ import {
 	removePlannerHandoffBootstrapFile,
 	selectPlannerResumeSessionFile,
 } from "./session/handoff";
+import { loadEffectivePlannerSettings } from "./settings/manager";
 import { createNodeFs } from "./storage/fs";
 import { createPlanStoragePaths } from "./storage/paths";
 import { resolveProjectStoragePaths } from "./storage/project-resolver";
@@ -108,7 +121,7 @@ import {
 	readProjectRecordIfExists,
 } from "./storage/project-store";
 import { PLANNER_STAGE_VALUES, PLANNER_STEP_VALUES } from "./storage/schema";
-import { readPlanStateIfExists } from "./storage/state-store";
+import { readPlanStateIfExists, updatePlanState } from "./storage/state-store";
 import {
 	bindWorktreeOriginalSession,
 	readWorktreeProjectIndexIfExists,
@@ -145,6 +158,8 @@ const CREATE_PLAN_TOOL_PARAMETERS = {
 const FOLLOW_UP_MESSAGE_OPTIONS = {
 	streamingBehavior: "followUp",
 } as unknown as { deliverAs: "followUp" };
+
+const IDLE_WATCHDOG_POLL_MS = 30_000;
 
 const GOAL_SUBMIT_TOOL_PARAMETERS = {
 	type: "object",
@@ -232,6 +247,33 @@ const TASK_UPSERT_TOOL_PARAMETERS = {
 		acceptanceCriteria: { type: "array", items: { type: "string" } },
 	},
 	required: ["taskId", "title", "objective", "scope", "acceptanceCriteria"],
+	additionalProperties: false,
+} as const;
+
+const STUCK_REPORT_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		reason: {
+			type: "string",
+			description: "Concise reason the current execution attempt is stuck.",
+		},
+		observedError: {
+			type: "string",
+			description:
+				"Exact command error, test failure, panic, or blocker if known.",
+		},
+		lastAttempt: {
+			type: "string",
+			description:
+				"What you tried in this attempt. Include commands and files at a high level.",
+		},
+		nextDebugPlan: {
+			type: "string",
+			description:
+				"Different focused debug plan for the next attempt after compact.",
+		},
+	},
+	required: ["reason", "lastAttempt", "nextDebugPlan"],
 	additionalProperties: false,
 } as const;
 
@@ -326,10 +368,22 @@ const GIT_OPTIONAL_MESSAGE_TOOL_PARAMETERS = {
 	additionalProperties: false,
 } as const;
 
+interface PlannerIdleRuntimeState {
+	latestCwd: string | null;
+	checking: boolean;
+	timer: ReturnType<typeof setInterval> | null;
+}
+
 export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 	const compactRuntime = createPlannerCompactRuntimeState();
+	const idleRuntime: PlannerIdleRuntimeState = {
+		latestCwd: null,
+		checking: false,
+		timer: null,
+	};
 	registerPlannerCommands(pi);
 	registerPlannerTools(pi, compactRuntime);
+	registerPlannerIdleWatchdog(pi, idleRuntime);
 	registerPlannerBuiltinToolGuard(pi);
 	registerPlannerCompactEvents(pi, compactRuntime);
 	registerInstructionDefaultsSync(pi);
@@ -883,10 +937,16 @@ function registerPlannerTools(
 		parameters: EMPTY_TOOL_PARAMETERS as never,
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
 			const fs = createNodeFs();
+			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+			await recordPlannerToolActivityForProject({
+				fs,
+				projectPaths,
+				now: Date.now(),
+			});
 			const orchestration = await runPlannerOrchestrator({
 				fs,
 				git: new NodeGitRunner(),
-				projectPaths: await createRuntimeProjectPaths(ctx.cwd),
+				projectPaths,
 			});
 
 			return {
@@ -905,15 +965,22 @@ function registerPlannerTools(
 				"Use planner_create_plan before project reads when the user asks to start a planner-controlled task.",
 			parameters: CREATE_PLAN_TOOL_PARAMETERS as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const fs = createNodeFs();
+				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
 				const result = await executePlannerPlanTool({
-					fs: createNodeFs(),
+					fs,
 					git: new NodeGitRunner(),
-					projectPaths: await createRuntimeProjectPaths(ctx.cwd),
+					projectPaths,
 					toolName,
 					params,
 				});
 
 				if (result.status === "applied") {
+					await recordPlannerToolActivityForProject({
+						fs,
+						projectPaths,
+						now: Date.now(),
+					});
 					activatePlannerToolVisibility(pi);
 				}
 
@@ -934,10 +1001,17 @@ function registerPlannerTools(
 				"Use planner goal tools during intake only. Draft goal.md before source reads and enter discovery only after explicit user approval.",
 			parameters: goalToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const fs = createNodeFs();
+				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				await recordPlannerToolActivityForProject({
+					fs,
+					projectPaths,
+					now: Date.now(),
+				});
 				const result = await executePlannerGoalTool({
-					fs: createNodeFs(),
+					fs,
 					git: new NodeGitRunner(),
-					projectPaths: await createRuntimeProjectPaths(ctx.cwd),
+					projectPaths,
 					toolName,
 					params,
 				});
@@ -958,10 +1032,17 @@ function registerPlannerTools(
 				"Use planner question tools during discovery/write_questions. Save evidence-based questions, show open questions to the user verbatim, wait for answers, then resolve them before continuing.",
 			parameters: questionToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const fs = createNodeFs();
+				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				await recordPlannerToolActivityForProject({
+					fs,
+					projectPaths,
+					now: Date.now(),
+				});
 				const result = await executePlannerQuestionTool({
-					fs: createNodeFs(),
+					fs,
 					git: new NodeGitRunner(),
-					projectPaths: await createRuntimeProjectPaths(ctx.cwd),
+					projectPaths,
 					toolName,
 					params,
 				});
@@ -982,13 +1063,59 @@ function registerPlannerTools(
 				"Use planner_task_upsert during planning/write_task_files. Pass semantic task fields only; the wrapper writes task.json, task.md, and empty TDD lifecycle artifacts.",
 			parameters: TASK_UPSERT_TOOL_PARAMETERS as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const fs = createNodeFs();
+				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				await recordPlannerToolActivityForProject({
+					fs,
+					projectPaths,
+					now: Date.now(),
+				});
 				const result = await executePlannerTaskTool({
-					fs: createNodeFs(),
+					fs,
 					git: new NodeGitRunner(),
-					projectPaths: await createRuntimeProjectPaths(ctx.cwd),
+					projectPaths,
 					toolName,
 					params,
 				});
+				return {
+					content: [{ type: "text", text: result.text }],
+					details: result,
+				};
+			},
+		});
+	}
+
+	for (const toolName of PLANNER_STUCK_TOOL_NAMES) {
+		pi.registerTool({
+			name: toolName,
+			label: stuckToolLabel(toolName),
+			description: stuckToolDescription(toolName),
+			promptSnippet:
+				"Use planner_report_stuck only when an execution attempt is actually stuck. Save evidence, diff, and next debug plan before planner-controlled compact.",
+			parameters: STUCK_REPORT_TOOL_PARAMETERS as never,
+			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const fs = createNodeFs();
+				const git = new NodeGitRunner();
+				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				await recordPlannerToolActivityForProject({
+					fs,
+					projectPaths,
+					now: Date.now(),
+				});
+				const result = await executePlannerStuckTool({
+					fs,
+					git,
+					projectPaths,
+					toolName,
+					params,
+				});
+				if (result.status === "applied") {
+					await maybeStartPlannerStuckCompact({
+						ctx,
+						fs,
+						projectPaths,
+					});
+				}
 				return {
 					content: [{ type: "text", text: result.text }],
 					details: result,
@@ -1009,6 +1136,11 @@ function registerPlannerTools(
 				const fs = createNodeFs();
 				const git = new NodeGitRunner();
 				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				await recordPlannerToolActivityForProject({
+					fs,
+					projectPaths,
+					now: Date.now(),
+				});
 				const result = await executePlannerWorkflowTool({
 					fs,
 					git,
@@ -1048,10 +1180,17 @@ function registerPlannerTools(
 				"Use planner_recovery_inspect when planner_status reports recovery or user-decision gating. Use planner_recovery_resume only after inspection shows no blocking git or worktree issues. Recovery tools never reset or delete git state.",
 			parameters: recoveryToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const fs = createNodeFs();
+				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				await recordPlannerToolActivityForProject({
+					fs,
+					projectPaths,
+					now: Date.now(),
+				});
 				const result = await executePlannerRecoveryTool({
-					fs: createNodeFs(),
+					fs,
 					git: new NodeGitRunner(),
-					projectPaths: await createRuntimeProjectPaths(ctx.cwd),
+					projectPaths,
 					toolName,
 					params,
 				});
@@ -1073,10 +1212,17 @@ function registerPlannerTools(
 				"Use planner git tools instead of raw git while a planner plan is active. Call planner_status first and only use allowed git wrappers.",
 			parameters: gitToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const fs = createNodeFs();
+				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				await recordPlannerToolActivityForProject({
+					fs,
+					projectPaths,
+					now: Date.now(),
+				});
 				const result = await executePlannerGitTool({
-					fs: createNodeFs(),
+					fs,
 					git: new NodeGitRunner(),
-					projectPaths: await createRuntimeProjectPaths(ctx.cwd),
+					projectPaths,
 					toolName,
 					params,
 				});
@@ -1134,6 +1280,107 @@ function registerPlannerCompactEvents(
 	});
 }
 
+function registerPlannerIdleWatchdog(
+	pi: ExtensionAPI,
+	runtime: PlannerIdleRuntimeState,
+): void {
+	pi.on("session_start", async (_event, ctx) => {
+		runtime.latestCwd = ctx.cwd;
+	});
+	pi.on("tool_call", async (_event, ctx) => {
+		runtime.latestCwd = ctx.cwd;
+	});
+
+	if (runtime.timer) {
+		return;
+	}
+	runtime.timer = setInterval(() => {
+		void runPlannerIdleWatchdogTick(pi, runtime);
+	}, IDLE_WATCHDOG_POLL_MS);
+	runtime.timer.unref?.();
+}
+
+async function runPlannerIdleWatchdogTick(
+	pi: ExtensionAPI,
+	runtime: PlannerIdleRuntimeState,
+): Promise<void> {
+	if (!runtime.latestCwd || runtime.checking) {
+		return;
+	}
+	if (!isPlanActive()) {
+		return;
+	}
+	runtime.checking = true;
+	try {
+		const fs = createNodeFs();
+		const projectPaths = await createRuntimeProjectPaths(runtime.latestCwd);
+		const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
+		const context = await readActivePlanContext({ fs, projectPaths });
+		if (context.status !== "ready") {
+			return;
+		}
+		const now = Date.now();
+		const decision = evaluatePlannerIdleWake({
+			state: context.state,
+			settings: settings.effective.idle,
+			now,
+		});
+		if (decision.action === "initialize") {
+			await updatePlanState(fs, context.planPaths, (state) =>
+				initializePlannerToolActivity(state, decision.timestamp),
+			);
+			return;
+		}
+		if (decision.action !== "wake") {
+			return;
+		}
+		await updatePlanState(fs, context.planPaths, (state) =>
+			markPlannerIdleWakeQueued(state, decision.timestamp),
+		);
+		try {
+			pi.sendUserMessage(decision.message, FOLLOW_UP_MESSAGE_OPTIONS as never);
+		} catch (error) {
+			await updatePlanState(fs, context.planPaths, (state) => ({
+				...state,
+				lastIdleWakeAt: null,
+				idleWakeInFlight: false,
+			}));
+			throw error;
+		}
+	} catch {
+		// Idle wake is best-effort. Explicit planner tools remain the source of truth.
+	} finally {
+		runtime.checking = false;
+	}
+}
+
+async function recordPlannerToolActivityForCwd(cwd: string): Promise<void> {
+	const fs = createNodeFs();
+	const projectPaths = await createRuntimeProjectPaths(cwd);
+	await recordPlannerToolActivityForProject({
+		fs,
+		projectPaths,
+		now: Date.now(),
+	});
+}
+
+async function recordPlannerToolActivityForProject(input: {
+	fs: ReturnType<typeof createNodeFs>;
+	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
+	now: number;
+}): Promise<void> {
+	const context = await readActivePlanContext({
+		fs: input.fs,
+		projectPaths: input.projectPaths,
+	});
+	if (context.status !== "ready") {
+		return;
+	}
+	await updatePlanState(input.fs, context.planPaths, (state) =>
+		markPlannerToolActivity(state, input.now),
+	);
+}
+
 async function maybeStartPlannerControlledCompact(input: {
 	ctx: ExtensionContext;
 	fs: ReturnType<typeof createNodeFs>;
@@ -1182,8 +1429,35 @@ async function maybeStartPlannerControlledCompact(input: {
 	};
 }
 
+async function maybeStartPlannerStuckCompact(input: {
+	ctx: ExtensionContext;
+	fs: ReturnType<typeof createNodeFs>;
+	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
+}): Promise<void> {
+	const instructions = await buildPlannerStuckCompactInstructions({
+		fs: input.fs,
+		projectPaths: input.projectPaths,
+	});
+	if (!instructions) {
+		return;
+	}
+	setTimeout(() => {
+		input.ctx.compact({
+			customInstructions: instructions,
+			onComplete: () => {
+				input.ctx.ui.notify("Planner stuck compact completed.", "info");
+			},
+			onError: (error) => {
+				input.ctx.ui.notify(formatPlannerCompactFailure(error), "error");
+			},
+		});
+	}, 0);
+}
+
 function registerPlannerBuiltinToolGuard(pi: ExtensionAPI): void {
 	pi.on("tool_call", async (event, ctx) => {
+		void recordPlannerToolActivityForCwd(ctx.cwd);
+
 		let tool: PlannerBuiltinToolCall;
 		if (isToolCallEventType("bash", event)) {
 			tool = { toolName: "bash", command: event.input.command };
@@ -1292,6 +1566,20 @@ function taskToolDescription(toolName: PlannerTaskToolName): string {
 	switch (toolName) {
 		case "planner_task_upsert":
 			return "Create or replace one behavioral task from semantic fields. The wrapper writes task.json, task.md, and empty TDD lifecycle artifacts.";
+	}
+}
+
+function stuckToolLabel(toolName: PlannerStuckToolName): string {
+	switch (toolName) {
+		case "planner_report_stuck":
+			return "Planner Report Stuck";
+	}
+}
+
+function stuckToolDescription(toolName: PlannerStuckToolName): string {
+	switch (toolName) {
+		case "planner_report_stuck":
+			return "Record a stuck execution attempt with full git diff artifacts and start a planner compact for a different debug attempt.";
 	}
 }
 

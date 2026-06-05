@@ -18,11 +18,15 @@ describe("planner settings", () => {
 			stage: true,
 			task: false,
 		});
+		expect(settings.effective.idle).toEqual({
+			enabled: true,
+			timeoutMinutes: 10,
+		});
 		expect(settings.worktreeSource).toBe("global");
 		expect(
 			fs.snapshot()["/agent/extensions/pi-code-planner/settings.json"],
 		).toBe(
-			'{\n  "worktree": {\n    "mode": "project-local"\n  },\n  "compact": {\n    "stage": true,\n    "task": false\n  }\n}\n',
+			'{\n  "worktree": {\n    "mode": "project-local"\n  },\n  "compact": {\n    "stage": true,\n    "task": false\n  },\n  "idle": {\n    "enabled": true,\n    "timeoutMinutes": 10\n  }\n}\n',
 		);
 	});
 
@@ -105,5 +109,45 @@ describe("planner settings", () => {
 			task: false,
 		});
 		expect(settings.compactSource).toBe("project");
+	});
+
+	it("lets project idle timeout override the global default", async () => {
+		const fs = new MockPlannerFs();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		await fs.writeTextAtomic(
+			"/agent/extensions/pi-code-planner/settings.json",
+			'{ "idle": { "timeoutMinutes": 20 } }\n',
+		);
+		await fs.writeTextAtomic(
+			"/repo/app/.pi/pi-code-planner/settings.json",
+			'{ "idle": { "enabled": false } }\n',
+		);
+
+		const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
+
+		expect(settings.effective.idle).toEqual({
+			enabled: false,
+			timeoutMinutes: 20,
+		});
+		expect(settings.idleSource).toBe("project");
+	});
+
+	it("rejects non-positive idle timeout settings", async () => {
+		const fs = new MockPlannerFs();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		await fs.writeTextAtomic(
+			"/agent/extensions/pi-code-planner/settings.json",
+			'{ "idle": { "timeoutMinutes": 0 } }\n',
+		);
+
+		await expect(
+			loadEffectivePlannerSettings({ fs, projectPaths }),
+		).rejects.toThrow("timeoutMinutes");
 	});
 });

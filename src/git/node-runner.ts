@@ -53,6 +53,10 @@ export class NodeGitRunner implements GitRunner {
 		return await runGitCommandOutput(buildGitDiffNameOnlyArgs(input));
 	}
 
+	async diffPatch(input: GitRepoInput): Promise<string> {
+		return await runGitCommandOutput(buildGitDiffPatchArgs(input));
+	}
+
 	async resolveGitPath(input: GitPathInput): Promise<string> {
 		const path = await runGitCommandOutput(buildGitPathArgs(input));
 		return isAbsolute(path) ? path : resolve(input.repoRoot, path);
@@ -129,6 +133,10 @@ export function buildGitDiffStatArgs(input: GitRepoInput): string[] {
 
 export function buildGitDiffNameOnlyArgs(input: GitRepoInput): string[] {
 	return ["-C", input.repoRoot, "diff", "--name-only"];
+}
+
+export function buildGitDiffPatchArgs(input: GitRepoInput): string[] {
+	return ["-C", input.repoRoot, "diff", "--patch", "--binary"];
 }
 
 export function buildGitPathArgs(input: GitPathInput): string[] {

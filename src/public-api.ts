@@ -174,6 +174,15 @@ export {
 	executePlannerGoalTool,
 	PLANNER_GOAL_TOOL_NAMES,
 } from "./runtime/goal-tools";
+export type { PlannerIdleWakeDecision } from "./runtime/idle-watchdog";
+export {
+	buildPlannerIdleWakeMessage,
+	evaluatePlannerIdleWake,
+	explainPlannerIdleGate,
+	initializePlannerToolActivity,
+	markPlannerIdleWakeQueued,
+	markPlannerToolActivity,
+} from "./runtime/idle-watchdog";
 export type {
 	PlannerLifecycleAction,
 	PlannerLifecycleDecision,
@@ -325,6 +334,16 @@ export {
 	PLANNER_STATUS_INVARIANTS,
 	PLANNER_STEP_RULES,
 } from "./runtime/status";
+export type {
+	PlannerStuckAttemptArtifacts,
+	PlannerStuckToolExecutionResult,
+	PlannerStuckToolName,
+} from "./runtime/stuck-tools";
+export {
+	buildPlannerStuckCompactInstructions,
+	executePlannerStuckTool,
+	PLANNER_STUCK_TOOL_NAMES,
+} from "./runtime/stuck-tools";
 export type { PlannerTaskToolName } from "./runtime/task-tools";
 export {
 	executePlannerTaskTool,
@@ -363,6 +382,7 @@ export {
 export type { PlannerSettingsPaths } from "./settings/paths";
 export { createPlannerSettingsPaths } from "./settings/paths";
 export type {
+	PlannerIdleSettings,
 	PlannerSettings,
 	PlannerSettingsFile,
 	WorktreeSettings,

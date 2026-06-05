@@ -152,6 +152,8 @@ export function buildPlannerPostCompactMessage(input: {
 		`- step: ${state?.step ?? "(none)"}`,
 		`- stepStatus: ${state?.stepStatus ?? "(none)"}`,
 		`- activeTaskId: ${state?.activeTaskId ?? "(none)"}`,
+		`- lastStuckAttemptId: ${state?.lastStuckAttemptId ?? "(none)"}`,
+		`- lastStuckReportPath: ${state?.lastStuckReportPath ?? "(none)"}`,
 		"",
 		"## Auto-Compact Instruction Sections",
 		...sectionLines(input.sections),

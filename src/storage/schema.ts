@@ -246,6 +246,11 @@ export interface PlanStateRecord {
 	questionsSubmitted: boolean;
 	questionsResolved: boolean;
 	compactBoundaries: PlannerCompactBoundaries;
+	lastPlannerToolCallAt: number | null;
+	lastIdleWakeAt: number | null;
+	idleWakeInFlight: boolean;
+	lastStuckReportPath: string | null;
+	lastStuckAttemptId: string | null;
 	requiresCompact: boolean;
 	requiresUserDecision: boolean;
 	broken: boolean;
@@ -316,6 +321,11 @@ export function createInitialPlanState(input: {
 			stage: true,
 			task: false,
 		},
+		lastPlannerToolCallAt: null,
+		lastIdleWakeAt: null,
+		idleWakeInFlight: false,
+		lastStuckReportPath: null,
+		lastStuckAttemptId: null,
 		requiresCompact: false,
 		requiresUserDecision: false,
 		broken: false,

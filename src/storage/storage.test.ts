@@ -351,6 +351,11 @@ describe("plan state store", () => {
 				stage: true,
 				task: false,
 			},
+			lastPlannerToolCallAt: null,
+			lastIdleWakeAt: null,
+			idleWakeInFlight: false,
+			lastStuckReportPath: null,
+			lastStuckAttemptId: null,
 		});
 	});
 

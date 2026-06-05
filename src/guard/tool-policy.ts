@@ -12,6 +12,7 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_questions_submit",
 	"planner_questions_resolve",
 	"planner_task_upsert",
+	"planner_report_stuck",
 	"planner_git_inspect",
 	"planner_git_init",
 	"planner_git_commit",
@@ -86,17 +87,30 @@ const STEP_ALLOWED_TOOLS = {
 	},
 	execution: {
 		prepare_task: ["planner_git_inspect", "planner_git_create_task_branch"],
-		write_tdd_plan: ["planner_git_inspect"],
-		write_tests: ["planner_git_inspect", "planner_git_commit"],
-		run_failing_tests: ["planner_git_inspect"],
-		implement_task: ["planner_git_inspect", "planner_git_commit"],
+		write_tdd_plan: ["planner_git_inspect", "planner_report_stuck"],
+		write_tests: [
+			"planner_git_inspect",
+			"planner_git_commit",
+			"planner_report_stuck",
+		],
+		run_failing_tests: ["planner_git_inspect", "planner_report_stuck"],
+		implement_task: [
+			"planner_git_inspect",
+			"planner_git_commit",
+			"planner_report_stuck",
+		],
 		refactor_task: [
 			"planner_git_inspect",
 			"planner_git_commit",
 			"planner_git_create_refactor_branch",
 			"planner_git_merge_refactor_to_task",
+			"planner_report_stuck",
 		],
-		run_final_tests: ["planner_git_inspect", "planner_git_commit"],
+		run_final_tests: [
+			"planner_git_inspect",
+			"planner_git_commit",
+			"planner_report_stuck",
+		],
 		merge_task_to_plan: [
 			"planner_git_inspect",
 			"planner_git_merge_task_to_plan",

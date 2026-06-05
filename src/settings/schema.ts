@@ -7,11 +7,18 @@ export type WorktreeSettings =
 export interface PlannerSettings {
 	worktree: WorktreeSettings;
 	compact: PlannerCompactBoundaries;
+	idle: PlannerIdleSettings;
 }
 
 export interface PlannerSettingsFile {
 	worktree?: WorktreeSettings;
 	compact?: Partial<PlannerCompactBoundaries>;
+	idle?: Partial<PlannerIdleSettings>;
+}
+
+export interface PlannerIdleSettings {
+	enabled: boolean;
+	timeoutMinutes: number;
 }
 
 export const DEFAULT_PLANNER_SETTINGS = {
@@ -19,5 +26,9 @@ export const DEFAULT_PLANNER_SETTINGS = {
 	compact: {
 		stage: true,
 		task: false,
+	},
+	idle: {
+		enabled: true,
+		timeoutMinutes: 10,
 	},
 } as const satisfies PlannerSettings;
