@@ -88,6 +88,7 @@ import {
 	buildPlannerStuckCompactInstructions,
 	executePlannerStuckTool,
 	PLANNER_STUCK_TOOL_NAMES,
+	PLANNER_STUCK_TYPES,
 	type PlannerStuckToolName,
 } from "./runtime/stuck-tools";
 import {
@@ -258,27 +259,54 @@ const TASK_UPSERT_TOOL_PARAMETERS = {
 const STUCK_REPORT_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {
-		reason: {
+		stuckType: {
 			type: "string",
-			description: "Concise reason the current execution attempt is stuck.",
+			enum: PLANNER_STUCK_TYPES,
+			description:
+				"Exact stuck classification. Pick the closest enum value; do not invent aliases.",
 		},
 		observedError: {
 			type: "string",
 			description:
 				"Exact command error, test failure, panic, or blocker if known.",
 		},
-		lastAttempt: {
-			type: "string",
+		evidence: {
+			type: "array",
+			items: { type: "string" },
 			description:
-				"What you tried in this attempt. Include commands and files at a high level.",
+				"Concrete evidence already checked: commands, files, logs, failing assertions, or inspected diff facts.",
 		},
-		nextDebugPlan: {
+		hypotheses: {
+			type: "array",
+			items: { type: "string" },
+			description:
+				"Possible root causes still plausible. Include at least one concrete hypothesis.",
+		},
+		discardedHypotheses: {
+			type: "array",
+			items: { type: "string" },
+			description:
+				"Root causes already ruled out by evidence. Use an empty array only when nothing has been ruled out yet.",
+		},
+		nextProbe: {
 			type: "string",
 			description:
-				"Different focused debug plan for the next attempt after compact.",
+				"One focused next diagnostic action after compact: command, file inspection, minimal repro, or log to collect.",
+		},
+		needsUserInput: {
+			type: "boolean",
+			description:
+				"True only when progress requires a concrete user decision or missing requirement.",
 		},
 	},
-	required: ["reason", "lastAttempt", "nextDebugPlan"],
+	required: [
+		"stuckType",
+		"evidence",
+		"hypotheses",
+		"discardedHypotheses",
+		"nextProbe",
+		"needsUserInput",
+	],
 	additionalProperties: false,
 } as const;
 

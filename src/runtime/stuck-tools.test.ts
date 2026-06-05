@@ -67,11 +67,21 @@ describe("planner stuck tools", () => {
 			toolName: "planner_report_stuck",
 			now: Date.UTC(2026, 5, 5, 0, 0, 0),
 			params: {
-				reason: "implementation keeps failing the focused round-trip test",
+				stuckType: "test_failure",
 				observedError: "cargo test round_trip failed",
-				lastAttempt: "Changed src/lib.ts and ran cargo test round_trip.",
-				nextDebugPlan:
+				evidence: [
+					"Changed src/lib.ts and ran cargo test round_trip.",
+					"Failure still points at signed byte round-trip assertion.",
+				],
+				hypotheses: [
+					"Codec sign restoration still disagrees with the test fixture.",
+				],
+				discardedHypotheses: [
+					"Test command typo was ruled out because the focused test ran.",
+				],
+				nextProbe:
 					"Inspect the failing assertion, reduce to one case, then patch only the codec.",
+				needsUserInput: false,
 			},
 		});
 
@@ -87,6 +97,13 @@ describe("planner stuck tools", () => {
 				`${setup.planPaths.tasksDir}/task-1/attempts/attempt-001/stuck.md`
 			],
 		).toContain("cargo test round_trip failed");
+		expect(
+			setup.fs.snapshot()[
+				`${setup.planPaths.tasksDir}/task-1/attempts/attempt-001/stuck.md`
+			],
+		).toContain("- stuckType: test_failure");
+		expect(result.text).toContain("Choose exactly one next probe");
+		expect(result.text).toContain("Do not repeat the previous attempt");
 
 		await expect(
 			readPlanState(setup.fs, setup.planPaths),
@@ -106,14 +123,37 @@ describe("planner stuck tools", () => {
 			...setup,
 			toolName: "planner_report_stuck",
 			params: {
-				reason: "not running",
-				lastAttempt: "none",
-				nextDebugPlan: "start step first",
+				stuckType: "implementation_loop",
+				evidence: ["not running"],
+				hypotheses: ["step must be started first"],
+				discardedHypotheses: [],
+				nextProbe: "start step first",
+				needsUserInput: false,
 			},
 		});
 
 		expect(result.status).toBe("blocked");
 		expect(result.text).toContain("blocked");
+	});
+
+	it("requires structured incident fields", async () => {
+		const setup = await createStuckSetup();
+
+		const result = await executePlannerStuckTool({
+			...setup,
+			toolName: "planner_report_stuck",
+			params: {
+				stuckType: "confused",
+				evidence: [],
+				hypotheses: ["unknown"],
+				discardedHypotheses: [],
+				nextProbe: "retry",
+				needsUserInput: false,
+			},
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("stuckType must be one of");
 	});
 });
 

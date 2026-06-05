@@ -346,11 +346,13 @@ export type {
 	PlannerStuckAttemptArtifacts,
 	PlannerStuckToolExecutionResult,
 	PlannerStuckToolName,
+	PlannerStuckType,
 } from "./runtime/stuck-tools";
 export {
 	buildPlannerStuckCompactInstructions,
 	executePlannerStuckTool,
 	PLANNER_STUCK_TOOL_NAMES,
+	PLANNER_STUCK_TYPES,
 } from "./runtime/stuck-tools";
 export type { PlannerTaskToolName } from "./runtime/task-tools";
 export {

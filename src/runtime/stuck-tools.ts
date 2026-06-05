@@ -28,6 +28,29 @@ export interface PlannerStuckAttemptArtifacts {
 	changedFilesPath: string;
 }
 
+export const PLANNER_STUCK_TYPES = [
+	"test_failure",
+	"build_failure",
+	"type_error",
+	"unknown_api",
+	"flaky_behavior",
+	"unclear_requirement",
+	"missing_context",
+	"bad_assumption",
+	"implementation_loop",
+] as const;
+export type PlannerStuckType = (typeof PLANNER_STUCK_TYPES)[number];
+
+interface PlannerStuckReportInput {
+	stuckType: PlannerStuckType;
+	observedError: string | null;
+	evidence: string[];
+	hypotheses: string[];
+	discardedHypotheses: string[];
+	nextProbe: string;
+	needsUserInput: boolean;
+}
+
 export async function executePlannerStuckTool(input: {
 	fs: PlannerFs;
 	git: GitRunner;
@@ -68,11 +91,12 @@ export async function executePlannerStuckTool(input: {
 		return blocked(input.toolName, "planner_report_stuck requires a worktree.");
 	}
 
-	const params = asObject(input.params);
-	const reason = requiredString(params, "reason");
-	const observedError = optionalString(params, "observedError");
-	const lastAttempt = requiredString(params, "lastAttempt");
-	const nextDebugPlan = requiredString(params, "nextDebugPlan");
+	let report: PlannerStuckReportInput;
+	try {
+		report = parseStuckReportParams(asObject(input.params));
+	} catch (error) {
+		return blocked(input.toolName, errorMessage(error));
+	}
 	const timestamp = input.now ?? Date.now();
 	const artifacts = await writeStuckAttemptArtifacts({
 		fs: input.fs,
@@ -81,10 +105,7 @@ export async function executePlannerStuckTool(input: {
 		taskDir: join(planPaths.tasksDir, state.activeTaskId),
 		stage: state.stage,
 		step: state.step,
-		reason,
-		observedError,
-		lastAttempt,
-		nextDebugPlan,
+		report,
 		timestamp,
 	});
 
@@ -104,7 +125,10 @@ export async function executePlannerStuckTool(input: {
 			`Report: ${artifacts.reportPath}`,
 			`Full diff: ${artifacts.diffPatchPath}`,
 			`Diff stat: ${artifacts.diffStatPath}`,
-			"Next: compact will clear volatile context. After compaction, call planner_status, read the stuck report and diff stat, then continue with a different debugging plan.",
+			"",
+			"Next action is planner-controlled compact. After compaction, call planner_status first, then read stuck.md and diff_stat.md.",
+			"Choose exactly one next probe from the report, run a focused command or inspect a focused file, and update the implementation from that evidence.",
+			"Do not repeat the previous attempt unless new evidence proves it was correct. If needsUserInput is true, stop and ask the user after planner_status.",
 		].join("\n"),
 		details: artifacts,
 	};
@@ -126,7 +150,9 @@ export async function buildPlannerStuckCompactInstructions(input: {
 		"Create a concise compact summary for a stuck execution attempt.",
 		"Do not replay the failed implementation in prose. Preserve paths and decisions.",
 		"After compaction, the next message must call planner_status before any other tool.",
-		"The model must inspect the stuck report and diff stat before continuing. It may open the full diff patch only when specific changed lines are needed.",
+		"The model must inspect stuck.md and diff_stat.md before continuing. It may open the full diff patch only when specific changed lines are needed.",
+		"Continue with one focused probe from the stuck report. Do not repeat the previous attempt without new evidence.",
+		"If the report says needsUserInput is true, ask the user a concrete question instead of guessing.",
 		"",
 		"## Planner State",
 		`- planId: ${activePlanId}`,
@@ -146,10 +172,7 @@ async function writeStuckAttemptArtifacts(input: {
 	taskDir: string;
 	stage: string;
 	step: string;
-	reason: string;
-	observedError: string | null;
-	lastAttempt: string;
-	nextDebugPlan: string;
+	report: PlannerStuckReportInput;
 	timestamp: number;
 }): Promise<PlannerStuckAttemptArtifacts> {
 	const attemptId = await nextAttemptId(
@@ -185,14 +208,21 @@ async function writeStuckAttemptArtifacts(input: {
 			`- recordedAt: ${new Date(input.timestamp).toISOString()}`,
 			`- stage: ${input.stage}`,
 			`- step: ${input.step}`,
-			`- reason: ${input.reason}`,
-			`- observedError: ${input.observedError ?? "(none)"}`,
+			`- stuckType: ${input.report.stuckType}`,
+			`- needsUserInput: ${String(input.report.needsUserInput)}`,
+			`- observedError: ${input.report.observedError ?? "(none)"}`,
 			"",
-			"## Last Attempt",
-			input.lastAttempt,
+			"## Evidence",
+			formatList(input.report.evidence),
 			"",
-			"## Next Debug Plan",
-			input.nextDebugPlan,
+			"## Hypotheses",
+			formatList(input.report.hypotheses),
+			"",
+			"## Discarded Hypotheses",
+			formatList(input.report.discardedHypotheses),
+			"",
+			"## Next Probe",
+			input.report.nextProbe,
 			"",
 			"## Artifact Links",
 			`- fullDiff: ${diffPatchPath}`,
@@ -248,10 +278,41 @@ function blocked(toolName: PlannerStuckToolName, text: string) {
 	return { status: "blocked" as const, toolName, text, details: null };
 }
 
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
 function asObject(value: unknown): Record<string, unknown> {
 	return value && typeof value === "object" && !Array.isArray(value)
 		? (value as Record<string, unknown>)
 		: {};
+}
+
+function parseStuckReportParams(
+	params: Record<string, unknown>,
+): PlannerStuckReportInput {
+	return {
+		stuckType: requiredStuckType(params),
+		observedError: optionalString(params, "observedError"),
+		evidence: requiredStringArray(params.evidence, "evidence"),
+		hypotheses: requiredStringArray(params.hypotheses, "hypotheses"),
+		discardedHypotheses: stringArray(
+			params.discardedHypotheses,
+			"discardedHypotheses",
+		),
+		nextProbe: requiredString(params, "nextProbe"),
+		needsUserInput: requiredBoolean(params, "needsUserInput"),
+	};
+}
+
+function requiredStuckType(params: Record<string, unknown>): PlannerStuckType {
+	const value = params.stuckType;
+	if (!PLANNER_STUCK_TYPES.includes(value as PlannerStuckType)) {
+		throw new TypeError(
+			`stuckType must be one of: ${PLANNER_STUCK_TYPES.join(", ")}.`,
+		);
+	}
+	return value as PlannerStuckType;
 }
 
 function requiredString(params: Record<string, unknown>, key: string): string {
@@ -260,6 +321,38 @@ function requiredString(params: Record<string, unknown>, key: string): string {
 		throw new TypeError(`${key} must be a non-empty string.`);
 	}
 	return value.trim();
+}
+
+function requiredBoolean(
+	params: Record<string, unknown>,
+	key: string,
+): boolean {
+	const value = params[key];
+	if (typeof value !== "boolean") {
+		throw new TypeError(`${key} must be a boolean.`);
+	}
+	return value;
+}
+
+function requiredStringArray(value: unknown, key: string): string[] {
+	const result = stringArray(value, key);
+	if (result.length === 0) {
+		throw new TypeError(`${key} must contain at least one non-empty string.`);
+	}
+	return result;
+}
+
+function stringArray(value: unknown, key: string): string[] {
+	if (!Array.isArray(value)) {
+		throw new TypeError(`${key} must be a string array.`);
+	}
+	const result = value.map((entry) => {
+		if (typeof entry !== "string") {
+			throw new TypeError(`${key} must be a string array.`);
+		}
+		return entry.trim();
+	});
+	return result.filter((entry) => entry.length > 0);
 }
 
 function optionalString(
@@ -272,4 +365,10 @@ function optionalString(
 		throw new TypeError(`${key} must be a string when provided.`);
 	}
 	return value.trim() || null;
+}
+
+function formatList(values: string[]): string {
+	return values.length
+		? values.map((value) => `- ${value}`).join("\n")
+		: "- (none)";
 }
