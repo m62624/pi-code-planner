@@ -1,9 +1,11 @@
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { EXTENSION_NAME } from "../constants";
 import type { PlannerFs } from "./fs";
 import { createProjectStoragePaths, type ProjectStoragePaths } from "./paths";
 import { readProjectRecordIfExists } from "./project-store";
 import { readWorktreeProjectIndexIfExists } from "./worktree-index";
+
+const PROJECT_LOCAL_WORKTREE_MARKER = `${EXTENSION_NAME}/worktrees`;
 
 export async function resolveProjectStoragePaths(input: {
 	fs: PlannerFs;
@@ -31,12 +33,21 @@ export async function resolveProjectStoragePaths(input: {
 		});
 	}
 
-	// Fallback: scan extensionDir/projects/ for any known project record.
-	// This prevents creating nested worktrees when cwd is inside an existing
-	// worktree but the worktree index lookup fails.
+	const projectLocalRoot = inferProjectRootFromProjectLocalWorktree(input.cwd);
+	if (projectLocalRoot) {
+		return createProjectStoragePaths({
+			agentDir: input.agentDir,
+			projectRoot: projectLocalRoot,
+		});
+	}
+
+	// Fallback: scan known project records only to recover project-local
+	// worktrees whose index is missing. Never return an unrelated project root
+	// for a normal new cwd.
 	const projectRoot = await findExistingProjectRoot({
 		fs: input.fs,
 		agentDir: input.agentDir,
+		cwd: input.cwd,
 	});
 	if (projectRoot) {
 		return createProjectStoragePaths({
@@ -51,6 +62,7 @@ export async function resolveProjectStoragePaths(input: {
 async function findExistingProjectRoot(input: {
 	fs: PlannerFs;
 	agentDir: string;
+	cwd: string;
 }): Promise<string | null> {
 	const projectsDir = join(
 		input.agentDir,
@@ -69,11 +81,41 @@ async function findExistingProjectRoot(input: {
 			...projectPaths,
 			projectJson,
 		});
-		if (record?.projectRoot) {
+		if (
+			record?.projectRoot &&
+			isInsideProjectLocalWorktree({
+				projectRoot: record.projectRoot,
+				cwd: input.cwd,
+			})
+		) {
 			return record.projectRoot;
 		}
 	}
 	return null;
+}
+
+function inferProjectRootFromProjectLocalWorktree(cwd: string): string | null {
+	const normalized = cwd.replace(/\\/g, "/");
+	const marker = `/.pi/${PROJECT_LOCAL_WORKTREE_MARKER}/`;
+	const index = normalized.indexOf(marker);
+	if (index <= 0) {
+		return null;
+	}
+	return normalized.slice(0, index);
+}
+
+function isInsideProjectLocalWorktree(input: {
+	projectRoot: string;
+	cwd: string;
+}): boolean {
+	const worktreeRoot = resolve(
+		input.projectRoot,
+		".pi",
+		EXTENSION_NAME,
+		"worktrees",
+	);
+	const rel = relative(worktreeRoot, resolve(input.cwd));
+	return rel.length > 0 && !rel.startsWith("..") && !isAbsolute(rel);
 }
 
 async function safeReaddir(fs: PlannerFs, dir: string): Promise<string[]> {

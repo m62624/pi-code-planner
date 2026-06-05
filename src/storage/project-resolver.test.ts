@@ -174,4 +174,40 @@ describe("project storage resolver", () => {
 		expect(resolved.projectRoot).toBe("/repo/app");
 		expect(resolved.projectId).toBe(original.projectId);
 	});
+
+	it("does not reuse an unrelated existing project for a new cwd", async () => {
+		const fs = new MockPlannerFs();
+		const existing = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/pi-planner",
+		});
+		await ensureProjectRecord(fs, existing);
+
+		const resolved = await resolveProjectStoragePaths({
+			fs,
+			agentDir: "/agent",
+			cwd: "/repo/approx_int",
+		});
+
+		expect(resolved.projectRoot).toBe("/repo/approx_int");
+		expect(resolved.projectId).not.toBe(existing.projectId);
+	});
+
+	it("infers project root from project-local worktree cwd without using unrelated records", async () => {
+		const fs = new MockPlannerFs();
+		const unrelated = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/pi-planner",
+		});
+		await ensureProjectRecord(fs, unrelated);
+
+		const resolved = await resolveProjectStoragePaths({
+			fs,
+			agentDir: "/agent",
+			cwd: "/repo/app/.pi/pi-code-planner/worktrees/plan-a/src",
+		});
+
+		expect(resolved.projectRoot).toBe("/repo/app");
+		expect(resolved.projectId).not.toBe(unrelated.projectId);
+	});
 });
