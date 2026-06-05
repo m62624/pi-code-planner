@@ -10,6 +10,7 @@ import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
 import type { PlanStateRecord } from "../storage/schema";
 import { savePlanState } from "../storage/state-store";
+import { assertNoPlannerDebugArtifactsBeforeCommit } from "./debug-tools";
 import {
 	inspectPlannerGitReality,
 	runSyncedPlannerGitMutation,
@@ -167,6 +168,10 @@ async function commitGitTool(
 ): Promise<PlannerGitToolExecutionResult> {
 	const repoRoot = requireWorktreePath(ready.state);
 	const message = requiredString(input.params, "message");
+	await assertNoPlannerDebugArtifactsBeforeCommit({
+		fs: input.fs,
+		state: ready.state,
+	});
 	const synced = await runSyncedPlannerGitMutation({
 		git: input.git,
 		state: ready.state,

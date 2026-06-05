@@ -194,6 +194,49 @@ describe("planner git tools", () => {
 		expect(await readPlanState(fs, setup.planPaths)).toEqual(before);
 	});
 
+	it("blocks planner git commit while debug artifacts exist", async () => {
+		const fs = new MockPlannerFs();
+		const debugArtifactsDir =
+			"/repo/app/.pi/pi-code-planner/worktrees/plan-a/.pi/pi-code-planner/debug/task-1/attempt-001-deadbeef";
+		const setup = await createGitToolSetup(fs, {
+			state: {
+				stage: "execution",
+				step: "implement_task",
+				stepStatus: "running",
+				currentBranch: "task/plan-a/task-1",
+				activeBranches: {
+					base: "main",
+					plan: "plan/plan-a",
+					currentTask: "task/plan-a/task-1",
+				},
+				lastStuckAttemptId: "attempt-001",
+				debugSessionId: "attempt-001-deadbeef",
+				debugArtifactsDir,
+				debugCleanupRequired: true,
+			},
+		});
+		await fs.mkdirp(debugArtifactsDir);
+		await fs.writeTextAtomic(`${debugArtifactsDir}/probe.md`, "debug\n");
+		const git = new MockGitRunner({
+			branch: "task/plan-a/task-1",
+			head: "old123",
+			status: " M src/a.ts",
+		});
+
+		const result = await executePlannerGitTool({
+			fs,
+			git,
+			projectPaths: setup.projectPaths,
+			toolName: "planner_git_commit",
+			params: { message: "must wait" },
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("debug artifacts still exist");
+		expect(git.calls.map((call) => call.name)).not.toContain("stageAll");
+		expect(git.calls.map((call) => call.name)).not.toContain("commit");
+	});
+
 	it("keeps merge targets state-bound when merging task into plan", async () => {
 		const fs = new MockPlannerFs();
 		const setup = await createGitToolSetup(fs, {

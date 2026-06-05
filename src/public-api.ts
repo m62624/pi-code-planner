@@ -146,6 +146,23 @@ export {
 	PLANNER_SYSTEM_INSTRUCTIONS_HEADER,
 } from "./runtime/compact";
 export type {
+	DebugInstrumentationType,
+	DebugProbeMethod,
+	DebugResultNextAction,
+	PlannerDebugToolExecutionResult,
+	PlannerDebugToolName,
+} from "./runtime/debug-tools";
+export {
+	assertNoPlannerDebugArtifactsBeforeCommit,
+	DEBUG_INSTRUMENTATION_TYPES,
+	DEBUG_PROBE_METHODS,
+	DEBUG_RESULT_NEXT_ACTIONS,
+	executePlannerDebugTool,
+	formatDebugStatusLines,
+	initializePlannerDebugSession,
+	PLANNER_DEBUG_TOOL_NAMES,
+} from "./runtime/debug-tools";
+export type {
 	PlannerGitReality,
 	PlannerPreflightAction,
 	PlannerPreflightDecision,

@@ -251,6 +251,11 @@ export interface PlanStateRecord {
 	idleWakeInFlight: boolean;
 	lastStuckReportPath: string | null;
 	lastStuckAttemptId: string | null;
+	debugSessionId: string | null;
+	debugArtifactsDir: string | null;
+	debugStrategyPath: string | null;
+	activeDebugProbeId: string | null;
+	debugCleanupRequired: boolean;
 	requiresCompact: boolean;
 	requiresUserDecision: boolean;
 	broken: boolean;
@@ -326,6 +331,11 @@ export function createInitialPlanState(input: {
 		idleWakeInFlight: false,
 		lastStuckReportPath: null,
 		lastStuckAttemptId: null,
+		debugSessionId: null,
+		debugArtifactsDir: null,
+		debugStrategyPath: null,
+		activeDebugProbeId: null,
+		debugCleanupRequired: false,
 		requiresCompact: false,
 		requiresUserDecision: false,
 		broken: false,

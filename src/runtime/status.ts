@@ -8,6 +8,7 @@ import type {
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerFs } from "../storage/fs";
 import type { PlannerStage, PlannerStep } from "../storage/schema";
+import { formatDebugStatusLines } from "./debug-tools";
 import {
 	decidePlannerLifecycleNext,
 	type PlannerLifecycleDecision,
@@ -730,6 +731,9 @@ export async function buildPlannerStatusText(
 		`- idleWakeInFlight: ${String(state.idleWakeInFlight)}`,
 		`- lastStuckAttemptId: ${state.lastStuckAttemptId ?? "(none)"}`,
 		`- lastStuckReportPath: ${state.lastStuckReportPath ?? "(none)"}`,
+		`- debugSessionId: ${state.debugSessionId ?? "(none)"}`,
+		`- debugArtifactsDir: ${state.debugArtifactsDir ?? "(none)"}`,
+		`- debugCleanupRequired: ${String(state.debugCleanupRequired)}`,
 		`- requiresCompact: ${String(state.requiresCompact)}`,
 		`- requiresUserDecision: ${String(state.requiresUserDecision)}`,
 		`- broken: ${String(state.broken)}`,
@@ -750,6 +754,9 @@ export async function buildPlannerStatusText(
 		`- conflicts: ${preflight.gitReality ? String(preflight.gitReality.hasConflicts) : "(unavailable)"}`,
 		`- activeBranches: ${JSON.stringify(state.activeBranches)}`,
 		`- mergeTargets: ${JSON.stringify(state.mergeTargets)}`,
+		"",
+		"## Debug Mode",
+		...formatDebugStatusLines(state),
 		"",
 		"## Lifecycle Decision",
 		...formatLifecycleDecision(lifecycle),

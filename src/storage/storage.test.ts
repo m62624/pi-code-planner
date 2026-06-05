@@ -356,6 +356,11 @@ describe("plan state store", () => {
 			idleWakeInFlight: false,
 			lastStuckReportPath: null,
 			lastStuckAttemptId: null,
+			debugSessionId: null,
+			debugArtifactsDir: null,
+			debugStrategyPath: null,
+			activeDebugProbeId: null,
+			debugCleanupRequired: false,
 		});
 	});
 

@@ -135,6 +135,11 @@ function normalizePlanState(state: PlanStateRecord): PlanStateRecord {
 		idleWakeInFlight: state.idleWakeInFlight ?? false,
 		lastStuckReportPath: state.lastStuckReportPath ?? null,
 		lastStuckAttemptId: state.lastStuckAttemptId ?? null,
+		debugSessionId: state.debugSessionId ?? null,
+		debugArtifactsDir: state.debugArtifactsDir ?? null,
+		debugStrategyPath: state.debugStrategyPath ?? null,
+		activeDebugProbeId: state.activeDebugProbeId ?? null,
+		debugCleanupRequired: state.debugCleanupRequired ?? false,
 	};
 }
 

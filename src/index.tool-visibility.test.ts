@@ -31,6 +31,10 @@ describe("filterPlannerTools", () => {
 			{ name: "planner_questions_submit" },
 			{ name: "planner_questions_resolve" },
 			{ name: "planner_task_upsert" },
+			{ name: "planner_debug_strategy" },
+			{ name: "planner_debug_probe" },
+			{ name: "planner_debug_result" },
+			{ name: "planner_debug_cleanup" },
 			{ name: "planner_git_inspect" },
 			{ name: "planner_git_init" },
 			{ name: "planner_git_commit" },
@@ -128,10 +132,11 @@ describe("filterPlannerTools", () => {
 		}
 	});
 
-	it("ALL_PLANNER_TOOL_NAMES has exactly 28 tools", () => {
-		expect(ALL_PLANNER_TOOL_NAMES).toHaveLength(28);
+	it("ALL_PLANNER_TOOL_NAMES has exactly 32 tools", () => {
+		expect(ALL_PLANNER_TOOL_NAMES).toHaveLength(32);
 		expect(ALL_PLANNER_TOOL_NAMES).toContain("planner_report_stuck");
 		expect(ALL_PLANNER_TOOL_NAMES).toContain("planner_refactor_review");
+		expect(ALL_PLANNER_TOOL_NAMES).toContain("planner_debug_strategy");
 	});
 });
 

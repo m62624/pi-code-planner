@@ -4,6 +4,7 @@ import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
 import { updatePlanState } from "../storage/state-store";
 import { readActivePlanContext } from "./active-plan";
+import { initializePlannerDebugSession } from "./debug-tools";
 import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
@@ -108,11 +109,19 @@ export async function executePlannerStuckTool(input: {
 		report,
 		timestamp,
 	});
+	const debugSession = await initializePlannerDebugSession({
+		fs: input.fs,
+		state,
+		planPaths,
+		taskId: state.activeTaskId,
+		attemptId: artifacts.attemptId,
+	});
 
 	await updatePlanState(input.fs, planPaths, (current) => ({
 		...current,
 		lastStuckReportPath: artifacts.reportPath,
 		lastStuckAttemptId: artifacts.attemptId,
+		...debugSession.statePatch,
 		idleWakeInFlight: false,
 		blockedReason: `Stuck attempt recorded: ${artifacts.reportPath}`,
 	}));
@@ -125,6 +134,7 @@ export async function executePlannerStuckTool(input: {
 			`Report: ${artifacts.reportPath}`,
 			`Full diff: ${artifacts.diffPatchPath}`,
 			`Diff stat: ${artifacts.diffStatPath}`,
+			`Debug artifacts dir: ${debugSession.debugArtifactsDir}`,
 			"",
 			"Next action is planner-controlled compact. After compaction, call planner_status first, then read stuck.md and diff_stat.md.",
 			"Choose exactly one next probe from the report, run a focused command or inspect a focused file, and update the implementation from that evidence.",

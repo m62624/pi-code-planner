@@ -14,6 +14,10 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_task_upsert",
 	"planner_refactor_review",
 	"planner_report_stuck",
+	"planner_debug_strategy",
+	"planner_debug_probe",
+	"planner_debug_result",
+	"planner_debug_cleanup",
 	"planner_git_inspect",
 	"planner_git_init",
 	"planner_git_commit",
@@ -42,6 +46,13 @@ export const ALL_PLANNER_TOOL_NAMES = [
 ] as const;
 
 export type AllPlannerToolName = (typeof ALL_PLANNER_TOOL_NAMES)[number];
+
+const DEBUG_WRAPPER_TOOLS = [
+	"planner_debug_strategy",
+	"planner_debug_probe",
+	"planner_debug_result",
+	"planner_debug_cleanup",
+] as const satisfies readonly PlannerWrapperTool[];
 
 export interface PlannerToolPolicyDecision {
 	allow: boolean;
@@ -88,17 +99,39 @@ const STEP_ALLOWED_TOOLS = {
 	},
 	execution: {
 		prepare_task: ["planner_git_inspect", "planner_git_create_task_branch"],
-		write_tdd_plan: ["planner_git_inspect", "planner_report_stuck"],
+		write_tdd_plan: [
+			"planner_git_inspect",
+			"planner_report_stuck",
+			"planner_debug_strategy",
+			"planner_debug_probe",
+			"planner_debug_result",
+			"planner_debug_cleanup",
+		],
 		write_tests: [
 			"planner_git_inspect",
 			"planner_git_commit",
 			"planner_report_stuck",
+			"planner_debug_strategy",
+			"planner_debug_probe",
+			"planner_debug_result",
+			"planner_debug_cleanup",
 		],
-		run_failing_tests: ["planner_git_inspect", "planner_report_stuck"],
+		run_failing_tests: [
+			"planner_git_inspect",
+			"planner_report_stuck",
+			"planner_debug_strategy",
+			"planner_debug_probe",
+			"planner_debug_result",
+			"planner_debug_cleanup",
+		],
 		implement_task: [
 			"planner_git_inspect",
 			"planner_git_commit",
 			"planner_report_stuck",
+			"planner_debug_strategy",
+			"planner_debug_probe",
+			"planner_debug_result",
+			"planner_debug_cleanup",
 		],
 		refactor_task: [
 			"planner_git_inspect",
@@ -107,11 +140,19 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_git_create_refactor_branch",
 			"planner_git_merge_refactor_to_task",
 			"planner_report_stuck",
+			"planner_debug_strategy",
+			"planner_debug_probe",
+			"planner_debug_result",
+			"planner_debug_cleanup",
 		],
 		run_final_tests: [
 			"planner_git_inspect",
 			"planner_git_commit",
 			"planner_report_stuck",
+			"planner_debug_strategy",
+			"planner_debug_probe",
+			"planner_debug_result",
+			"planner_debug_cleanup",
 		],
 		merge_task_to_plan: [
 			"planner_git_inspect",
@@ -156,7 +197,13 @@ const STEP_ALLOWED_TOOLS = {
 export function getAllowedPlannerWrapperTools(
 	state: Pick<
 		PlanStateRecord,
-		"stage" | "step" | "broken" | "requiresUserDecision" | "requiresCompact"
+		| "stage"
+		| "step"
+		| "broken"
+		| "requiresUserDecision"
+		| "requiresCompact"
+		| "lastStuckAttemptId"
+		| "debugArtifactsDir"
 	>,
 ): readonly PlannerWrapperTool[] {
 	if (state.broken || state.requiresUserDecision) {
@@ -175,7 +222,7 @@ export function getAllowedPlannerWrapperTools(
 		Record<PlannerStep, readonly PlannerWrapperTool[]>
 	> = STEP_ALLOWED_TOOLS[state.stage];
 	const stepRules = stageRules[state.step] ?? [];
-	return withAlwaysAllowed(stepRules);
+	return withAlwaysAllowed(filterDebugToolsForState(stepRules, state));
 }
 
 export function checkPlannerWrapperAllowed(input: {
@@ -188,6 +235,8 @@ export function checkPlannerWrapperAllowed(input: {
 		| "broken"
 		| "requiresUserDecision"
 		| "requiresCompact"
+		| "lastStuckAttemptId"
+		| "debugArtifactsDir"
 	>;
 }): PlannerToolPolicyDecision {
 	const allowedTools = getAllowedPlannerWrapperTools(input.state);
@@ -267,5 +316,18 @@ function withAlwaysAllowed(
 ): readonly PlannerWrapperTool[] {
 	return Array.from(
 		new Set<PlannerWrapperTool>([...ALWAYS_ALLOWED_TOOLS, ...tools]),
+	);
+}
+
+function filterDebugToolsForState(
+	tools: readonly PlannerWrapperTool[],
+	state: Pick<PlanStateRecord, "lastStuckAttemptId" | "debugArtifactsDir">,
+): readonly PlannerWrapperTool[] {
+	if (state.lastStuckAttemptId || state.debugArtifactsDir) {
+		return tools;
+	}
+	return tools.filter(
+		(tool) =>
+			!(DEBUG_WRAPPER_TOOLS as readonly PlannerWrapperTool[]).includes(tool),
 	);
 }

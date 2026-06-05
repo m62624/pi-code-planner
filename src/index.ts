@@ -43,6 +43,14 @@ import {
 	type PlannerCompactRuntimeState,
 } from "./runtime/compact";
 import {
+	DEBUG_INSTRUMENTATION_TYPES,
+	DEBUG_PROBE_METHODS,
+	DEBUG_RESULT_NEXT_ACTIONS,
+	executePlannerDebugTool,
+	PLANNER_DEBUG_TOOL_NAMES,
+	type PlannerDebugToolName,
+} from "./runtime/debug-tools";
+import {
 	executePlannerGitTool,
 	PLANNER_GIT_TOOL_NAMES,
 	type PlannerGitToolName,
@@ -365,6 +373,144 @@ const REFACTOR_REVIEW_TOOL_PARAMETERS = {
 	],
 	additionalProperties: false,
 } as const;
+
+const DEBUG_STRATEGY_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		runtimeTarget: {
+			type: "string",
+			description:
+				"Platform/runtime being debugged, for example native Rust, Tokio async, Gear WASM, browser, CLI, test runner, or unknown.",
+		},
+		availableSignals: {
+			type: "array",
+			items: { type: "string" },
+			description:
+				"Signals that can be observed in this project: test output, stdout/stderr, framework logger, temp file, backtrace, diff, etc.",
+		},
+		safeInstrumentation: {
+			type: "array",
+			items: { type: "string" },
+			description:
+				"Safe temporary instrumentation options for this project/runtime.",
+		},
+		forbiddenInstrumentation: {
+			type: "array",
+			items: { type: "string" },
+			description:
+				"Instrumentation that must not be used or committed for this project/runtime.",
+		},
+		cleanupPlan: {
+			type: "string",
+			description:
+				"How temporary logs/assertions/files will be removed before planner_git_commit.",
+		},
+	},
+	required: [
+		"runtimeTarget",
+		"availableSignals",
+		"safeInstrumentation",
+		"forbiddenInstrumentation",
+		"cleanupPlan",
+	],
+	additionalProperties: false,
+} as const;
+
+const DEBUG_PROBE_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		question: {
+			type: "string",
+			description: "One concrete question this probe must answer.",
+		},
+		hypothesis: {
+			type: "string",
+			description: "One hypothesis being tested by this probe.",
+		},
+		method: {
+			type: "string",
+			enum: DEBUG_PROBE_METHODS,
+			description:
+				"Exact debug probe method. Pick the smallest method that can produce a signal.",
+		},
+		instrumentation: {
+			type: "string",
+			enum: DEBUG_INSTRUMENTATION_TYPES,
+			description:
+				"Exact instrumentation channel. Use temp_file only as a last resort when normal output/logging is unavailable.",
+		},
+		target: {
+			type: "string",
+			description:
+				"Command, file path, function, test, runtime logger, or temp output target for this probe.",
+		},
+		expectedSignal: {
+			type: "string",
+			description: "What result would confirm or reject the hypothesis.",
+		},
+		cleanupRequired: {
+			type: "boolean",
+			description:
+				"True if this probe adds logs, temp files, assertions, test scaffolding, or any artifact that must be removed before commit.",
+		},
+	},
+	required: [
+		"question",
+		"hypothesis",
+		"method",
+		"instrumentation",
+		"target",
+		"expectedSignal",
+		"cleanupRequired",
+	],
+	additionalProperties: false,
+} as const;
+
+const DEBUG_RESULT_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		probeId: {
+			type: "string",
+			description:
+				"Optional probe id. Omit when reporting the currently active debug probe.",
+		},
+		observedSignal: {
+			type: "string",
+			description: "Concrete output/log/assertion/diff signal observed.",
+		},
+		signalMatched: {
+			type: "boolean",
+			description:
+				"Whether observedSignal matched expectedSignal for the active probe.",
+		},
+		conclusion: {
+			type: "string",
+			description:
+				"What this signal proves or rules out. Do not patch without a concrete conclusion.",
+		},
+		cleanupDone: {
+			type: "boolean",
+			description:
+				"True only if temporary project instrumentation was removed. Debug artifacts are removed separately by planner_debug_cleanup.",
+		},
+		nextAction: {
+			type: "string",
+			enum: DEBUG_RESULT_NEXT_ACTIONS,
+			description:
+				"patch only after a concrete signal. probe_again for another focused signal. ask_user/block when evidence requires it.",
+		},
+	},
+	required: [
+		"observedSignal",
+		"signalMatched",
+		"conclusion",
+		"cleanupDone",
+		"nextAction",
+	],
+	additionalProperties: false,
+} as const;
+
+const DEBUG_CLEANUP_TOOL_PARAMETERS = EMPTY_TOOL_PARAMETERS;
 
 const COMPLETE_STEP_TOOL_PARAMETERS = {
 	type: "object",
@@ -1260,6 +1406,37 @@ function registerPlannerTools(
 		});
 	}
 
+	for (const toolName of PLANNER_DEBUG_TOOL_NAMES) {
+		pi.registerTool({
+			name: toolName,
+			label: debugToolLabel(toolName),
+			description: debugToolDescription(toolName),
+			promptSnippet:
+				"Use planner debug tools only after planner_report_stuck. Record strategy, one focused probe, and result before patching. Use cleanup before planner_git_commit.",
+			parameters: debugToolParameters(toolName) as never,
+			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const fs = createNodeFs();
+				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				await recordPlannerToolActivityForProject({
+					fs,
+					projectPaths,
+					now: Date.now(),
+				});
+				const result = await executePlannerDebugTool({
+					fs,
+					git: new NodeGitRunner(),
+					projectPaths,
+					toolName,
+					params,
+				});
+				return {
+					content: [{ type: "text", text: result.text }],
+					details: result,
+				};
+			},
+		});
+	}
+
 	for (const toolName of PLANNER_WORKFLOW_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
@@ -1738,6 +1915,45 @@ function refactorToolDescription(toolName: PlannerRefactorToolName): string {
 	switch (toolName) {
 		case "planner_refactor_review":
 			return "Write the structured refactor.md review from semantic fields during execution/refactor_task.";
+	}
+}
+
+function debugToolLabel(toolName: PlannerDebugToolName): string {
+	switch (toolName) {
+		case "planner_debug_strategy":
+			return "Planner Debug Strategy";
+		case "planner_debug_probe":
+			return "Planner Debug Probe";
+		case "planner_debug_result":
+			return "Planner Debug Result";
+		case "planner_debug_cleanup":
+			return "Planner Debug Cleanup";
+	}
+}
+
+function debugToolDescription(toolName: PlannerDebugToolName): string {
+	switch (toolName) {
+		case "planner_debug_strategy":
+			return "Record platform-independent debug channels and cleanup plan after a stuck attempt.";
+		case "planner_debug_probe":
+			return "Record exactly one focused debug probe before patching from a stuck state.";
+		case "planner_debug_result":
+			return "Record the observed probe signal and the next action before patching or asking the user.";
+		case "planner_debug_cleanup":
+			return "Remove planner debug artifacts from the worktree and clear the commit guard.";
+	}
+}
+
+function debugToolParameters(toolName: PlannerDebugToolName) {
+	switch (toolName) {
+		case "planner_debug_strategy":
+			return DEBUG_STRATEGY_TOOL_PARAMETERS;
+		case "planner_debug_probe":
+			return DEBUG_PROBE_TOOL_PARAMETERS;
+		case "planner_debug_result":
+			return DEBUG_RESULT_TOOL_PARAMETERS;
+		case "planner_debug_cleanup":
+			return DEBUG_CLEANUP_TOOL_PARAMETERS;
 	}
 }
 
