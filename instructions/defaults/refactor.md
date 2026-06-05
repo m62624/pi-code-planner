@@ -15,7 +15,7 @@ KISS does not mean avoiding advanced language features. Traits, interfaces, gene
    - Is any code duplicated, speculative, over-generalized, or implemented for future use rather than the current task?
    - Does the implementation match existing project conventions and confirmed user decisions?
    - Are signatures and effects still as small and explicit as possible?
-4. Write `refactor.md` with concrete findings, KISS review, changes applied, and justified decisions to keep code unchanged.
+4. Write `refactor.md` with the required structured review template below. A passing test, linter, formatter, or build is not a refactor review.
 5. Apply only behavior-preserving changes.
 6. Run focused tests from the worktree path reported by `planner_status` after each meaningful refactor group.
 7. Commit through planner wrappers if files changed.
@@ -35,7 +35,51 @@ KISS does not mean avoiding advanced language features. Traits, interfaces, gene
 
 ## Exit Condition
 
-Refactor is complete only when `refactor.md` contains a concrete review, checks pass, the diff stays within task scope, and changed files are committed.
+Refactor is complete only when `refactor.md` passes the structured review gate, checks pass, the diff stays within task scope, and changed files are committed.
+
+## Required refactor.md Format
+
+Use these exact level-two headings. Fill every section with concrete observations from the active task diff.
+
+```md
+# Refactor Review
+
+## Changed Surface
+- Files:
+- Behavior touched:
+- Public API touched:
+
+## Complexity
+- Unnecessary abstraction:
+- Over-generalization:
+- Simpler alternative considered:
+
+## Duplication
+- New duplication:
+- Existing duplication touched:
+- Decision:
+
+## Naming And Boundaries
+- Confusing names:
+- Module/API boundary issues:
+- Scope leaks:
+
+## Edge Cases
+- Validation/error handling:
+- State consistency:
+- Regression risk:
+
+## Refactor Decision
+Decision: changed | kept
+
+## Changes Applied
+- ...
+
+## Why Kept
+- ...
+```
+
+If `Decision: changed`, `## Changes Applied` must describe the behavior-preserving edits. If `Decision: kept`, `## Why Kept` must explain why changing the actual diff would make the code worse or add unnecessary complexity. Do not write generic claims such as "tests pass" or "code is already good" as the reason.
 
 ## manual-compact
 

@@ -385,7 +385,8 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Read the selected implementation and inspect the planner-controlled diff.",
 			"Question unnecessary abstraction, duplication, speculative flexibility, premature generalization, and code that exists for imagined future work rather than the current task.",
-			"Write refactor.md with concrete findings, KISS review, changes applied, and justified decisions to keep code unchanged.",
+			"Write refactor.md using the required review sections: Changed Surface, Complexity, Duplication, Naming And Boundaries, Edge Cases, Refactor Decision, and either Changes Applied or Why Kept.",
+			"A passing test, linter, formatter, or build is not a refactor review.",
 			"Commit if project files changed.",
 		],
 		allowedNow: [
@@ -396,7 +397,7 @@ export const PLANNER_STEP_RULES = {
 			"Do not treat a successful linter or test run as sufficient refactor review.",
 		],
 		exitCondition:
-			"refactor.md contains a concrete KISS review and the refactor is committed if changed.",
+			"refactor.md passes the structured review gate and the refactor is committed if changed.",
 		nextInstruction: "Call planner_finish_step to open run_final_tests.",
 	}),
 	run_final_tests: stepRule("execution", "run_final_tests", {

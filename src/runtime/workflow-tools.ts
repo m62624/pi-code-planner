@@ -22,6 +22,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { validateRefactorReviewArtifact } from "./refactor-review";
 import {
 	applyPlannerStateTransition,
 	type PlannerStateTransition,
@@ -247,7 +248,7 @@ async function validateWorkflowExit(input: {
 		case "refactor_task":
 			return (
 				(taskDir
-					? await requireNonEmptyArtifact(
+					? await validateRefactorReviewArtifact(
 							input.fs,
 							join(taskDir, "refactor.md"),
 						)
