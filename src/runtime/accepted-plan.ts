@@ -28,6 +28,8 @@ export interface AcceptedPlanPreview {
 	worktreeSessionDir: string;
 	outputBranch: string;
 	worktreeIndex: WorktreeProjectIndexRecord | null;
+	createdFromSessionFile: string | null;
+	lastRootSessionFile: string | null;
 	originalSessionFile: string | null;
 	originalSessionExists: boolean;
 }
@@ -81,7 +83,9 @@ export async function inspectAcceptedPlan(input: {
 		agentDir: input.projectPaths.agentDir,
 		worktreePath,
 	});
-	const originalSessionFile = worktreeIndex?.originalSessionFile ?? null;
+	const createdFromSessionFile = worktreeIndex?.createdFromSessionFile ?? null;
+	const lastRootSessionFile = worktreeIndex?.lastRootSessionFile ?? null;
+	const originalSessionFile = lastRootSessionFile ?? createdFromSessionFile;
 	return {
 		project,
 		planId,
@@ -93,6 +97,8 @@ export async function inspectAcceptedPlan(input: {
 		}),
 		outputBranch: outputBranchName(planId),
 		worktreeIndex,
+		createdFromSessionFile,
+		lastRootSessionFile,
 		originalSessionFile,
 		originalSessionExists: originalSessionFile
 			? await input.fs.exists(originalSessionFile)

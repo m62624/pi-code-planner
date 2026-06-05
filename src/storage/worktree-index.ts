@@ -10,6 +10,9 @@ export interface WorktreeProjectIndexRecord {
 	projectRoot: string;
 	projectId: string;
 	planId: string;
+	createdFromSessionFile?: string | null;
+	lastRootSessionFile?: string | null;
+	/** @deprecated Use createdFromSessionFile and lastRootSessionFile. */
 	originalSessionFile?: string | null;
 }
 
@@ -35,23 +38,27 @@ export async function saveWorktreeProjectIndex(input: {
 	agentDir: string;
 	record: WorktreeProjectIndexRecord;
 }): Promise<void> {
+	const record = normalizeWorktreeProjectIndexRecord(input.record);
 	await writeJson(
 		input.fs,
 		createWorktreeProjectIndexPath({
 			agentDir: input.agentDir,
-			worktreePath: input.record.worktreePath,
+			worktreePath: record.worktreePath,
 		}),
-		input.record,
+		record,
 	);
 }
 
-export async function bindWorktreeOriginalSession(input: {
+export async function bindWorktreeRootSession(input: {
 	fs: PlannerFs;
 	agentDir: string;
 	worktreePath: string;
 	projectRoot: string;
 	projectId: string;
 	planId: string;
+	createdFromSessionFile?: string | null;
+	lastRootSessionFile?: string | null;
+	/** @deprecated Use createdFromSessionFile or lastRootSessionFile. */
 	originalSessionFile?: string | null;
 }): Promise<WorktreeProjectIndexRecord> {
 	const existing = await readWorktreeProjectIndexIfExists(input);
@@ -61,8 +68,18 @@ export async function bindWorktreeOriginalSession(input: {
 		projectRoot: input.projectRoot,
 		projectId: input.projectId,
 		planId: input.planId,
-		originalSessionFile:
-			input.originalSessionFile ?? existing?.originalSessionFile ?? null,
+		createdFromSessionFile:
+			existing?.createdFromSessionFile ??
+			input.createdFromSessionFile ??
+			input.originalSessionFile ??
+			input.lastRootSessionFile ??
+			null,
+		lastRootSessionFile:
+			input.lastRootSessionFile ??
+			existing?.lastRootSessionFile ??
+			input.createdFromSessionFile ??
+			input.originalSessionFile ??
+			null,
 	};
 	await saveWorktreeProjectIndex({
 		fs: input.fs,
@@ -72,13 +89,31 @@ export async function bindWorktreeOriginalSession(input: {
 	return record;
 }
 
+export const bindWorktreeOriginalSession = bindWorktreeRootSession;
+
 export async function readWorktreeProjectIndexIfExists(input: {
 	fs: PlannerFs;
 	agentDir: string;
 	worktreePath: string;
 }): Promise<WorktreeProjectIndexRecord | null> {
-	return await readJsonIfExists<WorktreeProjectIndexRecord>(
+	const record = await readJsonIfExists<WorktreeProjectIndexRecord>(
 		input.fs,
 		createWorktreeProjectIndexPath(input),
 	);
+	return record ? normalizeWorktreeProjectIndexRecord(record) : null;
+}
+
+function normalizeWorktreeProjectIndexRecord(
+	record: WorktreeProjectIndexRecord,
+): WorktreeProjectIndexRecord {
+	const legacy = record.originalSessionFile ?? null;
+	const createdFromSessionFile = record.createdFromSessionFile ?? legacy;
+	const lastRootSessionFile =
+		record.lastRootSessionFile ?? record.createdFromSessionFile ?? legacy;
+	return {
+		...record,
+		createdFromSessionFile,
+		lastRootSessionFile,
+		originalSessionFile: createdFromSessionFile,
+	};
 }

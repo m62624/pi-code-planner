@@ -502,7 +502,8 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					projectRoot: projectPaths.projectRoot,
 					projectId: projectPaths.projectId,
 					planId: createdPlanId,
-					originalSessionFile: originalSessionFile ?? null,
+					createdFromSessionFile: originalSessionFile ?? null,
+					lastRootSessionFile: originalSessionFile ?? null,
 				});
 
 				const session = await createPlannerHandoffSession({
@@ -588,7 +589,10 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					fs,
 					agentDir,
 					projectRoot: projectPaths.projectRoot,
-					originalSessionFile: index?.originalSessionFile ?? null,
+					preferredSessionFiles: [
+						index?.lastRootSessionFile ?? null,
+						index?.createdFromSessionFile ?? null,
+					],
 					parentSession: ctx.sessionManager.getSessionFile(),
 				});
 				if (!targetSessionFile.sessionFile) {
@@ -710,7 +714,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				projectRoot: projectPaths.projectRoot,
 				projectId: projectPaths.projectId,
 				planId,
-				originalSessionFile: isPathInsideOrEqual(
+				lastRootSessionFile: isPathInsideOrEqual(
 					ctx.cwd,
 					projectPaths.projectRoot,
 				)
@@ -854,7 +858,10 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					fs,
 					agentDir,
 					projectRoot: projectPaths.projectRoot,
-					originalSessionFile: preview.originalSessionFile,
+					preferredSessionFiles: [
+						preview.lastRootSessionFile,
+						preview.createdFromSessionFile,
+					],
 					parentSession: ctx.sessionManager.getSessionFile(),
 					createIfMissing: false,
 				});
@@ -1962,7 +1969,7 @@ async function resolveProjectSessionForHandoff(input: {
 	fs: ReturnType<typeof createNodeFs>;
 	agentDir: string;
 	projectRoot: string;
-	originalSessionFile?: string | null;
+	preferredSessionFiles?: readonly (string | null | undefined)[];
 	parentSession?: string | null;
 	createIfMissing?: boolean;
 }): Promise<{
@@ -1970,15 +1977,15 @@ async function resolveProjectSessionForHandoff(input: {
 	recovered: boolean;
 	created: boolean;
 }> {
-	if (
-		input.originalSessionFile &&
-		(await input.fs.exists(input.originalSessionFile))
-	) {
-		return {
-			sessionFile: input.originalSessionFile,
-			recovered: false,
-			created: false,
-		};
+	const preferred = uniqueSessionFiles(input.preferredSessionFiles ?? []);
+	for (const sessionFile of preferred) {
+		if (await input.fs.exists(sessionFile)) {
+			return {
+				sessionFile,
+				recovered: false,
+				created: false,
+			};
+		}
 	}
 
 	const existingProjectSession = selectPlannerResumeSessionFile(
@@ -1987,7 +1994,7 @@ async function resolveProjectSessionForHandoff(input: {
 	if (existingProjectSession) {
 		return {
 			sessionFile: existingProjectSession,
-			recovered: Boolean(input.originalSessionFile),
+			recovered: preferred.length > 0,
 			created: false,
 		};
 	}
@@ -2011,6 +2018,14 @@ async function resolveProjectSessionForHandoff(input: {
 		recovered: false,
 		created: true,
 	};
+}
+
+function uniqueSessionFiles(
+	values: readonly (string | null | undefined)[],
+): string[] {
+	return Array.from(
+		new Set(values.filter((value): value is string => Boolean(value))),
+	);
 }
 
 async function listProjectSessionsSafely(

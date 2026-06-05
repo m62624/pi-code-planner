@@ -83,6 +83,8 @@ describe("project storage resolver", () => {
 			planId: "plan-a",
 			projectRoot: "/repo/app",
 			originalSessionFile: "/agent/sessions/--repo-app--/parent.jsonl",
+			createdFromSessionFile: "/agent/sessions/--repo-app--/parent.jsonl",
+			lastRootSessionFile: "/agent/sessions/--repo-app--/parent.jsonl",
 		});
 	});
 
@@ -119,10 +121,12 @@ describe("project storage resolver", () => {
 			}),
 		).resolves.toMatchObject({
 			originalSessionFile: "/agent/sessions/--repo-app--/root.jsonl",
+			createdFromSessionFile: "/agent/sessions/--repo-app--/root.jsonl",
+			lastRootSessionFile: "/agent/sessions/--repo-app--/root.jsonl",
 		});
 	});
 
-	it("keeps the bound root session when a later switch has no root candidate", async () => {
+	it("keeps the created-from session and updates only the last root session on resume", async () => {
 		const fs = new MockPlannerFs();
 		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
 		await bindWorktreeOriginalSession({
@@ -132,7 +136,8 @@ describe("project storage resolver", () => {
 			projectRoot: "/repo/app",
 			projectId: "app-123",
 			planId: "plan-a",
-			originalSessionFile: "/agent/sessions/--repo-app--/root.jsonl",
+			createdFromSessionFile: "/agent/sessions/--repo-app--/created.jsonl",
+			lastRootSessionFile: "/agent/sessions/--repo-app--/created.jsonl",
 		});
 
 		await bindWorktreeOriginalSession({
@@ -142,7 +147,7 @@ describe("project storage resolver", () => {
 			projectRoot: "/repo/app",
 			projectId: "app-123",
 			planId: "plan-a",
-			originalSessionFile: null,
+			lastRootSessionFile: "/agent/sessions/--repo-app--/latest.jsonl",
 		});
 
 		await expect(
@@ -152,7 +157,9 @@ describe("project storage resolver", () => {
 				worktreePath,
 			}),
 		).resolves.toMatchObject({
-			originalSessionFile: "/agent/sessions/--repo-app--/root.jsonl",
+			createdFromSessionFile: "/agent/sessions/--repo-app--/created.jsonl",
+			lastRootSessionFile: "/agent/sessions/--repo-app--/latest.jsonl",
+			originalSessionFile: "/agent/sessions/--repo-app--/created.jsonl",
 		});
 	});
 
