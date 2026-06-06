@@ -82,6 +82,12 @@ describe("planner session handoff", () => {
 				worktreePath: "/repo/worktree",
 			}),
 		).toContain("Call planner_status now.");
+		expect(
+			buildPlannerHandoffPrompt({
+				planId: "plan-a",
+				worktreePath: "/repo/worktree",
+			}),
+		).toContain("Do not edit goal.md directly");
 	});
 
 	it("builds the resume prompt for switching between planner worktrees", () => {

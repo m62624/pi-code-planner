@@ -145,10 +145,10 @@ export const PLANNER_STEP_RULES = {
 		objective: "Rewrite the raw user request as a precise reviewable goal.",
 		requiredActions: [
 			"Read request.md.",
-			"Write goal.md in your own words with outcome, assumptions, non-goals, and constraints.",
+			"Draft goal.md content in your own words with outcome, assumptions, non-goals, and constraints.",
 			"Propose a short user-facing title. Prefer concise English unless the user requested another language.",
 			"Propose a very short planner-list description in the metadata.descriptionLanguage reported by planner_status.",
-			"Call planner_goal_submit with the full goal markdown, proposed title, and proposed description.",
+			"Call planner_goal_submit with the full goal markdown, proposed title, and proposed description. Do not edit goal.md directly; the wrapper writes it.",
 		],
 		allowedNow: ["Use planner_goal_submit only after the draft is complete."],
 		forbiddenNow: [
