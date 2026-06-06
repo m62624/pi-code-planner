@@ -9,6 +9,7 @@ export interface PlannerSettings {
 	compact: PlannerCompactBoundaries;
 	idle: PlannerIdleSettings;
 	metadata: PlannerMetadataSettings;
+	timer: PlannerTimerSettings;
 }
 
 export interface PlannerSettingsFile {
@@ -16,6 +17,7 @@ export interface PlannerSettingsFile {
 	compact?: Partial<PlannerCompactBoundaries>;
 	idle?: Partial<PlannerIdleSettings>;
 	metadata?: Partial<PlannerMetadataSettings>;
+	timer?: Partial<PlannerTimerSettings>;
 }
 
 export interface PlannerIdleSettings {
@@ -25,6 +27,14 @@ export interface PlannerIdleSettings {
 
 export interface PlannerMetadataSettings {
 	descriptionLanguage: string;
+}
+
+export interface PlannerTimerSettings {
+	enabled: boolean;
+	mode: "status" | "widget";
+	showCheckpoints: boolean;
+	maxCheckpoints: number;
+	syncIntervalMinutes: number;
 }
 
 export const DEFAULT_PLANNER_SETTINGS = {
@@ -39,5 +49,12 @@ export const DEFAULT_PLANNER_SETTINGS = {
 	},
 	metadata: {
 		descriptionLanguage: "English",
+	},
+	timer: {
+		enabled: true,
+		mode: "status",
+		showCheckpoints: true,
+		maxCheckpoints: 5,
+		syncIntervalMinutes: 10,
 	},
 } as const satisfies PlannerSettings;

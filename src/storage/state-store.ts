@@ -140,6 +140,7 @@ function normalizePlanState(state: PlanStateRecord): PlanStateRecord {
 		debugStrategyPath: state.debugStrategyPath ?? null,
 		activeDebugProbeId: state.activeDebugProbeId ?? null,
 		debugCleanupRequired: state.debugCleanupRequired ?? false,
+		timer: state.timer ?? null,
 	};
 }
 

@@ -231,6 +231,23 @@ export interface PlannerCompactBoundaries {
 	task: boolean;
 }
 
+export interface PlannerTimerCheckpoint {
+	stage: PlannerStage;
+	enteredAt: number;
+	activeMs: number;
+}
+
+export interface PlannerTimerState {
+	startedAt: number;
+	lastSyncedAt: number;
+	activeMs: number;
+	pausedAt: number | null;
+	finishedAt: number | null;
+	stage: PlannerStage;
+	stageStartedAt: number;
+	checkpoints: PlannerTimerCheckpoint[];
+}
+
 export interface PlanStateRecord {
 	schemaVersion: typeof SCHEMA_VERSION;
 	stage: PlannerStage;
@@ -256,6 +273,7 @@ export interface PlanStateRecord {
 	debugStrategyPath: string | null;
 	activeDebugProbeId: string | null;
 	debugCleanupRequired: boolean;
+	timer: PlannerTimerState | null;
 	requiresCompact: boolean;
 	requiresUserDecision: boolean;
 	broken: boolean;
@@ -336,6 +354,7 @@ export function createInitialPlanState(input: {
 		debugStrategyPath: null,
 		activeDebugProbeId: null,
 		debugCleanupRequired: false,
+		timer: null,
 		requiresCompact: false,
 		requiresUserDecision: false,
 		broken: false,

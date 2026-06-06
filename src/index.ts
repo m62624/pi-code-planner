@@ -105,6 +105,10 @@ import {
 	type PlannerTaskToolName,
 } from "./runtime/task-tools";
 import {
+	createPlannerTimerRuntimeState,
+	registerPlannerRuntimeTimer,
+} from "./runtime/timer";
+import {
 	confirmPlannerDelete,
 	inputPlannerRenameTitle,
 	selectPlannerPlanId,
@@ -616,9 +620,11 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 		checking: false,
 		timer: null,
 	};
+	const timerRuntime = createPlannerTimerRuntimeState();
 	registerPlannerCommands(pi);
 	registerPlannerTools(pi, compactRuntime);
 	registerPlannerIdleWatchdog(pi, idleRuntime);
+	registerPlannerRuntimeTimer(pi, timerRuntime);
 	registerPlannerBuiltinToolGuard(pi);
 	registerPlannerCompactEvents(pi, compactRuntime);
 	registerInstructionDefaultsSync(pi);

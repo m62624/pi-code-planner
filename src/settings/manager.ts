@@ -18,6 +18,7 @@ export interface EffectivePlannerSettings {
 	compactSource: "project" | "global" | "default";
 	idleSource: "project" | "global" | "default";
 	metadataSource: "project" | "global" | "default";
+	timerSource: "project" | "global" | "default";
 }
 
 export async function loadEffectivePlannerSettings(input: {
@@ -76,16 +77,27 @@ export async function loadEffectivePlannerSettings(input: {
 		...(global.metadata ?? {}),
 		...(project?.metadata ?? {}),
 	};
+	const timerSource = project?.timer
+		? "project"
+		: global.timer
+			? "global"
+			: "default";
+	const timer = {
+		...DEFAULT_PLANNER_SETTINGS.timer,
+		...(global.timer ?? {}),
+		...(project?.timer ?? {}),
+	};
 
 	return {
 		paths,
 		global,
 		project,
-		effective: { worktree, compact, idle, metadata },
+		effective: { worktree, compact, idle, metadata, timer },
 		worktreeSource,
 		compactSource,
 		idleSource,
 		metadataSource,
+		timerSource,
 	};
 }
 
@@ -120,6 +132,9 @@ function normalizeSettingsFile(
 		...(record.metadata === undefined
 			? {}
 			: { metadata: normalizeMetadataSettings(record.metadata, path) }),
+		...(record.timer === undefined
+			? {}
+			: { timer: normalizeTimerSettings(record.timer, path) }),
 	};
 }
 
@@ -180,6 +195,20 @@ function positiveNumber(value: unknown, key: string, path: string): number {
 	return value;
 }
 
+function positiveInteger(value: unknown, key: string, path: string): number {
+	if (
+		typeof value !== "number" ||
+		!Number.isInteger(value) ||
+		!Number.isFinite(value) ||
+		value <= 0
+	) {
+		throw new TypeError(
+			`Planner timer setting ${key} must be a positive integer: ${path}`,
+		);
+	}
+	return value;
+}
+
 function normalizeMetadataSettings(
 	value: unknown,
 	path: string,
@@ -201,6 +230,65 @@ function normalizeMetadataSettings(
 		...(typeof record.descriptionLanguage === "string"
 			? { descriptionLanguage: record.descriptionLanguage.trim() }
 			: {}),
+	};
+}
+
+function normalizeTimerSettings(
+	value: unknown,
+	path: string,
+): PlannerSettingsFile["timer"] {
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		throw new TypeError(`Planner timer settings must be an object: ${path}`);
+	}
+	const record = value as Record<string, unknown>;
+	if (record.enabled !== undefined && typeof record.enabled !== "boolean") {
+		throw new TypeError(
+			`Planner timer setting enabled must be boolean: ${path}`,
+		);
+	}
+	if (
+		record.showCheckpoints !== undefined &&
+		typeof record.showCheckpoints !== "boolean"
+	) {
+		throw new TypeError(
+			`Planner timer setting showCheckpoints must be boolean: ${path}`,
+		);
+	}
+	if (
+		record.mode !== undefined &&
+		record.mode !== "status" &&
+		record.mode !== "widget"
+	) {
+		throw new TypeError(
+			`Planner timer setting mode must be "status" or "widget": ${path}`,
+		);
+	}
+	return {
+		...(typeof record.enabled === "boolean" ? { enabled: record.enabled } : {}),
+		...(record.mode === "status" || record.mode === "widget"
+			? { mode: record.mode }
+			: {}),
+		...(typeof record.showCheckpoints === "boolean"
+			? { showCheckpoints: record.showCheckpoints }
+			: {}),
+		...(record.maxCheckpoints === undefined
+			? {}
+			: {
+					maxCheckpoints: positiveInteger(
+						record.maxCheckpoints,
+						"maxCheckpoints",
+						path,
+					),
+				}),
+		...(record.syncIntervalMinutes === undefined
+			? {}
+			: {
+					syncIntervalMinutes: positiveNumber(
+						record.syncIntervalMinutes,
+						"syncIntervalMinutes",
+						path,
+					),
+				}),
 	};
 }
 

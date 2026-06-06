@@ -161,11 +161,26 @@ Example:
 	"worktree": { "mode": "custom", "root": "/mnt/fast/pi-worktrees" },
 	"compact": { "stage": true, "task": false },
 	"idle": { "enabled": true, "timeoutMinutes": 10 },
-	"metadata": { "descriptionLanguage": "English" }
+	"metadata": { "descriptionLanguage": "English" },
+	"timer": {
+		"enabled": true,
+		"mode": "status",
+		"showCheckpoints": true,
+		"maxCheckpoints": 5,
+		"syncIntervalMinutes": 10
+	}
 }
 ```
 
 `metadata.descriptionLanguage` controls only the short planner-list description generated through `planner_goal_submit`. Plan ids, branches, and worktree paths stay ASCII/Git-safe.
+
+### Runtime Timer
+
+The runtime timer is only user-facing TUI telemetry. It is separate from the idle watchdog and does not wake the model.
+
+`timer.mode: "status"` shows one compact footer status. `timer.mode: "widget"` shows a passive block above the editor. The timer stores only coarse events in `state.json`: start, stage checkpoints, pause/resume/finish, and a heartbeat every `timer.syncIntervalMinutes`. Live seconds are rendered from memory and are not written to disk.
+
+After a sudden shutdown, the timer resumes from the last heartbeat and caps the missing active-time window to one sync interval instead of counting offline wall-clock time.
 
 ### Idle Timer
 
