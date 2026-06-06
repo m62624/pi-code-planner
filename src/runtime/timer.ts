@@ -320,11 +320,6 @@ function renderPlannerTimerUi(input: {
 	settings: PlannerTimerSettings;
 	now: number;
 }): void {
-	if (input.status === "paused") {
-		clearPlannerTimerUi(input.ctx);
-		return;
-	}
-
 	if (input.settings.mode === "widget") {
 		setPlannerStatus(input.ctx, undefined);
 		setPlannerWidget(input.ctx, buildTimerWidgetLines(input));
@@ -352,12 +347,17 @@ function buildTimerStatusLine(input: {
 	const stateLabel =
 		input.status === "active"
 			? theme.fg("accent", "run")
-			: theme.fg("success", "done");
+			: input.status === "paused"
+				? theme.fg("warning", "wait")
+				: theme.fg("success", "done");
 	const parts = [
 		theme.fg("dim", "Planner"),
 		stateLabel,
+		"total",
 		formatClock(input.displayActiveMs),
-		`${input.state.stage} ${formatDuration(currentStageActiveMs(input.state, input.displayActiveMs))}`,
+		input.status === "paused"
+			? pauseReason(input.state)
+			: `${input.state.stage} stage ${formatDuration(currentStageActiveMs(input.state, input.displayActiveMs))}`,
 	];
 	if (input.settings.showCheckpoints && timer) {
 		const previousStages = timer.checkpoints
@@ -378,9 +378,14 @@ function buildTimerWidgetLines(input: {
 	settings: PlannerTimerSettings;
 }): string[] {
 	const timer = input.state.timer;
-	const width = 48;
+	const width = 40;
 	const title = "PLANNER";
-	const stateLabel = input.status === "active" ? "RUN" : "DONE";
+	const stateLabel =
+		input.status === "active"
+			? "RUN"
+			: input.status === "paused"
+				? "WAIT"
+				: "DONE";
 	const clock = formatClock(input.displayActiveMs);
 	const checkpointTrail = timer
 		? timer.checkpoints
@@ -390,15 +395,31 @@ function buildTimerWidgetLines(input: {
 		: input.state.stage;
 	const lines = [
 		`+${"-".repeat(width - 2)}+`,
-		`| ${padRight(title, 18)}${padRight(stateLabel, 8)}${padLeft(clock, width - 30)} |`,
+		`| ${padRight(title, 12)}${padRight(stateLabel, 8)}${padLeft(clock, width - 24)} |`,
 		`| ${padRight(`${input.state.stage}/${input.state.step}`, width - 4)} |`,
-		`| ${padRight(`stage ${formatDuration(currentStageActiveMs(input.state, input.displayActiveMs))}`, width - 4)} |`,
+		`| ${padRight(input.status === "paused" ? pauseReason(input.state) : `stage ${formatDuration(currentStageActiveMs(input.state, input.displayActiveMs))}`, width - 4)} |`,
 	];
 	if (input.settings.showCheckpoints && checkpointTrail) {
 		lines.push(`| ${padRight(checkpointTrail, width - 4)} |`);
 	}
 	lines.push(`+${"-".repeat(width - 2)}+`);
 	return lines;
+}
+
+function pauseReason(state: PlanStateRecord): string {
+	if (state.requiresUserDecision) return "waiting for user decision";
+	if (state.requiresCompact) return "compact pending";
+	if (state.stage === "intake") return "waiting for goal approval";
+	if (
+		state.stage === "discovery" &&
+		state.step === "write_questions" &&
+		state.questionsSubmitted &&
+		!state.questionsResolved
+	) {
+		return "waiting for question answers";
+	}
+	if (state.stage === "done") return "waiting for user acceptance";
+	return "waiting";
 }
 
 function currentStageActiveMs(
