@@ -454,7 +454,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		projectAccess: "planner_artifacts",
 		actions: ["write_artifacts", "state_transition"],
 		requiredArtifacts: ["decisions.md"],
-		updatedArtifacts: ["plan.md", "decisions.md", "state.json"],
+		updatedArtifacts: ["plan.md", "decisions.md", "discovery.md", "state.json"],
 		requiredGates: ["user_acceptance_required"],
 		expectedTools: ["planner_finish_step"],
 		commitPolicy: "forbidden",

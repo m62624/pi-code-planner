@@ -162,8 +162,40 @@ function stateMachineDecision(
 				: "Discovery questions must be submitted before planning.",
 			modelMessage: state.questionsSubmitted
 				? "Show the submitted discovery questions to the user verbatim. Wait for explicit answers, then call planner_questions_resolve. Do not continue to planning yet."
-				: "Call planner_questions_submit with evidence-based questions and assumptions. Use hasOpenQuestions=false only when the artifact explicitly states that no unresolved questions remain.",
+				: "Call planner_questions_submit with evidence-based questions and assumptions. If the project is empty or test/lint/build commands are not discoverable, ask for the framework, test command, lint/format command, and required flags. Use hasOpenQuestions=false only when the artifact explicitly states that no unresolved questions remain.",
 		};
+	}
+	if (
+		state.stage === "done" &&
+		state.step === "await_user_acceptance" &&
+		state.stepStatus === "running"
+	) {
+		return transitionDecision({
+			base,
+			action: "finish_step",
+			transition: "finish_step",
+			tool: "planner_finish_step",
+			allowedTransitions,
+			reason: "Wait for explicit user acceptance or change request.",
+			modelMessage:
+				"If the user accepts, ask them to run /planner-finish. If the user provides corrections or says what is wrong, treat it as a change request and call planner_finish_step with target {stage: 'done', step: 'handle_change_request'}.",
+		});
+	}
+	if (
+		state.stage === "done" &&
+		state.step === "handle_change_request" &&
+		state.stepStatus === "running"
+	) {
+		return transitionDecision({
+			base,
+			action: "finish_step",
+			transition: "finish_step",
+			tool: "planner_finish_step",
+			allowedTransitions,
+			reason: "Record user change request before returning to planning.",
+			modelMessage:
+				"Append the user's requested corrections to decisions.md, add a Change Request Replan note near the start of plan.md, and append a Post-Implementation Snapshot to discovery.md. Both plan.md and discovery.md must include Completed Work and Remaining Work subsections. Preserve completed work and do not rewrite old artifacts wholesale. Then call planner_finish_step with target {stage: 'planning', step: 'read_context'}.",
+		});
 	}
 	switch (state.stepStatus) {
 		case "pending":

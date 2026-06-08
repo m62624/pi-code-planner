@@ -343,7 +343,6 @@ function buildTimerStatusLine(input: {
 	settings: PlannerTimerSettings;
 }): string {
 	const theme = input.ctx.ui.theme;
-	const timer = input.state.timer;
 	const stateLabel =
 		input.status === "active"
 			? theme.fg("accent", "run")
@@ -358,15 +357,8 @@ function buildTimerStatusLine(input: {
 		input.status === "paused"
 			? pauseReason(input.state)
 			: `${input.state.stage} stage ${formatDuration(currentStageActiveMs(input.state, input.displayActiveMs))}`,
+		`${input.state.stage}/${input.state.step}`,
 	];
-	if (input.settings.showCheckpoints && timer) {
-		const previousStages = timer.checkpoints
-			.slice(0, -1)
-			.slice(-Math.max(0, input.settings.maxCheckpoints - 1))
-			.map((checkpoint) => checkpoint.stage)
-			.join(">");
-		if (previousStages) parts.push(`via ${previousStages}`);
-	}
 	return parts.join(" ");
 }
 
@@ -400,7 +392,7 @@ function buildTimerWidgetLines(input: {
 		`| ${padRight(input.status === "paused" ? pauseReason(input.state) : `stage ${formatDuration(currentStageActiveMs(input.state, input.displayActiveMs))}`, width - 4)} |`,
 	];
 	if (input.settings.showCheckpoints && checkpointTrail) {
-		lines.push(`| ${padRight(checkpointTrail, width - 4)} |`);
+		lines.push(`| ${padRight(`route ${checkpointTrail}`, width - 4)} |`);
 	}
 	lines.push(`+${"-".repeat(width - 2)}+`);
 	return lines;
@@ -408,7 +400,8 @@ function buildTimerWidgetLines(input: {
 
 function pauseReason(state: PlanStateRecord): string {
 	if (state.requiresUserDecision) return "waiting for user decision";
-	if (state.requiresCompact) return "compact pending";
+	if (state.requiresCompact)
+		return `compact pending at ${state.stage}/${state.step}`;
 	if (state.stage === "intake") return "waiting for goal approval";
 	if (
 		state.stage === "discovery" &&

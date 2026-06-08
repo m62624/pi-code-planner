@@ -11,8 +11,12 @@ Become familiar with the project before planning. Keep this stage cheap for a lo
    - Inspect the project tree with read-only shell commands.
    - Read only the manifests, entrypoints, tests, configuration, and source files needed to understand the requested work.
    - Write a concise `discovery.md`: architecture, relevant paths, commands, conventions, risks, and uncertainty.
+   - Record exact test, lint, build, and format commands when they exist. Include required working directory and important flags.
+   - If commands are not discoverable, record that uncertainty explicitly.
 2. `write_questions`
    - Call `planner_questions_submit` with evidence-based unresolved questions and explicit assumptions.
+   - If the project is empty or has no existing test/lint/build conventions, ask how to set up testing: framework, test command, lint command, formatter, and any required flags.
+   - If the project has existing conventions but discovery could not prove exact commands or flags, ask only for the missing commands/flags.
    - If questions exist, show them to the user verbatim and wait for answers.
    - Call `planner_questions_resolve` with the user's explicit answers.
    - If no questions remain, call `planner_questions_submit` with `hasOpenQuestions: false` and state that explicitly.

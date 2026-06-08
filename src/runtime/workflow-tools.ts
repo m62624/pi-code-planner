@@ -205,6 +205,52 @@ async function validateWorkflowExit(input: {
 				: "Discovery questions are still unresolved. Show them to the user verbatim, wait for answers, and call planner_questions_resolve before finishing discovery/write_questions.")
 		);
 	}
+	if (state.stage === "done" && state.step === "handle_change_request") {
+		return (
+			(await requireArtifactIncludes(
+				input.fs,
+				input.orchestrator.preflight.context.planPaths.decisionsMd,
+				"Change Request",
+				"Record the user's requested corrections in decisions.md under a Change Request section before finishing done/handle_change_request.",
+			)) ??
+			(await requireArtifactIncludes(
+				input.fs,
+				input.orchestrator.preflight.context.planPaths.planMd,
+				"Change Request",
+				"Append a short Change Request Replan note to plan.md before finishing done/handle_change_request.",
+			)) ??
+			(await requireArtifactIncludes(
+				input.fs,
+				input.orchestrator.preflight.context.planPaths.planMd,
+				"Completed Work",
+				"Add a Completed Work subsection to plan.md before finishing done/handle_change_request.",
+			)) ??
+			(await requireArtifactIncludes(
+				input.fs,
+				input.orchestrator.preflight.context.planPaths.planMd,
+				"Remaining Work",
+				"Add a Remaining Work subsection to plan.md before finishing done/handle_change_request.",
+			)) ??
+			(await requireArtifactIncludes(
+				input.fs,
+				input.orchestrator.preflight.context.planPaths.discoveryMd,
+				"Post-Implementation Snapshot",
+				"Append a Post-Implementation Snapshot to discovery.md before finishing done/handle_change_request.",
+			)) ??
+			(await requireArtifactIncludes(
+				input.fs,
+				input.orchestrator.preflight.context.planPaths.discoveryMd,
+				"Completed Work",
+				"Add a Completed Work subsection to discovery.md before finishing done/handle_change_request.",
+			)) ??
+			(await requireArtifactIncludes(
+				input.fs,
+				input.orchestrator.preflight.context.planPaths.discoveryMd,
+				"Remaining Work",
+				"Add a Remaining Work subsection to discovery.md before finishing done/handle_change_request.",
+			))
+		);
+	}
 	if (state.stage !== "execution") {
 		return state.stage === "planning" && state.step === "write_task_files"
 			? await validateTaskArtifacts(
@@ -335,6 +381,18 @@ async function requireNonEmptyArtifact(
 		return `Required planner artifact is missing or empty: ${path}.`;
 	}
 	return null;
+}
+
+async function requireArtifactIncludes(
+	fs: PlannerFs,
+	path: string,
+	requiredText: string,
+	message: string,
+): Promise<string | null> {
+	const nonEmpty = await requireNonEmptyArtifact(fs, path);
+	if (nonEmpty) return nonEmpty;
+	const content = await fs.readText(path);
+	return content.includes(requiredText) ? null : message;
 }
 
 export function workflowToolTransition(

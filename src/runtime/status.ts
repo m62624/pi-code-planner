@@ -182,7 +182,8 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Inspect the project tree with read-only shell commands.",
 			"Read only the source files needed to understand architecture, commands, risks, and the requested change.",
-			"Write concise findings to discovery.md.",
+			"Write concise findings to discovery.md, including exact test/lint/build commands when discoverable.",
+			"If commands are missing or the project is empty, record that uncertainty for discovery/write_questions.",
 		],
 		allowedNow: [
 			"Use read-only shell commands, source reads, and discovery.md.",
@@ -199,6 +200,8 @@ export const PLANNER_STEP_RULES = {
 		objective: "Resolve evidence-based user questions before planning.",
 		requiredActions: [
 			"Call planner_questions_submit with focused questions and assumptions for questions.md.",
+			"If the project is empty or lacks test/lint/build conventions, ask the user which test framework, lint command, formatter, and flags to use.",
+			"If existing conventions are present but exact commands/flags are unclear, ask only for the missing command details.",
 			"If open questions exist, show the returned questions to the user verbatim and wait for answers.",
 			"Call planner_questions_resolve with explicit user answers before finishing this step.",
 			"If there are no unresolved questions, submit an explicit no-questions artifact with hasOpenQuestions=false.",
@@ -237,6 +240,7 @@ export const PLANNER_STEP_RULES = {
 		objective: "Load the project context needed for planning.",
 		requiredActions: [
 			"Read discovery.md, questions.md, and decisions.md.",
+			"If decisions.md contains a Change Request, read the Post-Implementation Snapshot in discovery.md and preserve Completed Work as current context.",
 			"Read specific source files only when the recorded discovery context is insufficient.",
 		],
 		allowedNow: ["Use planner artifacts and focused source reads."],
@@ -249,6 +253,7 @@ export const PLANNER_STEP_RULES = {
 		objective: "Draft an executable plan.",
 		requiredActions: [
 			"Write plan.md with scope, constraints, risks, checks, and intended sequence.",
+			"If this is a change-request planning pass, append or revise only the relevant sections. Do not overwrite the previous completed plan wholesale and do not repeat work listed under Completed Work.",
 		],
 		allowedNow: ["Write planner artifacts."],
 		forbiddenNow: ["Do not implement code.", "Do not create task branches."],
@@ -521,19 +526,23 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition: "User decision is explicit.",
 		nextInstruction:
-			"If the user accepts, ask the user to run /planner-finish. If the user requests changes, complete with explicit next target done/handle_change_request.",
+			"If the user accepts, ask the user to run /planner-finish. If the user writes feedback, says what is wrong, or requests changes, complete with explicit next target done/handle_change_request.",
 	}),
 	handle_change_request: stepRule("done", "handle_change_request", {
 		objective: "Record requested changes and return to planning.",
 		requiredActions: [
-			"Write feedback into planner artifacts and prepare to replan within the same plan branch/worktree.",
+			"Append the user's requested corrections to decisions.md under a Change Request section.",
+			"Append a short Change Request Replan note near the start of plan.md with Completed Work and Remaining Work subsections. Preserve the previous completed plan and do not rewrite it wholesale.",
+			"Append a Post-Implementation Snapshot section to discovery.md with Completed Work, Remaining Work, current relevant files/branches, known gaps, and why another pass is needed.",
+			"Prepare to replan within the same plan branch/worktree.",
 		],
 		allowedNow: ["Write planner artifacts."],
 		forbiddenNow: [
 			"Do not delete worktree.",
 			"Do not create a new root project state.",
 		],
-		exitCondition: "Change request is recorded and planning can resume.",
+		exitCondition:
+			"Change request is recorded in decisions.md, plan.md, and discovery.md, and planning can resume.",
 		nextInstruction: "Complete with next target planning/read_context.",
 	}),
 	prepare_output_branch: stepRule("done", "prepare_output_branch", {

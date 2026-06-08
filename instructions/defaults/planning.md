@@ -16,9 +16,11 @@ At `planning/read_context`, load context in this order:
 
 1. `read_context`
    - Reconstruct project context from compacted artifacts.
+   - If `decisions.md` contains a Change Request, treat this as a follow-up planning pass. Reread the Post-Implementation Snapshot in `discovery.md`, especially `Completed Work` and `Remaining Work`.
 2. `draft_plan`
    - Write the full implementation strategy to `plan.md`.
    - Include goal, non-goals, constraints, risks, integration boundaries, required checks, and unresolved decisions.
+   - In a follow-up planning pass, preserve the existing completed plan history. Append or revise only the sections needed for the change request; do not replace `plan.md` wholesale and do not repeat work already listed under `Completed Work`.
 3. `split_tasks`
    - Split the plan into small ordered tasks.
    - Each task must be independently understandable and small enough for one TDD loop.
