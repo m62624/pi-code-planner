@@ -18,17 +18,20 @@ At `planning/read_context`, load context in this order:
    - Reconstruct project context from compacted artifacts.
    - If `decisions.md` contains a Change Request, treat this as a follow-up planning pass. Reread the Post-Implementation Snapshot in `discovery.md`, especially `Completed Work` and `Remaining Work`.
 2. `draft_plan`
-   - Write the full implementation strategy to `plan.md`.
-   - Include goal, non-goals, constraints, risks, integration boundaries, required checks, and unresolved decisions.
-   - In a follow-up planning pass, preserve the existing completed plan history. Append or revise only the sections needed for the change request; do not replace `plan.md` wholesale and do not repeat work already listed under `Completed Work`.
+	- Write the full implementation strategy to `plan.md`.
+	- Include goal, non-goals, constraints, risks, integration boundaries, required checks, and unresolved decisions.
+	- In a follow-up planning pass, preserve the existing completed plan history. Append or revise only the sections needed for the change request; do not replace `plan.md` wholesale and do not repeat work already listed under `Completed Work`.
+	- For follow-up work, add a clearly labeled revision section with what remains and why the previous implementation was rejected.
 3. `split_tasks`
-   - Split the plan into small ordered tasks.
-   - Each task must be independently understandable and small enough for one TDD loop.
+	- Split the plan into small ordered tasks.
+	- Each task must be independently understandable and small enough for one TDD loop.
+	- In a follow-up planning pass, existing completed task artifacts are history. Create new revision task IDs for new work; do not reuse a completed task ID.
 4. `write_task_files`
-   - Call `planner_task_upsert` once per behavioral task.
-   - Provide semantic fields only: task id, title, objective, scope, and acceptance criteria.
-   - The wrapper creates `task.json`, `task.md`, and empty TDD lifecycle artifacts. Do not write task JSON manually.
-   - Each `task.md` must state scope, acceptance criteria, expected files or symbols, dependency context, and checks.
+	- Call `planner_task_upsert` once per behavioral task.
+	- Provide semantic fields only: task id, title, objective, scope, and acceptance criteria.
+	- The wrapper creates `task.json`, `task.md`, and empty TDD lifecycle artifacts. Do not write task JSON manually.
+	- Each `task.md` must state scope, acceptance criteria, expected files or symbols, dependency context, and checks.
+	- In a follow-up planning pass, call `planner_task_upsert` only for new or still-pending revision tasks. Completed task IDs are immutable audit history.
 5. `verify_plan`
    - Verify that tasks are ordered, bounded, testable, and free of hidden broad work.
    - Record decisions and remaining risks.
@@ -47,6 +50,7 @@ At `planning/read_context`, load context in this order:
 - Tests, mocks, fixtures, and checks belong inside the individual behavioral task that needs them. Each task runs its own tests-first TDD loop before production edits.
 - A separate testing task is allowed only when test infrastructure itself is the requested product behavior or an explicit shared prerequisite, not merely because implementation needs tests.
 - If a task reveals additional required work, add or revise a task artifact during planning instead of silently expanding implementation scope.
+- For a change request after a completed pass, use new revision task IDs such as `fix-storage-root-revision` instead of reopening completed task IDs.
 
 ## Restrictions
 

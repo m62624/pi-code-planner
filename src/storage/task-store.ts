@@ -7,7 +7,7 @@ import {
 	type PlanStoragePaths,
 	type TaskStoragePaths,
 } from "./paths";
-import type { TaskRecord } from "./schema";
+import type { TaskRecord, TaskStatus } from "./schema";
 
 export interface UpsertTaskArtifactsInput {
 	taskId: string;
@@ -50,6 +50,17 @@ export async function readTaskRecord(
 	paths: TaskStoragePaths,
 ): Promise<TaskRecord> {
 	return await readJson<TaskRecord>(fs, paths.taskJson);
+}
+
+export async function updateTaskStatus(
+	fs: PlannerFs,
+	paths: TaskStoragePaths,
+	status: TaskStatus,
+): Promise<TaskRecord> {
+	const current = await readTaskRecord(fs, paths);
+	const next = { ...current, status };
+	await writeJson(fs, paths.taskJson, next);
+	return next;
 }
 
 function formatTaskMarkdown(task: TaskRecord): string {

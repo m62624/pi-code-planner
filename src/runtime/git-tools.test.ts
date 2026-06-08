@@ -17,7 +17,11 @@ import {
 	createProjectStoragePaths,
 	type ProjectStoragePaths,
 } from "../storage/paths";
-import { initializePlanFiles } from "../storage/plan-store";
+import {
+	initializePlanFiles,
+	readPlanRecord,
+	updatePlanRecord,
+} from "../storage/plan-store";
 import { ensureProjectRecord, setActivePlan } from "../storage/project-store";
 import {
 	createInitialPlanState,
@@ -25,6 +29,7 @@ import {
 	type PlanStateRecord,
 } from "../storage/schema";
 import { initializePlanState, readPlanState } from "../storage/state-store";
+import { readTaskRecord, upsertTaskArtifacts } from "../storage/task-store";
 import { MockPlannerFs } from "../test/mock-fs";
 import { executePlannerGitTool } from "./git-tools";
 
@@ -291,6 +296,59 @@ describe("planner git tools", () => {
 			currentBranch: "plan/plan-a",
 			activeTaskId: null,
 			mergeTargets: { taskToPlan: null },
+		});
+	});
+
+	it("marks a task done after merging it into the plan branch", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createGitToolSetup(fs, {
+			state: {
+				stage: "execution",
+				step: "merge_task_to_plan",
+				stepStatus: "running",
+				activeTaskId: "task-1",
+				currentBranch: "task/plan-a/task-1",
+				activeBranches: {
+					base: "main",
+					plan: "plan/plan-a",
+					currentTask: "task/plan-a/task-1",
+				},
+				mergeTargets: {
+					taskToPlan: "plan/plan-a",
+					planToOutput: null,
+				},
+			},
+		});
+		const taskPaths = await upsertTaskArtifacts(fs, setup.planPaths, {
+			taskId: "task-1",
+			title: "Task one",
+			objective: "Do task one.",
+			scope: ["src/a.ts"],
+			acceptanceCriteria: ["Task one is done."],
+		});
+		await updatePlanRecord(fs, setup.planPaths, (plan) => ({
+			...plan,
+			tasks: [{ taskId: "task-1", title: "Task one", status: "pending" }],
+		}));
+		const git = new MockGitRunner({
+			branch: "task/plan-a/task-1",
+			head: "abc123",
+		});
+
+		const result = await executePlannerGitTool({
+			fs,
+			git,
+			projectPaths: setup.projectPaths,
+			toolName: "planner_git_merge_task_to_plan",
+			params: { message: "merge task-1" },
+		});
+
+		expect(result.status).toBe("applied");
+		await expect(readPlanRecord(fs, setup.planPaths)).resolves.toMatchObject({
+			tasks: [{ taskId: "task-1", status: "done" }],
+		});
+		await expect(readTaskRecord(fs, taskPaths.paths)).resolves.toMatchObject({
+			status: "done",
 		});
 	});
 

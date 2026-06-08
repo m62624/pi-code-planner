@@ -194,7 +194,7 @@ function stateMachineDecision(
 			allowedTransitions,
 			reason: "Record user change request before returning to planning.",
 			modelMessage:
-				"Append the user's requested corrections to decisions.md, add a Change Request Replan note near the start of plan.md, and append a Post-Implementation Snapshot to discovery.md. Both plan.md and discovery.md must include Completed Work and Remaining Work subsections. Preserve completed work and do not rewrite old artifacts wholesale. Then call planner_finish_step with target {stage: 'planning', step: 'read_context'}.",
+				"Append the user's requested corrections to decisions.md, add a Change Request Replan note near the start of plan.md, and append a Post-Implementation Snapshot to discovery.md. Both plan.md and discovery.md must include Completed Work and Remaining Work subsections. Preserve completed work and do not rewrite old artifacts wholesale. Existing tasks become completed history; create new revision task IDs for remaining work in the follow-up planning pass. Then call planner_finish_step with target {stage: 'planning', step: 'read_context'}.",
 		});
 	}
 	switch (state.stepStatus) {

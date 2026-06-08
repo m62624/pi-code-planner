@@ -6,13 +6,14 @@ import {
 	type PlanStoragePaths,
 	type ProjectStoragePaths,
 } from "../storage/paths";
-import { readPlanRecord } from "../storage/plan-store";
+import { readPlanRecord, updatePlanRecord } from "../storage/plan-store";
 import {
 	PLANNER_STAGE_STEPS,
 	type PlannerStage,
 	type PlannerStep,
 	type PlanStateRecord,
 } from "../storage/schema";
+import { updateTaskStatus } from "../storage/task-store";
 import type { PlannerGitReality } from "./git-state-sync";
 import {
 	decidePlannerLifecycleNext,
@@ -138,6 +139,17 @@ export async function executePlannerWorkflowTool(
 		preflight: orchestrator.preflight,
 		transition,
 	});
+	if (
+		result.status === "applied" &&
+		orchestrator.preflight.context.status === "ready"
+	) {
+		await applyWorkflowSideEffects({
+			fs: input.fs,
+			planPaths: orchestrator.preflight.context.planPaths,
+			transition,
+			previousState: result.previousState,
+		});
+	}
 
 	return {
 		text: formatWorkflowToolResult(result, lifecycle),
@@ -145,6 +157,40 @@ export async function executePlannerWorkflowTool(
 		result,
 		lifecycle,
 	};
+}
+
+async function applyWorkflowSideEffects(input: {
+	fs: PlannerFs;
+	planPaths: PlanStoragePaths;
+	transition: PlannerStateTransition;
+	previousState: PlanStateRecord;
+}): Promise<void> {
+	if (
+		input.transition.type === "finish_step" &&
+		input.previousState.stage === "done" &&
+		input.previousState.step === "handle_change_request"
+	) {
+		await markExistingTasksDone(input.fs, input.planPaths);
+	}
+}
+
+async function markExistingTasksDone(
+	fs: PlannerFs,
+	planPaths: PlanStoragePaths,
+): Promise<void> {
+	const plan = await updatePlanRecord(fs, planPaths, (record) => ({
+		...record,
+		tasks: record.tasks.map((task) =>
+			task.status === "blocked" ? task : { ...task, status: "done" },
+		),
+	}));
+	for (const task of plan.tasks) {
+		if (task.status === "blocked") continue;
+		const paths = createTaskStoragePaths(planPaths, task.taskId);
+		if (await fs.exists(paths.taskJson)) {
+			await updateTaskStatus(fs, paths, "done");
+		}
+	}
 }
 
 function fallbackWorkflowToolTransition(

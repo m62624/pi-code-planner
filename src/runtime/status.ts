@@ -254,6 +254,7 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Write plan.md with scope, constraints, risks, checks, and intended sequence.",
 			"If this is a change-request planning pass, append or revise only the relevant sections. Do not overwrite the previous completed plan wholesale and do not repeat work listed under Completed Work.",
+			"For follow-up work, add a labeled revision section explaining what remains and why the previous result was rejected.",
 		],
 		allowedNow: ["Write planner artifacts."],
 		forbiddenNow: ["Do not implement code.", "Do not create task branches."],
@@ -265,8 +266,11 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Create an ordered task list with small independent tasks and acceptance criteria.",
 			"Keep tests inside each behavioral task as its TDD cycle. Never create standalone tasks for writing tests, mocks, or verification.",
+			"If this is a change-request planning pass, keep completed task IDs as history and create new revision task IDs only for remaining work.",
 		],
-		allowedNow: ["Write planner artifacts and plan task records."],
+		allowedNow: [
+			"Write planner artifacts and the planned task list in plan.md. Task records are created in planning/write_task_files.",
+		],
 		forbiddenNow: ["Do not start TDD before task files exist."],
 		exitCondition: "Each task is atomic enough for one TDD loop.",
 		nextInstruction: "Call planner_finish_step to open write_task_files.",
@@ -275,6 +279,7 @@ export const PLANNER_STEP_RULES = {
 		objective: "Create task artifacts.",
 		requiredActions: [
 			"Call planner_task_upsert for each behavioral task with scope and acceptance criteria.",
+			"In a change-request planning pass, call planner_task_upsert only for new or still-pending revision tasks. Do not reuse completed task IDs.",
 			"Let the wrapper create task.json, task.md, and empty TDD lifecycle artifacts. Do not write task JSON manually.",
 		],
 		allowedNow: ["Use planner_task_upsert for task planner artifacts only."],

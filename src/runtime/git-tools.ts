@@ -7,9 +7,14 @@ import {
 import type { GitRunner } from "../git/runner";
 import type { PlannerWrapperTool } from "../guard/tool-policy";
 import type { PlannerFs } from "../storage/fs";
-import type { ProjectStoragePaths } from "../storage/paths";
+import {
+	createTaskStoragePaths,
+	type ProjectStoragePaths,
+} from "../storage/paths";
+import { updatePlanRecord } from "../storage/plan-store";
 import type { PlanStateRecord } from "../storage/schema";
 import { savePlanState } from "../storage/state-store";
+import { updateTaskStatus } from "../storage/task-store";
 import { assertNoPlannerDebugArtifactsBeforeCommit } from "./debug-tools";
 import {
 	inspectPlannerGitReality,
@@ -258,6 +263,7 @@ async function mergeTaskTool(
 	input: PlannerGitToolExecutionInput,
 	ready: ReadyGitContext,
 ): Promise<PlannerGitToolExecutionResult> {
+	const taskId = ready.state.activeTaskId;
 	return await runStateChangingGitOperation({
 		input,
 		ready,
@@ -268,6 +274,10 @@ async function mergeTaskTool(
 				state: ready.state,
 				message: optionalMessage(input.params, "merge task into plan"),
 			}),
+		afterSave: async () => {
+			if (!taskId) return;
+			await markTaskDone(input.fs, ready, taskId);
+		},
 	});
 }
 
@@ -276,6 +286,7 @@ async function runStateChangingGitOperation(input: {
 	ready: ReadyGitContext;
 	text: string;
 	operation: () => Promise<{ state: PlanStateRecord }>;
+	afterSave?: () => Promise<void>;
 }): Promise<PlannerGitToolExecutionResult> {
 	const repoRoot = requireWorktreePath(input.ready.state);
 	const before = await inspectPlannerGitReality({
@@ -297,11 +308,30 @@ async function runStateChangingGitOperation(input: {
 		input.ready.orchestrator.preflight.context.planPaths,
 		state,
 	);
+	await input.afterSave?.();
 	return applied(input.input.toolName, input.text, {
 		before,
 		after,
 		state,
 	});
+}
+
+async function markTaskDone(
+	fs: PlannerFs,
+	ready: ReadyGitContext,
+	taskId: string,
+): Promise<void> {
+	const planPaths = ready.orchestrator.preflight.context.planPaths;
+	await updatePlanRecord(fs, planPaths, (plan) => ({
+		...plan,
+		tasks: plan.tasks.map((task) =>
+			task.taskId === taskId ? { ...task, status: "done" } : task,
+		),
+	}));
+	const taskPaths = createTaskStoragePaths(planPaths, taskId);
+	if (await fs.exists(taskPaths.taskJson)) {
+		await updateTaskStatus(fs, taskPaths, "done");
+	}
 }
 
 function requireWorktreePath(state: PlanStateRecord): string {

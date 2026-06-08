@@ -1,7 +1,7 @@
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
-import { updatePlanRecord } from "../storage/plan-store";
+import { readPlanRecord, updatePlanRecord } from "../storage/plan-store";
 import { upsertTaskArtifacts } from "../storage/task-store";
 import {
 	checkPlannerOrchestratorToolAllowed,
@@ -34,11 +34,23 @@ export async function executePlannerTaskTool(input: {
 	}
 	try {
 		const params = asObject(input.params);
+		const taskId = requiredString(params, "taskId");
+		const plan = await readPlanRecord(
+			input.fs,
+			orchestrator.preflight.context.planPaths,
+		);
+		const existing = plan.tasks.find((task) => task.taskId === taskId);
+		if (existing?.status === "done") {
+			return blocked(
+				input.toolName,
+				`Task ${taskId} is already done. For a follow-up or change request, create a new revision task id instead of reopening completed work.`,
+			);
+		}
 		const result = await upsertTaskArtifacts(
 			input.fs,
 			orchestrator.preflight.context.planPaths,
 			{
-				taskId: requiredString(params, "taskId"),
+				taskId,
 				title: requiredString(params, "title"),
 				objective: requiredString(params, "objective"),
 				scope: stringArray(params.scope, "scope"),

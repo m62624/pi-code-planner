@@ -17,11 +17,12 @@ Present the verified plan result, wait for an explicit user decision, then eithe
    - For a change request, call `planner_finish_step` with target `done/handle_change_request`.
    - `/planner-finish` atomically performs the remaining export, cleanup, and Pi session handoff. Do not try to reproduce that cleanup through model tools.
 3. `handle_change_request`
-   - Record user feedback in durable artifacts.
-   - Append a `## Change Request` section to `decisions.md` with the user's exact requested corrections.
-   - Append a short `## Change Request Replan` note near the start of `plan.md`: the previous implementation is complete, but the user requested follow-up changes. Include `### Completed Work` and `### Remaining Work` subsections. Do not rewrite the old plan wholesale.
-   - Append a `## Post-Implementation Snapshot` section to `discovery.md`: summarize what was implemented, current relevant files/branches, known gaps, and why the user requested another pass. Include `### Completed Work` and `### Remaining Work` subsections.
-   - Return to `planning/read_context` in the same plan worktree and branch.
+	- Record user feedback in durable artifacts.
+	- Append a `## Change Request` section to `decisions.md` with the user's exact requested corrections.
+	- Append a short `## Change Request Replan` note near the start of `plan.md`: the previous implementation is complete, but the user requested follow-up changes. Include `### Completed Work` and `### Remaining Work` subsections. Do not rewrite the old plan wholesale or delete the previous plan history.
+	- Append a `## Post-Implementation Snapshot` section to `discovery.md`: summarize what was implemented, current relevant files/branches, known gaps, and why the user requested another pass. Include `### Completed Work` and `### Remaining Work` subsections.
+	- Treat existing task artifacts as completed history. The follow-up planning pass may create new revision tasks for the remaining work, but must not reopen completed task IDs.
+	- Return to `planning/read_context` in the same plan worktree and branch.
 4. `prepare_output_branch`
    - Internal `/planner-finish` phase: prepare the output branch in the original repository.
 5. `merge_or_export_result`
@@ -48,7 +49,7 @@ Present the verified plan result, wait for an explicit user decision, then eithe
 
 ## Change Request Reload
 
-When returning to `planning/read_context`, reread full `plan.md`, `decisions.md`, user feedback, and `discovery.md`. Treat the previous implementation as current project context, not as a blank project. Preserve completed work, revise the plan only where the change request requires it, then continue toward execution. Rebuild tasks only as needed for the requested change. Do not repeat tasks listed under `Completed Work`; create or revise only work listed under `Remaining Work`.
+When returning to `planning/read_context`, reread full `plan.md`, `decisions.md`, user feedback, and `discovery.md`. Treat the previous implementation as current project context, not as a blank project. Preserve completed work, revise the plan only where the change request requires it, then continue toward execution. Existing completed task artifacts remain as audit history. Rebuild tasks only as needed for the requested change. Do not repeat tasks listed under `Completed Work`; create new revision task IDs only for work listed under `Remaining Work`.
 
 ## auto-compact
 

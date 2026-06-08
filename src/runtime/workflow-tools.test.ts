@@ -1,11 +1,70 @@
 import { describe, expect, it } from "vitest";
-import type { GitRunner } from "../git/runner";
+import type {
+	GitBranchInput,
+	GitCommitInput,
+	GitCreateBranchInput,
+	GitDeleteBranchInput,
+	GitMergeInput,
+	GitRepoInput,
+	GitRunner,
+	GitSwitchBranchInput,
+	GitWorktreeAddInput,
+	GitWorktreeRemoveInput,
+} from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
-import type { ProjectStoragePaths } from "../storage/paths";
+import {
+	createPlanStoragePaths,
+	createProjectStoragePaths,
+	createTaskStoragePaths,
+	type ProjectStoragePaths,
+} from "../storage/paths";
+import {
+	initializePlanFiles,
+	readPlanRecord,
+	updatePlanRecord,
+} from "../storage/plan-store";
+import { ensureProjectRecord, setActivePlan } from "../storage/project-store";
+import { createInitialPlanState, createPlanRecord } from "../storage/schema";
+import { initializePlanState } from "../storage/state-store";
+import { readTaskRecord, upsertTaskArtifacts } from "../storage/task-store";
+import { MockPlannerFs } from "../test/mock-fs";
 import {
 	executePlannerWorkflowTool,
 	workflowToolTransition,
 } from "./workflow-tools";
+
+class MockGitRunner implements GitRunner {
+	async init(_input: GitRepoInput): Promise<void> {}
+	async currentBranch(_input: GitRepoInput): Promise<string> {
+		return "plan/plan-a";
+	}
+	async headCommit(_input: GitRepoInput): Promise<string> {
+		return "abc123";
+	}
+	async statusPorcelain(_input: GitRepoInput): Promise<string> {
+		return "";
+	}
+	async diffStat(_input: GitRepoInput): Promise<string> {
+		return "";
+	}
+	async diffNameOnly(_input: GitRepoInput): Promise<string> {
+		return "";
+	}
+	async listProjectFiles(_input: GitRepoInput): Promise<string[]> {
+		return [];
+	}
+	async branchExists(_input: GitBranchInput): Promise<boolean> {
+		return true;
+	}
+	async createBranch(_input: GitCreateBranchInput): Promise<void> {}
+	async deleteBranch(_input: GitDeleteBranchInput): Promise<void> {}
+	async switchBranch(_input: GitSwitchBranchInput): Promise<void> {}
+	async stageAll(_input: GitRepoInput): Promise<void> {}
+	async commit(_input: GitCommitInput): Promise<void> {}
+	async merge(_input: GitMergeInput): Promise<void> {}
+	async worktreeAdd(_input: GitWorktreeAddInput): Promise<void> {}
+	async worktreeRemove(_input: GitWorktreeRemoveInput): Promise<void> {}
+}
 
 describe("workflowToolTransition", () => {
 	it("rejects unknown stage ids instead of casting them", () => {
@@ -41,5 +100,99 @@ describe("workflowToolTransition", () => {
 		expect(result.result.status).toBe("blocked");
 		expect(result.text).toContain("nextStage must be one of");
 		expect(result.text).toContain("Call planner_status");
+	});
+
+	it("marks existing tasks done when returning from a change request to planning", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await ensureProjectRecord(fs, projectPaths);
+		await initializePlanFiles(
+			fs,
+			planPaths,
+			createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+		);
+		await fs.mkdirp(worktreePath);
+		await initializePlanState(fs, planPaths, {
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "done",
+			step: "handle_change_request",
+			stepStatus: "running",
+			currentBranch: "plan/plan-a",
+		});
+		await setActivePlan(fs, projectPaths, "plan-a");
+		const taskPaths = await upsertTaskArtifacts(fs, planPaths, {
+			taskId: "old-task",
+			title: "Old task",
+			objective: "Already implemented.",
+			scope: ["src/a.ts"],
+			acceptanceCriteria: ["Old task passes."],
+		});
+		await updatePlanRecord(fs, planPaths, (plan) => ({
+			...plan,
+			tasks: [{ taskId: "old-task", title: "Old task", status: "pending" }],
+		}));
+		await fs.writeTextAtomic(
+			planPaths.decisionsMd,
+			"## Change Request\n\nFix remaining vault gaps.\n",
+		);
+		await fs.writeTextAtomic(
+			planPaths.planMd,
+			[
+				"## Change Request Replan",
+				"",
+				"### Completed Work",
+				"- Old implementation exists.",
+				"",
+				"### Remaining Work",
+				"- Fix storage and recovery.",
+				"",
+			].join("\n"),
+		);
+		await fs.writeTextAtomic(
+			planPaths.discoveryMd,
+			[
+				"## Post-Implementation Snapshot",
+				"",
+				"### Completed Work",
+				"- Old implementation exists.",
+				"",
+				"### Remaining Work",
+				"- Fix storage and recovery.",
+				"",
+			].join("\n"),
+		);
+
+		const result = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+
+		expect(result.result.status).toBe("applied");
+		expect(result.result.state).toMatchObject({
+			stage: "planning",
+			step: "read_context",
+		});
+		await expect(readPlanRecord(fs, planPaths)).resolves.toMatchObject({
+			tasks: [{ taskId: "old-task", status: "done" }],
+		});
+		await expect(
+			readTaskRecord(fs, createTaskStoragePaths(planPaths, "old-task")),
+		).resolves.toMatchObject({ status: "done" });
+		await expect(readTaskRecord(fs, taskPaths.paths)).resolves.toMatchObject({
+			status: "done",
+		});
 	});
 });

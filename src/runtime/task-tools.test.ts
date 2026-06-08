@@ -16,11 +16,15 @@ import {
 	createProjectStoragePaths,
 	createTaskStoragePaths,
 } from "../storage/paths";
-import { initializePlanFiles, readPlanRecord } from "../storage/plan-store";
+import {
+	initializePlanFiles,
+	readPlanRecord,
+	updatePlanRecord,
+} from "../storage/plan-store";
 import { ensureProjectRecord, setActivePlan } from "../storage/project-store";
 import { createInitialPlanState, createPlanRecord } from "../storage/schema";
 import { initializePlanState } from "../storage/state-store";
-import { readTaskRecord } from "../storage/task-store";
+import { readTaskRecord, updateTaskStatus } from "../storage/task-store";
 import { MockPlannerFs } from "../test/mock-fs";
 import { executePlannerTaskTool } from "./task-tools";
 
@@ -91,6 +95,47 @@ describe("planner task tools", () => {
 			),
 		).resolves.toMatchObject({
 			objective: "Parse config files with typed validation.",
+		});
+	});
+
+	it("blocks reopening a completed task id during follow-up planning", async () => {
+		const setup = await createTaskSetup();
+		const createResult = await executePlannerTaskTool({
+			...setup,
+			toolName: "planner_task_upsert",
+			params: {
+				taskId: "parse-config",
+				title: "Parse configuration",
+				objective: "Parse config files with typed validation.",
+				scope: ["src/config.ts"],
+				acceptanceCriteria: ["Invalid input returns a typed error."],
+			},
+		});
+		expect(createResult.status).toBe("applied");
+		const taskPaths = createTaskStoragePaths(setup.planPaths, "parse-config");
+		await updatePlanRecord(setup.fs, setup.planPaths, (plan) => ({
+			...plan,
+			tasks: plan.tasks.map((task) => ({ ...task, status: "done" })),
+		}));
+		await updateTaskStatus(setup.fs, taskPaths, "done");
+
+		const result = await executePlannerTaskTool({
+			...setup,
+			toolName: "planner_task_upsert",
+			params: {
+				taskId: "parse-config",
+				title: "Parse configuration revision",
+				objective: "Reopen old completed work.",
+				scope: ["src/config.ts"],
+				acceptanceCriteria: ["Old task is mutable."],
+			},
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("already done");
+		await expect(readTaskRecord(setup.fs, taskPaths)).resolves.toMatchObject({
+			title: "Parse configuration",
+			status: "done",
 		});
 	});
 });
