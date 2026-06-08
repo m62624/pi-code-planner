@@ -46,6 +46,11 @@ export async function createPlanWorktree(
 		input.projectPaths,
 		input.worktreePath,
 	);
+	await ensureProjectRootHasCommits(
+		input.fs,
+		input.git,
+		input.projectPaths.projectRoot,
+	);
 	await input.git.headCommit({ repoRoot: input.projectPaths.projectRoot });
 	const localExclude = projectLocal
 		? await ensureProjectWorktreesLocallyExcluded(
@@ -93,6 +98,23 @@ export async function createPlanWorktree(
 	};
 }
 
+async function ensureProjectRootHasCommits(
+	fs: PlannerFs,
+	git: GitRunner,
+	projectRoot: string,
+): Promise<void> {
+	if (await git.hasCommits({ repoRoot: projectRoot })) {
+		return;
+	}
+
+	// Repo has no commits yet (unborn HEAD). Create a minimal initial commit
+	// so that `git worktree add` has a valid HEAD to branch from.
+	const gitkeepPath = `${projectRoot}/.gitkeep`;
+	await fs.writeTextAtomic(gitkeepPath, "");
+	await git.stageAll({ repoRoot: projectRoot });
+	await git.commit({ repoRoot: projectRoot, message: INITIAL_COMMIT_MESSAGE });
+}
+
 async function resolveLocalExcludePath(
 	git: GitRunner,
 	projectRoot: string,
@@ -107,6 +129,9 @@ async function resolveLocalExcludePath(
 
 export const WORKTREE_GITIGNORE_COMMIT_MESSAGE =
 	"chore: ignore pi-code-planner worktrees";
+
+export const INITIAL_COMMIT_MESSAGE =
+	"initial commit (pi-planner: ensure repo has HEAD)";
 
 async function commitGitignoreBootstrap(
 	git: GitRunner,

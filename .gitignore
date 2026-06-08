@@ -26,3 +26,4 @@ pi-session-*.html
 
 .DS_Store
 Thumbs.db
+.pi/pi-code-planner/worktrees/

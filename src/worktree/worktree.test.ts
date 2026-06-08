@@ -16,6 +16,7 @@ import { createProjectStoragePaths } from "../storage/paths";
 import { MockPlannerFs } from "../test/mock-fs";
 import {
 	createPlanWorktree,
+	INITIAL_COMMIT_MESSAGE,
 	removePlanWorktree,
 	WORKTREE_GITIGNORE_COMMIT_MESSAGE,
 } from "./manager";
@@ -41,7 +42,11 @@ class MockGitRunner implements GitRunner {
 	async headCommit(_input: GitRepoInput): Promise<string> {
 		return "abc123";
 	}
-	async statusPorcelain(input: GitRepoInput): Promise<string> {
+	async hasCommits(_input: GitRepoInput): Promise<boolean> {
+		return this.hasCommitsResult;
+	}
+	hasCommitsResult = true;
+	statusPorcelain(input: GitRepoInput): Promise<string> {
 		this.statusChecks.push(input);
 		return this.statusResponses.shift() ?? "";
 	}
@@ -318,5 +323,43 @@ describe("worktree manager", () => {
 				force: true,
 			},
 		]);
+	});
+
+	it("creates an initial commit when the repo has no commits yet", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		git.hasCommitsResult = false;
+		const paths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const location = createProjectLocalWorktreeLocation(paths, "plan-a");
+
+		const result = await createPlanWorktree({
+			fs,
+			git,
+			projectPaths: paths,
+			worktreePath: location.path,
+			branch: "plan/plan-a",
+			fromRef: "main",
+		});
+
+		expect(result.gitignore?.action).toBe("created");
+		expect(git.staged).toEqual([
+			{ repoRoot: "/repo/app" },
+			{
+				repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
+			},
+		]);
+		expect(git.commits).toHaveLength(2);
+		expect(git.commits[0]).toEqual({
+			repoRoot: "/repo/app",
+			message: INITIAL_COMMIT_MESSAGE,
+		});
+		expect(git.commits[1]).toEqual({
+			repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
+			message: WORKTREE_GITIGNORE_COMMIT_MESSAGE,
+		});
+		expect(fs.snapshot()["/repo/app/.gitkeep"]).toBe("");
 	});
 });

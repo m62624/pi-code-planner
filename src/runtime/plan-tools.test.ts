@@ -54,6 +54,9 @@ class MockGitRunner implements GitRunner {
 		this.calls.push({ name: "headCommit", input });
 		return this.head;
 	}
+	async hasCommits(_input: GitRepoInput): Promise<boolean> {
+		return this.head !== "";
+	}
 	async statusPorcelain(input: GitRepoInput): Promise<string> {
 		this.calls.push({ name: "statusPorcelain", input });
 		return "";

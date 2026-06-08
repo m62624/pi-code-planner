@@ -52,6 +52,7 @@ export interface GitRunner {
 	init(input: GitRepoInput): Promise<void>;
 	currentBranch(input: GitRepoInput): Promise<string>;
 	headCommit(input: GitRepoInput): Promise<string>;
+	hasCommits(input: GitRepoInput): Promise<boolean>;
 	statusPorcelain(input: GitRepoInput): Promise<string>;
 	diffStat(input: GitRepoInput): Promise<string>;
 	diffNameOnly(input: GitRepoInput): Promise<string>;

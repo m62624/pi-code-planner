@@ -41,6 +41,15 @@ export class NodeGitRunner implements GitRunner {
 		return await runGitCommandOutput(buildGitHeadCommitArgs(input));
 	}
 
+	async hasCommits(input: GitRepoInput): Promise<boolean> {
+		try {
+			await runGitCommand(buildGitHasCommitsArgs(input));
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
 	async statusPorcelain(input: GitRepoInput): Promise<string> {
 		return await runGitCommandOutput(buildGitStatusPorcelainArgs(input));
 	}
@@ -121,6 +130,10 @@ export function buildGitCurrentBranchArgs(input: GitRepoInput): string[] {
 
 export function buildGitHeadCommitArgs(input: GitRepoInput): string[] {
 	return ["-C", input.repoRoot, "rev-parse", "HEAD"];
+}
+
+export function buildGitHasCommitsArgs(input: GitRepoInput): string[] {
+	return ["-C", input.repoRoot, "rev-parse", "--verify", "HEAD"];
 }
 
 export function buildGitStatusPorcelainArgs(input: GitRepoInput): string[] {
