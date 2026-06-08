@@ -195,4 +195,70 @@ describe("workflowToolTransition", () => {
 			status: "done",
 		});
 	});
+
+	it("requires a recorded doubt review before leaving finalize doubt_review", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await ensureProjectRecord(fs, projectPaths);
+		await initializePlanFiles(
+			fs,
+			planPaths,
+			createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+		);
+		await fs.mkdirp(worktreePath);
+		await initializePlanState(fs, planPaths, {
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "finalize",
+			step: "doubt_review",
+			stepStatus: "running",
+			currentBranch: "plan/plan-a",
+		});
+		await setActivePlan(fs, projectPaths, "plan-a");
+		await fs.writeTextAtomic(planPaths.verifyMd, "Checks passed.\n");
+
+		const blocked = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {
+				nextStage: "finalize",
+				nextStep: "write_final_summary",
+			},
+		});
+
+		expect(blocked.result.status).toBe("blocked");
+		expect(blocked.text).toContain("Doubt Review");
+
+		await fs.writeTextAtomic(
+			planPaths.verifyMd,
+			"## Doubt Review\n\nNo actionable concern found.\n",
+		);
+		const applied = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {
+				nextStage: "finalize",
+				nextStep: "write_final_summary",
+			},
+		});
+
+		expect(applied.result.status).toBe("applied");
+		expect(applied.result.state).toMatchObject({
+			stage: "finalize",
+			step: "write_final_summary",
+		});
+	});
 });

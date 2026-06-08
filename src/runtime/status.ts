@@ -472,7 +472,28 @@ export const PLANNER_STEP_RULES = {
 		allowedNow: ["Run checks and inspect planner git state."],
 		forbiddenNow: ["Do not cleanup worktree before user review."],
 		exitCondition: "Plan branch is verified or risks are documented.",
-		nextInstruction: "Call planner_finish_step to open write_final_summary.",
+		nextInstruction: "Call planner_finish_step to open doubt_review.",
+	}),
+	doubt_review: stepRule("finalize", "doubt_review", {
+		objective: "Doubt the completed result before user acceptance.",
+		requiredActions: [
+			"Reread goal.md, plan.md, task artifacts, verify.md, and the final diff from the planner worktree.",
+			"Actively look for mismatches between the requested behavior and the implementation, including storage paths, cleanup, recovery, user flows, and tests that may encode wrong behavior.",
+			"If a plausible bug or missing requirement is found, record it under a Doubt Review section in verify.md/decisions.md and complete with explicit target planning/read_context for revision tasks.",
+			"If no actionable issue is found, record a short Doubt Review pass note in verify.md.",
+		],
+		allowedNow: [
+			"Run focused checks and inspect planner git state from the planner worktree.",
+		],
+		forbiddenNow: [
+			"Do not ask the user for acceptance yet.",
+			"Do not patch production code directly in finalize.",
+			"Do not cleanup or export the result.",
+		],
+		exitCondition:
+			"Doubt Review is recorded and either no actionable concern remains or the state returns to planning/read_context for revision work.",
+		nextInstruction:
+			"Call planner_finish_step to open write_final_summary, or call planner_finish_step with target planning/read_context if revision tasks are needed.",
 	}),
 	write_final_summary: stepRule("finalize", "write_final_summary", {
 		objective: "Write final result summary for user review.",
@@ -961,6 +982,7 @@ function formatPlannerArtifactLinks(
 		`- discovery.md: ${planPaths.discoveryMd}`,
 		`- questions.md: ${planPaths.questionsMd}`,
 		`- decisions.md: ${planPaths.decisionsMd}`,
+		`- verify.md: ${planPaths.verifyMd}`,
 		`- tasks dir: ${planPaths.tasksDir}`,
 	];
 	if (state.activeTaskId) {

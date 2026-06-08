@@ -25,6 +25,7 @@ export interface PlanStoragePaths {
 	discoveryMd: string;
 	questionsMd: string;
 	decisionsMd: string;
+	verifyMd: string;
 	tasksDir: string;
 }
 
@@ -74,6 +75,7 @@ export function createPlanStoragePaths(
 		discoveryMd: join(planDir, "discovery.md"),
 		questionsMd: join(planDir, "questions.md"),
 		decisionsMd: join(planDir, "decisions.md"),
+		verifyMd: join(planDir, "verify.md"),
 		tasksDir: join(planDir, "tasks"),
 	};
 }

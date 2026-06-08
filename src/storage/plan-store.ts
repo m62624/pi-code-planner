@@ -16,6 +16,7 @@ export async function initializePlanFiles(
 	await ensureTextFile(fs, paths.discoveryMd);
 	await ensureTextFile(fs, paths.questionsMd);
 	await ensureTextFile(fs, paths.decisionsMd);
+	await ensureTextFile(fs, paths.verifyMd);
 	return plan;
 }
 

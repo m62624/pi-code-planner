@@ -163,6 +163,7 @@ const STEP_ALLOWED_TOOLS = {
 	},
 	finalize: {
 		verify_plan_branch: ["planner_git_inspect"],
+		doubt_review: ["planner_git_inspect"],
 		write_final_summary: [],
 		compact_finalize: [],
 		enter_done: [],

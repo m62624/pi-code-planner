@@ -220,6 +220,28 @@ describe("planner state machine", () => {
 		).toMatchObject({ nextStep: "read_context" });
 	});
 
+	it("branches final doubt review to summary or follow-up planning", () => {
+		const doubtReview = state({
+			stage: "finalize",
+			step: "doubt_review",
+			stepStatus: "running",
+		});
+
+		expect(() => completePlannerStep(doubtReview)).toThrowStateMachine(
+			"ambiguous_next_step",
+		);
+		expect(
+			completePlannerStep(doubtReview, {
+				next: { stage: "finalize", step: "write_final_summary" },
+			}),
+		).toMatchObject({ nextStep: "write_final_summary" });
+		expect(
+			completePlannerStep(doubtReview, {
+				next: { stage: "planning", step: "read_context" },
+			}),
+		).toMatchObject({ nextStep: "read_context" });
+	});
+
 	it("marks failed or blocked steps and retries without moving position", () => {
 		const failed = failPlannerStep(
 			state({

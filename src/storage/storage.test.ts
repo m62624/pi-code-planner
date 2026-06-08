@@ -151,6 +151,7 @@ describe("plan record store", () => {
 		expect(fs.snapshot()[planPaths.discoveryMd]).toBe("");
 		expect(fs.snapshot()[planPaths.questionsMd]).toBe("");
 		expect(fs.snapshot()[planPaths.decisionsMd]).toBe("");
+		expect(fs.snapshot()[planPaths.verifyMd]).toBe("");
 		expect(await fs.exists(planPaths.tasksDir)).toBe(true);
 	});
 
@@ -220,6 +221,7 @@ describe("plan state store", () => {
 			],
 			finalize: [
 				"verify_plan_branch",
+				"doubt_review",
 				"write_final_summary",
 				"compact_finalize",
 				"enter_done",
@@ -259,7 +261,7 @@ describe("plan state store", () => {
 			discovery: 4,
 			planning: 7,
 			execution: 10,
-			finalize: 4,
+			finalize: 5,
 			done: 8,
 			recovery: 6,
 		});

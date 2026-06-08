@@ -7,16 +7,22 @@ Verify the complete plan branch as one integrated result, write a durable user-f
 ## Strict Step Order
 
 1. `verify_plan_branch`
-   - Inspect planner git state and confirm that all required tasks were merged.
-   - Run project-level checks defined by project instructions and task evidence from the worktree path reported by `planner_status`.
-   - Record failures, residual risks, and any checks that cannot run locally.
-2. `write_final_summary`
-   - Write `final_summary.md`.
-   - Include completed scope, changed files, checks, risks, output branch expectations, and unresolved limitations.
-3. `compact_finalize`
-   - Request planner-controlled compact preserving summary, verification, branch state, and risks.
-4. `enter_done`
-   - Advance to `done/present_result`.
+	- Inspect planner git state and confirm that all required tasks were merged.
+	- Run project-level checks defined by project instructions and task evidence from the worktree path reported by `planner_status`.
+	- Record failures, residual risks, and any checks that cannot run locally.
+2. `doubt_review`
+	- Before asking for user acceptance, deliberately doubt the completed result.
+	- Reread `goal.md`, `plan.md`, task artifacts, `verify.md`, and the final worktree diff.
+	- Check whether tests may be proving the wrong behavior, whether required cleanup/deletion/recovery paths are actually implemented, and whether the implementation violates any explicit non-goal or storage/API constraint.
+	- If a plausible bug or missing requirement exists, write a `## Doubt Review` section to `verify.md` and `decisions.md`, then return to `planning/read_context` for revision tasks. Do not patch ad hoc in finalize.
+	- If no actionable concern remains, write a short `## Doubt Review` pass note to `verify.md`.
+3. `write_final_summary`
+	- Write `final_summary.md`.
+	- Include completed scope, changed files, checks, risks, output branch expectations, and unresolved limitations.
+4. `compact_finalize`
+	- Request planner-controlled compact preserving summary, verification, branch state, and risks.
+5. `enter_done`
+	- Advance to `done/present_result`.
 
 ## Restrictions
 
@@ -26,6 +32,7 @@ Verify the complete plan branch as one integrated result, write a durable user-f
 - Do not export the plan result before explicit user acceptance.
 - Do not use raw git.
 - If checks reveal missing implementation, record the issue and return through the controlled planning flow instead of patching ad hoc.
+- During `doubt_review`, assume there may still be bugs even if tests pass. Passing checks are evidence, not acceptance.
 
 ## Exit Condition
 

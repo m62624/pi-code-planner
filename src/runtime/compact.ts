@@ -248,6 +248,7 @@ function artifactLines(preflight: PlannerPreflightResult): string[] {
 		`- discovery.md: ${planPaths.discoveryMd}`,
 		`- questions.md: ${planPaths.questionsMd}`,
 		`- decisions.md: ${planPaths.decisionsMd}`,
+		`- verify.md: ${planPaths.verifyMd}`,
 		`- tasksDir: ${planPaths.tasksDir}`,
 	];
 	return lines;

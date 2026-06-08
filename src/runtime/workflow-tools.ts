@@ -297,6 +297,25 @@ async function validateWorkflowExit(input: {
 			))
 		);
 	}
+	if (state.stage === "finalize" && state.step === "doubt_review") {
+		const target = input.transition.next;
+		return (
+			(await requireArtifactIncludes(
+				input.fs,
+				input.orchestrator.preflight.context.planPaths.verifyMd,
+				"Doubt Review",
+				"Record the final doubt audit in verify.md under a Doubt Review section before finishing finalize/doubt_review.",
+			)) ??
+			(target?.stage === "planning" && target.step === "read_context"
+				? await requireArtifactIncludes(
+						input.fs,
+						input.orchestrator.preflight.context.planPaths.decisionsMd,
+						"Doubt Review",
+						"Record the actionable doubt findings in decisions.md before returning finalize/doubt_review to planning/read_context.",
+					)
+				: null)
+		);
+	}
 	if (state.stage !== "execution") {
 		return state.stage === "planning" && state.step === "write_task_files"
 			? await validateTaskArtifacts(

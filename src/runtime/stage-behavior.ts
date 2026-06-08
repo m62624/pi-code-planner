@@ -412,6 +412,16 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
+	doubt_review: behavior("finalize", "doubt_review", {
+		projectAccess: "checks_only",
+		actions: ["run_checks", "planner_git", "write_artifacts"],
+		requiredArtifacts: ["goal.md", "plan.md", "verify.md"],
+		updatedArtifacts: ["verify.md", "decisions.md"],
+		requiredGates: ["plan_branch_verified"],
+		expectedTools: ["planner_git_inspect"],
+		commitPolicy: "forbidden",
+		compactPolicy: "not_allowed",
+	}),
 	write_final_summary: behavior("finalize", "write_final_summary", {
 		projectAccess: "planner_artifacts",
 		actions: ["write_artifacts"],

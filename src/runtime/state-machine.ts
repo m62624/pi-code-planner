@@ -128,6 +128,12 @@ export function getAllowedNextPlannerPositions(
 			{ stage: "finalize", step: "verify_plan_branch" },
 		];
 	}
+	if (input.stage === "finalize" && input.step === "doubt_review") {
+		return [
+			{ stage: "finalize", step: "write_final_summary" },
+			{ stage: "planning", step: "read_context" },
+		];
+	}
 	if (input.stage === "finalize" && input.step === "enter_done") {
 		return [{ stage: "done", step: "present_result" }];
 	}

@@ -54,6 +54,7 @@ export type ExecutionStep =
 
 export type FinalizeStep =
 	| "verify_plan_branch"
+	| "doubt_review"
 	| "write_final_summary"
 	| "compact_finalize"
 	| "enter_done";
@@ -126,6 +127,7 @@ export const PLANNER_STAGE_STEPS = {
 	],
 	finalize: [
 		"verify_plan_branch",
+		"doubt_review",
 		"write_final_summary",
 		"compact_finalize",
 		"enter_done",
