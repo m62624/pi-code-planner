@@ -300,6 +300,46 @@ const STUCK_REPORT_TOOL_PARAMETERS = {
 			description:
 				"Root causes already ruled out by evidence. Use an empty array only when nothing has been ruled out yet.",
 		},
+		stuckLoad: {
+			type: "object",
+			description:
+				"Engineering stuck-load score. Rate each field 0-3 before compact; total is calculated by the planner.",
+			properties: {
+				failedAttempts: {
+					type: "number",
+					description:
+						"0 none, 1 one failed attempt, 2 two failed attempts, 3 three or more repeated failed attempts.",
+				},
+				evidenceQuality: {
+					type: "number",
+					description:
+						"0 exact error/repro known, 1 partial error known, 2 symptom known without repro, 3 vague failure only.",
+				},
+				hypothesisChurn: {
+					type: "number",
+					description:
+						"0 one clear hypothesis, 1 two hypotheses, 2 many unranked hypotheses, 3 repeating guesses.",
+				},
+				contextDrift: {
+					type: "number",
+					description:
+						"0 goal/task/diff recently reread, 1 one artifact stale, 2 multiple artifacts stale, 3 relying mostly on memory.",
+				},
+				verificationGap: {
+					type: "number",
+					description:
+						"0 focused verification exists, 1 broad check exists, 2 unclear check, 3 no verification path.",
+				},
+			},
+			required: [
+				"failedAttempts",
+				"evidenceQuality",
+				"hypothesisChurn",
+				"contextDrift",
+				"verificationGap",
+			],
+			additionalProperties: false,
+		},
 		nextProbe: {
 			type: "string",
 			description:
@@ -316,6 +356,7 @@ const STUCK_REPORT_TOOL_PARAMETERS = {
 		"evidence",
 		"hypotheses",
 		"discardedHypotheses",
+		"stuckLoad",
 		"nextProbe",
 		"needsUserInput",
 	],

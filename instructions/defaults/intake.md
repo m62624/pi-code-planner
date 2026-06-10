@@ -37,6 +37,16 @@ Intake is complete only after `goal.md` reflects the user's intent and the user 
 
 Evidence-based clarification questions belong to `discovery/write_questions`, after the model has indexed the project. Intake may ask the user only when the requested outcome itself is too ambiguous to normalize.
 
+## Doubt Checkpoint
+
+Before finishing an intake step, doubt the normalized goal:
+
+- Did `goal.md` preserve the user's actual request rather than a convenient nearby task?
+- Are assumptions, non-goals, and constraints explicit enough for later review?
+- Is approval explicit, or are you inferring it from silence?
+
+If doubt remains, revise `goal.md` or ask one concrete intake question. Do not enter discovery on an inferred goal.
+
 ## auto-compact
 
 Call `planner_status` immediately. Read `request.md` and `goal.md`, then resume the exact intake step. Do not begin discovery without explicit approval.

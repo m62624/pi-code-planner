@@ -37,6 +37,17 @@ Become familiar with the project before planning. Keep this stage cheap for a lo
 
 Discovery is complete when `discovery.md` contains enough context for planning, required user questions are answered or explicitly absent, and the configured discovery compact boundary finishes.
 
+## Doubt Checkpoint
+
+Before finishing discovery, doubt the context:
+
+- Did you record exact test, lint, build, and format commands with working directory and important flags?
+- If the project is empty or conventions are missing, did you ask how testing and checks should be set up?
+- Are source findings backed by paths and evidence, not filenames or comments alone?
+- Are open questions truly resolved, or only postponed?
+
+If doubt remains, update `discovery.md`/`questions.md` or ask focused questions. Do not plan from vague project memory.
+
 ## Fundamental Rules
 
 ### Rule 1: System Boundaries

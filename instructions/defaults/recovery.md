@@ -32,6 +32,7 @@ Recovery is inspection-first. It must never perform destructive repair without e
 - Conflicts, missing worktrees, and missing state block normal flow.
 - If the original project directory is missing, tell the user clearly and use only documented best-effort cleanup paths.
 - Persisted state and planner git wrappers remain the source of branch and merge targets.
+- If recovery follows a stuck compact, treat the stuck report as evidence, not as a negative state. Reset tone: one hypothesis, one smallest falsifying probe, one observed fact, then continue or ask the user.
 
 ## Resume Reload
 

@@ -65,6 +65,17 @@ At `planning/read_context`, load context in this order:
 
 Planning is complete only when `plan.md` is coherent, every task has artifacts and acceptance criteria, task order is verified, and planning compact finishes.
 
+## Doubt Checkpoint
+
+Before finishing planning, doubt the plan shape:
+
+- Does every task prove one behavioral unit, or did you hide several tasks in one broad item?
+- Does each task own its tests-first evidence instead of creating standalone test/implementation/verify tasks?
+- Are completed tasks preserved as history during follow-up planning?
+- Does `plan.md` explain remaining work without repeating work already completed?
+
+If doubt remains, revise `plan.md` or task artifacts before entering execution. Do not rely on memory from chat.
+
 ## Fundamental Rules
 
 ### Rule 3: Integration vs New Entity

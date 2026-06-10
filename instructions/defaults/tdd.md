@@ -58,15 +58,17 @@ Call `planner_status` immediately. Reload `task.md`, `tdd.md`, and focused sourc
 ## Smart TDD & Boundary Coverage (KISS-based TDD)
 
 ### 1. Mandatory Core Test Cases
-For every code modification or feature, your test suite must cover the following test cases before writing any production code:
-- **Baseline (Happy Path)**: The exact expected outcome for typical valid input.
-- **Minimum Limit**: Test with empty inputs, zero, empty arrays, or minimum bounds.
-- **Maximum Limit**: Test with maximum bounds, long strings, large arrays, or overflow limits.
-- **Danger Zone (Edge Cases & Errors)**: Test with null, undefined, invalid type formats, or error paths.
+For every behavioral task, choose only the cases that falsify a real acceptance risk before writing production code:
+- **Baseline (Happy Path)**: The exact expected outcome for typical valid input when the task changes that path.
+- **Minimum Limit**: Empty inputs, zero, empty arrays, or minimum bounds only when boundaries are part of the behavior.
+- **Maximum Limit**: Maximum bounds, long strings, large arrays, or overflow limits only when the task can plausibly break them.
+- **Danger Zone (Edge Cases & Errors)**: Null, undefined, invalid formats, or error paths only when the task owns validation/error behavior.
+- **No Reassurance Tests**: Do not add tests merely to feel safer. Add a test only when it would fail before the fix or protect a named requirement.
 
 ### 2. Implementation Footprint Restriction
 - **No Speculative Coding**: Only write the absolute minimum amount of production code required to make your TDD tests pass.
 - **Do Not Guess Behaviors**: If you write code to handle a case that is not covered by a TDD test, you are violating this rule. Add a test for that case first, then implement it.
+- **Doubt the Test Itself**: A passing test can prove the wrong behavior. Before implementation, name the exact failure signal that proves the missing behavior.
 
 ## TDD & Test-Harness Diagnostics
 

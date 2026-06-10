@@ -145,6 +145,15 @@ export function buildPlannerPostCompactMessage(input: {
 		"Use discovery.md as the project summary. Read source files only when the exact current action needs details that are not recorded there.",
 		"If planner_status reports recovery, use recovery tools and ask the user before destructive repair.",
 		"Do not use raw git. Use planner git wrappers only.",
+		...(state?.lastStuckReportPath
+			? [
+					"",
+					"## Stuck Recovery Reset",
+					"The previous attempt is evidence, not a negative state. Do not continue the same loop from memory.",
+					"After planner_status, read the stuck report and diff_stat.md, choose one smallest falsifying probe, record the observed fact, then patch only from evidence.",
+					"Do not repeat the previous attempt unless new evidence proves it was correct.",
+				]
+			: []),
 		"",
 		"## Current Stored Position",
 		`- planId: ${planId ?? "(none)"}`,

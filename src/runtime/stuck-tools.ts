@@ -48,8 +48,19 @@ interface PlannerStuckReportInput {
 	evidence: string[];
 	hypotheses: string[];
 	discardedHypotheses: string[];
+	stuckLoad: PlannerStuckLoadScore;
 	nextProbe: string;
 	needsUserInput: boolean;
+}
+
+interface PlannerStuckLoadScore {
+	failedAttempts: number;
+	evidenceQuality: number;
+	hypothesisChurn: number;
+	contextDrift: number;
+	verificationGap: number;
+	total: number;
+	level: "low" | "medium" | "high" | "critical";
 }
 
 export async function executePlannerStuckTool(input: {
@@ -135,8 +146,10 @@ export async function executePlannerStuckTool(input: {
 			`Full diff: ${artifacts.diffPatchPath}`,
 			`Diff stat: ${artifacts.diffStatPath}`,
 			`Debug artifacts dir: ${debugSession.debugArtifactsDir}`,
+			`Stuck load: ${report.stuckLoad.total}/15 (${report.stuckLoad.level})`,
 			"",
 			"Next action is planner-controlled compact. After compaction, call planner_status first, then read stuck.md and diff_stat.md.",
+			"Reset the working tone: this is not a failure state; it means the previous approach is under-instrumented.",
 			"Choose exactly one next probe from the report, run a focused command or inspect a focused file, and update the implementation from that evidence.",
 			"Do not repeat the previous attempt unless new evidence proves it was correct. If needsUserInput is true, stop and ask the user after planner_status.",
 		].join("\n"),
@@ -161,6 +174,8 @@ export async function buildPlannerStuckCompactInstructions(input: {
 		"Do not replay the failed implementation in prose. Preserve paths and decisions.",
 		"After compaction, the next message must call planner_status before any other tool.",
 		"The model must inspect stuck.md and diff_stat.md before continuing. It may open the full diff patch only when specific changed lines are needed.",
+		"Reset the working tone after compact: avoid carrying forward helpless or repetitive language. Treat the report as evidence for the next probe, not as proof that the task is impossible.",
+		"Use this recovery rule: one hypothesis, one smallest falsifying probe, one observed fact, then patch only from evidence.",
 		"Continue with one focused probe from the stuck report. Do not repeat the previous attempt without new evidence.",
 		"If the report says needsUserInput is true, ask the user a concrete question instead of guessing.",
 		"",
@@ -221,6 +236,18 @@ async function writeStuckAttemptArtifacts(input: {
 			`- stuckType: ${input.report.stuckType}`,
 			`- needsUserInput: ${String(input.report.needsUserInput)}`,
 			`- observedError: ${input.report.observedError ?? "(none)"}`,
+			`- stuckLoadTotal: ${input.report.stuckLoad.total}`,
+			`- stuckLoadLevel: ${input.report.stuckLoad.level}`,
+			"",
+			"## Stuck Load",
+			`- failedAttempts: ${input.report.stuckLoad.failedAttempts}`,
+			`- evidenceQuality: ${input.report.stuckLoad.evidenceQuality}`,
+			`- hypothesisChurn: ${input.report.stuckLoad.hypothesisChurn}`,
+			`- contextDrift: ${input.report.stuckLoad.contextDrift}`,
+			`- verificationGap: ${input.report.stuckLoad.verificationGap}`,
+			"",
+			"## Recovery Reset",
+			"This attempt is under-instrumented, not hopeless. Continue from persisted evidence only: reread planner_status, stuck.md, diff_stat.md, then run one smallest falsifying probe.",
 			"",
 			"## Evidence",
 			formatList(input.report.evidence),
@@ -310,9 +337,52 @@ function parseStuckReportParams(
 			params.discardedHypotheses,
 			"discardedHypotheses",
 		),
+		stuckLoad: requiredStuckLoad(params.stuckLoad),
 		nextProbe: requiredString(params, "nextProbe"),
 		needsUserInput: requiredBoolean(params, "needsUserInput"),
 	};
+}
+
+function requiredStuckLoad(value: unknown): PlannerStuckLoadScore {
+	const object = asObject(value);
+	const score = {
+		failedAttempts: requiredScore(object, "failedAttempts"),
+		evidenceQuality: requiredScore(object, "evidenceQuality"),
+		hypothesisChurn: requiredScore(object, "hypothesisChurn"),
+		contextDrift: requiredScore(object, "contextDrift"),
+		verificationGap: requiredScore(object, "verificationGap"),
+	};
+	const total =
+		score.failedAttempts +
+		score.evidenceQuality +
+		score.hypothesisChurn +
+		score.contextDrift +
+		score.verificationGap;
+	return {
+		...score,
+		total,
+		level:
+			total <= 3
+				? "low"
+				: total <= 7
+					? "medium"
+					: total <= 11
+						? "high"
+						: "critical",
+	};
+}
+
+function requiredScore(params: Record<string, unknown>, key: string): number {
+	const value = params[key];
+	if (
+		typeof value !== "number" ||
+		!Number.isInteger(value) ||
+		value < 0 ||
+		value > 3
+	) {
+		throw new TypeError(`${key} must be an integer from 0 to 3.`);
+	}
+	return value;
 }
 
 function requiredStuckType(params: Record<string, unknown>): PlannerStuckType {

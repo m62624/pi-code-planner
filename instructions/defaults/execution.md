@@ -64,6 +64,18 @@ Execute exactly one active task at a time through tests-first development, imple
 - Refactor is mandatory design review, not formatter/linter output. Passing checks do not prove that no refactor is needed.
 - If new required work exceeds the current task, record it as a new task or return to planning.
 
+## Doubt Checkpoint
+
+Before finishing any execution step, doubt the proof:
+
+- What artifact or command proves this exact step is complete?
+- Did the test fail before implementation for the intended reason?
+- Did the fix stay inside active task scope?
+- Did refactor review challenge the implementation, not just repeat that checks pass?
+- Are temporary debug logs, probes, or scratch files removed before commit?
+
+If doubt remains, run one focused probe or record the risk. Do not add broad tests or unrelated cleanup only to increase confidence.
+
 ## Fundamental Rules
 
 ### Rule 4: Uncertainty -> Question

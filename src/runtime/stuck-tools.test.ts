@@ -79,6 +79,13 @@ describe("planner stuck tools", () => {
 				discardedHypotheses: [
 					"Test command typo was ruled out because the focused test ran.",
 				],
+				stuckLoad: {
+					failedAttempts: 2,
+					evidenceQuality: 1,
+					hypothesisChurn: 1,
+					contextDrift: 0,
+					verificationGap: 1,
+				},
 				nextProbe:
 					"Inspect the failing assertion, reduce to one case, then patch only the codec.",
 				needsUserInput: false,
@@ -102,6 +109,12 @@ describe("planner stuck tools", () => {
 				`${setup.planPaths.tasksDir}/task-1/attempts/attempt-001/stuck.md`
 			],
 		).toContain("- stuckType: test_failure");
+		expect(
+			setup.fs.snapshot()[
+				`${setup.planPaths.tasksDir}/task-1/attempts/attempt-001/stuck.md`
+			],
+		).toContain("- stuckLoadTotal: 5");
+		expect(result.text).toContain("Stuck load: 5/15 (medium)");
 		expect(result.text).toContain("Choose exactly one next probe");
 		expect(result.text).toContain("Do not repeat the previous attempt");
 
@@ -127,6 +140,13 @@ describe("planner stuck tools", () => {
 				evidence: ["not running"],
 				hypotheses: ["step must be started first"],
 				discardedHypotheses: [],
+				stuckLoad: {
+					failedAttempts: 0,
+					evidenceQuality: 3,
+					hypothesisChurn: 0,
+					contextDrift: 0,
+					verificationGap: 3,
+				},
 				nextProbe: "start step first",
 				needsUserInput: false,
 			},
@@ -147,6 +167,13 @@ describe("planner stuck tools", () => {
 				evidence: [],
 				hypotheses: ["unknown"],
 				discardedHypotheses: [],
+				stuckLoad: {
+					failedAttempts: 4,
+					evidenceQuality: 0,
+					hypothesisChurn: 0,
+					contextDrift: 0,
+					verificationGap: 0,
+				},
 				nextProbe: "retry",
 				needsUserInput: false,
 			},
@@ -154,6 +181,35 @@ describe("planner stuck tools", () => {
 
 		expect(result.status).toBe("blocked");
 		expect(result.text).toContain("stuckType must be one of");
+	});
+
+	it("validates stuck load scores", async () => {
+		const setup = await createStuckSetup();
+
+		const result = await executePlannerStuckTool({
+			...setup,
+			toolName: "planner_report_stuck",
+			params: {
+				stuckType: "implementation_loop",
+				evidence: ["same test failed again"],
+				hypotheses: ["current patch is addressing the wrong boundary"],
+				discardedHypotheses: [],
+				stuckLoad: {
+					failedAttempts: 4,
+					evidenceQuality: 1,
+					hypothesisChurn: 2,
+					contextDrift: 1,
+					verificationGap: 1,
+				},
+				nextProbe: "reduce the failing test to one input/output pair",
+				needsUserInput: false,
+			},
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain(
+			"failedAttempts must be an integer from 0 to 3",
+		);
 	});
 });
 

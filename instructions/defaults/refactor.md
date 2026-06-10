@@ -11,10 +11,11 @@ KISS does not mean avoiding advanced language features. Traits, interfaces, gene
 1. Read `task.md`, `tdd.md`, existing `refactor.md`, and focused source files only when needed.
 2. Inspect the current task-branch diff through planner wrappers.
 3. Question the implementation actively:
-   - Can any helper, abstraction, branch, conversion, or validation path be removed or made clearer?
-   - Is any code duplicated, speculative, over-generalized, or implemented for future use rather than the current task?
-   - Does the implementation match existing project conventions and confirmed user decisions?
-   - Are signatures and effects still as small and explicit as possible?
+	- Can any helper, abstraction, branch, conversion, or validation path be removed or made clearer?
+	- Is any code duplicated, speculative, over-generalized, or implemented for future use rather than the current task?
+	- Does the implementation match existing project conventions and confirmed user decisions?
+	- Are signatures and effects still as small and explicit as possible?
+	- If you think no refactor is needed, what concrete diff fact proves that changing it would make the code worse?
 4. Call `planner_refactor_review` with concrete review fields. The wrapper writes `refactor.md` in the required format. A passing test, linter, formatter, or build is not a refactor review.
 5. Apply only behavior-preserving changes.
 6. Run focused tests from the worktree path reported by `planner_status` after each meaningful refactor group.
@@ -80,6 +81,15 @@ Decision: changed | kept
 ```
 
 If `Decision: changed`, `## Changes Applied` must describe the behavior-preserving edits. If `Decision: kept`, `## Why Kept` must explain why changing the actual diff would make the code worse or add unnecessary complexity. Do not write generic claims such as "tests pass" or "code is already good" as the reason.
+
+## Doubt Checkpoint
+
+Refactor doubt is mandatory but bounded:
+
+- Find one concrete simplification opportunity, or one concrete reason each tempting change should be rejected.
+- Do not refactor unrelated code to satisfy doubt.
+- Do not invent abstractions to look thoughtful.
+- Do not treat tool success as design proof.
 
 ## manual-compact
 
