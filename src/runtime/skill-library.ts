@@ -1,9 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
+import type { GitRunner } from "../git/runner";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerFs } from "../storage/fs";
 import { readJsonIfExists, writeJson } from "../storage/json";
 import type { ProjectStoragePaths } from "../storage/paths";
+import {
+	checkPlannerOrchestratorToolAllowed,
+	runPlannerOrchestrator,
+} from "./orchestrator";
 
 export const PLANNER_SKILL_TOOL_NAMES = ["planner_skill_create"] as const;
 
@@ -45,6 +50,7 @@ export interface PlannerSkillIndexItem {
 
 export interface PlannerSkillCreateInput {
 	fs: PlannerFs;
+	git: GitRunner;
 	projectPaths: ProjectStoragePaths;
 	params: unknown;
 	now?: number;
@@ -93,6 +99,20 @@ export async function executePlannerSkillTool(
 	input: PlannerSkillCreateInput,
 ): Promise<PlannerSkillCreateResult> {
 	try {
+		const orchestrator = await runPlannerOrchestrator(input);
+		if (orchestrator.preflight.context.status !== "ready") {
+			return blocked(orchestrator.preflight.context.reason);
+		}
+		const policy = checkPlannerOrchestratorToolAllowed({
+			orchestrator,
+			toolName: "planner_skill_create",
+		});
+		if (!policy.allow) {
+			return blocked(
+				policy.reason ?? "planner_skill_create is blocked by planner state.",
+			);
+		}
+
 		const params = parseSkillCreateParams(input.params);
 		const settings = await loadEffectivePlannerSettings({
 			fs: input.fs,

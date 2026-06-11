@@ -1,5 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { createProjectStoragePaths } from "../storage/paths";
+import type {
+	GitBranchInput,
+	GitCommitInput,
+	GitCreateBranchInput,
+	GitDeleteBranchInput,
+	GitMergeInput,
+	GitRepoInput,
+	GitRunner,
+	GitSwitchBranchInput,
+	GitWorktreeAddInput,
+	GitWorktreeRemoveInput,
+} from "../git/runner";
+import {
+	createPlanStoragePaths,
+	createProjectStoragePaths,
+} from "../storage/paths";
+import { initializePlanFiles } from "../storage/plan-store";
+import { ensureProjectRecord, setActivePlan } from "../storage/project-store";
+import { createInitialPlanState, createPlanRecord } from "../storage/schema";
+import { initializePlanState } from "../storage/state-store";
 import { MockPlannerFs } from "../test/mock-fs";
 import {
 	executePlannerSkillTool,
@@ -7,13 +26,45 @@ import {
 	validatePlannerSkillMarkdown,
 } from "./skill-library";
 
+class MockGitRunner implements GitRunner {
+	async init(_input: GitRepoInput): Promise<void> {}
+	async currentBranch(_input: GitRepoInput): Promise<string> {
+		return "plan/plan-a";
+	}
+	async headCommit(_input: GitRepoInput): Promise<string> {
+		return "abc123";
+	}
+	async hasCommits(_input: GitRepoInput): Promise<boolean> {
+		return true;
+	}
+	async statusPorcelain(_input: GitRepoInput): Promise<string> {
+		return "";
+	}
+	async diffStat(_input: GitRepoInput): Promise<string> {
+		return "";
+	}
+	async diffNameOnly(_input: GitRepoInput): Promise<string> {
+		return "";
+	}
+	async listProjectFiles(_input: GitRepoInput): Promise<string[]> {
+		return [];
+	}
+	async branchExists(_input: GitBranchInput): Promise<boolean> {
+		return true;
+	}
+	async createBranch(_input: GitCreateBranchInput): Promise<void> {}
+	async deleteBranch(_input: GitDeleteBranchInput): Promise<void> {}
+	async switchBranch(_input: GitSwitchBranchInput): Promise<void> {}
+	async stageAll(_input: GitRepoInput): Promise<void> {}
+	async commit(_input: GitCommitInput): Promise<void> {}
+	async merge(_input: GitMergeInput): Promise<void> {}
+	async worktreeAdd(_input: GitWorktreeAddInput): Promise<void> {}
+	async worktreeRemove(_input: GitWorktreeRemoveInput): Promise<void> {}
+}
+
 describe("planner skill library", () => {
 	it("creates a validated Pi skill and indexes it", async () => {
-		const fs = new MockPlannerFs();
-		const projectPaths = createProjectStoragePaths({
-			agentDir: "/agent",
-			projectRoot: "/repo/app",
-		});
+		const { fs, git, projectPaths } = await createSkillSetup();
 		await fs.writeTextAtomic(
 			"/agent/extensions/pi-code-planner/settings.json",
 			'{ "metadata": { "skillLanguage": "Russian" } }\n',
@@ -21,6 +72,7 @@ describe("planner skill library", () => {
 
 		const result = await executePlannerSkillTool({
 			fs,
+			git,
 			projectPaths,
 			uuid: "12345678-1234-1234-1234-123456789abc",
 			now: 1000,
@@ -64,14 +116,11 @@ describe("planner skill library", () => {
 	});
 
 	it("rejects skill bodies that include frontmatter", async () => {
-		const fs = new MockPlannerFs();
-		const projectPaths = createProjectStoragePaths({
-			agentDir: "/agent",
-			projectRoot: "/repo/app",
-		});
+		const { fs, git, projectPaths } = await createSkillSetup();
 
 		const result = await executePlannerSkillTool({
 			fs,
+			git,
 			projectPaths,
 			params: {
 				nameHint: "bad",
@@ -83,6 +132,30 @@ describe("planner skill library", () => {
 
 		expect(result.status).toBe("blocked");
 		expect(result.text).toContain("must not include YAML frontmatter");
+	});
+
+	it("blocks skill creation when the planner state does not allow the wrapper", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+
+		const result = await executePlannerSkillTool({
+			fs,
+			git,
+			projectPaths,
+			params: {
+				nameHint: "blocked",
+				description: "ACTIVATE when this should not be created.",
+				bodyMarkdown: "# Blocked",
+				sourceKind: "other",
+			},
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("Project record does not exist");
 	});
 
 	it("validates Pi-compatible folded and single-line skill frontmatter", () => {
@@ -137,3 +210,34 @@ describe("planner skill library", () => {
 		});
 	});
 });
+
+async function createSkillSetup() {
+	const fs = new MockPlannerFs();
+	const git = new MockGitRunner();
+	const projectPaths = createProjectStoragePaths({
+		agentDir: "/agent",
+		projectRoot: "/repo/app",
+	});
+	const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+	const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+	await ensureProjectRecord(fs, projectPaths);
+	await initializePlanFiles(
+		fs,
+		planPaths,
+		createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+	);
+	await fs.mkdirp(worktreePath);
+	await initializePlanState(fs, planPaths, {
+		...createInitialPlanState({
+			baseBranch: "main",
+			planBranch: "plan/plan-a",
+			worktreePath,
+		}),
+		stage: "finalize",
+		step: "doubt_review",
+		stepStatus: "running",
+		currentBranch: "plan/plan-a",
+	});
+	await setActivePlan(fs, projectPaths, "plan-a");
+	return { fs, git, projectPaths, planPaths };
+}

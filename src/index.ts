@@ -1716,6 +1716,7 @@ function registerPlannerTools(
 				});
 				const result = await executePlannerSkillTool({
 					fs,
+					git: new NodeGitRunner(),
 					projectPaths,
 					params,
 				});
