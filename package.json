@@ -45,7 +45,7 @@
 		"@earendil-works/pi-coding-agent": "*"
 	},
 	"devDependencies": {
-		"@earendil-works/pi-coding-agent": "latest",
+		"@earendil-works/pi-coding-agent": "0.75.4",
 		"@biomejs/biome": "^2.4.15",
 		"@types/node": "^24.0.0",
 		"typescript": "^6.0.3",
