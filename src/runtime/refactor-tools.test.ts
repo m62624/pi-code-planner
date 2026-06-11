@@ -73,6 +73,8 @@ describe("planner refactor tools", () => {
 		const refactorMd =
 			setup.fs.snapshot()[`${setup.planPaths.tasksDir}/task-1/refactor.md`];
 		expect(refactorMd).toContain("## Changed Surface");
+		expect(refactorMd).toContain("## Category Review");
+		expect(refactorMd).toContain("### scope_creep");
 		expect(refactorMd).toContain("Decision: kept");
 		expect(refactorMd).toContain("extracting it would add an unused helper");
 	});
@@ -120,6 +122,24 @@ describe("planner refactor tools", () => {
 		expect(result.status).toBe("blocked");
 		expect(result.text).toContain("changesApplied must be a non-empty string");
 	});
+
+	it("requires every refactor category review", async () => {
+		const setup = await createRefactorSetup();
+
+		const result = await executePlannerRefactorTool({
+			...setup,
+			toolName: "planner_refactor_review",
+			params: {
+				...keptParams(),
+				categoryReviews: keptParams().categoryReviews.filter(
+					(review) => review.category !== "scope_creep",
+				),
+			},
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("missing category review: scope_creep");
+	});
 });
 
 function keptParams() {
@@ -134,6 +154,62 @@ function keptParams() {
 			"- Confusing names: none\n- Module/API boundary issues: none\n- Scope leaks: none",
 		edgeCases:
 			"- Validation/error handling: invalid input path covered\n- State consistency: no mutable state\n- Regression risk: low",
+		categoryReviews: [
+			{
+				category: "duplication",
+				status: "ok",
+				evidence: "The task diff adds one local validation branch.",
+				action: "No extraction; no repeated block exists.",
+			},
+			{
+				category: "naming",
+				status: "ok",
+				evidence: "Existing parser names remain clear at the touched site.",
+				action: "Keep names unchanged.",
+			},
+			{
+				category: "control_flow",
+				status: "ok",
+				evidence: "The new branch exits through the existing error path.",
+				action: "Keep current flow.",
+			},
+			{
+				category: "abstraction_level",
+				status: "ok",
+				evidence: "A helper would only wrap one conditional.",
+				action: "Reject helper extraction.",
+			},
+			{
+				category: "hidden_coupling",
+				status: "not_applicable",
+				evidence: "The diff touches no shared state or cross-module callback.",
+				action: "No action.",
+			},
+			{
+				category: "error_handling",
+				status: "ok",
+				evidence: "Invalid input uses the existing typed error path.",
+				action: "Keep error path.",
+			},
+			{
+				category: "test_clarity",
+				status: "ok",
+				evidence: "Focused test name states the invalid input behavior.",
+				action: "Keep test name.",
+			},
+			{
+				category: "debug_leftovers",
+				status: "ok",
+				evidence: "Diff contains no temporary logs or scratch files.",
+				action: "No cleanup needed.",
+			},
+			{
+				category: "scope_creep",
+				status: "ok",
+				evidence: "Changed file matches task scope.",
+				action: "No scope reduction needed.",
+			},
+		],
 		decision: "kept",
 		whyKept:
 			"- The task diff is one validation branch and extracting it would add an unused helper.",

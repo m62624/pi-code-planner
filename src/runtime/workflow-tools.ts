@@ -30,6 +30,11 @@ import {
 	type PlannerStateTransition,
 	type PlannerStateTransitionResult,
 } from "./state-transition";
+import {
+	validatePostImplementationCounterexampleReview,
+	validatePreImplementationProofContract,
+	validateTaskMergeScopeAudit,
+} from "./tdd-evidence";
 
 export const PLANNER_WORKFLOW_TOOL_NAMES = [
 	"planner_start_step",
@@ -350,12 +355,23 @@ async function validateWorkflowExit(input: {
 			);
 		case "run_failing_tests":
 			return taskDir
-				? await requireNonEmptyArtifact(input.fs, join(taskDir, "tdd.md"))
+				? ((await requireNonEmptyArtifact(input.fs, join(taskDir, "tdd.md"))) ??
+						(await validatePreImplementationProofContract(
+							input.fs,
+							join(taskDir, "tdd.md"),
+						)))
 				: "Active task is missing. Prepare exactly one task branch first.";
 		case "implement_task":
 			return (
 				(taskDir
-					? await requireNonEmptyArtifact(input.fs, join(taskDir, "tdd.md"))
+					? ((await requireNonEmptyArtifact(
+							input.fs,
+							join(taskDir, "tdd.md"),
+						)) ??
+						(await validatePostImplementationCounterexampleReview(
+							input.fs,
+							join(taskDir, "tdd.md"),
+						)))
 					: "Active task is missing. Prepare exactly one task branch first.") ??
 				validateCleanWorktree(input.orchestrator.preflight.gitReality)
 			);
@@ -381,12 +397,45 @@ async function validateWorkflowExit(input: {
 			);
 		case "merge_task_to_plan":
 			return (
+				(await validateTaskMergeAuditForCurrentOrDoneTask(
+					input.fs,
+					input.orchestrator.preflight.context.planPaths,
+					state,
+				)) ??
 				validateMergedTask(state) ??
 				validateCleanWorktree(input.orchestrator.preflight.gitReality)
 			);
 		default:
 			return null;
 	}
+}
+
+async function validateTaskMergeAuditForCurrentOrDoneTask(
+	fs: PlannerFs,
+	planPaths: PlanStoragePaths,
+	state: PlanStateRecord,
+): Promise<string | null> {
+	const taskId = state.activeTaskId ?? (await latestDoneTaskId(fs, planPaths));
+	if (!taskId) {
+		return "Task merge audit is unavailable because no active or completed task could be identified.";
+	}
+	return await validateTaskMergeScopeAudit(
+		fs,
+		join(planPaths.tasksDir, taskId, "tdd.md"),
+	);
+}
+
+async function latestDoneTaskId(
+	fs: PlannerFs,
+	planPaths: PlanStoragePaths,
+): Promise<string | null> {
+	const plan = await readPlanRecord(fs, planPaths);
+	for (let index = plan.tasks.length - 1; index >= 0; index -= 1) {
+		if (plan.tasks[index]?.status === "done") {
+			return plan.tasks[index].taskId;
+		}
+	}
+	return null;
 }
 
 async function requireValidDoubtReview(

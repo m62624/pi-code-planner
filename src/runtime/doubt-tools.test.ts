@@ -67,6 +67,7 @@ describe("planner doubt review tool", () => {
 				possibleErrors: [
 					{
 						id: "resume-selection-bug",
+						riskCategory: "user_flow_regression",
 						status: "disproven",
 						proofLevel: "disproven_by_code",
 						claim: "Resume selection compares labels instead of ids.",
@@ -86,6 +87,9 @@ describe("planner doubt review tool", () => {
 		expect(setup.fs.snapshot()[setup.planPaths.verifyMd]).toContain(
 			"## Possible Errors",
 		);
+		expect(setup.fs.snapshot()[setup.planPaths.verifyMd]).toContain(
+			"- riskCategory: user_flow_regression",
+		);
 		expect(result.text).toContain("Proven bugs: 0");
 	});
 
@@ -100,6 +104,7 @@ describe("planner doubt review tool", () => {
 				possibleErrors: [
 					{
 						id: "storage-root-bug",
+						riskCategory: "persistence_error",
 						status: "proven_bug",
 						proofLevel: "insufficient_evidence",
 						claim: "Storage root is wrong.",
@@ -116,6 +121,36 @@ describe("planner doubt review tool", () => {
 
 		expect(result.status).toBe("blocked");
 		expect(result.text).toContain("not proof");
+	});
+
+	it("requires a valid risk category", async () => {
+		const setup = await createDoubtSetup();
+
+		const result = await executePlannerDoubtTool({
+			...setup,
+			toolName: "planner_doubt_review",
+			params: {
+				summary: "A suspected issue used an invalid risk category.",
+				possibleErrors: [
+					{
+						id: "unknown-risk",
+						riskCategory: "maybe_bad",
+						status: "needs_probe",
+						proofLevel: "insufficient_evidence",
+						claim: "Something might be wrong.",
+						specReference: "goal.md",
+						codePath: "src/index.ts",
+						verification: "No probe yet.",
+						evidence: ["Only a suspicion."],
+						counterEvidence: [],
+						nextAction: "run_probe",
+					},
+				],
+			},
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("riskCategory");
 	});
 });
 

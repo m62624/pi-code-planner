@@ -14,6 +14,7 @@ Verify the complete plan branch as one integrated result, write a durable user-f
 	- Before asking for user acceptance, deliberately doubt the completed result.
 	- Reread `goal.md`, `plan.md`, task artifacts, `verify.md`, and the final worktree diff.
 	- Start with a `Possible Errors` list written in `metadata.doubtReviewLanguage`. These are suspicions, not bugs yet.
+	- Assign every possible error to one risk category: `requirement_mismatch`, `missing_test`, `boundary_case`, `integration_break`, `state_machine_error`, `persistence_error`, `recovery_error`, `wrong_file_scope`, `user_flow_regression`, or `cleanup_or_debug_leftover`.
 	- For each possible error, prove it, disprove it, or mark it `needs_probe`. Use `planner_doubt_review`; do not hand-write `verify.md`.
 	- A suspected issue may be called `proven_bug` only after a failing test/command, exact code-path proof, or exact spec contradiction.
 	- `needs_probe` findings cannot finish the step. Run the probe or downgrade with proof.
@@ -59,9 +60,10 @@ This step is a verification stage, not a writing exercise. Treat it like TDD for
    - Write down what the result must do, what it explicitly must not do, and which project checks already passed.
    - Do not trust memory from earlier chat turns. Durable artifacts and the current worktree are the source of truth.
 2. Generate possible errors before deciding.
-   - List concrete possible errors in `metadata.doubtReviewLanguage` under `Possible Errors`.
-   - A possible error must point to a requirement, a code path, a changed file, a missing test, a migration risk, or an integration boundary.
-   - Do not include vague anxiety such as "maybe something is wrong" or style preferences without product impact.
+	- List concrete possible errors in `metadata.doubtReviewLanguage` under `Possible Errors`.
+	- A possible error must point to a requirement, a code path, a changed file, a missing test, a migration risk, or an integration boundary.
+	- Choose the narrowest risk category before deciding whether the issue is real.
+	- Do not include vague anxiety such as "maybe something is wrong" or style preferences without product impact.
 3. Prove or disprove each possible error.
    - For behavior, prefer a focused failing test or a focused command that reproduces the issue.
    - For static correctness, trace the exact code path and name the files/symbols that force the conclusion.

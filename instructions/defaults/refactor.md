@@ -16,7 +16,7 @@ KISS does not mean avoiding advanced language features. Traits, interfaces, gene
 	- Does the implementation match existing project conventions and confirmed user decisions?
 	- Are signatures and effects still as small and explicit as possible?
 	- If you think no refactor is needed, what concrete diff fact proves that changing it would make the code worse?
-4. Call `planner_refactor_review` with concrete review fields. The wrapper writes `refactor.md` in the required format. A passing test, linter, formatter, or build is not a refactor review.
+4. Call `planner_refactor_review` with concrete review fields and every required category review. The wrapper writes `refactor.md` in the required format. A passing test, linter, formatter, or build is not a refactor review.
 5. Apply only behavior-preserving changes.
 6. Run focused tests from the worktree path reported by `planner_status` after each meaningful refactor group.
 7. Commit through planner wrappers if files changed.
@@ -70,6 +70,52 @@ Do not hand-write this file when `planner_refactor_review` is available. Pass se
 - State consistency:
 - Regression risk:
 
+## Category Review
+### duplication
+- status: ok | issue | not_applicable
+- evidence:
+- action:
+
+### naming
+- status: ok | issue | not_applicable
+- evidence:
+- action:
+
+### control_flow
+- status: ok | issue | not_applicable
+- evidence:
+- action:
+
+### abstraction_level
+- status: ok | issue | not_applicable
+- evidence:
+- action:
+
+### hidden_coupling
+- status: ok | issue | not_applicable
+- evidence:
+- action:
+
+### error_handling
+- status: ok | issue | not_applicable
+- evidence:
+- action:
+
+### test_clarity
+- status: ok | issue | not_applicable
+- evidence:
+- action:
+
+### debug_leftovers
+- status: ok | issue | not_applicable
+- evidence:
+- action:
+
+### scope_creep
+- status: ok | issue | not_applicable
+- evidence:
+- action:
+
 ## Refactor Decision
 Decision: changed | kept
 
@@ -81,6 +127,20 @@ Decision: changed | kept
 ```
 
 If `Decision: changed`, `## Changes Applied` must describe the behavior-preserving edits. If `Decision: kept`, `## Why Kept` must explain why changing the actual diff would make the code worse or add unnecessary complexity. Do not write generic claims such as "tests pass" or "code is already good" as the reason.
+
+Every category must be reviewed exactly once:
+
+- `duplication`
+- `naming`
+- `control_flow`
+- `abstraction_level`
+- `hidden_coupling`
+- `error_handling`
+- `test_clarity`
+- `debug_leftovers`
+- `scope_creep`
+
+Use `status: issue` when a behavior-preserving improvement is needed. Use `status: not_applicable` only with concrete evidence explaining why that category does not apply to the active diff.
 
 ## Doubt Checkpoint
 

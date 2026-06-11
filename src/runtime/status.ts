@@ -367,19 +367,21 @@ export const PLANNER_STEP_RULES = {
 		objective: "Prove the tests guard the missing behavior.",
 		requiredActions: [
 			"Run focused checks from task/tdd/project instructions and record failure evidence.",
+			"Add ## Pre-Implementation Proof Contract to tdd.md with failingSignal, productionPath, successSignal, and outOfScopeFiles.",
 		],
 		allowedNow: ["Run checks and update test summary artifacts."],
 		forbiddenNow: [
 			"Do not implement production code before the failing/contract signal is understood.",
 		],
 		exitCondition:
-			"The failing/mock/contract signal is confirmed and documented.",
+			"The failing/mock/contract signal and pre-implementation proof contract are confirmed and documented.",
 		nextInstruction: "Call planner_finish_step to open implement_task.",
 	}),
 	implement_task: stepRule("execution", "implement_task", {
 		objective: "Implement the active task on the task branch.",
 		requiredActions: [
 			"Implement only the behavior required by task.md and tdd.md.",
+			"After green focused checks, add ## Post-Implementation Counterexample Review to tdd.md.",
 			"Run focused checks, update tdd.md with the implementation/check result, then commit through planner_git_commit when project files changed.",
 		],
 		allowedNow: [
@@ -390,7 +392,7 @@ export const PLANNER_STEP_RULES = {
 			"Do not merge the task into the plan here.",
 		],
 		exitCondition:
-			"Task implementation is committed and the worktree is clean.",
+			"Task implementation is committed, counterexample review is recorded, and the worktree is clean.",
 		nextInstruction: "Call planner_finish_step to open refactor_task.",
 	}),
 	refactor_task: stepRule("execution", "refactor_task", {
@@ -399,7 +401,7 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Read the selected implementation and inspect the planner-controlled diff.",
 			"Question unnecessary abstraction, duplication, speculative flexibility, premature generalization, and code that exists for imagined future work rather than the current task.",
-			"Call planner_refactor_review with semantic review fields; the wrapper writes the required refactor.md format.",
+			"Call planner_refactor_review with semantic review fields and every category review: duplication, naming, control_flow, abstraction_level, hidden_coupling, error_handling, test_clarity, debug_leftovers, scope_creep.",
 			"A passing test, linter, formatter, or build is not a refactor review.",
 			"Commit if project files changed.",
 		],
@@ -432,6 +434,7 @@ export const PLANNER_STEP_RULES = {
 		objective: "Merge the completed task branch into the plan branch.",
 		requiredActions: [
 			"Use planner_git_merge_task_to_plan; extension determines task and plan branches from state.json.",
+			"Before finishing this step, add ## Task Merge Scope Audit to tdd.md with acceptance coverage, changed-file scope, tests run, cleanup, commit message fit, and branch drift check.",
 		],
 		allowedNow: ["Use the task-to-plan merge wrapper."],
 		forbiddenNow: [
@@ -439,7 +442,7 @@ export const PLANNER_STEP_RULES = {
 			"Do not start next task before compact_task.",
 		],
 		exitCondition:
-			"Task branch is merged into plan branch and the task branch is deleted.",
+			"Task branch is merged into plan branch, task branch is deleted, and tdd.md contains the merge scope audit.",
 		nextInstruction: "Call planner_finish_step to open compact_task.",
 	}),
 	compact_task: stepRule("execution", "compact_task", {
@@ -483,6 +486,7 @@ export const PLANNER_STEP_RULES = {
 			"Reread goal.md, plan.md, task artifacts, verify.md, and the final diff from the planner worktree.",
 			"Reconstruct the approved promise from artifacts first; do not trust chat memory or confidence from previous steps.",
 			"Start with a Possible Errors list written in metadata.doubtReviewLanguage. Each item must name a concrete requirement, changed code path, missing test, or integration risk.",
+			"Assign every item to the narrowest riskCategory enum before proving or dismissing it.",
 			"Treat each possible error like TDD for a suspected problem: prove it with a focused failing test/command, exact code-path proof, or exact spec contradiction; otherwise disprove it or mark needs_probe.",
 			"Use planner_doubt_review to write verify.md. Do not hand-write weak doubt notes.",
 			"Run every needs_probe before leaving this step; unresolved probes cannot become bugs and cannot be ignored.",

@@ -28,6 +28,20 @@ export const DOUBT_NEXT_ACTIONS = [
 ] as const;
 export type DoubtNextAction = (typeof DOUBT_NEXT_ACTIONS)[number];
 
+export const DOUBT_RISK_CATEGORIES = [
+	"requirement_mismatch",
+	"missing_test",
+	"boundary_case",
+	"integration_break",
+	"state_machine_error",
+	"persistence_error",
+	"recovery_error",
+	"wrong_file_scope",
+	"user_flow_regression",
+	"cleanup_or_debug_leftover",
+] as const;
+export type DoubtRiskCategory = (typeof DOUBT_RISK_CATEGORIES)[number];
+
 const PROVEN_PROOF_LEVELS = new Set<DoubtProofLevel>([
 	"reproduced_test",
 	"reproduced_command",
@@ -42,6 +56,7 @@ const DISPROVEN_PROOF_LEVELS = new Set<DoubtProofLevel>([
 
 export interface DoubtFinding {
 	id: string;
+	riskCategory: DoubtRiskCategory;
 	status: DoubtFindingStatus;
 	proofLevel: DoubtProofLevel;
 	claim: string;
@@ -89,6 +104,7 @@ export function formatDoubtReviewMarkdown(review: DoubtReview): string {
 		...review.possibleErrors.flatMap((finding, index) => [
 			`### ${index + 1}. ${finding.id}`,
 			"",
+			`- riskCategory: ${finding.riskCategory}`,
 			`- status: ${finding.status}`,
 			`- proofLevel: ${finding.proofLevel}`,
 			`- nextAction: ${finding.nextAction}`,
@@ -156,6 +172,7 @@ export function validateDoubtReviewMarkdown(
 	let needsProbeCount = 0;
 	for (const block of findingBlocks) {
 		const status = fieldValue(block, "status");
+		const riskCategory = fieldValue(block, "riskCategory");
 		const proofLevel = fieldValue(block, "proofLevel");
 		const nextAction = fieldValue(block, "nextAction");
 		const claim = fieldValue(block, "claim");
@@ -164,6 +181,7 @@ export function validateDoubtReviewMarkdown(
 		const verification = fieldValue(block, "verification");
 		for (const [key, value] of Object.entries({
 			status,
+			riskCategory,
 			proofLevel,
 			nextAction,
 			claim,
@@ -176,6 +194,9 @@ export function validateDoubtReviewMarkdown(
 		if (!DOUBT_FINDING_STATUSES.includes(status as DoubtFindingStatus)) {
 			return invalid(`Invalid doubt finding status: ${status}.`);
 		}
+		if (!DOUBT_RISK_CATEGORIES.includes(riskCategory as DoubtRiskCategory)) {
+			return invalid(`Invalid doubt riskCategory: ${riskCategory}.`);
+		}
 		if (!DOUBT_PROOF_LEVELS.includes(proofLevel as DoubtProofLevel)) {
 			return invalid(`Invalid doubt proofLevel: ${proofLevel}.`);
 		}
@@ -184,6 +205,7 @@ export function validateDoubtReviewMarkdown(
 		}
 		const validation = validateFindingStatus({
 			id: block.split("\n")[0]?.trim() ?? "(unknown)",
+			riskCategory: riskCategory as DoubtRiskCategory,
 			status: status as DoubtFindingStatus,
 			proofLevel: proofLevel as DoubtProofLevel,
 			claim,
@@ -256,6 +278,7 @@ function validateFindingStatus(finding: DoubtFinding): DoubtReviewValidation {
 function parseFinding(value: Record<string, unknown>): DoubtFinding {
 	return {
 		id: requiredId(value, "id"),
+		riskCategory: requiredEnum(value, "riskCategory", DOUBT_RISK_CATEGORIES),
 		status: requiredEnum(value, "status", DOUBT_FINDING_STATUSES),
 		proofLevel: requiredEnum(value, "proofLevel", DOUBT_PROOF_LEVELS),
 		claim: requiredString(value, "claim"),

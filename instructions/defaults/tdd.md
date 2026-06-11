@@ -16,8 +16,15 @@ Use strict tests-first development for every execution task. Production implemen
    - expected failure or contract signal before implementation
 3. During `write_tests`, write tests and required test harness wiring only. Record changed files, intent, and expected signal in `tdd.md`. If project files changed, commit through `planner_git_commit` before continuing.
 4. During `run_failing_tests`, execute focused checks and record the exact failing signal in `tdd.md`.
+   - Before finishing `run_failing_tests`, add `## Pre-Implementation Proof Contract`.
+   - Record the exact missing-behavior signal, intended production path, success signal, and files that must stay out of scope.
 5. Begin production edits only during `implement_task`.
-6. During `run_final_tests`, rerun focused tests and required broader integration checks.
+6. Before finishing `implement_task`, add `## Post-Implementation Counterexample Review`.
+   - Record the smallest counterexample, boundary value, opposite case, regression risk, scope check, and action.
+   - If the counterexample is real, add a test or explicitly record why it is out of scope before continuing.
+7. During `run_final_tests`, rerun focused tests and required broader integration checks.
+8. Before finishing `merge_task_to_plan`, add `## Task Merge Scope Audit`.
+   - Confirm acceptance criteria coverage, changed-file scope, commands run, debug cleanup, commit message fit, and branch drift check.
 
 ## Test Signal Rules
 
@@ -46,6 +53,32 @@ Record in `tdd.md`:
 - passing signal after implementation
 - skipped checks and reasons
 - edge cases covered
+
+Required proof/audit sections:
+
+```md
+## Pre-Implementation Proof Contract
+- failingSignal: exact failing test, command output, mock/contract failure, or documented reason no local failing signal is possible
+- productionPath: files/functions expected to change
+- successSignal: exact command or assertion expected to pass after implementation
+- outOfScopeFiles: files or areas that must not be changed for this task
+
+## Post-Implementation Counterexample Review
+- counterexample: smallest input/user flow/state that could break the fix
+- boundaryValue: boundary checked or explicit reason it is not relevant
+- oppositeCase: opposite behavior checked or explicit reason it is not relevant
+- regressionRisk: old behavior that could have been broken
+- scopeCheck: whether the implementation stayed inside the task scope
+- action: added test, recorded non-goal, or no action with evidence
+
+## Task Merge Scope Audit
+- acceptanceCriteriaCovered: task acceptance criteria and evidence
+- changedFilesMatchScope: changed files compared with task scope
+- testsRun: exact focused and broader commands run
+- debugRemoved: temporary logs/probes/scratch files removed
+- commitMessageMatchesBehavior: latest planner commit describes behavior, not process
+- branchDriftCheck: planner_status/git wrapper state showed expected task/plan branch state
+```
 
 ## manual-compact
 

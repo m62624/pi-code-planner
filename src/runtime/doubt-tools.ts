@@ -6,6 +6,7 @@ import {
 	DOUBT_NEXT_ACTIONS,
 	DOUBT_PROOF_LEVELS,
 	DOUBT_REVIEW_TOOL_NAMES,
+	DOUBT_RISK_CATEGORIES,
 	formatDoubtReviewMarkdown,
 	type PlannerDoubtReviewToolName,
 	parseDoubtReviewParams,
@@ -21,6 +22,7 @@ export {
 	DOUBT_NEXT_ACTIONS,
 	DOUBT_PROOF_LEVELS,
 	DOUBT_REVIEW_TOOL_NAMES,
+	DOUBT_RISK_CATEGORIES,
 	type PlannerDoubtReviewToolName,
 };
 

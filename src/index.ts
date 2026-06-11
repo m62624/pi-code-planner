@@ -55,6 +55,7 @@ import {
 	DOUBT_NEXT_ACTIONS,
 	DOUBT_PROOF_LEVELS,
 	DOUBT_REVIEW_TOOL_NAMES,
+	DOUBT_RISK_CATEGORIES,
 	executePlannerDoubtTool,
 	type PlannerDoubtReviewToolName,
 } from "./runtime/doubt-tools";
@@ -99,6 +100,8 @@ import {
 	executePlannerRefactorTool,
 	PLANNER_REFACTOR_TOOL_NAMES,
 	type PlannerRefactorToolName,
+	REFACTOR_REVIEW_CATEGORIES,
+	REFACTOR_REVIEW_CATEGORY_STATUSES,
 } from "./runtime/refactor-tools";
 import {
 	buildPlannerStuckCompactInstructions,
@@ -399,6 +402,38 @@ const REFACTOR_REVIEW_TOOL_PARAMETERS = {
 			description:
 				"Concrete edge-case review: validation, error handling, state consistency, and regression risk.",
 		},
+		categoryReviews: {
+			type: "array",
+			description:
+				"Mandatory category-by-category refactor doubt review. Include every category exactly once with concrete evidence and action.",
+			items: {
+				type: "object",
+				properties: {
+					category: {
+						type: "string",
+						enum: REFACTOR_REVIEW_CATEGORIES,
+					},
+					status: {
+						type: "string",
+						enum: REFACTOR_REVIEW_CATEGORY_STATUSES,
+						description:
+							"ok when reviewed and acceptable, issue when refactor action is needed, not_applicable when the category truly does not apply.",
+					},
+					evidence: {
+						type: "string",
+						description:
+							"Concrete observation from the active task diff, tests, or project conventions.",
+					},
+					action: {
+						type: "string",
+						description:
+							"Action taken, action planned, or concrete reason no action should be taken.",
+					},
+				},
+				required: ["category", "status", "evidence", "action"],
+				additionalProperties: false,
+			},
+		},
 		decision: {
 			type: "string",
 			enum: ["changed", "kept"],
@@ -422,6 +457,7 @@ const REFACTOR_REVIEW_TOOL_PARAMETERS = {
 		"duplication",
 		"namingAndBoundaries",
 		"edgeCases",
+		"categoryReviews",
 		"decision",
 	],
 	additionalProperties: false,
@@ -445,6 +481,12 @@ const DOUBT_REVIEW_TOOL_PARAMETERS = {
 					id: {
 						type: "string",
 						description: "Lowercase kebab-case finding id.",
+					},
+					riskCategory: {
+						type: "string",
+						enum: DOUBT_RISK_CATEGORIES,
+						description:
+							"Exact risk category this suspected issue belongs to. Choose the narrowest enum value before proving or dismissing it.",
 					},
 					status: {
 						type: "string",
@@ -494,6 +536,7 @@ const DOUBT_REVIEW_TOOL_PARAMETERS = {
 				},
 				required: [
 					"id",
+					"riskCategory",
 					"status",
 					"proofLevel",
 					"claim",

@@ -8,13 +8,21 @@ import {
 } from "./orchestrator";
 import {
 	formatRefactorReviewMarkdown,
+	REFACTOR_REVIEW_CATEGORIES,
+	REFACTOR_REVIEW_CATEGORY_STATUSES,
+	type RefactorCategoryReview,
 	type RefactorDecision,
+	type RefactorReviewCategory,
+	type RefactorReviewCategoryStatus,
+	validateRefactorCategoryReviews,
 	validateRefactorReviewMarkdown,
 } from "./refactor-review";
 
 export const PLANNER_REFACTOR_TOOL_NAMES = ["planner_refactor_review"] as const;
 export type PlannerRefactorToolName =
 	(typeof PLANNER_REFACTOR_TOOL_NAMES)[number];
+
+export { REFACTOR_REVIEW_CATEGORIES, REFACTOR_REVIEW_CATEGORY_STATUSES };
 
 export interface PlannerRefactorToolExecutionResult {
 	status: "applied" | "blocked";
@@ -68,6 +76,13 @@ export async function executePlannerRefactorTool(input: {
 		const decision = requiredDecision(params);
 		const changesApplied = optionalString(params, "changesApplied");
 		const whyKept = optionalString(params, "whyKept");
+		const categoryReviews = parseCategoryReviews(params.categoryReviews);
+		const categoryValidation = validateRefactorCategoryReviews(categoryReviews);
+		if (!categoryValidation.valid) {
+			throw new TypeError(
+				categoryValidation.reason ?? "category review is invalid.",
+			);
+		}
 		if (decision === "changed" && !changesApplied) {
 			throw new TypeError(
 				"changesApplied must be a non-empty string when decision is changed.",
@@ -90,6 +105,7 @@ export async function executePlannerRefactorTool(input: {
 			duplication: requiredString(params, "duplication"),
 			namingAndBoundaries: requiredString(params, "namingAndBoundaries"),
 			edgeCases: requiredString(params, "edgeCases"),
+			categoryReviews,
 			decision,
 			changesApplied,
 			whyKept,
@@ -154,6 +170,49 @@ function requiredDecision(params: Record<string, unknown>): RefactorDecision {
 		throw new TypeError("decision must be changed or kept.");
 	}
 	return value;
+}
+
+function parseCategoryReviews(value: unknown): RefactorCategoryReview[] {
+	if (!Array.isArray(value)) {
+		throw new TypeError("categoryReviews must be an array.");
+	}
+	return value.map((entry) => {
+		const object = asObject(entry);
+		return {
+			category: requiredCategory(object),
+			status: requiredCategoryStatus(object),
+			evidence: requiredString(object, "evidence"),
+			action: requiredString(object, "action"),
+		};
+	});
+}
+
+function requiredCategory(
+	params: Record<string, unknown>,
+): RefactorReviewCategory {
+	const value = params.category;
+	if (!REFACTOR_REVIEW_CATEGORIES.includes(value as RefactorReviewCategory)) {
+		throw new TypeError(
+			`category must be one of: ${REFACTOR_REVIEW_CATEGORIES.join(", ")}.`,
+		);
+	}
+	return value as RefactorReviewCategory;
+}
+
+function requiredCategoryStatus(
+	params: Record<string, unknown>,
+): RefactorReviewCategoryStatus {
+	const value = params.status;
+	if (
+		!REFACTOR_REVIEW_CATEGORY_STATUSES.includes(
+			value as RefactorReviewCategoryStatus,
+		)
+	) {
+		throw new TypeError(
+			`status must be one of: ${REFACTOR_REVIEW_CATEGORY_STATUSES.join(", ")}.`,
+		);
+	}
+	return value as RefactorReviewCategoryStatus;
 }
 
 function errorMessage(error: unknown): string {
