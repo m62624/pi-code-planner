@@ -4,6 +4,7 @@ import { MockPlannerFs } from "../test/mock-fs";
 import {
 	executePlannerSkillTool,
 	listActivePlannerSkillPaths,
+	validatePlannerSkillMarkdown,
 } from "./skill-library";
 
 describe("planner skill library", () => {
@@ -82,5 +83,57 @@ describe("planner skill library", () => {
 
 		expect(result.status).toBe("blocked");
 		expect(result.text).toContain("must not include YAML frontmatter");
+	});
+
+	it("validates Pi-compatible folded and single-line skill frontmatter", () => {
+		expect(
+			validatePlannerSkillMarkdown(
+				[
+					"---",
+					"name: pi-planner-example-12345678",
+					"description: >",
+					"  ACTIVATE when a planner task hits a known Pi extension session switch issue.",
+					"  Use the fresh replacement ctx for follow-up messages.",
+					"---",
+					"",
+					"# Example",
+				].join("\n"),
+			),
+		).toMatchObject({
+			valid: true,
+			name: "pi-planner-example-12345678",
+		});
+
+		expect(
+			validatePlannerSkillMarkdown(
+				[
+					"---",
+					"name: pi-planner-example-12345678",
+					"description: Use when a planner task hits a known Pi extension issue.",
+					"---",
+					"",
+					"# Example",
+				].join("\n"),
+			),
+		).toMatchObject({ valid: true });
+	});
+
+	it("rejects malformed multiline description indentation", () => {
+		const result = validatePlannerSkillMarkdown(
+			[
+				"---",
+				"name: pi-planner-example-12345678",
+				"description: >",
+				" ACTIVATE when indentation is wrong.",
+				"---",
+				"",
+				"# Example",
+			].join("\n"),
+		);
+
+		expect(result).toMatchObject({
+			valid: false,
+			reason: expect.stringContaining("indented with two spaces"),
+		});
 	});
 });

@@ -111,6 +111,10 @@ export async function executePlannerSkillTool(
 			description: params.description,
 			bodyMarkdown: params.bodyMarkdown,
 		});
+		const skillValidation = validatePlannerSkillMarkdown(content);
+		if (!skillValidation.valid) {
+			throw new TypeError(skillValidation.reason);
+		}
 		const hash = createHash("sha256")
 			.update(`${params.description}\n\n${params.bodyMarkdown}`)
 			.digest("hex");
@@ -259,6 +263,136 @@ function formatPlannerSkillMarkdown(input: {
 		input.bodyMarkdown.trim(),
 		"",
 	].join("\n");
+}
+
+export function validatePlannerSkillMarkdown(content: string):
+	| {
+			valid: true;
+			name: string;
+			description: string;
+	  }
+	| {
+			valid: false;
+			reason: string;
+	  } {
+	const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+	const lines = normalized.split("\n");
+	if (lines[0] !== "---") {
+		return invalidSkill(
+			"SKILL.md must start with an exact --- frontmatter delimiter.",
+		);
+	}
+	const endIndex = lines.indexOf("---", 1);
+	if (endIndex === -1) {
+		return invalidSkill(
+			"SKILL.md frontmatter must end with an exact --- delimiter.",
+		);
+	}
+	const frontmatter = lines.slice(1, endIndex);
+	const body = lines
+		.slice(endIndex + 1)
+		.join("\n")
+		.trim();
+	if (!/^#\s+\S/m.test(body)) {
+		return invalidSkill(
+			"SKILL.md body must contain a markdown H1 heading after frontmatter.",
+		);
+	}
+	const parsed = parsePlannerSkillFrontmatter(frontmatter);
+	if (!parsed.valid) return parsed;
+	if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(parsed.name)) {
+		return invalidSkill(
+			"SKILL.md name must be 1-64 chars, lowercase a-z, digits, and single hyphens; no leading/trailing hyphen.",
+		);
+	}
+	if (parsed.name.includes("--")) {
+		return invalidSkill("SKILL.md name must not contain consecutive hyphens.");
+	}
+	if (!parsed.description.trim()) {
+		return invalidSkill("SKILL.md description is required.");
+	}
+	if (parsed.description.length > 1024) {
+		return invalidSkill("SKILL.md description must be <= 1024 characters.");
+	}
+	return { valid: true, name: parsed.name, description: parsed.description };
+}
+
+function parsePlannerSkillFrontmatter(
+	lines: string[],
+):
+	| { valid: true; name: string; description: string }
+	| { valid: false; reason: string } {
+	if (lines.length < 2) {
+		return invalidSkill(
+			"SKILL.md frontmatter must contain name and description.",
+		);
+	}
+	const nameLine = lines[0];
+	if (!nameLine.startsWith("name: ")) {
+		return invalidSkill(
+			"SKILL.md first frontmatter field must be: name: <skill-name>.",
+		);
+	}
+	const name = nameLine.slice("name: ".length).trim();
+	const descriptionLine = lines[1];
+	if (descriptionLine.startsWith("description: >")) {
+		if (descriptionLine !== "description: >") {
+			return invalidSkill(
+				"Multiline SKILL.md description must use exactly: description: >",
+			);
+		}
+		const descriptionLines = lines.slice(2);
+		if (descriptionLines.length === 0) {
+			return invalidSkill(
+				"Multiline SKILL.md description must contain indented text.",
+			);
+		}
+		for (const [index, line] of descriptionLines.entries()) {
+			if (!line.startsWith("  ")) {
+				return invalidSkill(
+					`Multiline SKILL.md description line ${index + 1} must be indented with two spaces.`,
+				);
+			}
+			if (line.startsWith("   ")) {
+				return invalidSkill(
+					`Multiline SKILL.md description line ${index + 1} must use exactly two leading spaces.`,
+				);
+			}
+			if (line.includes("\t")) {
+				return invalidSkill(
+					`Multiline SKILL.md description line ${index + 1} must not contain tabs.`,
+				);
+			}
+		}
+		return {
+			valid: true,
+			name,
+			description: descriptionLines
+				.map((line) => line.slice(2).trim())
+				.join(" ")
+				.replace(/\s+/g, " ")
+				.trim(),
+		};
+	}
+	if (descriptionLine.startsWith("description: ")) {
+		if (lines.length !== 2) {
+			return invalidSkill(
+				"Single-line SKILL.md description must not have extra frontmatter lines.",
+			);
+		}
+		return {
+			valid: true,
+			name,
+			description: descriptionLine.slice("description: ".length).trim(),
+		};
+	}
+	return invalidSkill(
+		"SKILL.md second frontmatter field must be description: <text> or description: >.",
+	);
+}
+
+function invalidSkill(reason: string): { valid: false; reason: string } {
+	return { valid: false, reason };
 }
 
 function createPlannerSkillId(nameHint: string, uuid: string): string {
