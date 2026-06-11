@@ -3,10 +3,30 @@
 	"version": "0.1.0",
 	"description": "Disk-first planning and git guardrails for Pi local-model workflows",
 	"keywords": [
-		"pi-package"
+		"pi-package",
+		"pi-code",
+		"pi-extension",
+		"planner",
+		"local-ai"
 	],
+	"homepage": "https://github.com/m62624/pi-planner#readme",
+	"bugs": {
+		"url": "https://github.com/m62624/pi-planner/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+ssh://git@github.com/m62624/pi-planner.git"
+	},
 	"type": "module",
 	"main": "src/index.ts",
+	"files": [
+		"src/**/*.ts",
+		"!src/**/*.test.ts",
+		"!src/test/**",
+		"instructions/defaults/*.md",
+		"README.md",
+		"LICENSE"
+	],
 	"pi": {
 		"extensions": [
 			"src/index.ts"
@@ -16,14 +36,16 @@
 	"scripts": {
 		"build": "tsc",
 		"check": "biome check .",
+		"ci": "npm run check && npm run build && npm test && npm pack --dry-run",
 		"format": "biome format --write .",
 		"test": "vitest run",
 		"test:watch": "vitest"
 	},
-	"dependencies": {
-		"@earendil-works/pi-coding-agent": "latest"
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": "*"
 	},
 	"devDependencies": {
+		"@earendil-works/pi-coding-agent": "latest",
 		"@biomejs/biome": "^2.4.15",
 		"@types/node": "^24.0.0",
 		"typescript": "^6.0.3",

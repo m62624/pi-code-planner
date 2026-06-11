@@ -4,10 +4,16 @@
 
 `pi-code-planner` is an experimental [Pi Code](https://github.com/badlogic/pi-mono) extension for local coding models. It wraps a small deterministic state machine around a stochastic model so long coding tasks can survive compaction, Git branching, and user approval steps.
 
-Install it directly from GitHub:
+Install the npm package after it is published:
 
 ```bash
-pi install git:github.com/m62624/pi-code-planner
+pi install npm:pi-code-planner
+```
+
+Or install the development repository directly from GitHub:
+
+```bash
+pi install git:github.com/m62624/pi-planner
 ```
 
 Then open Pi inside a Git project and run:
@@ -236,8 +242,8 @@ Use append files for project test commands, architecture notes, mock strategy, a
 ## Development 🛠️
 
 ```bash
-git clone https://github.com/m62624/pi-code-planner.git
-cd pi-code-planner
+git clone https://github.com/m62624/pi-planner.git
+cd pi-planner
 npm install
 npm run build
 pi -e ./src/index.ts
@@ -250,6 +256,8 @@ npm run check
 npm run build
 npm test
 ```
+
+Release notes and npm publishing flow are described in `RELEASING.md`.
 
 ## Safety ⚠️
 
