@@ -495,7 +495,6 @@ export type { UpsertTaskArtifactsInput } from "./storage/task-store";
 export { readTaskRecord, upsertTaskArtifacts } from "./storage/task-store";
 export type { WorktreeProjectIndexRecord } from "./storage/worktree-index";
 export {
-	bindWorktreeOriginalSession,
 	bindWorktreeRootSession,
 	createWorktreeProjectIndexPath,
 	readWorktreeProjectIndexIfExists,

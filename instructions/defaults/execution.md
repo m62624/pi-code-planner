@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Execute exactly one active task at a time through tests-first development, implementation, mandatory refactor review, final checks, merge, and task compact. There is no experiment/candidate branch loop.
+Execute exactly one active task at a time through tests-first development, implementation, mandatory refactor review, final checks, merge, and task compact.
 
 ## Context Reload Policy
 

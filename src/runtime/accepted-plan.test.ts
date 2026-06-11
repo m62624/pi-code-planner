@@ -162,7 +162,8 @@ async function createFixture(input?: {
 			projectRoot: projectPaths.projectRoot,
 			planId,
 			worktreePath,
-			originalSessionFile,
+			createdFromSessionFile: originalSessionFile,
+			lastRootSessionFile: originalSessionFile,
 		},
 	});
 	if (input?.originalSession !== false) {

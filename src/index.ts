@@ -152,7 +152,7 @@ import {
 import { PLANNER_STAGE_VALUES, PLANNER_STEP_VALUES } from "./storage/schema";
 import { readPlanStateIfExists, updatePlanState } from "./storage/state-store";
 import {
-	bindWorktreeOriginalSession,
+	bindWorktreeRootSession,
 	readWorktreeProjectIndexIfExists,
 } from "./storage/worktree-index";
 
@@ -919,7 +919,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				}
 
 				const originalSessionFile = ctx.sessionManager.getSessionFile();
-				await bindWorktreeOriginalSession({
+				await bindWorktreeRootSession({
 					fs,
 					agentDir,
 					worktreePath,
@@ -1132,7 +1132,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			}
 			const worktreePath = details.worktreePath;
 			const parentSession = ctx.sessionManager.getSessionFile();
-			await bindWorktreeOriginalSession({
+			await bindWorktreeRootSession({
 				fs,
 				agentDir,
 				worktreePath,

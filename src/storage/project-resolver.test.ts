@@ -5,7 +5,7 @@ import { createProjectStoragePaths } from "./paths";
 import { resolveProjectStoragePaths } from "./project-resolver";
 import { ensureProjectRecord } from "./project-store";
 import {
-	bindWorktreeOriginalSession,
+	bindWorktreeRootSession,
 	readWorktreeProjectIndexIfExists,
 	saveWorktreeProjectIndex,
 } from "./worktree-index";
@@ -57,7 +57,7 @@ describe("project storage resolver", () => {
 		expect(resolved.projectId).toBe(original.projectId);
 	});
 
-	it("preserves the original session file in the worktree index", async () => {
+	it("preserves root session files in the worktree index", async () => {
 		const fs = new MockPlannerFs();
 
 		await saveWorktreeProjectIndex({
@@ -69,7 +69,8 @@ describe("project storage resolver", () => {
 				projectRoot: "/repo/app",
 				projectId: "app-123",
 				planId: "plan-a",
-				originalSessionFile: "/agent/sessions/--repo-app--/parent.jsonl",
+				createdFromSessionFile: "/agent/sessions/--repo-app--/parent.jsonl",
+				lastRootSessionFile: "/agent/sessions/--repo-app--/parent.jsonl",
 			},
 		});
 
@@ -82,7 +83,6 @@ describe("project storage resolver", () => {
 		).resolves.toMatchObject({
 			planId: "plan-a",
 			projectRoot: "/repo/app",
-			originalSessionFile: "/agent/sessions/--repo-app--/parent.jsonl",
 			createdFromSessionFile: "/agent/sessions/--repo-app--/parent.jsonl",
 			lastRootSessionFile: "/agent/sessions/--repo-app--/parent.jsonl",
 		});
@@ -103,14 +103,15 @@ describe("project storage resolver", () => {
 			},
 		});
 
-		await bindWorktreeOriginalSession({
+		await bindWorktreeRootSession({
 			fs,
 			agentDir: "/agent",
 			worktreePath,
 			projectRoot: "/repo/app",
 			projectId: "app-123",
 			planId: "plan-a",
-			originalSessionFile: "/agent/sessions/--repo-app--/root.jsonl",
+			createdFromSessionFile: "/agent/sessions/--repo-app--/root.jsonl",
+			lastRootSessionFile: "/agent/sessions/--repo-app--/root.jsonl",
 		});
 
 		await expect(
@@ -120,7 +121,6 @@ describe("project storage resolver", () => {
 				worktreePath,
 			}),
 		).resolves.toMatchObject({
-			originalSessionFile: "/agent/sessions/--repo-app--/root.jsonl",
 			createdFromSessionFile: "/agent/sessions/--repo-app--/root.jsonl",
 			lastRootSessionFile: "/agent/sessions/--repo-app--/root.jsonl",
 		});
@@ -129,7 +129,7 @@ describe("project storage resolver", () => {
 	it("keeps the created-from session and updates only the last root session on resume", async () => {
 		const fs = new MockPlannerFs();
 		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
-		await bindWorktreeOriginalSession({
+		await bindWorktreeRootSession({
 			fs,
 			agentDir: "/agent",
 			worktreePath,
@@ -140,7 +140,7 @@ describe("project storage resolver", () => {
 			lastRootSessionFile: "/agent/sessions/--repo-app--/created.jsonl",
 		});
 
-		await bindWorktreeOriginalSession({
+		await bindWorktreeRootSession({
 			fs,
 			agentDir: "/agent",
 			worktreePath,
@@ -159,7 +159,6 @@ describe("project storage resolver", () => {
 		).resolves.toMatchObject({
 			createdFromSessionFile: "/agent/sessions/--repo-app--/created.jsonl",
 			lastRootSessionFile: "/agent/sessions/--repo-app--/latest.jsonl",
-			originalSessionFile: "/agent/sessions/--repo-app--/created.jsonl",
 		});
 	});
 

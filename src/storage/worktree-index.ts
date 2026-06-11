@@ -12,8 +12,6 @@ export interface WorktreeProjectIndexRecord {
 	planId: string;
 	createdFromSessionFile?: string | null;
 	lastRootSessionFile?: string | null;
-	/** @deprecated Use createdFromSessionFile and lastRootSessionFile. */
-	originalSessionFile?: string | null;
 }
 
 export function createWorktreeProjectIndexPath(input: {
@@ -38,14 +36,13 @@ export async function saveWorktreeProjectIndex(input: {
 	agentDir: string;
 	record: WorktreeProjectIndexRecord;
 }): Promise<void> {
-	const record = normalizeWorktreeProjectIndexRecord(input.record);
 	await writeJson(
 		input.fs,
 		createWorktreeProjectIndexPath({
 			agentDir: input.agentDir,
-			worktreePath: record.worktreePath,
+			worktreePath: input.record.worktreePath,
 		}),
-		record,
+		input.record,
 	);
 }
 
@@ -58,8 +55,6 @@ export async function bindWorktreeRootSession(input: {
 	planId: string;
 	createdFromSessionFile?: string | null;
 	lastRootSessionFile?: string | null;
-	/** @deprecated Use createdFromSessionFile or lastRootSessionFile. */
-	originalSessionFile?: string | null;
 }): Promise<WorktreeProjectIndexRecord> {
 	const existing = await readWorktreeProjectIndexIfExists(input);
 	const record: WorktreeProjectIndexRecord = {
@@ -71,14 +66,12 @@ export async function bindWorktreeRootSession(input: {
 		createdFromSessionFile:
 			existing?.createdFromSessionFile ??
 			input.createdFromSessionFile ??
-			input.originalSessionFile ??
 			input.lastRootSessionFile ??
 			null,
 		lastRootSessionFile:
 			input.lastRootSessionFile ??
 			existing?.lastRootSessionFile ??
 			input.createdFromSessionFile ??
-			input.originalSessionFile ??
 			null,
 	};
 	await saveWorktreeProjectIndex({
@@ -89,8 +82,6 @@ export async function bindWorktreeRootSession(input: {
 	return record;
 }
 
-export const bindWorktreeOriginalSession = bindWorktreeRootSession;
-
 export async function readWorktreeProjectIndexIfExists(input: {
 	fs: PlannerFs;
 	agentDir: string;
@@ -100,20 +91,5 @@ export async function readWorktreeProjectIndexIfExists(input: {
 		input.fs,
 		createWorktreeProjectIndexPath(input),
 	);
-	return record ? normalizeWorktreeProjectIndexRecord(record) : null;
-}
-
-function normalizeWorktreeProjectIndexRecord(
-	record: WorktreeProjectIndexRecord,
-): WorktreeProjectIndexRecord {
-	const legacy = record.originalSessionFile ?? null;
-	const createdFromSessionFile = record.createdFromSessionFile ?? legacy;
-	const lastRootSessionFile =
-		record.lastRootSessionFile ?? record.createdFromSessionFile ?? legacy;
-	return {
-		...record,
-		createdFromSessionFile,
-		lastRootSessionFile,
-		originalSessionFile: createdFromSessionFile,
-	};
+	return record;
 }
