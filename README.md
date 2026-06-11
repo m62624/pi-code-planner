@@ -179,6 +179,8 @@ Example:
 
 Settings merge in this order: defaults, global settings, then project settings.
 
+`worktree` and `compact` settings are captured when a plan is created. Changing them later does not move an existing worktree or rewrite that plan's saved `state.compactBoundaries`. `idle`, `timer`, and `metadata` settings are read while the planner is running.
+
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `worktree.mode` | `"project-local"` | Store worktrees under `<project-root>/.pi/pi-code-planner/worktrees/`. |
