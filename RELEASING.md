@@ -7,7 +7,7 @@ Releases use the same pin-tag flow as the reference workflow, adapted for npm.
 - Configure npm Trusted Publishing for this package:
   - Publisher: GitHub Actions.
   - Organization or user: `m62624`.
-  - Repository: `pi-planner`.
+  - Repository: `pi-code-planner`.
   - Workflow filename: `release.yml`.
   - Allowed action: `npm publish`.
 - Use conventional PR titles or commit messages so labels and release notes stay useful.

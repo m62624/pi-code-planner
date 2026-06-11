@@ -9,13 +9,13 @@
 		"planner",
 		"local-ai"
 	],
-	"homepage": "https://github.com/m62624/pi-planner#readme",
+	"homepage": "https://github.com/m62624/pi-code-planner#readme",
 	"bugs": {
-		"url": "https://github.com/m62624/pi-planner/issues"
+		"url": "https://github.com/m62624/pi-code-planner/issues"
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+ssh://git@github.com/m62624/pi-planner.git"
+		"url": "git+ssh://git@github.com/m62624/pi-code-planner.git"
 	},
 	"type": "module",
 	"main": "src/index.ts",

@@ -13,7 +13,7 @@ pi install npm:pi-code-planner
 Or install the development repository directly from GitHub:
 
 ```bash
-pi install git:github.com/m62624/pi-planner
+pi install git:github.com/m62624/pi-code-planner
 ```
 
 Then open Pi inside a Git project and run:
@@ -242,8 +242,8 @@ Use append files for project test commands, architecture notes, mock strategy, a
 ## Development 🛠️
 
 ```bash
-git clone https://github.com/m62624/pi-planner.git
-cd pi-planner
+git clone https://github.com/m62624/pi-code-planner.git
+cd pi-code-planner
 npm install
 npm run build
 pi -e ./src/index.ts
