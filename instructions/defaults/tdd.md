@@ -22,6 +22,7 @@ Use strict tests-first development for every execution task. Production implemen
 6. Before finishing `implement_task`, add `## Post-Implementation Counterexample Review`.
    - Record the smallest counterexample, boundary value, opposite case, regression risk, scope check, and action.
    - If the counterexample is real, add a test or explicitly record why it is out of scope before continuing.
+   - If resolving the task produced a reusable verified lesson, call `planner_skill_create` to save it for future planner sessions. Do not create a skill for ordinary task summaries.
 7. During `run_final_tests`, rerun focused tests and required broader integration checks.
 8. Before finishing `merge_task_to_plan`, add `## Task Merge Scope Audit`.
    - Confirm acceptance criteria coverage, changed-file scope, commands run, debug cleanup, commit message fit, and branch drift check.
@@ -53,6 +54,18 @@ Record in `tdd.md`:
 - passing signal after implementation
 - skipped checks and reasons
 - edge cases covered
+
+## Planner Skill Memory
+
+`planner_skill_create` is optional future memory. Use it only after a lesson is proven by a failing signal, debug probe, counterexample review, or repeated mistake that future planner sessions should avoid.
+
+Do not create skills for:
+- ordinary task summaries
+- project-specific paths that will not generalize
+- unverified opinions
+- broad advice like "write tests" or "debug carefully"
+
+When creating a skill, write the skill body in `metadata.skillLanguage`. The wrapper writes `name` and `description` frontmatter and stores the skill under the planner extension library.
 
 Required proof/audit sections:
 

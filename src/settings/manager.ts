@@ -229,6 +229,7 @@ function normalizeMetadataSettings(
 		"descriptionLanguage",
 		"commitLanguage",
 		"doubtReviewLanguage",
+		"skillLanguage",
 	] as const) {
 		if (
 			record[key] !== undefined &&
@@ -254,6 +255,9 @@ function normalizeMetadataSettings(
 			: {}),
 		...(typeof record.doubtReviewLanguage === "string"
 			? { doubtReviewLanguage: record.doubtReviewLanguage.trim() }
+			: {}),
+		...(typeof record.skillLanguage === "string"
+			? { skillLanguage: record.skillLanguage.trim() }
 			: {}),
 	};
 }
@@ -292,6 +296,12 @@ function mergeMetadataSettings(
 			global?.doubtReviewLanguage ??
 			global?.humanLanguage ??
 			DEFAULT_PLANNER_SETTINGS.metadata.doubtReviewLanguage,
+		skillLanguage:
+			project?.skillLanguage ??
+			project?.humanLanguage ??
+			global?.skillLanguage ??
+			global?.humanLanguage ??
+			DEFAULT_PLANNER_SETTINGS.metadata.skillLanguage,
 	};
 }
 

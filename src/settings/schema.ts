@@ -31,6 +31,7 @@ export interface PlannerMetadataSettings {
 	descriptionLanguage: string;
 	commitLanguage: string;
 	doubtReviewLanguage: string;
+	skillLanguage: string;
 }
 
 export interface PlannerTimerSettings {
@@ -57,6 +58,7 @@ export const DEFAULT_PLANNER_SETTINGS = {
 		descriptionLanguage: "English",
 		commitLanguage: "English",
 		doubtReviewLanguage: "English",
+		skillLanguage: "English",
 	},
 	timer: {
 		enabled: true,

@@ -52,6 +52,7 @@ export const PLANNER_STATUS_INVARIANTS = [
 	"Before finishing any step, doubt the result: identify the artifact, command, diff, or user answer that proves the exit condition is true.",
 	"Doubt must lead to a concrete probe or recorded risk. Do not create extra tests only to feel safer; add tests only when they falsify a specific requirement risk.",
 	"If repeated attempts fail, treat stuck state as under-instrumentation. Use planner_report_stuck with stuckLoad and continue from evidence after compact.",
+	"Create planner skills only from verified reusable lessons. A planner skill is future memory for later sessions, not a substitute for current stage evidence.",
 	"Task branch cannot merge into plan before final task checks pass.",
 	"Next task cannot start before merge_task_to_plan and compact_task.",
 	"Task branch is temporary. It is deleted after it is merged into the plan branch.",
@@ -383,6 +384,7 @@ export const PLANNER_STEP_RULES = {
 			"Implement only the behavior required by task.md and tdd.md.",
 			"After green focused checks, add ## Post-Implementation Counterexample Review to tdd.md.",
 			"Run focused checks, update tdd.md with the implementation/check result, then commit through planner_git_commit when project files changed.",
+			"If a repeated failure or non-obvious verified lesson was resolved, call planner_skill_create to save the reusable method for future planner sessions.",
 		],
 		allowedNow: [
 			"Edit production/test files in scope, run checks, use planner_git_commit.",
@@ -403,6 +405,7 @@ export const PLANNER_STEP_RULES = {
 			"Question unnecessary abstraction, duplication, speculative flexibility, premature generalization, and code that exists for imagined future work rather than the current task.",
 			"Call planner_refactor_review with semantic review fields and every category review: duplication, naming, control_flow, abstraction_level, hidden_coupling, error_handling, test_clarity, debug_leftovers, scope_creep.",
 			"A passing test, linter, formatter, or build is not a refactor review.",
+			"If the review proves a reusable refactor/debug lesson, call planner_skill_create with sourceKind=refactor.",
 			"Commit if project files changed.",
 		],
 		allowedNow: [
@@ -491,6 +494,7 @@ export const PLANNER_STEP_RULES = {
 			"Use planner_doubt_review to write verify.md. Do not hand-write weak doubt notes.",
 			"Run every needs_probe before leaving this step; unresolved probes cannot become bugs and cannot be ignored.",
 			"If proven_bug findings exist, record them in decisions.md and complete with explicit target planning/read_context for revision tasks.",
+			"If a proven or disproven finding teaches a reusable workflow lesson, call planner_skill_create with sourceKind=doubt_review before leaving this step.",
 			"If no proven bugs and no needs_probe findings remain, complete with target finalize/write_final_summary.",
 		],
 		allowedNow: [
@@ -511,6 +515,7 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Write final_summary.md in metadata.humanLanguage unless the user explicitly requested another language.",
 			"Summarize changes, checks, risks, output branch plan, and changed files.",
+			"If the whole plan produced a reusable verified lesson not already captured, call planner_skill_create with sourceKind=final_summary.",
 		],
 		allowedNow: ["Write final summary artifacts."],
 		forbiddenNow: ["Do not export/cleanup until user acceptance flow."],
@@ -792,6 +797,7 @@ export async function buildPlannerStatusText(
 		`- metadata.descriptionLanguage: ${settings.effective.metadata.descriptionLanguage}`,
 		`- metadata.commitLanguage: ${settings.effective.metadata.commitLanguage}`,
 		`- metadata.doubtReviewLanguage: ${settings.effective.metadata.doubtReviewLanguage}`,
+		`- metadata.skillLanguage: ${settings.effective.metadata.skillLanguage}`,
 		`- idle.enabled: ${String(settings.effective.idle.enabled)}`,
 		`- idle.timeoutMinutes: ${settings.effective.idle.timeoutMinutes}`,
 		"",

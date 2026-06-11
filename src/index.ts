@@ -104,6 +104,12 @@ import {
 	REFACTOR_REVIEW_CATEGORY_STATUSES,
 } from "./runtime/refactor-tools";
 import {
+	executePlannerSkillTool,
+	listActivePlannerSkillPaths,
+	PLANNER_SKILL_SOURCE_KINDS,
+	PLANNER_SKILL_TOOL_NAMES,
+} from "./runtime/skill-library";
+import {
 	buildPlannerStuckCompactInstructions,
 	executePlannerStuckTool,
 	PLANNER_STUCK_TOOL_NAMES,
@@ -555,6 +561,49 @@ const DOUBT_REVIEW_TOOL_PARAMETERS = {
 	additionalProperties: false,
 } as const;
 
+const SKILL_CREATE_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		nameHint: {
+			type: "string",
+			description:
+				"Short ASCII-oriented semantic hint for the skill name. The wrapper normalizes it and appends a UUID suffix.",
+		},
+		description: {
+			type: "string",
+			description:
+				"Pi skill trigger description, <=1024 chars. Include ACTIVATE/Use when conditions and avoid broad generic wording.",
+		},
+		bodyMarkdown: {
+			type: "string",
+			description:
+				"Full SKILL.md body without YAML frontmatter. Must include a markdown H1 and concrete workflow/checks. Use metadata.skillLanguage for human-facing prose.",
+		},
+		tags: {
+			type: "array",
+			items: { type: "string" },
+			description:
+				"Short tags for future planner skill selection, for example pi-extension, ctx, session-switch.",
+		},
+		sourceKind: {
+			type: "string",
+			enum: PLANNER_SKILL_SOURCE_KINDS,
+			description:
+				"Exact source of the reusable lesson. Pick one enum value; do not invent aliases.",
+		},
+		sourcePlanId: {
+			type: "string",
+			description: "Current planner plan id when known.",
+		},
+		sourceTaskId: {
+			type: "string",
+			description: "Current planner task id when known.",
+		},
+	},
+	required: ["nameHint", "description", "bodyMarkdown", "sourceKind"],
+	additionalProperties: false,
+} as const;
+
 const DEBUG_STRATEGY_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {
@@ -804,8 +853,29 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 	registerPlannerRuntimeTimer(pi, timerRuntime);
 	registerPlannerBuiltinToolGuard(pi);
 	registerPlannerCompactEvents(pi, compactRuntime);
+	registerPlannerSkillResources(pi);
 	registerInstructionDefaultsSync(pi);
 	registerPlannerToolVisibility(pi);
+}
+
+function registerPlannerSkillResources(pi: ExtensionAPI): void {
+	pi.on("resources_discover", async (event) => {
+		const fs = createNodeFs();
+		try {
+			const projectPaths = await resolveProjectStoragePaths({
+				fs,
+				agentDir: getAgentDir(),
+				cwd: event.cwd,
+			});
+			const skillPaths = await listActivePlannerSkillPaths({
+				fs,
+				projectPaths,
+			});
+			return { skillPaths };
+		} catch {
+			return { skillPaths: [] };
+		}
+	});
 }
 
 function registerInstructionDefaultsSync(pi: ExtensionAPI): void {
@@ -1617,6 +1687,36 @@ function registerPlannerTools(
 					git: new NodeGitRunner(),
 					projectPaths,
 					toolName,
+					params,
+				});
+				return {
+					content: [{ type: "text", text: result.text }],
+					details: result,
+				};
+			},
+		});
+	}
+
+	for (const toolName of PLANNER_SKILL_TOOL_NAMES) {
+		pi.registerTool({
+			name: toolName,
+			label: "Planner Skill Create",
+			description:
+				"Create a validated Pi skill from a proven reusable planner lesson for future planner sessions.",
+			promptSnippet:
+				"Use planner_skill_create only after a reusable lesson is proven by stuck/debug/refactor/doubt/final evidence. The wrapper writes YAML frontmatter and stores the skill for future planner sessions.",
+			parameters: SKILL_CREATE_TOOL_PARAMETERS as never,
+			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const fs = createNodeFs();
+				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				await recordPlannerToolActivityForProject({
+					fs,
+					projectPaths,
+					now: Date.now(),
+				});
+				const result = await executePlannerSkillTool({
+					fs,
+					projectPaths,
 					params,
 				});
 				return {

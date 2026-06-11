@@ -8,6 +8,7 @@ Present the verified plan result, wait for an explicit user decision, then eithe
 
 1. `present_result`
    - Read `final_summary.md` and present scope, checks, risks, plan branch, worktree path, and output options.
+   - If a verified reusable lesson is still missing from the planner skill library, call `planner_skill_create` before asking for acceptance. Do not create skills for ordinary summaries.
    - After presenting the result, call `planner_finish_step` immediately to enter `await_user_acceptance`.
 2. `await_user_acceptance`
    - Ask the user to accept the result or request changes.
@@ -50,6 +51,10 @@ Present the verified plan result, wait for an explicit user decision, then eithe
 ## Change Request Reload
 
 When returning to `planning/read_context`, reread full `plan.md`, `decisions.md`, user feedback, and `discovery.md`. Treat the previous implementation as current project context, not as a blank project. Preserve completed work, revise the plan only where the change request requires it, then continue toward execution. Existing completed task artifacts remain as audit history. Rebuild tasks only as needed for the requested change. Do not repeat tasks listed under `Completed Work`; create new revision task IDs only for work listed under `Remaining Work`.
+
+## Planner Skill Memory
+
+`planner_skill_create` is allowed in `present_result` only as a final catch-up for a reusable lesson that was already verified during execution or finalize. Skills are loaded in future planner sessions through Pi `resources_discover`; they do not replace the current done-state acceptance flow.
 
 ## auto-compact
 

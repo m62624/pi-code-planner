@@ -204,6 +204,9 @@ Metadata language settings affect human-facing generated text only. Tool names, 
 | `descriptionLanguage` | `humanLanguage` | Short `/planner-resume` list description. |
 | `commitLanguage` | `humanLanguage` | Human-readable parts of planner commit messages. Conventional prefixes stay technical. |
 | `doubtReviewLanguage` | `humanLanguage` | Human-readable content inside `finalize/doubt_review`. The parser heading `Possible Errors` remains stable. |
+| `skillLanguage` | `humanLanguage` | Human-readable body text for planner-generated Pi skills. Skill names and YAML structure stay technical. |
+
+Planner may create Pi skills from verified reusable lessons during stuck/debug/refactor/doubt/finalize work. They are stored under `getAgentDir()/extensions/pi-code-planner/skills/` and exposed to future planner sessions through Pi `resources_discover`. They are future memory, not a replacement for the current stage instructions.
 
 ### Runtime Timer
 

@@ -76,6 +76,12 @@ Before finishing any execution step, doubt the proof:
 
 If doubt remains, run one focused probe or record the risk. Do not add broad tests or unrelated cleanup only to increase confidence.
 
+## Planner Skill Memory
+
+When a task resolves a verified reusable lesson, use `planner_skill_create` to save it for future planner sessions. Good candidates are repeated failure patterns, non-obvious debug probes, state-machine mistakes, stale context issues, or exact workflow rules that prevented a real bug.
+
+Do not create a skill for ordinary implementation notes, task summaries, broad advice, or unproven suspicions. The skill body should be written in `metadata.skillLanguage`; the wrapper writes frontmatter and updates the planner skill index.
+
 ## Fundamental Rules
 
 ### Rule 4: Uncertainty -> Question

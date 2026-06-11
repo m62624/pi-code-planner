@@ -28,6 +28,7 @@ describe("planner settings", () => {
 			descriptionLanguage: "English",
 			commitLanguage: "English",
 			doubtReviewLanguage: "English",
+			skillLanguage: "English",
 		});
 		expect(settings.effective.timer).toEqual({
 			enabled: true,
@@ -188,6 +189,7 @@ describe("planner settings", () => {
 			descriptionLanguage: "Russian",
 			commitLanguage: "English",
 			doubtReviewLanguage: "English",
+			skillLanguage: "English",
 		});
 		expect(settings.metadataSource).toBe("project");
 	});
@@ -215,6 +217,7 @@ describe("planner settings", () => {
 			descriptionLanguage: "Kazakh",
 			commitLanguage: "Russian",
 			doubtReviewLanguage: "Russian",
+			skillLanguage: "Russian",
 		});
 		expect(settings.metadataSource).toBe("project");
 	});
@@ -242,7 +245,28 @@ describe("planner settings", () => {
 			descriptionLanguage: "Russian",
 			commitLanguage: "Russian",
 			doubtReviewLanguage: "Russian",
+			skillLanguage: "Russian",
 		});
+	});
+
+	it("lets project metadata settings override skill language", async () => {
+		const fs = new MockPlannerFs();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		await fs.writeTextAtomic(
+			"/agent/extensions/pi-code-planner/settings.json",
+			'{ "metadata": { "skillLanguage": "English" } }\n',
+		);
+		await fs.writeTextAtomic(
+			"/repo/app/.pi/pi-code-planner/settings.json",
+			'{ "metadata": { "skillLanguage": "Russian" } }\n',
+		);
+
+		const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
+
+		expect(settings.effective.metadata.skillLanguage).toBe("Russian");
 	});
 
 	it("rejects empty metadata description language", async () => {

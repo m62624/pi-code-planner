@@ -21,7 +21,8 @@ KISS does not mean avoiding advanced language features. Traits, interfaces, gene
 6. Run focused tests from the worktree path reported by `planner_status` after each meaningful refactor group.
 7. Commit through planner wrappers if files changed.
 8. Update task artifacts when the refactor changes relevant implementation details.
-9. Commit the refactor if project files changed.
+9. If the review proves a reusable refactor/debugging lesson, call `planner_skill_create` with `sourceKind=refactor`.
+10. Commit the refactor if project files changed.
 
 ## Restrictions
 
@@ -150,6 +151,12 @@ Refactor doubt is mandatory but bounded:
 - Do not refactor unrelated code to satisfy doubt.
 - Do not invent abstractions to look thoughtful.
 - Do not treat tool success as design proof.
+
+## Planner Skill Memory
+
+Create a planner skill only when refactor review finds a transferable rule that future tasks should reuse, such as a recurring boundary mistake, a hidden coupling pattern, or a reliable simplification method. Do not create a skill for "no refactor needed" or for a one-off project detail.
+
+Use `metadata.skillLanguage` for the body. Keep the Pi skill `description` trigger-specific: name the exact situation that should activate the skill and what it prevents.
 
 ## manual-compact
 

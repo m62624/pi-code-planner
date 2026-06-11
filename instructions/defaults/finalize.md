@@ -19,11 +19,13 @@ Verify the complete plan branch as one integrated result, write a durable user-f
 	- A suspected issue may be called `proven_bug` only after a failing test/command, exact code-path proof, or exact spec contradiction.
 	- `needs_probe` findings cannot finish the step. Run the probe or downgrade with proof.
 	- If `proven_bug` findings exist, write them to `decisions.md`, then return to `planning/read_context` for revision tasks. Do not patch ad hoc in finalize.
+	- If a proven or disproven finding teaches a reusable workflow lesson, call `planner_skill_create` with `sourceKind=doubt_review`.
 	- If no proven bug or probe remains, continue to `write_final_summary`.
 3. `write_final_summary`
 	- Write `final_summary.md`.
 	- Use `metadata.humanLanguage` from `planner_status` unless the user explicitly requested another language.
 	- Include completed scope, changed files, checks, risks, output branch expectations, and unresolved limitations.
+	- If the whole plan produced a reusable verified lesson not already captured, call `planner_skill_create` with `sourceKind=final_summary`.
 4. `compact_finalize`
 	- Request planner-controlled compact preserving summary, verification, branch state, and risks.
 5. `enter_done`
@@ -79,6 +81,12 @@ This step is a verification stage, not a writing exercise. Treat it like TDD for
    - `needs_probe` is not a terminal state. The runtime will block leaving this step until every probe is resolved.
 
 Do not reward yourself for finding many bugs. Reward exactness. False positives waste revision cycles; false negatives ship broken work. The correct outcome may be "no proven bugs remain" if every suspicion was checked and dismissed with evidence.
+
+## Planner Skill Memory
+
+Use `planner_skill_create` only for verified lessons that should improve future planner sessions. A skill is not a final summary. It must describe a reusable trigger and workflow, for example a Pi extension stale-ctx pattern, a recovery proof method, or a specific class of state-machine mistake.
+
+The skill body should be written in `metadata.skillLanguage`. The wrapper writes YAML frontmatter and stores the skill under the planner extension library. The new skill is loaded through Pi `resources_discover` on future planner session start, resume, or reload.
 
 ## Exit Condition
 
