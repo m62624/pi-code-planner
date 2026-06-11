@@ -13,9 +13,12 @@ Verify the complete plan branch as one integrated result, write a durable user-f
 2. `doubt_review`
 	- Before asking for user acceptance, deliberately doubt the completed result.
 	- Reread `goal.md`, `plan.md`, task artifacts, `verify.md`, and the final worktree diff.
-	- Check whether tests may be proving the wrong behavior, whether required cleanup/deletion/recovery paths are actually implemented, and whether the implementation violates any explicit non-goal or storage/API constraint.
-	- If a plausible bug or missing requirement exists, write a `## Doubt Review` section to `verify.md` and `decisions.md`, then return to `planning/read_context` for revision tasks. Do not patch ad hoc in finalize.
-	- If no actionable concern remains, write a short `## Doubt Review` pass note to `verify.md`.
+	- Start with an English `Possible Errors` list. These are suspicions, not bugs yet.
+	- For each possible error, prove it, disprove it, or mark it `needs_probe`. Use `planner_doubt_review`; do not hand-write `verify.md`.
+	- A suspected issue may be called `proven_bug` only after a failing test/command, exact code-path proof, or exact spec contradiction.
+	- `needs_probe` findings cannot finish the step. Run the probe or downgrade with proof.
+	- If `proven_bug` findings exist, write them to `decisions.md`, then return to `planning/read_context` for revision tasks. Do not patch ad hoc in finalize.
+	- If no proven bug or probe remains, continue to `write_final_summary`.
 3. `write_final_summary`
 	- Write `final_summary.md`.
 	- Include completed scope, changed files, checks, risks, output branch expectations, and unresolved limitations.
@@ -33,6 +36,46 @@ Verify the complete plan branch as one integrated result, write a durable user-f
 - Do not use raw git.
 - If checks reveal missing implementation, record the issue and return through the controlled planning flow instead of patching ad hoc.
 - During `doubt_review`, assume there may still be bugs even if tests pass. Passing checks are evidence, not acceptance.
+- Do not call a finding a bug from suspicion alone. Suspicions without proof are `needs_probe`, not revision tasks.
+
+## Doubt Review Proof Rules
+
+Every possible error must be classified:
+
+- `proven_bug`: verified by `reproduced_test`, `reproduced_command`, `code_path_proven`, or `spec_contradiction`; must return to planning.
+- `disproven`: dismissed by `disproven_by_test` or `disproven_by_code`; no action.
+- `needs_probe`: plausible but not proven; run one focused probe before finishing the step.
+- `not_a_bug`: valid behavior or design preference; no action.
+
+Tests are preferred for runtime behavior. Code-path proof is allowed only when the exact path makes the behavior impossible or directly contradicts the approved spec.
+
+## Doubt Review Method
+
+This step is a verification stage, not a writing exercise. Treat it like TDD for suspected problems:
+
+1. Reconstruct the promise.
+   - Read the approved goal, the current plan, completed task files, final summary if present, and the final diff.
+   - Write down what the result must do, what it explicitly must not do, and which project checks already passed.
+   - Do not trust memory from earlier chat turns. Durable artifacts and the current worktree are the source of truth.
+2. Generate possible errors before deciding.
+   - List concrete possible errors in English under `Possible Errors`.
+   - A possible error must point to a requirement, a code path, a changed file, a missing test, a migration risk, or an integration boundary.
+   - Do not include vague anxiety such as "maybe something is wrong" or style preferences without product impact.
+3. Prove or disprove each possible error.
+   - For behavior, prefer a focused failing test or a focused command that reproduces the issue.
+   - For static correctness, trace the exact code path and name the files/symbols that force the conclusion.
+   - For spec mismatch, quote the exact approved requirement and the exact implemented behavior that contradicts it.
+   - If the evidence is not enough, mark `needs_probe` and run one targeted probe before finishing. Do not convert uncertainty into a bug.
+4. Decide the route.
+   - If any finding is `proven_bug`, record it in `decisions.md` and finish this step with target `planning/read_context`.
+   - Planning must then create revision tasks. Do not patch production files inside finalize.
+   - If all findings are `disproven` or `not_a_bug`, finish this step with target `finalize/write_final_summary`.
+5. Keep the artifact strict.
+   - Use only `planner_doubt_review` to write the final doubt artifact.
+   - Every finding must include `claim`, `specReference`, `codePath`, `verification`, evidence, and `nextAction`.
+   - `needs_probe` is not a terminal state. The runtime will block leaving this step until every probe is resolved.
+
+Do not reward yourself for finding many bugs. Reward exactness. False positives waste revision cycles; false negatives ship broken work. The correct outcome may be "no proven bugs remain" if every suspicion was checked and dismissed with evidence.
 
 ## Exit Condition
 

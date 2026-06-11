@@ -481,12 +481,16 @@ export const PLANNER_STEP_RULES = {
 		objective: "Doubt the completed result before user acceptance.",
 		requiredActions: [
 			"Reread goal.md, plan.md, task artifacts, verify.md, and the final diff from the planner worktree.",
-			"Actively look for mismatches between the requested behavior and the implementation, including storage paths, cleanup, recovery, user flows, and tests that may encode wrong behavior.",
-			"If a plausible bug or missing requirement is found, record it under a Doubt Review section in verify.md/decisions.md and complete with explicit target planning/read_context for revision tasks.",
-			"If no actionable issue is found, record a short Doubt Review pass note in verify.md.",
+			"Reconstruct the approved promise from artifacts first; do not trust chat memory or confidence from previous steps.",
+			"Start with an English Possible Errors list. Each item must name a concrete requirement, changed code path, missing test, or integration risk.",
+			"Treat each possible error like TDD for a suspected problem: prove it with a focused failing test/command, exact code-path proof, or exact spec contradiction; otherwise disprove it or mark needs_probe.",
+			"Use planner_doubt_review to write verify.md. Do not hand-write weak doubt notes.",
+			"Run every needs_probe before leaving this step; unresolved probes cannot become bugs and cannot be ignored.",
+			"If proven_bug findings exist, record them in decisions.md and complete with explicit target planning/read_context for revision tasks.",
+			"If no proven bugs and no needs_probe findings remain, complete with target finalize/write_final_summary.",
 		],
 		allowedNow: [
-			"Run focused checks and inspect planner git state from the planner worktree.",
+			"Run focused checks, inspect planner git state from the planner worktree, and call planner_doubt_review.",
 		],
 		forbiddenNow: [
 			"Do not ask the user for acceptance yet.",

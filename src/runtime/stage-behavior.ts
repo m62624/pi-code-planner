@@ -418,7 +418,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["goal.md", "plan.md", "verify.md"],
 		updatedArtifacts: ["verify.md", "decisions.md"],
 		requiredGates: ["plan_branch_verified"],
-		expectedTools: ["planner_git_inspect"],
+		expectedTools: ["planner_git_inspect", "planner_doubt_review"],
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),

@@ -7,6 +7,7 @@ import {
 	createPlanStoragePaths,
 	type ProjectStoragePaths,
 } from "../storage/paths";
+import { readPlanRecord } from "../storage/plan-store";
 import {
 	readProjectRecordIfExists,
 	saveProjectRecord,
@@ -113,13 +114,21 @@ export async function finalizeAcceptedPlan(input: {
 	message?: string;
 }): Promise<FinalizedAcceptedPlan> {
 	const preview = await inspectAcceptedPlan(input);
+	const planPaths = createPlanStoragePaths(input.projectPaths, preview.planId);
+	const message =
+		input.message ??
+		(await buildAcceptedPlanCommitMessage({
+			fs: input.fs,
+			planPaths,
+			planId: preview.planId,
+			outputBranch: preview.outputBranch,
+		}));
 	await exportPlanToOutputBranch({
 		git: input.git,
 		state: preview.state,
 		projectRoot: input.projectPaths.projectRoot,
 		planId: preview.planId,
-		message:
-			input.message ?? `feat: export accepted planner result ${preview.planId}`,
+		message,
 	});
 
 	const childBranches = managedChildBranches(preview.state);
@@ -141,7 +150,6 @@ export async function finalizeAcceptedPlan(input: {
 		force: true,
 	});
 
-	const planPaths = createPlanStoragePaths(input.projectPaths, preview.planId);
 	await input.fs.removeFile(
 		createWorktreeProjectIndexPath({
 			agentDir: input.projectPaths.agentDir,
@@ -162,6 +170,64 @@ export async function finalizeAcceptedPlan(input: {
 		removedPlanDir: planPaths.planDir,
 		removedChildBranches: childBranches,
 	};
+}
+
+async function buildAcceptedPlanCommitMessage(input: {
+	fs: PlannerFs;
+	planPaths: ReturnType<typeof createPlanStoragePaths>;
+	planId: string;
+	outputBranch: string;
+}): Promise<string> {
+	const plan = await readPlanRecord(input.fs, input.planPaths);
+	const finalSummary = await readOptionalText(
+		input.fs,
+		input.planPaths.planDir,
+		["final_summary.md"],
+	);
+	const title = normalizeCommitTitle(plan.title || input.planId);
+	const summaryLines = summarizeFinalSummary(finalSummary);
+	return [
+		`feat: export ${title} planner result`,
+		"",
+		`Planner plan: ${plan.title || input.planId} (${input.planId})`,
+		`Output branch: ${input.outputBranch}`,
+		"",
+		"Summary:",
+		...summaryLines.map((line) => `- ${line}`),
+		"",
+		"Accepted through /planner-finish after the planner verification flow.",
+	].join("\n");
+}
+
+async function readOptionalText(
+	fs: PlannerFs,
+	dir: string,
+	names: string[],
+): Promise<string> {
+	for (const name of names) {
+		const path = `${dir}/${name}`;
+		if (await fs.exists(path)) {
+			return await fs.readText(path);
+		}
+	}
+	return "";
+}
+
+function normalizeCommitTitle(value: string): string {
+	const title = value.replace(/\s+/g, " ").trim();
+	if (!title) return "accepted";
+	return title.length <= 52 ? title : `${title.slice(0, 49).trimEnd()}...`;
+}
+
+function summarizeFinalSummary(content: string): string[] {
+	const lines = content
+		.split(/\r?\n/)
+		.map((line) => line.replace(/^[-*]\s*/, "").trim())
+		.filter((line) => line.length > 0 && !line.startsWith("#"));
+	const unique = [...new Set(lines)].slice(0, 5);
+	return unique.length > 0
+		? unique
+		: ["Planner result was accepted and exported."];
 }
 
 export function buildAcceptedPlanCompletionPrompt(input: {

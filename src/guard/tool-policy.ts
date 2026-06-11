@@ -13,6 +13,7 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_questions_resolve",
 	"planner_task_upsert",
 	"planner_refactor_review",
+	"planner_doubt_review",
 	"planner_report_stuck",
 	"planner_debug_strategy",
 	"planner_debug_probe",
@@ -163,7 +164,7 @@ const STEP_ALLOWED_TOOLS = {
 	},
 	finalize: {
 		verify_plan_branch: ["planner_git_inspect"],
-		doubt_review: ["planner_git_inspect"],
+		doubt_review: ["planner_git_inspect", "planner_doubt_review"],
 		write_final_summary: [],
 		compact_finalize: [],
 		enter_done: [],

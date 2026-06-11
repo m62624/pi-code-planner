@@ -108,7 +108,22 @@ async function createFixture(input?: {
 	await initializePlanFiles(
 		fs,
 		planPaths,
-		createPlanRecord({ planId, title: "Plan A", status: "active" }),
+		createPlanRecord({
+			planId,
+			title: "Improve vault session recovery",
+			status: "active",
+		}),
+	);
+	await fs.writeTextAtomic(
+		`${planPaths.planDir}/final_summary.md`,
+		[
+			"# Final Summary",
+			"",
+			"- Implemented encrypted session locking.",
+			"- Added recovery checks.",
+			"- Verified build and tests.",
+			"",
+		].join("\n"),
 	);
 	const base = createInitialPlanState({
 		baseBranch: "main",
@@ -206,7 +221,19 @@ describe("accepted planner result", () => {
 			name: "commit",
 			input: {
 				repoRoot: "/repo/app",
-				message: "feat: export accepted planner result plan-a",
+				message: [
+					"feat: export Improve vault session recovery planner result",
+					"",
+					"Planner plan: Improve vault session recovery (plan-a)",
+					"Output branch: output/plan-a",
+					"",
+					"Summary:",
+					"- Implemented encrypted session locking.",
+					"- Added recovery checks.",
+					"- Verified build and tests.",
+					"",
+					"Accepted through /planner-finish after the planner verification flow.",
+				].join("\n"),
 			},
 		});
 		expect(fixture.git.calls).toContainEqual({

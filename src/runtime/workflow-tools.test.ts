@@ -242,7 +242,32 @@ describe("workflowToolTransition", () => {
 
 		await fs.writeTextAtomic(
 			planPaths.verifyMd,
-			"## Doubt Review\n\nNo actionable concern found.\n",
+			[
+				"# Doubt Review",
+				"",
+				"## Summary",
+				"",
+				"No actionable concern found.",
+				"",
+				"## Possible Errors",
+				"",
+				"### 1. resume-selection-bug",
+				"",
+				"- status: disproven",
+				"- proofLevel: disproven_by_code",
+				"- nextAction: no_action",
+				"- claim: Resume selection compares labels instead of ids.",
+				"- specReference: goal.md resume behavior",
+				"- codePath: src/commands/resume.ts",
+				"- verification: Inspected adapter and confirmed selected value is vaultChatId.",
+				"",
+				"#### Evidence",
+				"- Selection value is vaultChatId.",
+				"",
+				"#### Counter Evidence",
+				"- (none)",
+				"",
+			].join("\n"),
 		);
 		const applied = await executePlannerWorkflowTool({
 			fs,
@@ -259,6 +284,99 @@ describe("workflowToolTransition", () => {
 		expect(applied.result.state).toMatchObject({
 			stage: "finalize",
 			step: "write_final_summary",
+		});
+	});
+
+	it("returns final doubt review with proven bugs to planning", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await ensureProjectRecord(fs, projectPaths);
+		await initializePlanFiles(
+			fs,
+			planPaths,
+			createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+		);
+		await fs.mkdirp(worktreePath);
+		await initializePlanState(fs, planPaths, {
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "finalize",
+			step: "doubt_review",
+			stepStatus: "running",
+			currentBranch: "plan/plan-a",
+		});
+		await setActivePlan(fs, projectPaths, "plan-a");
+		await fs.writeTextAtomic(
+			planPaths.verifyMd,
+			[
+				"# Doubt Review",
+				"",
+				"## Summary",
+				"",
+				"One proven bug remains.",
+				"",
+				"## Possible Errors",
+				"",
+				"### 1. storage-root-bug",
+				"",
+				"- status: proven_bug",
+				"- proofLevel: code_path_proven",
+				"- nextAction: create_revision_task",
+				"- claim: Storage root uses cwd-local directory instead of agent extension dir.",
+				"- specReference: goal.md storage root requirement",
+				"- codePath: src/index.ts",
+				"- verification: Traced createNodeFs argument to ctx.cwd/.pi path.",
+				"",
+				"#### Evidence",
+				"- Runtime path is ctx.cwd/.pi/extensions/pi-session-vault.",
+				"",
+				"#### Counter Evidence",
+				"- (none)",
+				"",
+			].join("\n"),
+		);
+
+		const summaryBlocked = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {
+				nextStage: "finalize",
+				nextStep: "write_final_summary",
+			},
+		});
+		expect(summaryBlocked.result.status).toBe("blocked");
+		expect(summaryBlocked.text).toContain("proven bugs");
+
+		await fs.writeTextAtomic(
+			planPaths.decisionsMd,
+			"## Doubt Review\n\n- storage-root-bug must become a revision task.\n",
+		);
+		const returned = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {
+				nextStage: "planning",
+				nextStep: "read_context",
+			},
+		});
+
+		expect(returned.result.status).toBe("applied");
+		expect(returned.result.state).toMatchObject({
+			stage: "planning",
+			step: "read_context",
 		});
 	});
 });

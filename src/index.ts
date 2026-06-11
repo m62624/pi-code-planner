@@ -51,6 +51,14 @@ import {
 	type PlannerDebugToolName,
 } from "./runtime/debug-tools";
 import {
+	DOUBT_FINDING_STATUSES,
+	DOUBT_NEXT_ACTIONS,
+	DOUBT_PROOF_LEVELS,
+	DOUBT_REVIEW_TOOL_NAMES,
+	executePlannerDoubtTool,
+	type PlannerDoubtReviewToolName,
+} from "./runtime/doubt-tools";
+import {
 	executePlannerGitTool,
 	PLANNER_GIT_TOOL_NAMES,
 	type PlannerGitToolName,
@@ -416,6 +424,91 @@ const REFACTOR_REVIEW_TOOL_PARAMETERS = {
 		"edgeCases",
 		"decision",
 	],
+	additionalProperties: false,
+} as const;
+
+const DOUBT_REVIEW_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		summary: {
+			type: "string",
+			description:
+				"Short final doubt-review summary. State whether proven bugs remain, probes are needed, or the result can proceed.",
+		},
+		possibleErrors: {
+			type: "array",
+			description:
+				"Every suspected issue from final review. A finding may be called a proven bug only after a failing test/command, exact code path proof, or exact spec contradiction.",
+			items: {
+				type: "object",
+				properties: {
+					id: {
+						type: "string",
+						description: "Lowercase kebab-case finding id.",
+					},
+					status: {
+						type: "string",
+						enum: DOUBT_FINDING_STATUSES,
+						description:
+							"proven_bug only for verified problems; needs_probe for unproven suspicion; disproven/not_a_bug for dismissed findings.",
+					},
+					proofLevel: {
+						type: "string",
+						enum: DOUBT_PROOF_LEVELS,
+						description:
+							"How the finding was proven or dismissed. Use insufficient_evidence until a probe/test/code proof exists.",
+					},
+					claim: { type: "string" },
+					specReference: {
+						type: "string",
+						description:
+							"Spec, goal, plan, or task artifact section that makes this finding relevant.",
+					},
+					codePath: {
+						type: "string",
+						description:
+							"Exact files/functions/commands inspected. Use concrete paths, not broad module names.",
+					},
+					verification: {
+						type: "string",
+						description:
+							"The concrete test, command, reproduction, code-path trace, or spec comparison used to prove or dismiss the claim.",
+					},
+					evidence: {
+						type: "array",
+						items: { type: "string" },
+						description: "Concrete evidence. Required for every finding.",
+					},
+					counterEvidence: {
+						type: "array",
+						items: { type: "string" },
+						description:
+							"Evidence against the claim. Use an empty array only when none was found.",
+					},
+					nextAction: {
+						type: "string",
+						enum: DOUBT_NEXT_ACTIONS,
+						description:
+							"create_revision_task for proven bugs, run_probe for unproven suspicions, no_action for disproven/not_a_bug.",
+					},
+				},
+				required: [
+					"id",
+					"status",
+					"proofLevel",
+					"claim",
+					"specReference",
+					"codePath",
+					"verification",
+					"evidence",
+					"counterEvidence",
+					"nextAction",
+				],
+				additionalProperties: false,
+			},
+		},
+	},
+	required: ["summary", "possibleErrors"],
 	additionalProperties: false,
 } as const;
 
@@ -1453,6 +1546,37 @@ function registerPlannerTools(
 		});
 	}
 
+	for (const toolName of DOUBT_REVIEW_TOOL_NAMES) {
+		pi.registerTool({
+			name: toolName,
+			label: doubtToolLabel(toolName),
+			description: doubtToolDescription(toolName),
+			promptSnippet:
+				"Use planner_doubt_review during finalize/doubt_review. List possible errors first, then prove or dismiss each one before calling anything a real bug.",
+			parameters: doubtToolParameters(toolName) as never,
+			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const fs = createNodeFs();
+				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				await recordPlannerToolActivityForProject({
+					fs,
+					projectPaths,
+					now: Date.now(),
+				});
+				const result = await executePlannerDoubtTool({
+					fs,
+					git: new NodeGitRunner(),
+					projectPaths,
+					toolName,
+					params,
+				});
+				return {
+					content: [{ type: "text", text: result.text }],
+					details: result,
+				};
+			},
+		});
+	}
+
 	for (const toolName of PLANNER_DEBUG_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
@@ -1962,6 +2086,27 @@ function refactorToolDescription(toolName: PlannerRefactorToolName): string {
 	switch (toolName) {
 		case "planner_refactor_review":
 			return "Write the structured refactor.md review from semantic fields during execution/refactor_task.";
+	}
+}
+
+function doubtToolLabel(toolName: PlannerDoubtReviewToolName): string {
+	switch (toolName) {
+		case "planner_doubt_review":
+			return "Planner Doubt Review";
+	}
+}
+
+function doubtToolDescription(toolName: PlannerDoubtReviewToolName): string {
+	switch (toolName) {
+		case "planner_doubt_review":
+			return "Write the structured final doubt review. Suspected bugs must be proven or classified as probes/non-bugs before user acceptance.";
+	}
+}
+
+function doubtToolParameters(toolName: PlannerDoubtReviewToolName) {
+	switch (toolName) {
+		case "planner_doubt_review":
+			return DOUBT_REVIEW_TOOL_PARAMETERS;
 	}
 }
 

@@ -31,7 +31,7 @@ Use the repository's existing convention when it is discoverable. Project append
 
 - Refactor -> task: identify behavior-preserving cleanup.
 - Task -> plan: identify completed atomic task.
-- Plan -> output: identify accepted planner result.
+- Plan -> output: use a conventional commit subject and a short body that explains the accepted result in human language. Include the plan title/id, output branch, and a concise summary of completed behavior. Do not use a vague one-line "merge result" message.
 
 ## Restrictions
 

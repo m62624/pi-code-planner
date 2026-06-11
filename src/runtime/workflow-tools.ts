@@ -14,6 +14,7 @@ import {
 	type PlanStateRecord,
 } from "../storage/schema";
 import { updateTaskStatus } from "../storage/task-store";
+import { validateDoubtReviewMarkdown } from "./doubt-review";
 import type { PlannerGitReality } from "./git-state-sync";
 import {
 	decidePlannerLifecycleNext,
@@ -45,6 +46,8 @@ export const PLANNER_WORKFLOW_TOOL_NAMES = [
 
 export type PlannerWorkflowToolName =
 	(typeof PLANNER_WORKFLOW_TOOL_NAMES)[number];
+
+type PlannerTargetPosition = { stage: PlannerStage; step: PlannerStep };
 
 export interface PlannerWorkflowToolExecutionInput {
 	fs: PlannerFs;
@@ -299,19 +302,19 @@ async function validateWorkflowExit(input: {
 	}
 	if (state.stage === "finalize" && state.step === "doubt_review") {
 		const target = input.transition.next;
+		const artifactBlock = await requireValidDoubtReview(
+			input.fs,
+			input.orchestrator.preflight.context.planPaths.verifyMd,
+			target,
+		);
 		return (
-			(await requireArtifactIncludes(
-				input.fs,
-				input.orchestrator.preflight.context.planPaths.verifyMd,
-				"Doubt Review",
-				"Record the final doubt audit in verify.md under a Doubt Review section before finishing finalize/doubt_review.",
-			)) ??
+			artifactBlock ??
 			(target?.stage === "planning" && target.step === "read_context"
 				? await requireArtifactIncludes(
 						input.fs,
 						input.orchestrator.preflight.context.planPaths.decisionsMd,
 						"Doubt Review",
-						"Record the actionable doubt findings in decisions.md before returning finalize/doubt_review to planning/read_context.",
+						"Record the proven doubt findings in decisions.md before returning finalize/doubt_review to planning/read_context.",
 					)
 				: null)
 		);
@@ -384,6 +387,37 @@ async function validateWorkflowExit(input: {
 		default:
 			return null;
 	}
+}
+
+async function requireValidDoubtReview(
+	fs: PlannerFs,
+	path: string,
+	target: PlannerTargetPosition | undefined,
+): Promise<string | null> {
+	const nonEmpty = await requireNonEmptyArtifact(fs, path);
+	if (nonEmpty) return nonEmpty;
+	const validation = validateDoubtReviewMarkdown(await fs.readText(path));
+	if (!validation.valid) {
+		return `${validation.reason} Use planner_doubt_review; do not hand-write weak doubt notes.`;
+	}
+	if (validation.needsProbeCount > 0) {
+		return "Doubt Review still contains needs_probe findings. Run the probes or dismiss them with proof before finishing finalize/doubt_review.";
+	}
+	if (
+		target?.stage === "planning" &&
+		target.step === "read_context" &&
+		validation.provenBugCount === 0
+	) {
+		return "Returning from finalize/doubt_review to planning/read_context requires at least one proven_bug finding.";
+	}
+	if (
+		target?.stage === "finalize" &&
+		target.step === "write_final_summary" &&
+		validation.provenBugCount > 0
+	) {
+		return "Doubt Review contains proven bugs. Return to planning/read_context for revision tasks instead of writing the final summary.";
+	}
+	return null;
 }
 
 async function validateTaskArtifacts(
