@@ -192,16 +192,24 @@ export function validateDoubtReviewMarkdown(
 			if (!value) return invalid(`Doubt finding is missing ${key}.`);
 		}
 		if (!DOUBT_FINDING_STATUSES.includes(status as DoubtFindingStatus)) {
-			return invalid(`Invalid doubt finding status: ${status}.`);
+			return invalid(
+				`Invalid doubt finding status: ${status}. Expected one of: ${DOUBT_FINDING_STATUSES.join(", ")}.`,
+			);
 		}
 		if (!DOUBT_RISK_CATEGORIES.includes(riskCategory as DoubtRiskCategory)) {
-			return invalid(`Invalid doubt riskCategory: ${riskCategory}.`);
+			return invalid(
+				`Invalid doubt riskCategory: ${riskCategory}. Expected one of: ${DOUBT_RISK_CATEGORIES.join(", ")}.`,
+			);
 		}
 		if (!DOUBT_PROOF_LEVELS.includes(proofLevel as DoubtProofLevel)) {
-			return invalid(`Invalid doubt proofLevel: ${proofLevel}.`);
+			return invalid(
+				`Invalid doubt proofLevel: ${proofLevel}. Expected one of: ${DOUBT_PROOF_LEVELS.join(", ")}.`,
+			);
 		}
 		if (!DOUBT_NEXT_ACTIONS.includes(nextAction as DoubtNextAction)) {
-			return invalid(`Invalid doubt nextAction: ${nextAction}.`);
+			return invalid(
+				`Invalid doubt nextAction: ${nextAction}. Expected one of: ${DOUBT_NEXT_ACTIONS.join(", ")}.`,
+			);
 		}
 		const validation = validateFindingStatus({
 			id: block.split("\n")[0]?.trim() ?? "(unknown)",

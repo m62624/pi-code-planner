@@ -77,12 +77,12 @@ async function validateTddSection(input: {
 	const sections = parseLevelTwoSections(text);
 	const content = sections.get(input.section);
 	if (!content || isBlank(content)) {
-		return `tdd.md must include a non-empty "## ${input.section}" section before this transition.`;
+		return `tdd.md must include a non-empty "## ${input.section}" section before this transition. Required fields: ${input.fields.map((field) => `- ${field}: <concrete evidence>`).join(", ")}.`;
 	}
 	for (const field of input.fields) {
 		const value = fieldValue(content, field);
 		if (!value || isPlaceholder(value)) {
-			return `tdd.md "## ${input.section}" must include "- ${field}: <concrete evidence>" before this transition.`;
+			return `tdd.md "## ${input.section}" must include "- ${field}: <concrete evidence>" before this transition. Required fields: ${input.fields.join(", ")}.`;
 		}
 	}
 	return null;
