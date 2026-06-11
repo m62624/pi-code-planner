@@ -9,6 +9,16 @@ import {
 	type WorktreeSettings,
 } from "./schema";
 
+const DEFAULT_PLANNER_SETTINGS_FILE: PlannerSettingsFile = {
+	worktree: DEFAULT_PLANNER_SETTINGS.worktree,
+	compact: DEFAULT_PLANNER_SETTINGS.compact,
+	idle: DEFAULT_PLANNER_SETTINGS.idle,
+	metadata: {
+		humanLanguage: DEFAULT_PLANNER_SETTINGS.metadata.humanLanguage,
+	},
+	timer: DEFAULT_PLANNER_SETTINGS.timer,
+};
+
 export interface EffectivePlannerSettings {
 	paths: PlannerSettingsPaths;
 	global: PlannerSettingsFile;
@@ -72,11 +82,7 @@ export async function loadEffectivePlannerSettings(input: {
 		: global.metadata
 			? "global"
 			: "default";
-	const metadata = {
-		...DEFAULT_PLANNER_SETTINGS.metadata,
-		...(global.metadata ?? {}),
-		...(project?.metadata ?? {}),
-	};
+	const metadata = mergeMetadataSettings(global.metadata, project?.metadata);
 	const timerSource = project?.timer
 		? "project"
 		: global.timer
@@ -108,7 +114,7 @@ export async function ensureGlobalPlannerSettings(
 	if (await fs.exists(paths.globalSettingsJson)) {
 		return;
 	}
-	await writeJson(fs, paths.globalSettingsJson, DEFAULT_PLANNER_SETTINGS);
+	await writeJson(fs, paths.globalSettingsJson, DEFAULT_PLANNER_SETTINGS_FILE);
 }
 
 function normalizeSettingsFile(
@@ -217,19 +223,75 @@ function normalizeMetadataSettings(
 		throw new TypeError(`Planner metadata settings must be an object: ${path}`);
 	}
 	const record = value as Record<string, unknown>;
-	if (
-		record.descriptionLanguage !== undefined &&
-		(typeof record.descriptionLanguage !== "string" ||
-			record.descriptionLanguage.trim().length === 0)
-	) {
-		throw new TypeError(
-			`Planner metadata setting descriptionLanguage must be a non-empty string: ${path}`,
-		);
+	for (const key of [
+		"humanLanguage",
+		"titleLanguage",
+		"descriptionLanguage",
+		"commitLanguage",
+		"doubtReviewLanguage",
+	] as const) {
+		if (
+			record[key] !== undefined &&
+			(typeof record[key] !== "string" || record[key].trim().length === 0)
+		) {
+			throw new TypeError(
+				`Planner metadata setting ${key} must be a non-empty string: ${path}`,
+			);
+		}
 	}
 	return {
+		...(typeof record.humanLanguage === "string"
+			? { humanLanguage: record.humanLanguage.trim() }
+			: {}),
+		...(typeof record.titleLanguage === "string"
+			? { titleLanguage: record.titleLanguage.trim() }
+			: {}),
 		...(typeof record.descriptionLanguage === "string"
 			? { descriptionLanguage: record.descriptionLanguage.trim() }
 			: {}),
+		...(typeof record.commitLanguage === "string"
+			? { commitLanguage: record.commitLanguage.trim() }
+			: {}),
+		...(typeof record.doubtReviewLanguage === "string"
+			? { doubtReviewLanguage: record.doubtReviewLanguage.trim() }
+			: {}),
+	};
+}
+
+function mergeMetadataSettings(
+	global: PlannerSettingsFile["metadata"] | undefined,
+	project: PlannerSettingsFile["metadata"] | undefined,
+): PlannerSettings["metadata"] {
+	const humanLanguage =
+		project?.humanLanguage ??
+		global?.humanLanguage ??
+		DEFAULT_PLANNER_SETTINGS.metadata.humanLanguage;
+	return {
+		humanLanguage,
+		titleLanguage:
+			project?.titleLanguage ??
+			project?.humanLanguage ??
+			global?.titleLanguage ??
+			global?.humanLanguage ??
+			DEFAULT_PLANNER_SETTINGS.metadata.titleLanguage,
+		descriptionLanguage:
+			project?.descriptionLanguage ??
+			project?.humanLanguage ??
+			global?.descriptionLanguage ??
+			global?.humanLanguage ??
+			DEFAULT_PLANNER_SETTINGS.metadata.descriptionLanguage,
+		commitLanguage:
+			project?.commitLanguage ??
+			project?.humanLanguage ??
+			global?.commitLanguage ??
+			global?.humanLanguage ??
+			DEFAULT_PLANNER_SETTINGS.metadata.commitLanguage,
+		doubtReviewLanguage:
+			project?.doubtReviewLanguage ??
+			project?.humanLanguage ??
+			global?.doubtReviewLanguage ??
+			global?.humanLanguage ??
+			DEFAULT_PLANNER_SETTINGS.metadata.doubtReviewLanguage,
 	};
 }
 

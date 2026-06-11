@@ -49,6 +49,8 @@ user request
   -> implement the current task
   -> refactor and verify
   -> merge completed tasks into one plan branch
+  -> verify the whole plan branch
+  -> doubt the result and prove/disprove possible errors
   -> ask the user to accept or request changes
   -> export one ordinary output commit
 ```
@@ -93,13 +95,16 @@ init -> intake -> discovery -> planning -> execution -> finalize -> done
 
 `recovery` can interrupt this path when Git, the worktree, or `state.json` disagree.
 
-Key behavior:
+Stage behavior:
 
-- `intake`: the model restates the request and waits for approval before discovery.
-- `discovery`: the model reads only useful project files and writes a concise `discovery.md`.
-- `planning`: tasks are behavioral. Tests stay inside each task's TDD cycle.
-- `execution`: each task goes through TDD, implementation, mandatory refactor review, final checks, and merge.
-- `done`: the user accepts, requests changes, or runs `/planner-finish`.
+- `init`: validate the Git project, create planner storage, choose the worktree location, create the plan branch/worktree, then enter intake.
+- `intake`: restate the request in `goal.md`, propose a title and short description, and wait for explicit user approval before discovery.
+- `discovery`: inspect only useful project files, record `discovery.md`, ask evidence-based questions when needed, then compact before planning.
+- `planning`: read persisted context, write `plan.md`, split behavioral tasks, create task artifacts, verify task order, then compact before execution.
+- `execution`: for each task, prepare a task branch, write a TDD plan, write tests first, run the failing signal, implement, run structured refactor review, run final checks, merge the task, then select the next task.
+- `finalize`: verify the integrated plan branch, run `doubt_review` where possible errors must be proven or disproven, write `final_summary.md`, compact, then enter done.
+- `done`: present the result and wait. The user can run `/planner-finish` to export `output/<plan-id>`, or request changes; change requests append context and return to planning without repeating completed work.
+- `recovery`: inspect persisted state, Git reality, worktree state, and conflicts before repairing or resuming.
 
 ## Git And Worktrees 🌿
 
@@ -161,7 +166,7 @@ Example:
 	"worktree": { "mode": "custom", "root": "/mnt/fast/pi-worktrees" },
 	"compact": { "stage": true, "task": false },
 	"idle": { "enabled": true, "timeoutMinutes": 10 },
-	"metadata": { "descriptionLanguage": "English" },
+	"metadata": { "humanLanguage": "English" },
 	"timer": {
 		"enabled": true,
 		"mode": "status",
@@ -172,7 +177,31 @@ Example:
 }
 ```
 
-`metadata.descriptionLanguage` controls only the short planner-list description generated through `planner_goal_submit`. Plan ids, branches, and worktree paths stay ASCII/Git-safe.
+Settings merge in this order: defaults, global settings, then project settings.
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `worktree.mode` | `"project-local"` | Store worktrees under `<project-root>/.pi/pi-code-planner/worktrees/`. |
+| `worktree.root` | unset | Required only when `worktree.mode` is `"custom"`; stores worktrees under that absolute directory. |
+| `compact.stage` | `true` | Request planner-controlled compaction at stage boundaries. |
+| `compact.task` | `false` | Request planner-controlled compaction at task boundaries. |
+| `idle.enabled` | `true` | Enable the idle watchdog that wakes a running plan after inactivity. |
+| `idle.timeoutMinutes` | `10` | Minutes since the last planner/tool activity before the idle wake-up. |
+| `timer.enabled` | `true` | Show or hide passive planner runtime telemetry. |
+| `timer.mode` | `"status"` | `"status"` shows one footer line; `"widget"` shows a passive block above the editor. |
+| `timer.showCheckpoints` | `true` | Include recent stage checkpoint timings. |
+| `timer.maxCheckpoints` | `5` | Maximum checkpoint entries shown. |
+| `timer.syncIntervalMinutes` | `10` | How often timer heartbeat state is written to disk. |
+
+Metadata language settings affect human-facing generated text only. Tool names, JSON fields, branch names, plan ids, parser headings, and code stay stable.
+
+| Metadata setting | Default | Used for |
+| --- | --- | --- |
+| `humanLanguage` | `"English"` | Default language for user-facing planner text. |
+| `titleLanguage` | `humanLanguage` | Plan title proposed through `planner_goal_submit`. |
+| `descriptionLanguage` | `humanLanguage` | Short `/planner-resume` list description. |
+| `commitLanguage` | `humanLanguage` | Human-readable parts of planner commit messages. Conventional prefixes stay technical. |
+| `doubtReviewLanguage` | `humanLanguage` | Human-readable content inside `finalize/doubt_review`. The parser heading `Possible Errors` remains stable. |
 
 ### Runtime Timer
 

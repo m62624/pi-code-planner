@@ -13,7 +13,7 @@ Turn the user's raw request into an explicit approved goal before reading projec
    - Do not invent project-specific questions before reading project evidence.
    - Call `planner_goal_submit` with the full goal markdown, proposed title, and short planner-list description. The wrapper writes `goal.md`.
    - Do not use built-in write/edit tools for `goal.md`.
-   - Prefer a concise English title unless the user explicitly requests another language.
+   - Use `metadata.titleLanguage` from `planner_status` for the title unless the user explicitly requests another language.
    - The title is user-facing and may contain Unicode. It is not the stable branch-safe `planId`.
    - Do not inspect project source.
 2. `await_goal_approval`

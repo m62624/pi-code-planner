@@ -198,7 +198,7 @@ const GOAL_SUBMIT_TOOL_PARAMETERS = {
 		title: {
 			type: "string",
 			description:
-				"Short proposed plan title. Prefer a concise English phrase unless the user requested another language. The user reviews this title together with goal.md.",
+				"Short proposed plan title. Use the metadata.titleLanguage reported by planner_status unless the user requested another language. The user reviews this title together with goal.md.",
 		},
 		description: {
 			type: "string",
@@ -852,7 +852,10 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					plan?: { planId?: string };
 					settings?: {
 						effective?: {
-							metadata?: { descriptionLanguage?: string };
+							metadata?: {
+								titleLanguage?: string;
+								descriptionLanguage?: string;
+							};
 						};
 					};
 				};
@@ -861,6 +864,9 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				const descriptionLanguage =
 					details.settings?.effective?.metadata?.descriptionLanguage ??
 					"English";
+				const titleLanguage =
+					details.settings?.effective?.metadata?.titleLanguage ??
+					descriptionLanguage;
 				if (!worktreePath) {
 					ctx.ui.notify(
 						"Planner plan was created without worktreePath.",
@@ -898,6 +904,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 								buildPlannerHandoffPrompt({
 									planId: createdPlanId,
 									worktreePath,
+									titleLanguage,
 									descriptionLanguage,
 								}),
 								FOLLOW_UP_MESSAGE_OPTIONS,

@@ -26,7 +26,11 @@ export interface PlannerIdleSettings {
 }
 
 export interface PlannerMetadataSettings {
+	humanLanguage: string;
+	titleLanguage: string;
 	descriptionLanguage: string;
+	commitLanguage: string;
+	doubtReviewLanguage: string;
 }
 
 export interface PlannerTimerSettings {
@@ -48,7 +52,11 @@ export const DEFAULT_PLANNER_SETTINGS = {
 		timeoutMinutes: 10,
 	},
 	metadata: {
+		humanLanguage: "English",
+		titleLanguage: "English",
 		descriptionLanguage: "English",
+		commitLanguage: "English",
+		doubtReviewLanguage: "English",
 	},
 	timer: {
 		enabled: true,

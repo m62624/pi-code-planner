@@ -149,7 +149,7 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Read request.md.",
 			"Draft goal.md content in your own words with outcome, assumptions, non-goals, and constraints.",
-			"Propose a short user-facing title. Prefer concise English unless the user requested another language.",
+			"Propose a short user-facing title in metadata.titleLanguage unless the user explicitly requested another language.",
 			"Propose a very short planner-list description in the metadata.descriptionLanguage reported by planner_status.",
 			"Call planner_goal_submit with the full goal markdown, proposed title, and proposed description. Do not edit goal.md directly; the wrapper writes it.",
 		],
@@ -482,7 +482,7 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Reread goal.md, plan.md, task artifacts, verify.md, and the final diff from the planner worktree.",
 			"Reconstruct the approved promise from artifacts first; do not trust chat memory or confidence from previous steps.",
-			"Start with an English Possible Errors list. Each item must name a concrete requirement, changed code path, missing test, or integration risk.",
+			"Start with a Possible Errors list written in metadata.doubtReviewLanguage. Each item must name a concrete requirement, changed code path, missing test, or integration risk.",
 			"Treat each possible error like TDD for a suspected problem: prove it with a focused failing test/command, exact code-path proof, or exact spec contradiction; otherwise disprove it or mark needs_probe.",
 			"Use planner_doubt_review to write verify.md. Do not hand-write weak doubt notes.",
 			"Run every needs_probe before leaving this step; unresolved probes cannot become bugs and cannot be ignored.",
@@ -505,6 +505,7 @@ export const PLANNER_STEP_RULES = {
 	write_final_summary: stepRule("finalize", "write_final_summary", {
 		objective: "Write final result summary for user review.",
 		requiredActions: [
+			"Write final_summary.md in metadata.humanLanguage unless the user explicitly requested another language.",
 			"Summarize changes, checks, risks, output branch plan, and changed files.",
 		],
 		allowedNow: ["Write final summary artifacts."],
@@ -782,7 +783,11 @@ export async function buildPlannerStatusText(
 		`- blockedReason: ${state.blockedReason ?? "(none)"}`,
 		"",
 		"## Effective Settings",
+		`- metadata.humanLanguage: ${settings.effective.metadata.humanLanguage}`,
+		`- metadata.titleLanguage: ${settings.effective.metadata.titleLanguage}`,
 		`- metadata.descriptionLanguage: ${settings.effective.metadata.descriptionLanguage}`,
+		`- metadata.commitLanguage: ${settings.effective.metadata.commitLanguage}`,
+		`- metadata.doubtReviewLanguage: ${settings.effective.metadata.doubtReviewLanguage}`,
 		`- idle.enabled: ${String(settings.effective.idle.enabled)}`,
 		`- idle.timeoutMinutes: ${settings.effective.idle.timeoutMinutes}`,
 		"",

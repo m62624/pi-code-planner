@@ -222,10 +222,11 @@ describe("accepted planner result", () => {
 			input: {
 				repoRoot: "/repo/app",
 				message: [
-					"feat: export Improve vault session recovery planner result",
+					"feat: export Improve vault session recovery",
 					"",
 					"Planner plan: Improve vault session recovery (plan-a)",
 					"Output branch: output/plan-a",
+					"Commit language: English",
 					"",
 					"Summary:",
 					"- Implemented encrypted session locking.",

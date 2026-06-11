@@ -13,7 +13,7 @@ Verify the complete plan branch as one integrated result, write a durable user-f
 2. `doubt_review`
 	- Before asking for user acceptance, deliberately doubt the completed result.
 	- Reread `goal.md`, `plan.md`, task artifacts, `verify.md`, and the final worktree diff.
-	- Start with an English `Possible Errors` list. These are suspicions, not bugs yet.
+	- Start with a `Possible Errors` list written in `metadata.doubtReviewLanguage`. These are suspicions, not bugs yet.
 	- For each possible error, prove it, disprove it, or mark it `needs_probe`. Use `planner_doubt_review`; do not hand-write `verify.md`.
 	- A suspected issue may be called `proven_bug` only after a failing test/command, exact code-path proof, or exact spec contradiction.
 	- `needs_probe` findings cannot finish the step. Run the probe or downgrade with proof.
@@ -21,6 +21,7 @@ Verify the complete plan branch as one integrated result, write a durable user-f
 	- If no proven bug or probe remains, continue to `write_final_summary`.
 3. `write_final_summary`
 	- Write `final_summary.md`.
+	- Use `metadata.humanLanguage` from `planner_status` unless the user explicitly requested another language.
 	- Include completed scope, changed files, checks, risks, output branch expectations, and unresolved limitations.
 4. `compact_finalize`
 	- Request planner-controlled compact preserving summary, verification, branch state, and risks.
@@ -58,7 +59,7 @@ This step is a verification stage, not a writing exercise. Treat it like TDD for
    - Write down what the result must do, what it explicitly must not do, and which project checks already passed.
    - Do not trust memory from earlier chat turns. Durable artifacts and the current worktree are the source of truth.
 2. Generate possible errors before deciding.
-   - List concrete possible errors in English under `Possible Errors`.
+   - List concrete possible errors in `metadata.doubtReviewLanguage` under `Possible Errors`.
    - A possible error must point to a requirement, a code path, a changed file, a missing test, a migration risk, or an integration boundary.
    - Do not include vague anxiety such as "maybe something is wrong" or style preferences without product impact.
 3. Prove or disprove each possible error.

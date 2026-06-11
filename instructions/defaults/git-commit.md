@@ -26,12 +26,13 @@ docs: record <decision>
 ```
 
 Use the repository's existing convention when it is discoverable. Project append instructions may override language, prefix style, scope style, merge subject style, and team conventions.
+Use `metadata.commitLanguage` from `planner_status` for human-readable commit text unless repository conventions or explicit user instructions override it. Conventional commit type prefixes such as `feat:`, `fix:`, and `test:` remain technical tokens.
 
 ## Merge Messages
 
 - Refactor -> task: identify behavior-preserving cleanup.
 - Task -> plan: identify completed atomic task.
-- Plan -> output: use a conventional commit subject and a short body that explains the accepted result in human language. Include the plan title/id, output branch, and a concise summary of completed behavior. Do not use a vague one-line "merge result" message.
+- Plan -> output: use a conventional commit subject and a short body that explains the accepted result in `metadata.commitLanguage`. Include the plan title/id, output branch, and a concise summary of completed behavior. Do not use a vague one-line "merge result" message.
 
 ## Restrictions
 

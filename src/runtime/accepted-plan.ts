@@ -2,6 +2,7 @@ import { outputBranchName } from "../git/branches";
 import { exportPlanToOutputBranch } from "../git/planner-ops";
 import type { GitRunner } from "../git/runner";
 import { createPiSessionDir } from "../session/handoff";
+import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerFs } from "../storage/fs";
 import {
 	createPlanStoragePaths,
@@ -115,6 +116,10 @@ export async function finalizeAcceptedPlan(input: {
 }): Promise<FinalizedAcceptedPlan> {
 	const preview = await inspectAcceptedPlan(input);
 	const planPaths = createPlanStoragePaths(input.projectPaths, preview.planId);
+	const settings = await loadEffectivePlannerSettings({
+		fs: input.fs,
+		projectPaths: input.projectPaths,
+	});
 	const message =
 		input.message ??
 		(await buildAcceptedPlanCommitMessage({
@@ -122,6 +127,7 @@ export async function finalizeAcceptedPlan(input: {
 			planPaths,
 			planId: preview.planId,
 			outputBranch: preview.outputBranch,
+			commitLanguage: settings.effective.metadata.commitLanguage,
 		}));
 	await exportPlanToOutputBranch({
 		git: input.git,
@@ -177,6 +183,7 @@ async function buildAcceptedPlanCommitMessage(input: {
 	planPaths: ReturnType<typeof createPlanStoragePaths>;
 	planId: string;
 	outputBranch: string;
+	commitLanguage: string;
 }): Promise<string> {
 	const plan = await readPlanRecord(input.fs, input.planPaths);
 	const finalSummary = await readOptionalText(
@@ -187,10 +194,11 @@ async function buildAcceptedPlanCommitMessage(input: {
 	const title = normalizeCommitTitle(plan.title || input.planId);
 	const summaryLines = summarizeFinalSummary(finalSummary);
 	return [
-		`feat: export ${title} planner result`,
+		`feat: export ${title}`,
 		"",
 		`Planner plan: ${plan.title || input.planId} (${input.planId})`,
 		`Output branch: ${input.outputBranch}`,
+		`Commit language: ${input.commitLanguage}`,
 		"",
 		"Summary:",
 		...summaryLines.map((line) => `- ${line}`),

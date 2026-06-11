@@ -82,18 +82,21 @@ export function createPiSessionDir(input: {
 export function buildPlannerHandoffPrompt(input: {
 	planId: string;
 	worktreePath: string;
+	titleLanguage?: string;
 	descriptionLanguage?: string;
 }): string {
 	const descriptionLanguage = input.descriptionLanguage ?? "English";
+	const titleLanguage = input.titleLanguage ?? descriptionLanguage;
 	return [
 		`Planner plan ${input.planId} was created and this session is now in the planner worktree.`,
 		`Worktree: ${input.worktreePath}`,
+		`Planner title language: ${titleLanguage}`,
 		`Planner-list description language: ${descriptionLanguage}`,
 		"",
 		"Call planner_status now.",
 		"Read request.md, draft the requested goal content in your own words, then call planner_goal_submit.",
 		"Do not edit goal.md directly with built-in write/edit tools; planner_goal_submit writes goal.md.",
-		`When calling planner_goal_submit, generate the short planner-list description in ${descriptionLanguage}.`,
+		`When calling planner_goal_submit, generate the title in ${titleLanguage} and the short planner-list description in ${descriptionLanguage}.`,
 		"Show the full goal draft to the user and wait for explicit approval.",
 		"Do not write plan.md yet. plan.md is written later during planning/draft_plan after discovery and questions are complete.",
 		"Wait for explicit user approval. Ask evidence-based clarification questions only after discovery.",
