@@ -8,8 +8,9 @@ Become familiar with the project before planning. Keep this stage cheap for a lo
 
 1. `scan_project_structure`
    - Read `goal.md`.
-   - Call `planner_contract_scan` in batches. This discovers AGENTS.md/AGENTS.MD/CLAUDE.md/CLAUDE.MD paths without reading all file bodies.
+   - Call `planner_contract_scan` in batches. This discovers AGENTS.md/AGENTS.MD canonical contracts and read-only context imports such as CLAUDE.md, GEMINI.md, .cursorrules, WARP.md, AIDER.md, and COPILOT.md without reading all file bodies.
    - If contract files exist, call `planner_contract_route` for the goal/scope and `planner_contract_read` for the relevant chain before broad source reads.
+   - Treat AGENTS.md as the only writable/canonical planner memory format. Treat non-AGENTS context files as read-only guidance; if they contain durable planner knowledge, copy the distilled rule into the nearest AGENTS.md via `planner_contract_upsert`.
    - Inspect the project tree with read-only shell commands after the contract map is started.
    - Read only the manifests, entrypoints, tests, configuration, and source files needed to understand the requested work after contract guidance is considered.
    - Write a concise `discovery.md`: architecture, relevant paths, commands, conventions, risks, and uncertainty.

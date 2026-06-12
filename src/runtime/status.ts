@@ -186,8 +186,8 @@ export const PLANNER_STEP_RULES = {
 		objective:
 			"Become familiar with the project without indexing the repository.",
 		requiredActions: [
-			"Call planner_contract_scan in batches to discover AGENTS.md/AGENTS.MD/CLAUDE.md/CLAUDE.MD files before broad source reads.",
-			"When contract files exist, call planner_contract_route and planner_contract_read for the relevant chain first. Treat AGENTS.md as routing memory: higher levels route, nearest levels explain.",
+			"Call planner_contract_scan in batches to discover AGENTS.md canonical contracts and read-only context imports before broad source reads.",
+			"When contract/context files exist, call planner_contract_route and planner_contract_read for the relevant chain first. Treat AGENTS.md as writable routing memory; treat CLAUDE.md, GEMINI.md, .cursorrules, and similar files as read-only imported guidance.",
 			"Inspect the project tree with read-only shell commands only after the contract map is started.",
 			"Read only the source files needed to understand architecture, commands, risks, and the requested change after contract guidance is considered.",
 			"Write concise findings to discovery.md, including exact test/lint/build commands when discoverable.",
