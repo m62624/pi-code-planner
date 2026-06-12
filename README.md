@@ -262,7 +262,7 @@ Example:
 
 Settings merge in this order: defaults, global settings, then project settings.
 
-`worktree` and `compact` settings are captured when a plan is created. Changing them later does not move an existing worktree or rewrite that plan's saved `state.compactBoundaries`. `idle`, `timer`, `metadata`, and `contracts` settings are read while the planner is running.
+`worktree` and `compact` settings are captured when a plan is created. Changing them later does not move an existing worktree or rewrite that plan's saved `state.compactBoundaries`. `idle`, `timer`, `metadata`, `skills`, and `contracts` settings are read while the planner is running.
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
@@ -277,6 +277,8 @@ Settings merge in this order: defaults, global settings, then project settings.
 | `timer.showCheckpoints` | `true` | Include recent stage checkpoint timings. |
 | `timer.maxCheckpoints` | `5` | Maximum checkpoint entries shown. |
 | `timer.syncIntervalMinutes` | `10` | How often timer heartbeat state is written to disk. |
+| `skills.enabled` | `true` | Expose planner-generated skills to active planner sessions through Pi `resources_discover`. |
+| `skills.maxActive` | `0` | Maximum planner skills exposed to Pi; `0` means no planner-side limit. Newer skills are preferred when capped. |
 | `contracts.enabled` | `true` | Enable planner local AGENTS.md contract discovery, routing, checks, and upserts. |
 | `contracts.finalPolicy` | `"ask"` | What `/planner-finish` does with planner-created/updated AGENTS.md files: `"ask"`, `"keep"`, or `"remove"`. |
 | `contracts.scanBatchSize` | `10` | Directory count scanned per `planner_contract_scan` call. |
@@ -300,7 +302,7 @@ Metadata language settings affect human-facing generated text only. Tool names, 
 | `doubtReviewLanguage` | `humanLanguage` | Human-readable content inside `finalize/doubt_review`. The parser heading `Possible Errors` remains stable. |
 | `skillLanguage` | `humanLanguage` | Human-readable body text for planner-generated Pi skills. Skill names and YAML structure stay technical. |
 
-Planner may create Pi skills from verified reusable lessons during stuck/debug/refactor/doubt/finalize work. They are stored under `getAgentDir()/extensions/pi-code-planner/skills/` and exposed to future planner sessions through Pi `resources_discover`. Current selection is simple: every `active` skill in `skills/index.json` with an existing `SKILL.md` is loaded. They are future memory, not a replacement for the current stage instructions.
+Planner may create Pi skills from verified reusable lessons during stuck/debug/refactor/doubt/finalize work. They are stored under `getAgentDir()/extensions/pi-code-planner/skills/` and exposed only to active planner sessions through Pi `resources_discover`. A skill created during a running session is available after a Pi `/reload`, `/planner-resume`, or the next planner session start. Current selection loads every `active` skill in `skills/index.json` with an existing `SKILL.md` unless `skills.maxActive` caps the list. They are future memory, not a replacement for the current stage instructions.
 
 ### Runtime Timer
 

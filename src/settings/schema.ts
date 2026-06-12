@@ -10,6 +10,7 @@ export interface PlannerSettings {
 	idle: PlannerIdleSettings;
 	metadata: PlannerMetadataSettings;
 	timer: PlannerTimerSettings;
+	skills: PlannerSkillsSettings;
 	contracts: PlannerContractsSettings;
 }
 
@@ -19,6 +20,7 @@ export interface PlannerSettingsFile {
 	idle?: Partial<PlannerIdleSettings>;
 	metadata?: Partial<PlannerMetadataSettings>;
 	timer?: Partial<PlannerTimerSettings>;
+	skills?: Partial<PlannerSkillsSettings>;
 	contracts?: PlannerContractsSettingsFile;
 }
 
@@ -42,6 +44,11 @@ export interface PlannerTimerSettings {
 	showCheckpoints: boolean;
 	maxCheckpoints: number;
 	syncIntervalMinutes: number;
+}
+
+export interface PlannerSkillsSettings {
+	enabled: boolean;
+	maxActive: number;
 }
 
 export interface PlannerContractLevelBudgets {
@@ -91,6 +98,10 @@ export const DEFAULT_PLANNER_SETTINGS = {
 		showCheckpoints: true,
 		maxCheckpoints: 5,
 		syncIntervalMinutes: 10,
+	},
+	skills: {
+		enabled: true,
+		maxActive: 0,
 	},
 	contracts: {
 		enabled: true,
