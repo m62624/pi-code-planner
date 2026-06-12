@@ -1,4 +1,4 @@
-> ⚠️ This repository is an experiment built with Pi Code and Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf for local coding work. It is maintained with local AI assistance and may contain non-professional design choices, rough edges, broken behavior, or mistakes. Use it at your own risk.
+> ⚠️ This repository is an experiment built with Pi and Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf for local coding work. It is maintained with local AI assistance and may contain non-professional design choices, rough edges, broken behavior, or mistakes. Use it at your own risk.
 
 # pi-code-planner 🧭
 
@@ -6,7 +6,7 @@
   <img src="assets/icon.png" alt="pi-code-planner icon" width="180">
 </p>
 
-`pi-code-planner` is an experimental [Pi Code](https://github.com/badlogic/pi-mono) extension for local coding models. It wraps a small deterministic state machine around a stochastic model so long coding tasks can survive compaction, Git branching, and user approval steps.
+`pi-code-planner` is an experimental [Pi](https://github.com/badlogic/pi-mono) package for local coding models. It adds a deterministic planner state machine so long coding tasks can survive compaction, Git branching, and user approval steps.
 
 Install the npm package after it is published:
 

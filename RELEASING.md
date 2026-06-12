@@ -10,6 +10,8 @@ Releases use the same pin-tag flow as the reference workflow, adapted for npm.
   - Repository: `pi-code-planner`.
   - Workflow filename: `release.yml`.
   - Allowed action: `npm publish`.
+- No `NPM_TOKEN` GitHub secret is needed.
+- In GitHub repository settings, allow Actions to write contents and pull requests so the workflow can push `rc/v*`, create `v*`, and open the sync PR.
 - Use conventional PR titles or commit messages so labels and release notes stay useful.
 - Keep `package-lock.json` committed; CI uses `npm ci`.
 
