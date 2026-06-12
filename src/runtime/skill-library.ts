@@ -85,9 +85,21 @@ export async function listActivePlannerSkillPaths(input: {
 	projectPaths: ProjectStoragePaths;
 }): Promise<string[]> {
 	const paths = createPlannerSkillStoragePaths(input.projectPaths);
+	const settings = await loadEffectivePlannerSettings({
+		fs: input.fs,
+		projectPaths: input.projectPaths,
+	});
+	if (!settings.effective.skills.enabled) {
+		return [];
+	}
 	const index = await readPlannerSkillIndex(input.fs, paths.indexJson);
 	const existing: string[] = [];
-	for (const item of index.items) {
+	const items = [...index.items].sort((left, right) => {
+		const byUpdated = right.updatedAt - left.updatedAt;
+		return byUpdated || left.name.localeCompare(right.name);
+	});
+	const maxActive = settings.effective.skills.maxActive;
+	for (const item of maxActive > 0 ? items.slice(0, maxActive) : items) {
 		if (item.status !== "active") continue;
 		if (await input.fs.exists(item.skillPath)) {
 			existing.push(item.skillPath);
@@ -110,6 +122,18 @@ export async function listActivePlannerSkillPathsForCwd(input: {
 		fs: input.fs,
 		projectPaths,
 	});
+}
+
+export async function listPlannerSkillResourcePaths(input: {
+	fs: PlannerFs;
+	agentDir: string;
+	cwd: string;
+	plannerActive: boolean;
+}): Promise<string[]> {
+	if (!input.plannerActive) {
+		return [];
+	}
+	return await listActivePlannerSkillPathsForCwd(input);
 }
 
 export async function executePlannerSkillTool(

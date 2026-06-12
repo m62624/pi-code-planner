@@ -18,6 +18,7 @@ const DEFAULT_PLANNER_SETTINGS_FILE: PlannerSettingsFile = {
 		humanLanguage: DEFAULT_PLANNER_SETTINGS.metadata.humanLanguage,
 	},
 	timer: DEFAULT_PLANNER_SETTINGS.timer,
+	skills: DEFAULT_PLANNER_SETTINGS.skills,
 	contracts: DEFAULT_PLANNER_SETTINGS.contracts,
 };
 
@@ -31,6 +32,7 @@ export interface EffectivePlannerSettings {
 	idleSource: "project" | "global" | "default";
 	metadataSource: "project" | "global" | "default";
 	timerSource: "project" | "global" | "default";
+	skillsSource: "project" | "global" | "default";
 	contractsSource: "project" | "global" | "default";
 }
 
@@ -96,6 +98,16 @@ export async function loadEffectivePlannerSettings(input: {
 		...(global.timer ?? {}),
 		...(project?.timer ?? {}),
 	};
+	const skillsSource = project?.skills
+		? "project"
+		: global.skills
+			? "global"
+			: "default";
+	const skills = {
+		...DEFAULT_PLANNER_SETTINGS.skills,
+		...(global.skills ?? {}),
+		...(project?.skills ?? {}),
+	};
 	const contractsSource = project?.contracts
 		? "project"
 		: global.contracts
@@ -110,12 +122,13 @@ export async function loadEffectivePlannerSettings(input: {
 		paths,
 		global,
 		project,
-		effective: { worktree, compact, idle, metadata, timer, contracts },
+		effective: { worktree, compact, idle, metadata, timer, skills, contracts },
 		worktreeSource,
 		compactSource,
 		idleSource,
 		metadataSource,
 		timerSource,
+		skillsSource,
 		contractsSource,
 	};
 }
@@ -154,6 +167,9 @@ function normalizeSettingsFile(
 		...(record.timer === undefined
 			? {}
 			: { timer: normalizeTimerSettings(record.timer, path) }),
+		...(record.skills === undefined
+			? {}
+			: { skills: normalizeSkillsSettings(record.skills, path) }),
 		...(record.contracts === undefined
 			? {}
 			: { contracts: normalizeContractsSettings(record.contracts, path) }),
@@ -226,6 +242,20 @@ function positiveInteger(value: unknown, key: string, path: string): number {
 	) {
 		throw new TypeError(
 			`Planner setting ${key} must be a positive integer: ${path}`,
+		);
+	}
+	return value;
+}
+
+function nonNegativeInteger(value: unknown, key: string, path: string): number {
+	if (
+		typeof value !== "number" ||
+		!Number.isInteger(value) ||
+		!Number.isFinite(value) ||
+		value < 0
+	) {
+		throw new TypeError(
+			`Planner setting ${key} must be a non-negative integer: ${path}`,
 		);
 	}
 	return value;
@@ -374,6 +404,33 @@ function normalizeTimerSettings(
 					syncIntervalMinutes: positiveNumber(
 						record.syncIntervalMinutes,
 						"syncIntervalMinutes",
+						path,
+					),
+				}),
+	};
+}
+
+function normalizeSkillsSettings(
+	value: unknown,
+	path: string,
+): PlannerSettingsFile["skills"] {
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		throw new TypeError(`Planner skills settings must be an object: ${path}`);
+	}
+	const record = value as Record<string, unknown>;
+	if (record.enabled !== undefined && typeof record.enabled !== "boolean") {
+		throw new TypeError(
+			`Planner skills setting enabled must be boolean: ${path}`,
+		);
+	}
+	return {
+		...(typeof record.enabled === "boolean" ? { enabled: record.enabled } : {}),
+		...(record.maxActive === undefined
+			? {}
+			: {
+					maxActive: nonNegativeInteger(
+						record.maxActive,
+						"skills.maxActive",
 						path,
 					),
 				}),

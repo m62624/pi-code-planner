@@ -112,7 +112,7 @@ import {
 } from "./runtime/refactor-tools";
 import {
 	executePlannerSkillTool,
-	listActivePlannerSkillPathsForCwd,
+	listPlannerSkillResourcePaths,
 	PLANNER_SKILL_SOURCE_KINDS,
 	PLANNER_SKILL_TOOL_NAMES,
 } from "./runtime/skill-library";
@@ -1044,10 +1044,11 @@ function registerPlannerSkillResources(pi: ExtensionAPI): void {
 	pi.on("resources_discover", async (event) => {
 		const fs = createNodeFs();
 		try {
-			const skillPaths = await listActivePlannerSkillPathsForCwd({
+			const skillPaths = await listPlannerSkillResourcePaths({
 				fs,
 				agentDir: getAgentDir(),
 				cwd: event.cwd,
+				plannerActive: isPlanActive(),
 			});
 			return { skillPaths };
 		} catch {

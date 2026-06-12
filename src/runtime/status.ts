@@ -835,6 +835,8 @@ export async function buildPlannerStatusText(
 		`- metadata.skillLanguage: ${settings.effective.metadata.skillLanguage}`,
 		`- idle.enabled: ${String(settings.effective.idle.enabled)}`,
 		`- idle.timeoutMinutes: ${settings.effective.idle.timeoutMinutes}`,
+		`- skills.enabled: ${String(settings.effective.skills.enabled)}`,
+		`- skills.maxActive: ${settings.effective.skills.maxActive}`,
 		`- contracts.enabled: ${String(settings.effective.contracts.enabled)}`,
 		`- contracts.finalPolicy: ${settings.effective.contracts.finalPolicy}`,
 		`- contracts.scanBatchSize: ${settings.effective.contracts.scanBatchSize}`,

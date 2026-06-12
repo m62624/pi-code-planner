@@ -23,9 +23,11 @@ import { initializePlanState } from "../storage/state-store";
 import { saveWorktreeProjectIndex } from "../storage/worktree-index";
 import { MockPlannerFs } from "../test/mock-fs";
 import {
+	createPlannerSkillStoragePaths,
 	executePlannerSkillTool,
 	listActivePlannerSkillPaths,
 	listActivePlannerSkillPathsForCwd,
+	listPlannerSkillResourcePaths,
 	validatePlannerSkillMarkdown,
 } from "./skill-library";
 
@@ -182,6 +184,72 @@ describe("planner skill library", () => {
 		).resolves.toEqual([created.details?.skillPath]);
 	});
 
+	it("does not expose planner skills to non-planner sessions", async () => {
+		const { fs, git, projectPaths } = await createSkillSetup();
+		const created = await executePlannerSkillTool({
+			fs,
+			git,
+			projectPaths,
+			uuid: "11111111-1234-1234-1234-123456789abc",
+			now: 1000,
+			params: {
+				nameHint: "Planner only",
+				description:
+					"ACTIVATE only inside planner sessions when a reusable planner lesson is relevant.",
+				bodyMarkdown: "# Planner Only\n\nDo not load outside planner sessions.",
+				sourceKind: "other",
+			},
+		});
+
+		expect(created.status).toBe("applied");
+		await expect(
+			listPlannerSkillResourcePaths({
+				fs,
+				agentDir: "/agent",
+				cwd: projectPaths.projectRoot,
+				plannerActive: false,
+			}),
+		).resolves.toEqual([]);
+	});
+
+	it("respects skills.enabled and skills.maxActive when exposing resources", async () => {
+		const { fs, projectPaths } = await createSkillSetup();
+		await seedPlannerSkillIndex(fs, projectPaths, [
+			{ name: "pi-planner-old-11111111", updatedAt: 1000 },
+			{ name: "pi-planner-new-22222222", updatedAt: 3000 },
+			{ name: "pi-planner-mid-33333333", updatedAt: 2000 },
+		]);
+		await fs.writeTextAtomic(
+			"/repo/app/.pi/pi-code-planner/settings.json",
+			'{ "skills": { "maxActive": 2 } }\n',
+		);
+
+		await expect(
+			listPlannerSkillResourcePaths({
+				fs,
+				agentDir: "/agent",
+				cwd: projectPaths.projectRoot,
+				plannerActive: true,
+			}),
+		).resolves.toEqual([
+			"/agent/extensions/pi-code-planner/skills/library/pi-planner-new-22222222/SKILL.md",
+			"/agent/extensions/pi-code-planner/skills/library/pi-planner-mid-33333333/SKILL.md",
+		]);
+
+		await fs.writeTextAtomic(
+			"/repo/app/.pi/pi-code-planner/settings.json",
+			'{ "skills": { "enabled": false } }\n',
+		);
+		await expect(
+			listPlannerSkillResourcePaths({
+				fs,
+				agentDir: "/agent",
+				cwd: projectPaths.projectRoot,
+				plannerActive: true,
+			}),
+		).resolves.toEqual([]);
+	});
+
 	it("blocks skill creation when the planner state does not allow the wrapper", async () => {
 		const fs = new MockPlannerFs();
 		const git = new MockGitRunner();
@@ -289,4 +357,47 @@ async function createSkillSetup(input?: { worktreePath?: string }) {
 	});
 	await setActivePlan(fs, projectPaths, "plan-a");
 	return { fs, git, projectPaths, planPaths };
+}
+
+async function seedPlannerSkillIndex(
+	fs: MockPlannerFs,
+	projectPaths: ReturnType<typeof createProjectStoragePaths>,
+	items: Array<{ name: string; updatedAt: number }>,
+): Promise<void> {
+	const paths = createPlannerSkillStoragePaths(projectPaths);
+	const indexItems = [];
+	for (const item of items) {
+		const skillPath = `${paths.libraryDir}/${item.name}/SKILL.md`;
+		await fs.writeTextAtomic(
+			skillPath,
+			[
+				"---",
+				`name: ${item.name}`,
+				"description: Use when testing planner skill resource selection.",
+				"---",
+				"",
+				`# ${item.name}`,
+				"",
+			].join("\n"),
+		);
+		indexItems.push({
+			id: item.name,
+			name: item.name,
+			description: "Use when testing planner skill resource selection.",
+			status: "active",
+			tags: [],
+			sourceKind: "other",
+			sourcePlanId: null,
+			sourceTaskId: null,
+			language: "English",
+			skillPath,
+			createdAt: item.updatedAt,
+			updatedAt: item.updatedAt,
+			hash: item.name,
+		});
+	}
+	await fs.writeTextAtomic(
+		paths.indexJson,
+		`${JSON.stringify({ version: 1, items: indexItems }, null, 2)}\n`,
+	);
 }
