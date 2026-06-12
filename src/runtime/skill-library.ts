@@ -5,6 +5,7 @@ import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerFs } from "../storage/fs";
 import { readJsonIfExists, writeJson } from "../storage/json";
 import type { ProjectStoragePaths } from "../storage/paths";
+import { resolveProjectStoragePaths } from "../storage/project-resolver";
 import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
@@ -93,6 +94,22 @@ export async function listActivePlannerSkillPaths(input: {
 		}
 	}
 	return existing;
+}
+
+export async function listActivePlannerSkillPathsForCwd(input: {
+	fs: PlannerFs;
+	agentDir: string;
+	cwd: string;
+}): Promise<string[]> {
+	const projectPaths = await resolveProjectStoragePaths({
+		fs: input.fs,
+		agentDir: input.agentDir,
+		cwd: input.cwd,
+	});
+	return await listActivePlannerSkillPaths({
+		fs: input.fs,
+		projectPaths,
+	});
 }
 
 export async function executePlannerSkillTool(

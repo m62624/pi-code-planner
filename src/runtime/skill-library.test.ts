@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SCHEMA_VERSION } from "../constants";
 import type {
 	GitBranchInput,
 	GitCommitInput,
@@ -19,10 +20,12 @@ import { initializePlanFiles } from "../storage/plan-store";
 import { ensureProjectRecord, setActivePlan } from "../storage/project-store";
 import { createInitialPlanState, createPlanRecord } from "../storage/schema";
 import { initializePlanState } from "../storage/state-store";
+import { saveWorktreeProjectIndex } from "../storage/worktree-index";
 import { MockPlannerFs } from "../test/mock-fs";
 import {
 	executePlannerSkillTool,
 	listActivePlannerSkillPaths,
+	listActivePlannerSkillPathsForCwd,
 	validatePlannerSkillMarkdown,
 } from "./skill-library";
 
@@ -134,6 +137,51 @@ describe("planner skill library", () => {
 		expect(result.text).toContain("must not include YAML frontmatter");
 	});
 
+	it("loads planner skills from the original project when cwd is a resumed worktree", async () => {
+		const customWorktreePath = "/tmp/pi-worktrees/plan-a";
+		const { fs, git, projectPaths } = await createSkillSetup({
+			worktreePath: customWorktreePath,
+		});
+		await saveWorktreeProjectIndex({
+			fs,
+			agentDir: "/agent",
+			record: {
+				schemaVersion: SCHEMA_VERSION,
+				worktreePath: customWorktreePath,
+				projectRoot: projectPaths.projectRoot,
+				projectId: projectPaths.projectId,
+				planId: "plan-a",
+			},
+		});
+
+		const created = await executePlannerSkillTool({
+			fs,
+			git,
+			projectPaths,
+			uuid: "87654321-1234-1234-1234-123456789abc",
+			now: 1000,
+			params: {
+				nameHint: "Resume worktree skills",
+				description:
+					"ACTIVATE when planner resume switches into a worktree and skill discovery must use the original project storage.",
+				bodyMarkdown:
+					"# Resume Worktree Skills\n\nRead skills from the project that owns the worktree.",
+				tags: ["resume", "skills"],
+				sourceKind: "debug",
+				sourcePlanId: "plan-a",
+			},
+		});
+
+		expect(created.status).toBe("applied");
+		await expect(
+			listActivePlannerSkillPathsForCwd({
+				fs,
+				agentDir: "/agent",
+				cwd: customWorktreePath,
+			}),
+		).resolves.toEqual([created.details?.skillPath]);
+	});
+
 	it("blocks skill creation when the planner state does not allow the wrapper", async () => {
 		const fs = new MockPlannerFs();
 		const git = new MockGitRunner();
@@ -211,7 +259,7 @@ describe("planner skill library", () => {
 	});
 });
 
-async function createSkillSetup() {
+async function createSkillSetup(input?: { worktreePath?: string }) {
 	const fs = new MockPlannerFs();
 	const git = new MockGitRunner();
 	const projectPaths = createProjectStoragePaths({
@@ -219,7 +267,8 @@ async function createSkillSetup() {
 		projectRoot: "/repo/app",
 	});
 	const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
-	const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+	const worktreePath =
+		input?.worktreePath ?? "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
 	await ensureProjectRecord(fs, projectPaths);
 	await initializePlanFiles(
 		fs,
