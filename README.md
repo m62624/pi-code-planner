@@ -269,3 +269,7 @@ Release notes and npm publishing flow are described in `RELEASING.md`.
 - Persisted state reduces context loss but cannot make model output correct.
 - Git wrappers reduce workflow drift but do not replace code review.
 - Keep backups of important repositories.
+
+## License 📄
+
+[MIT](https://github.com/m62624/pi-code-planner/blob/main/LICENSE)
