@@ -2,6 +2,10 @@
 
 # pi-code-planner 🧭
 
+<p align="center">
+  <img src="assets/icon.png" alt="pi-code-planner icon" width="180">
+</p>
+
 `pi-code-planner` is an experimental [Pi Code](https://github.com/badlogic/pi-mono) extension for local coding models. It wraps a small deterministic state machine around a stochastic model so long coding tasks can survive compaction, Git branching, and user approval steps.
 
 Install the npm package after it is published:
