@@ -10,7 +10,8 @@ At `planning/read_context`, load context in this order:
 
 1. Call `planner_status`.
 2. Read `discovery.md`, `questions.md`, and `decisions.md`.
-3. Read specific source files only when the recorded discovery context is insufficient.
+3. Use `planner_contract_route/read` for applicable AGENTS.md chains before extra source reads.
+4. Read specific source files only when the recorded discovery context and local contracts are insufficient.
 
 ## Strict Step Order
 
@@ -28,9 +29,9 @@ At `planning/read_context`, load context in this order:
 	- In a follow-up planning pass, existing completed task artifacts are history. Create new revision task IDs for new work; do not reuse a completed task ID.
 4. `write_task_files`
 	- Call `planner_task_upsert` once per behavioral task.
-	- Provide semantic fields only: task id, title, objective, scope, and acceptance criteria.
+	- Provide semantic fields only: task id, title, objective, scope, acceptance criteria, and optional Local Contract Context fields.
 	- The wrapper creates `task.json`, `task.md`, and empty TDD lifecycle artifacts. Do not write task JSON manually.
-	- Each `task.md` must state scope, acceptance criteria, expected files or symbols, dependency context, and checks.
+	- Each `task.md` must state scope, acceptance criteria, expected files or symbols, dependency context, checks, and relevant AGENTS.md chain when known.
 	- In a follow-up planning pass, call `planner_task_upsert` only for new or still-pending revision tasks. Completed task IDs are immutable audit history.
 5. `verify_plan`
    - Verify that tasks are ordered, bounded, testable, and free of hidden broad work.
@@ -59,6 +60,7 @@ At `planning/read_context`, load context in this order:
 - Built-in project write/edit calls remain blocked. Shell remains available, but raw git is forbidden.
 - Do not create task branches.
 - Do not reread the whole project unless recorded discovery context is insufficient.
+- Do not ignore local contracts. If AGENTS.md files exist, task scope should preserve the relevant contract chain or explicitly explain why none applies.
 - Do not rely on chat memory; write durable facts to artifacts.
 
 ## Exit Condition

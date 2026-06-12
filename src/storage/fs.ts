@@ -13,6 +13,7 @@ import { dirname } from "node:path";
 
 export interface PlannerFs {
 	exists(path: string): Promise<boolean>;
+	isDirectory(path: string): Promise<boolean>;
 	mkdirp(path: string): Promise<void>;
 	readText(path: string): Promise<string>;
 	readdir(path: string): Promise<string[]>;
@@ -28,6 +29,16 @@ export function createNodeFs(): PlannerFs {
 			try {
 				await stat(path);
 				return true;
+			} catch (error) {
+				if (isNodeError(error) && error.code === "ENOENT") {
+					return false;
+				}
+				throw error;
+			}
+		},
+		async isDirectory(path) {
+			try {
+				return (await stat(path)).isDirectory();
 			} catch (error) {
 				if (isNodeError(error) && error.code === "ENOENT") {
 					return false;

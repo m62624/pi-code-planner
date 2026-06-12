@@ -13,6 +13,7 @@ const IDLE_EXECUTION_STEPS = new Set<PlanStateRecord["step"]>([
 	"write_tests",
 	"run_failing_tests",
 	"implement_task",
+	"contract_check",
 	"refactor_task",
 	"run_final_tests",
 ]);

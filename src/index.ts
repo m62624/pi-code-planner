@@ -43,6 +43,13 @@ import {
 	type PlannerCompactRuntimeState,
 } from "./runtime/compact";
 import {
+	applyPlannerContractFinishPolicy,
+	executePlannerContractTool,
+	hasPendingContractFinishDecision,
+	PLANNER_CONTRACT_TOOL_NAMES,
+	type PlannerContractToolName,
+} from "./runtime/contracts";
+import {
 	DEBUG_INSTRUMENTATION_TYPES,
 	DEBUG_PROBE_METHODS,
 	DEBUG_RESULT_NEXT_ACTIONS,
@@ -280,8 +287,183 @@ const TASK_UPSERT_TOOL_PARAMETERS = {
 		objective: { type: "string" },
 		scope: { type: "array", items: { type: "string" } },
 		acceptanceCriteria: { type: "array", items: { type: "string" } },
+		contractChain: {
+			type: "array",
+			items: { type: "string" },
+			description:
+				"Optional AGENTS.md/CLAUDE.md chain paths this task should reload before execution.",
+		},
+		relevantContracts: {
+			type: "array",
+			items: { type: "string" },
+			description: "Optional durable contract facts this task depends on.",
+		},
+		forbiddenAreas: {
+			type: "array",
+			items: { type: "string" },
+			description:
+				"Optional paths/domains the task must not touch without replanning.",
+		},
+		domainDetails: {
+			type: "array",
+			items: { type: "string" },
+			description:
+				"Optional domain-specific details from AGENTS.md useful after compact.",
+		},
 	},
 	required: ["taskId", "title", "objective", "scope", "acceptanceCriteria"],
+	additionalProperties: false,
+} as const;
+
+const CONTRACT_SCAN_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		batchSize: {
+			type: "number",
+			description:
+				"Optional positive batch size for directory scanning. Defaults to contracts.scanBatchSize.",
+		},
+	},
+	additionalProperties: false,
+} as const;
+
+const CONTRACT_ROUTE_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		targetPaths: {
+			type: "array",
+			items: { type: "string" },
+			description:
+				"Files or directories the model expects to read/edit. The tool maps them to relevant AGENTS.md/CLAUDE.md chains.",
+		},
+		declaredScope: {
+			type: "array",
+			items: { type: "string" },
+			description:
+				"Fallback task scope/domain hints when exact targetPaths are not known yet.",
+		},
+		reason: {
+			type: "string",
+			description: "Why this contract route is needed now.",
+		},
+	},
+	additionalProperties: false,
+} as const;
+
+const CONTRACT_READ_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		path: {
+			type: "string",
+			description:
+				"AGENTS.md/AGENTS.MD/CLAUDE.md/CLAUDE.MD path to read. Omit to continue pendingRead from planner_status.",
+		},
+		cursor: {
+			type: "number",
+			description:
+				"Optional read cursor. Omit unless continuing an explicit cursor.",
+		},
+		reason: {
+			type: "string",
+			description: "Why this contract content is needed now.",
+		},
+	},
+	additionalProperties: false,
+} as const;
+
+const CONTRACT_CHECK_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		taskId: {
+			type: "string",
+			description:
+				"Active task id. Omit only if planner_status reports no active task.",
+		},
+		action: {
+			type: "string",
+			enum: ["no_update", "upsert_existing", "create_new"],
+			description:
+				"Whether AGENTS.md needs no change, an existing contract update, or a new meaningful domain contract.",
+		},
+		outcomeSummary: {
+			type: "string",
+			description:
+				"What changed and why this does or does not alter durable local contracts.",
+		},
+		domainImpact: {
+			type: "string",
+			description:
+				"Which architecture/domain rule was affected. Say none with evidence for no_update.",
+		},
+		changedFiles: { type: "array", items: { type: "string" } },
+		evidence: {
+			type: "array",
+			items: { type: "string" },
+			description:
+				"Concrete proof from diff/tests/artifacts that supports the action.",
+		},
+		recommendedPath: {
+			type: "string",
+			description:
+				"Nearest meaningful AGENTS.md path when action is upsert_existing or create_new.",
+		},
+	},
+	required: [
+		"action",
+		"outcomeSummary",
+		"domainImpact",
+		"changedFiles",
+		"evidence",
+	],
+	additionalProperties: false,
+} as const;
+
+const CONTRACT_UPSERT_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		path: {
+			type: "string",
+			description:
+				"AGENTS.md/AGENTS.MD path to create/update. Omit only when planner_status reports pendingUpsert.",
+		},
+		purpose: { type: "string" },
+		parent: {
+			type: "string",
+			description:
+				"Relative parent AGENTS.md backlink. Use `(root)` or omit for the worktree root.",
+		},
+		childIndex: {
+			type: "array",
+			items: {
+				type: "object",
+				properties: {
+					path: { type: "string" },
+					description: { type: "string" },
+				},
+				required: ["path", "description"],
+				additionalProperties: false,
+			},
+		},
+		stableContracts: { type: "array", items: { type: "string" } },
+		readFirst: { type: "array", items: { type: "string" } },
+		doNotTouchUnless: { type: "array", items: { type: "string" } },
+		domainDetails: { type: "array", items: { type: "string" } },
+	},
+	required: ["purpose", "stableContracts"],
+	additionalProperties: false,
+} as const;
+
+const CONTRACT_DECIDE_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		decision: {
+			type: "string",
+			enum: ["keep", "remove"],
+			description:
+				"Keep AGENTS.md contract changes in the accepted result or remove/restore them before finish.",
+		},
+	},
+	required: ["decision"],
 	additionalProperties: false,
 } as const;
 
@@ -1347,6 +1529,50 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					ctx.ui.notify("Planner finish cancelled.", "info");
 					return;
 				}
+				if (
+					preview.state.contracts.dirty &&
+					preview.state.contracts.touchedFiles.length > 0
+				) {
+					let contractDecision: "keep" | "remove" | undefined;
+					if (hasPendingContractFinishDecision(preview.state)) {
+						const keepLabel =
+							"Keep AGENTS.md contracts - recommended durable project memory";
+						const removeLabel =
+							"Remove planner AGENTS.md changes - future plans may rediscover them";
+						const choice = await ctx.ui.select(
+							"Planner AGENTS.md contract changes",
+							[keepLabel, removeLabel],
+						);
+						if (!choice) {
+							ctx.ui.notify("Planner finish cancelled.", "info");
+							return;
+						}
+						contractDecision = choice === keepLabel ? "keep" : "remove";
+					}
+					const contractPolicy = await applyPlannerContractFinishPolicy({
+						fs,
+						planPaths: createPlanStoragePaths(projectPaths, preview.planId),
+						state: preview.state,
+						decision: contractDecision,
+					});
+					if (contractPolicy.decision === "remove") {
+						const status = await git.statusPorcelain({
+							repoRoot: preview.worktreePath,
+						});
+						if (status.trim()) {
+							await git.stageAll({ repoRoot: preview.worktreePath });
+							await git.commit({
+								repoRoot: preview.worktreePath,
+								message: [
+									"docs: remove planner contract updates",
+									"",
+									"Restore AGENTS.md files according to the user's /planner-finish decision.",
+								].join("\n"),
+							});
+						}
+					}
+					ctx.ui.notify(contractPolicy.message, "info");
+				}
 
 				let deleteWorktreeSessions = true;
 				const projectSession = await resolveProjectSessionForHandoff({
@@ -1582,6 +1808,37 @@ function registerPlannerTools(
 					now: Date.now(),
 				});
 				const result = await executePlannerTaskTool({
+					fs,
+					git: new NodeGitRunner(),
+					projectPaths,
+					toolName,
+					params,
+				});
+				return {
+					content: [{ type: "text", text: result.text }],
+					details: result,
+				};
+			},
+		});
+	}
+
+	for (const toolName of PLANNER_CONTRACT_TOOL_NAMES) {
+		pi.registerTool({
+			name: toolName,
+			label: contractToolLabel(toolName),
+			description: contractToolDescription(toolName),
+			promptSnippet:
+				"Use planner contract tools for AGENTS.md local contracts. Scan/route/read before broad source reads; check/update contracts after each green TDD task before refactor.",
+			parameters: contractToolParameters(toolName) as never,
+			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const fs = createNodeFs();
+				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				await recordPlannerToolActivityForProject({
+					fs,
+					projectPaths,
+					now: Date.now(),
+				});
+				const result = await executePlannerContractTool({
 					fs,
 					git: new NodeGitRunner(),
 					projectPaths,
@@ -2209,6 +2466,57 @@ function taskToolDescription(toolName: PlannerTaskToolName): string {
 	switch (toolName) {
 		case "planner_task_upsert":
 			return "Create or replace one behavioral task from semantic fields. The wrapper writes task.json, task.md, and empty TDD lifecycle artifacts.";
+	}
+}
+
+function contractToolLabel(toolName: PlannerContractToolName): string {
+	switch (toolName) {
+		case "planner_contract_scan":
+			return "Planner Contract Scan";
+		case "planner_contract_route":
+			return "Planner Contract Route";
+		case "planner_contract_read":
+			return "Planner Contract Read";
+		case "planner_contract_check":
+			return "Planner Contract Check";
+		case "planner_contract_upsert":
+			return "Planner Contract Upsert";
+		case "planner_contract_decide":
+			return "Planner Contract Decide";
+	}
+}
+
+function contractToolDescription(toolName: PlannerContractToolName): string {
+	switch (toolName) {
+		case "planner_contract_scan":
+			return "Discover AGENTS.md/CLAUDE.md local contract files in bounded batches without reading every file body.";
+		case "planner_contract_route":
+			return "Choose the relevant AGENTS.md contract chain for target files or declared task scope.";
+		case "planner_contract_read":
+			return "Read an AGENTS.md/CLAUDE.md contract file in chunks and preserve pendingRead state across compact.";
+		case "planner_contract_check":
+			return "Record the mandatory post-implementation check that decides whether AGENTS.md local contracts need an update.";
+		case "planner_contract_upsert":
+			return "Create or update a validated pi-code-planner managed AGENTS.md block with parent links and child routing.";
+		case "planner_contract_decide":
+			return "Keep or remove planner-created AGENTS.md contract changes before accepted finish.";
+	}
+}
+
+function contractToolParameters(toolName: PlannerContractToolName) {
+	switch (toolName) {
+		case "planner_contract_scan":
+			return CONTRACT_SCAN_TOOL_PARAMETERS;
+		case "planner_contract_route":
+			return CONTRACT_ROUTE_TOOL_PARAMETERS;
+		case "planner_contract_read":
+			return CONTRACT_READ_TOOL_PARAMETERS;
+		case "planner_contract_check":
+			return CONTRACT_CHECK_TOOL_PARAMETERS;
+		case "planner_contract_upsert":
+			return CONTRACT_UPSERT_TOOL_PARAMETERS;
+		case "planner_contract_decide":
+			return CONTRACT_DECIDE_TOOL_PARAMETERS;
 	}
 }
 

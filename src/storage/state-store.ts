@@ -2,11 +2,13 @@ import type { PlannerFs } from "./fs";
 import { readJson, readJsonIfExists, writeJson } from "./json";
 import type { PlanStoragePaths } from "./paths";
 import type {
+	PlannerContractsState,
 	PlannerStage,
 	PlannerStep,
 	PlanStateRecord,
 	StepStatus,
 } from "./schema";
+import { createDefaultPlannerContractsState } from "./schema";
 
 const stateWriteLocks = new Map<string, Promise<void>>();
 
@@ -141,6 +143,32 @@ function normalizePlanState(state: PlanStateRecord): PlanStateRecord {
 		activeDebugProbeId: state.activeDebugProbeId ?? null,
 		debugCleanupRequired: state.debugCleanupRequired ?? false,
 		timer: state.timer ?? null,
+		contracts: normalizePlannerContractsState(state.contracts),
+	};
+}
+
+function normalizePlannerContractsState(
+	value: PlannerContractsState | undefined,
+): PlannerContractsState {
+	const defaults = createDefaultPlannerContractsState();
+	if (!value) {
+		return defaults;
+	}
+	return {
+		...defaults,
+		...value,
+		scanQueue: Array.isArray(value.scanQueue) ? value.scanQueue : [],
+		discoveredPaths: Array.isArray(value.discoveredPaths)
+			? value.discoveredPaths
+			: [],
+		diagnostics: Array.isArray(value.diagnostics) ? value.diagnostics : [],
+		activeChains: Array.isArray(value.activeChains) ? value.activeChains : [],
+		summaries: Array.isArray(value.summaries) ? value.summaries : [],
+		pendingRead: value.pendingRead ?? null,
+		pendingCheckTaskId: value.pendingCheckTaskId ?? null,
+		pendingUpsert: value.pendingUpsert ?? null,
+		lastCheck: value.lastCheck ?? null,
+		touchedFiles: Array.isArray(value.touchedFiles) ? value.touchedFiles : [],
 	};
 }
 

@@ -57,7 +57,15 @@ describe("simplified local-model workflow", () => {
 			getAllowedPlannerWrapperTools(
 				state({ stage: "discovery", step: "scan_project_structure" }),
 			),
-		).toEqual(["planner_status", "planner_git_inspect"]);
+		).toEqual([
+			"planner_status",
+			"planner_git_inspect",
+			"planner_contract_scan",
+			"planner_contract_route",
+			"planner_contract_read",
+			"planner_contract_upsert",
+			"planner_git_commit",
+		]);
 		expect(
 			getInstructionKeysForPlannerStep({
 				stage: "execution",

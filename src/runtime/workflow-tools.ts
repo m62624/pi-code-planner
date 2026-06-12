@@ -14,6 +14,7 @@ import {
 	type PlanStateRecord,
 } from "../storage/schema";
 import { updateTaskStatus } from "../storage/task-store";
+import { validateContractCheckCompleted } from "./contracts";
 import { validateDoubtReviewMarkdown } from "./doubt-review";
 import type { PlannerGitReality } from "./git-state-sync";
 import {
@@ -247,6 +248,9 @@ async function validateWorkflowExit(input: {
 		return null;
 	}
 	const { state } = input.orchestrator.preflight.context;
+	if (state.stage === "discovery" && state.step === "scan_project_structure") {
+		return validateCleanWorktree(input.orchestrator.preflight.gitReality);
+	}
 	if (state.stage === "discovery" && state.step === "write_questions") {
 		const artifactBlock = await requireNonEmptyArtifact(
 			input.fs,
@@ -373,6 +377,11 @@ async function validateWorkflowExit(input: {
 							join(taskDir, "tdd.md"),
 						)))
 					: "Active task is missing. Prepare exactly one task branch first.") ??
+				validateCleanWorktree(input.orchestrator.preflight.gitReality)
+			);
+		case "contract_check":
+			return (
+				validateContractCheckCompleted(state) ??
 				validateCleanWorktree(input.orchestrator.preflight.gitReality)
 			);
 		case "refactor_task":

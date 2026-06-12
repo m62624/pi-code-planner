@@ -37,11 +37,26 @@ describe("planner settings", () => {
 			maxCheckpoints: 5,
 			syncIntervalMinutes: 10,
 		});
+		expect(settings.effective.contracts).toEqual({
+			enabled: true,
+			finalPolicy: "ask",
+			scanBatchSize: 10,
+			statusCharBudget: 12000,
+			readChunkChars: 6000,
+			maxActiveChains: 3,
+			levelBudgets: {
+				root: 1800,
+				ancestor: 3000,
+				nearest: 7000,
+			},
+			requireAfterTdd: true,
+			requireBeforeEditOutsideChain: true,
+		});
 		expect(settings.worktreeSource).toBe("global");
 		expect(
 			fs.snapshot()["/agent/extensions/pi-code-planner/settings.json"],
 		).toBe(
-			'{\n  "worktree": {\n    "mode": "project-local"\n  },\n  "compact": {\n    "stage": true,\n    "task": false\n  },\n  "idle": {\n    "enabled": true,\n    "timeoutMinutes": 10\n  },\n  "metadata": {\n    "humanLanguage": "English"\n  },\n  "timer": {\n    "enabled": true,\n    "mode": "status",\n    "showCheckpoints": true,\n    "maxCheckpoints": 5,\n    "syncIntervalMinutes": 10\n  }\n}\n',
+			'{\n  "worktree": {\n    "mode": "project-local"\n  },\n  "compact": {\n    "stage": true,\n    "task": false\n  },\n  "idle": {\n    "enabled": true,\n    "timeoutMinutes": 10\n  },\n  "metadata": {\n    "humanLanguage": "English"\n  },\n  "timer": {\n    "enabled": true,\n    "mode": "status",\n    "showCheckpoints": true,\n    "maxCheckpoints": 5,\n    "syncIntervalMinutes": 10\n  },\n  "contracts": {\n    "enabled": true,\n    "finalPolicy": "ask",\n    "scanBatchSize": 10,\n    "statusCharBudget": 12000,\n    "readChunkChars": 6000,\n    "maxActiveChains": 3,\n    "levelBudgets": {\n      "root": 1800,\n      "ancestor": 3000,\n      "nearest": 7000\n    },\n    "requireAfterTdd": true,\n    "requireBeforeEditOutsideChain": true\n  }\n}\n',
 		);
 	});
 
@@ -310,6 +325,35 @@ describe("planner settings", () => {
 			syncIntervalMinutes: 3,
 		});
 		expect(settings.timerSource).toBe("project");
+	});
+
+	it("lets project contracts settings override nested budget fields", async () => {
+		const fs = new MockPlannerFs();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		await fs.writeTextAtomic(
+			"/agent/extensions/pi-code-planner/settings.json",
+			'{ "contracts": { "finalPolicy": "keep", "levelBudgets": { "nearest": 5000 } } }\n',
+		);
+		await fs.writeTextAtomic(
+			"/repo/app/.pi/pi-code-planner/settings.json",
+			'{ "contracts": { "scanBatchSize": 4, "levelBudgets": { "root": 900 } } }\n',
+		);
+
+		const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
+
+		expect(settings.effective.contracts).toMatchObject({
+			finalPolicy: "keep",
+			scanBatchSize: 4,
+			levelBudgets: {
+				root: 900,
+				ancestor: 3000,
+				nearest: 5000,
+			},
+		});
+		expect(settings.contractsSource).toBe("project");
 	});
 
 	it("rejects invalid timer mode", async () => {

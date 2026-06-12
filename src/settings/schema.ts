@@ -10,6 +10,7 @@ export interface PlannerSettings {
 	idle: PlannerIdleSettings;
 	metadata: PlannerMetadataSettings;
 	timer: PlannerTimerSettings;
+	contracts: PlannerContractsSettings;
 }
 
 export interface PlannerSettingsFile {
@@ -18,6 +19,7 @@ export interface PlannerSettingsFile {
 	idle?: Partial<PlannerIdleSettings>;
 	metadata?: Partial<PlannerMetadataSettings>;
 	timer?: Partial<PlannerTimerSettings>;
+	contracts?: PlannerContractsSettingsFile;
 }
 
 export interface PlannerIdleSettings {
@@ -40,6 +42,29 @@ export interface PlannerTimerSettings {
 	showCheckpoints: boolean;
 	maxCheckpoints: number;
 	syncIntervalMinutes: number;
+}
+
+export interface PlannerContractLevelBudgets {
+	root: number;
+	ancestor: number;
+	nearest: number;
+}
+
+export interface PlannerContractsSettings {
+	enabled: boolean;
+	finalPolicy: "ask" | "keep" | "remove";
+	scanBatchSize: number;
+	statusCharBudget: number;
+	readChunkChars: number;
+	maxActiveChains: number;
+	levelBudgets: PlannerContractLevelBudgets;
+	requireAfterTdd: boolean;
+	requireBeforeEditOutsideChain: boolean;
+}
+
+export interface PlannerContractsSettingsFile
+	extends Partial<Omit<PlannerContractsSettings, "levelBudgets">> {
+	levelBudgets?: Partial<PlannerContractLevelBudgets>;
 }
 
 export const DEFAULT_PLANNER_SETTINGS = {
@@ -66,5 +91,20 @@ export const DEFAULT_PLANNER_SETTINGS = {
 		showCheckpoints: true,
 		maxCheckpoints: 5,
 		syncIntervalMinutes: 10,
+	},
+	contracts: {
+		enabled: true,
+		finalPolicy: "ask",
+		scanBatchSize: 10,
+		statusCharBudget: 12_000,
+		readChunkChars: 6_000,
+		maxActiveChains: 3,
+		levelBudgets: {
+			root: 1_800,
+			ancestor: 3_000,
+			nearest: 7_000,
+		},
+		requireAfterTdd: true,
+		requireBeforeEditOutsideChain: true,
 	},
 } as const satisfies PlannerSettings;

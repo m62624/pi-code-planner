@@ -46,6 +46,7 @@ export type ExecutionStep =
 	| "write_tests"
 	| "run_failing_tests"
 	| "implement_task"
+	| "contract_check"
 	| "refactor_task"
 	| "run_final_tests"
 	| "merge_task_to_plan"
@@ -119,6 +120,7 @@ export const PLANNER_STAGE_STEPS = {
 		"write_tests",
 		"run_failing_tests",
 		"implement_task",
+		"contract_check",
 		"refactor_task",
 		"run_final_tests",
 		"merge_task_to_plan",
@@ -197,6 +199,10 @@ export interface TaskRecord {
 	objective: string;
 	scope: string[];
 	acceptanceCriteria: string[];
+	contractChain?: string[];
+	relevantContracts?: string[];
+	forbiddenAreas?: string[];
+	domainDetails?: string[];
 }
 
 export interface PlanRecord {
@@ -250,6 +256,79 @@ export interface PlannerTimerState {
 	checkpoints: PlannerTimerCheckpoint[];
 }
 
+export type PlannerContractFinalPolicy = "ask" | "keep" | "remove";
+export type PlannerContractFinalDecision = "pending" | "keep" | "remove";
+export type PlannerContractCheckAction =
+	| "no_update"
+	| "upsert_existing"
+	| "create_new";
+
+export interface PlannerContractTouchedFile {
+	path: string;
+	existedBeforePlan: boolean;
+	baselineSha256: string | null;
+	baselinePath: string | null;
+	currentSha256: string | null;
+	changeKind: "created" | "updated" | "removed";
+}
+
+export interface PlannerContractPendingRead {
+	path: string;
+	cursor: number;
+	reason: string;
+}
+
+export interface PlannerContractPendingUpsert {
+	path: string;
+	reason: string;
+	taskId: string | null;
+}
+
+export interface PlannerContractCheckRecord {
+	taskId: string | null;
+	action: PlannerContractCheckAction;
+	path: string | null;
+	summary: string;
+	checkedAt: number;
+}
+
+export interface PlannerContractChainRecord {
+	targetPath: string;
+	chain: string[];
+	reason: string;
+	updatedAt: number;
+}
+
+export interface PlannerContractSummaryRecord {
+	path: string;
+	purpose: string;
+	childIndex: string[];
+	stableContracts: string[];
+	readFirst: string[];
+	doNotTouchUnless: string[];
+	domainDetails: string[];
+	diagnostics: string[];
+	updatedAt: number;
+}
+
+export interface PlannerContractsState {
+	enabled: boolean;
+	dirty: boolean;
+	finalPolicy: PlannerContractFinalPolicy;
+	finalDecision: PlannerContractFinalDecision;
+	scanComplete: boolean;
+	scanQueue: string[];
+	discoveredPaths: string[];
+	diagnostics: string[];
+	activeChains: PlannerContractChainRecord[];
+	summaries: PlannerContractSummaryRecord[];
+	pendingRead: PlannerContractPendingRead | null;
+	pendingCheckTaskId: string | null;
+	pendingUpsert: PlannerContractPendingUpsert | null;
+	lastCheck: PlannerContractCheckRecord | null;
+	touchedFiles: PlannerContractTouchedFile[];
+}
+
 export interface PlanStateRecord {
 	schemaVersion: typeof SCHEMA_VERSION;
 	stage: PlannerStage;
@@ -276,6 +355,7 @@ export interface PlanStateRecord {
 	activeDebugProbeId: string | null;
 	debugCleanupRequired: boolean;
 	timer: PlannerTimerState | null;
+	contracts: PlannerContractsState;
 	requiresCompact: boolean;
 	requiresUserDecision: boolean;
 	broken: boolean;
@@ -312,6 +392,26 @@ export function createPlanRecord(input: {
 		...(input.description ? { description: input.description } : {}),
 		status: input.status ?? "draft",
 		tasks: input.tasks ?? [],
+	};
+}
+
+export function createDefaultPlannerContractsState(): PlannerContractsState {
+	return {
+		enabled: true,
+		dirty: false,
+		finalPolicy: "ask",
+		finalDecision: "pending",
+		scanComplete: false,
+		scanQueue: [],
+		discoveredPaths: [],
+		diagnostics: [],
+		activeChains: [],
+		summaries: [],
+		pendingRead: null,
+		pendingCheckTaskId: null,
+		pendingUpsert: null,
+		lastCheck: null,
+		touchedFiles: [],
 	};
 }
 
@@ -357,6 +457,7 @@ export function createInitialPlanState(input: {
 		activeDebugProbeId: null,
 		debugCleanupRequired: false,
 		timer: null,
+		contracts: createDefaultPlannerContractsState(),
 		requiresCompact: false,
 		requiresUserDecision: false,
 		broken: false,

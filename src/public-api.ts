@@ -146,6 +146,28 @@ export {
 	PLANNER_SYSTEM_INSTRUCTIONS_HEADER,
 } from "./runtime/compact";
 export type {
+	PlannerContract,
+	PlannerContractChildIndexEntry,
+	PlannerContractParseDiagnostic,
+	PlannerContractParseResult,
+	PlannerContractsManifest,
+	PlannerContractToolName,
+} from "./runtime/contracts";
+export {
+	applyPlannerContractFinishPolicy,
+	executePlannerContractTool,
+	formatPlannerContractBlock,
+	formatPlannerContractsStatus,
+	hasPendingContractFinishDecision,
+	PLANNER_CONTRACT_END,
+	PLANNER_CONTRACT_START,
+	PLANNER_CONTRACT_TOOL_NAMES,
+	parsePlannerContractMarkdown,
+	readPlannerContractsManifest,
+	upsertPlannerContractBlock,
+	validateContractCheckCompleted,
+} from "./runtime/contracts";
+export type {
 	DebugInstrumentationType,
 	DebugProbeMethod,
 	DebugResultNextAction,
@@ -409,6 +431,9 @@ export {
 export type { PlannerSettingsPaths } from "./settings/paths";
 export { createPlannerSettingsPaths } from "./settings/paths";
 export type {
+	PlannerContractLevelBudgets,
+	PlannerContractsSettings,
+	PlannerContractsSettingsFile,
 	PlannerIdleSettings,
 	PlannerMetadataSettings,
 	PlannerSettings,
@@ -460,6 +485,15 @@ export type {
 	InitStep,
 	MergeTargets,
 	PlannerCompactBoundaries,
+	PlannerContractChainRecord,
+	PlannerContractCheckAction,
+	PlannerContractFinalDecision,
+	PlannerContractFinalPolicy,
+	PlannerContractPendingRead,
+	PlannerContractPendingUpsert,
+	PlannerContractSummaryRecord,
+	PlannerContractsState,
+	PlannerContractTouchedFile,
 	PlannerStage,
 	PlannerStep,
 	PlanningStep,
@@ -476,6 +510,7 @@ export type {
 	TaskStatus,
 } from "./storage/schema";
 export {
+	createDefaultPlannerContractsState,
 	createEmptyProjectRecord,
 	createInitialPlanState,
 	createPlanRecord,

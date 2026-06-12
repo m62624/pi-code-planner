@@ -11,6 +11,10 @@ export class MockPlannerFs implements PlannerFs {
 		return this.files.has(key) || this.dirs.has(key);
 	}
 
+	async isDirectory(path: string): Promise<boolean> {
+		return this.dirs.has(normalize(path));
+	}
+
 	async readdir(path: string): Promise<string[]> {
 		const normalized = normalize(path);
 		const entries = new Set<string>();

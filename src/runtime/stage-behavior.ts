@@ -38,7 +38,8 @@ export type PlannerBehaviorArtifact =
 	| "tdd.md"
 	| "refactor.md"
 	| "verify.md"
-	| "final_summary.md";
+	| "final_summary.md"
+	| "contracts/manifest.json";
 
 export type PlannerBehaviorGate =
 	| "project_resolved"
@@ -55,6 +56,7 @@ export type PlannerBehaviorGate =
 	| "tests_written_first"
 	| "failing_signal_recorded"
 	| "task_implemented"
+	| "contract_check_completed"
 	| "refactor_checked"
 	| "final_tests_passed"
 	| "task_merged_to_plan"
@@ -114,8 +116,15 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: [],
 		updatedArtifacts: ["project.json"],
 		requiredGates: ["git_available"],
-		expectedTools: ["planner_status"],
-		commitPolicy: "forbidden",
+		expectedTools: [
+			"planner_contract_scan",
+			"planner_contract_route",
+			"planner_contract_read",
+			"planner_contract_upsert",
+			"planner_git_commit",
+			"planner_status",
+		],
+		commitPolicy: "required_if_dirty",
 		compactPolicy: "not_allowed",
 	}),
 	choose_worktree_location: behavior("init", "choose_worktree_location", {
@@ -151,7 +160,11 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["plan.json", "state.json"],
 		updatedArtifacts: ["state.json"],
 		requiredGates: ["plan_record_exists"],
-		expectedTools: ["planner_git_inspect"],
+		expectedTools: [
+			"planner_git_inspect",
+			"planner_contract_route",
+			"planner_contract_read",
+		],
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
@@ -202,7 +215,12 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["discovery.md"],
 		updatedArtifacts: ["questions.md"],
 		requiredGates: [],
-		expectedTools: ["planner_questions_submit", "planner_questions_resolve"],
+		expectedTools: [
+			"planner_questions_submit",
+			"planner_questions_resolve",
+			"planner_contract_route",
+			"planner_contract_read",
+		],
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
@@ -217,7 +235,11 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["discovery.md"],
 		updatedArtifacts: [],
 		requiredGates: [],
-		expectedTools: ["planner_status"],
+		expectedTools: [
+			"planner_status",
+			"planner_contract_route",
+			"planner_contract_read",
+		],
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
@@ -239,7 +261,11 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["plan.md"],
 		updatedArtifacts: ["task.json", "task.md"],
 		requiredGates: [],
-		expectedTools: ["planner_task_upsert"],
+		expectedTools: [
+			"planner_task_upsert",
+			"planner_contract_route",
+			"planner_contract_read",
+		],
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
@@ -335,6 +361,8 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["failing_signal_recorded"],
 		expectedTools: [
 			"planner_git_commit",
+			"planner_contract_route",
+			"planner_contract_read",
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_debug_strategy",
@@ -345,15 +373,37 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		commitPolicy: "required_if_dirty",
 		compactPolicy: "not_allowed",
 	}),
+	contract_check: behavior("execution", "contract_check", {
+		projectAccess: "planner_artifacts",
+		actions: ["inspect_project", "write_artifacts", "planner_git"],
+		requiredArtifacts: ["tdd.md"],
+		updatedArtifacts: ["tdd.md", "contracts/manifest.json"],
+		requiredGates: ["task_implemented"],
+		expectedTools: [
+			"planner_contract_check",
+			"planner_contract_upsert",
+			"planner_contract_route",
+			"planner_contract_read",
+			"planner_git_commit",
+			"planner_report_stuck",
+			"planner_skill_create",
+		],
+		commitPolicy: "allowed_if_dirty",
+		compactPolicy: "not_allowed",
+	}),
 	refactor_task: behavior("execution", "refactor_task", {
 		projectAccess: "production_edits",
 		actions: ["refactor", "run_checks", "planner_git"],
 		requiredArtifacts: ["tdd.md"],
 		updatedArtifacts: ["refactor.md"],
-		requiredGates: ["task_implemented"],
+		requiredGates: ["task_implemented", "contract_check_completed"],
 		expectedTools: [
 			"planner_refactor_review",
 			"planner_git_commit",
+			"planner_contract_check",
+			"planner_contract_upsert",
+			"planner_contract_route",
+			"planner_contract_read",
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_debug_strategy",
@@ -428,6 +478,10 @@ export const PLANNER_STAGE_BEHAVIOR = {
 			"planner_git_inspect",
 			"planner_doubt_review",
 			"planner_skill_create",
+			"planner_contract_check",
+			"planner_contract_upsert",
+			"planner_contract_route",
+			"planner_contract_read",
 		],
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
@@ -438,7 +492,12 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["plan.md", "verify.md"],
 		updatedArtifacts: ["final_summary.md"],
 		requiredGates: ["plan_branch_verified"],
-		expectedTools: ["planner_status", "planner_skill_create"],
+		expectedTools: [
+			"planner_status",
+			"planner_skill_create",
+			"planner_contract_check",
+			"planner_contract_upsert",
+		],
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),

@@ -24,6 +24,11 @@ describe("instruction routing", () => {
 			"tdd",
 			"git-commit",
 		]);
+		expect(keys("execution", "contract_check")).toEqual([
+			"execution",
+			"tdd",
+			"git-commit",
+		]);
 		expect(keys("execution", "refactor_task")).toEqual([
 			"execution",
 			"refactor",

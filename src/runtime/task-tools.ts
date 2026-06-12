@@ -58,6 +58,16 @@ export async function executePlannerTaskTool(input: {
 					params.acceptanceCriteria,
 					"acceptanceCriteria",
 				),
+				contractChain: stringArray(params.contractChain ?? [], "contractChain"),
+				relevantContracts: stringArray(
+					params.relevantContracts ?? [],
+					"relevantContracts",
+				),
+				forbiddenAreas: stringArray(
+					params.forbiddenAreas ?? [],
+					"forbiddenAreas",
+				),
+				domainDetails: stringArray(params.domainDetails ?? [], "domainDetails"),
 			},
 		);
 		await updatePlanRecord(

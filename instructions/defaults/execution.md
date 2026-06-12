@@ -2,11 +2,12 @@
 
 ## Purpose
 
-Execute exactly one active task at a time through tests-first development, implementation, mandatory refactor review, final checks, merge, and task compact.
+Execute exactly one active task at a time through tests-first development, implementation, AGENTS.md contract check, mandatory refactor review, final checks, merge, and task compact.
 
 ## Context Reload Policy
 
 - At `prepare_task`, call `planner_status`, reread the full `plan.md`, read answered `questions.md` and `decisions.md`, read the selected `task.md`, then inspect `discovery.md` and use focused project search only if needed.
+- If `task.md` lists a Local Contract Context, call `planner_contract_route/read` before source reads. AGENTS.md files are repository-owned routing memory; higher levels route, nearest levels explain.
 - During one task, reread `task.md`, `tdd.md`, `refactor.md`, and focused source files only when the current action needs details that are not already recorded.
 - After `compact_task`, do not carry live reasoning into the next task. Call `planner_status`, reread the full `plan.md`, inspect task status, then load the next `task.md`.
 - After recovery or auto-compact, call `planner_status` before any edit or check.
@@ -29,19 +30,24 @@ Execute exactly one active task at a time through tests-first development, imple
 5. `implement_task`
    - Implement only the behavior required by `task.md` and `tdd.md`.
    - Run focused checks, update `tdd.md` with results, and commit through planner git if files changed.
-6. `refactor_task`
+6. `contract_check`
+   - Inspect the green task diff and decide whether durable AGENTS.md local contracts changed.
+   - Call `planner_contract_check`.
+   - If the tool reports an update is needed, call `planner_contract_upsert` and commit the AGENTS.md change.
+   - Add only durable domain guidance. Do not store task trivia or create AGENTS.md in every folder.
+7. `refactor_task`
    - Challenge the implementation without changing behavior.
    - Write `refactor.md` with a concrete KISS review, changes applied, and decisions to keep code unchanged.
    - Commit through planner git if files changed.
-7. `run_final_tests`
+8. `run_final_tests`
    - Run final focused and integration checks from the planner worktree.
    - Record final check results and scope review in `refactor.md`.
-8. `merge_task_to_plan`
+9. `merge_task_to_plan`
    - Merge the task branch into the plan branch through the planner wrapper.
    - Call `planner_status` after merge.
-9. `compact_task`
+10. `compact_task`
    - Compact the completed task result if enabled.
-10. `select_next_task`
+11. `select_next_task`
    - Choose `execution/prepare_task` for the next task or `finalize/verify_plan_branch` when execution is complete.
 
 ## Atomic Unit Rules
@@ -49,7 +55,7 @@ Execute exactly one active task at a time through tests-first development, imple
 - A commit alone does not finish an atomic unit.
 - After every planner-controlled commit or merge, call `planner_status` and continue the persisted state-machine step.
 - Dirty worktree is allowed while implementing a running step, but must be resolved before merge boundaries.
-- Built-in project write/edit calls are enabled only during `write_tests`, `implement_task`, and `refactor_task`. The planner does not infer file roles from names, so tests, fixtures, harness wiring, configuration, and production code may share files. Follow the exact step purpose.
+- Built-in project write/edit calls are enabled only during `write_tests`, `implement_task`, and `refactor_task`. During `contract_check`, AGENTS.md changes must go through `planner_contract_upsert`, not raw write/edit.
 - Never edit the original checkout while a planner worktree is active. Continue inside the worktree session reported by `planner_status`.
 - Run every project command from the worktree path reported by `planner_status`. This includes focused tests, full tests, builds, type checks, linters, formatters, generators, package scripts, compilers, and project-specific verification commands, regardless of language or tooling.
 - Before recording a successful check, confirm that its shell cwd was the planner worktree, not the original checkout.
@@ -71,6 +77,7 @@ Before finishing any execution step, doubt the proof:
 - What artifact or command proves this exact step is complete?
 - Did the test fail before implementation for the intended reason?
 - Did the fix stay inside active task scope?
+- Did `contract_check` prove whether AGENTS.md must be updated, and are pending upserts resolved?
 - Did refactor review challenge the implementation, not just repeat that checks pass?
 - Are temporary debug logs, probes, or scratch files removed before commit?
 

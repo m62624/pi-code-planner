@@ -8,6 +8,7 @@ import type {
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerFs } from "../storage/fs";
 import type { PlannerStage, PlannerStep } from "../storage/schema";
+import { formatPlannerContractsStatus } from "./contracts";
 import { formatDebugStatusLines } from "./debug-tools";
 import {
 	decidePlannerLifecycleNext,
@@ -53,6 +54,7 @@ export const PLANNER_STATUS_INVARIANTS = [
 	"Doubt must lead to a concrete probe or recorded risk. Do not create extra tests only to feel safer; add tests only when they falsify a specific requirement risk.",
 	"If repeated attempts fail, treat stuck state as under-instrumentation. Use planner_report_stuck with stuckLoad and continue from evidence after compact.",
 	"Create planner skills only from verified reusable lessons. A planner skill is future memory for later sessions, not a substitute for current stage evidence.",
+	"Repository AGENTS.md files are planner local contracts. Prefer reading the relevant contract chain before source reads; update contracts when completed work changes a durable domain rule.",
 	"Task branch cannot merge into plan before final task checks pass.",
 	"Next task cannot start before merge_task_to_plan and compact_task.",
 	"Task branch is temporary. It is deleted after it is merged into the plan branch.",
@@ -184,17 +186,22 @@ export const PLANNER_STEP_RULES = {
 		objective:
 			"Become familiar with the project without indexing the repository.",
 		requiredActions: [
-			"Inspect the project tree with read-only shell commands.",
-			"Read only the source files needed to understand architecture, commands, risks, and the requested change.",
+			"Call planner_contract_scan in batches to discover AGENTS.md/AGENTS.MD/CLAUDE.md/CLAUDE.MD files before broad source reads.",
+			"When contract files exist, call planner_contract_route and planner_contract_read for the relevant chain first. Treat AGENTS.md as routing memory: higher levels route, nearest levels explain.",
+			"Inspect the project tree with read-only shell commands only after the contract map is started.",
+			"Read only the source files needed to understand architecture, commands, risks, and the requested change after contract guidance is considered.",
 			"Write concise findings to discovery.md, including exact test/lint/build commands when discoverable.",
+			"If no AGENTS.md exists, use discovery evidence to propose initial root/domain AGENTS.md only for meaningful architectural zones, not every folder.",
+			"If planner_contract_upsert changes AGENTS.md files, commit them through planner_git_commit before finishing discovery/scan_project_structure.",
 			"If commands are missing or the project is empty, record that uncertainty for discovery/write_questions.",
 		],
 		allowedNow: [
-			"Use read-only shell commands, source reads, and discovery.md.",
+			"Use planner_contract_scan/route/read, read-only shell commands, focused source reads, and discovery.md.",
 		],
 		forbiddenNow: [
 			"Do not implement code.",
 			"Do not read every project file by default.",
+			"Do not create AGENTS.md in every directory; contracts belong only to durable architectural domains.",
 		],
 		exitCondition: "discovery.md contains a concise useful project overview.",
 		nextInstruction:
@@ -245,9 +252,12 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Read discovery.md, questions.md, and decisions.md.",
 			"If decisions.md contains a Change Request, read the Post-Implementation Snapshot in discovery.md and preserve Completed Work as current context.",
-			"Read specific source files only when the recorded discovery context is insufficient.",
+			"Use planner_contract_route/read for applicable AGENTS.md chains before reading additional source files.",
+			"Read specific source files only when the recorded discovery and local contracts are insufficient.",
 		],
-		allowedNow: ["Use planner artifacts and focused source reads."],
+		allowedNow: [
+			"Use planner artifacts, planner_contract_route/read, and focused source reads.",
+		],
 		forbiddenNow: ["Do not reread the whole project by default."],
 		exitCondition:
 			"Relevant context for planning is loaded from planner artifacts.",
@@ -283,6 +293,7 @@ export const PLANNER_STEP_RULES = {
 		objective: "Create task artifacts.",
 		requiredActions: [
 			"Call planner_task_upsert for each behavioral task with scope and acceptance criteria.",
+			"When known, include AGENTS.md contract chain paths in the task scope/dependency context so execution can reload them after compact.",
 			"In a change-request planning pass, call planner_task_upsert only for new or still-pending revision tasks. Do not reuse completed task IDs.",
 			"Let the wrapper create task.json, task.md, and empty TDD lifecycle artifacts. Do not write task JSON manually.",
 		],
@@ -395,6 +406,28 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition:
 			"Task implementation is committed, counterexample review is recorded, and the worktree is clean.",
+		nextInstruction: "Call planner_finish_step to open contract_check.",
+	}),
+	contract_check: stepRule("execution", "contract_check", {
+		objective:
+			"Check whether the green task changed durable AGENTS.md local contracts before refactor.",
+		requiredActions: [
+			"Review the task diff, changed files, task acceptance criteria, and active AGENTS.md contract chain.",
+			"Call planner_contract_check with outcomeSummary, domainImpact, changedFiles, evidence, and action no_update/upsert_existing/create_new.",
+			"If planner_contract_check reports an update is needed, call planner_contract_upsert for the nearest meaningful AGENTS.md domain and commit that change if the worktree becomes dirty.",
+			"Use AGENTS.md as repository-owned routing memory. Add durable domain rules, parent backlinks, child index entries, read-first hints, and domain details only when they help future agents avoid reading irrelevant code.",
+			"Do not add overly specific task trivia to AGENTS.md. Record local one-off details in tdd.md instead.",
+		],
+		allowedNow: [
+			"Inspect the task diff, read/update AGENTS.md through planner_contract tools, and commit contract documentation changes.",
+		],
+		forbiddenNow: [
+			"Do not refactor before contract_check is complete.",
+			"Do not write managed contract blocks by hand; use planner_contract_upsert.",
+			"Do not create AGENTS.md in every folder.",
+		],
+		exitCondition:
+			"planner_contract_check is recorded for the active task, pending upserts are resolved, and the worktree is clean.",
 		nextInstruction: "Call planner_finish_step to open refactor_task.",
 	}),
 	refactor_task: stepRule("execution", "refactor_task", {
@@ -404,6 +437,7 @@ export const PLANNER_STEP_RULES = {
 			"Read the selected implementation and inspect the planner-controlled diff.",
 			"Question unnecessary abstraction, duplication, speculative flexibility, premature generalization, and code that exists for imagined future work rather than the current task.",
 			"Call planner_refactor_review with semantic review fields and every category review: duplication, naming, control_flow, abstraction_level, hidden_coupling, error_handling, test_clarity, debug_leftovers, scope_creep.",
+			"If refactor changes a durable domain contract or discovers stale AGENTS.md guidance, call planner_contract_check and planner_contract_upsert.",
 			"A passing test, linter, formatter, or build is not a refactor review.",
 			"If the review proves a reusable refactor/debug lesson, call planner_skill_create with sourceKind=refactor.",
 			"Commit if project files changed.",
@@ -492,13 +526,14 @@ export const PLANNER_STEP_RULES = {
 			"Assign every item to the narrowest riskCategory enum before proving or dismissing it.",
 			"Treat each possible error like TDD for a suspected problem: prove it with a focused failing test/command, exact code-path proof, or exact spec contradiction; otherwise disprove it or mark needs_probe.",
 			"Use planner_doubt_review to write verify.md. Do not hand-write weak doubt notes.",
+			"Audit AGENTS.md local contracts: check stale guidance, missing parent backlinks, wrong child routing, or missing durable domain details. Use planner_contract_check/upsert when needed.",
 			"Run every needs_probe before leaving this step; unresolved probes cannot become bugs and cannot be ignored.",
 			"If proven_bug findings exist, record them in decisions.md and complete with explicit target planning/read_context for revision tasks.",
 			"If a proven or disproven finding teaches a reusable workflow lesson, call planner_skill_create with sourceKind=doubt_review before leaving this step.",
 			"If no proven bugs and no needs_probe findings remain, complete with target finalize/write_final_summary.",
 		],
 		allowedNow: [
-			"Run focused checks, inspect planner git state from the planner worktree, and call planner_doubt_review.",
+			"Run focused checks, inspect planner git state from the planner worktree, call planner_doubt_review, and update AGENTS.md contracts when evidence shows they changed.",
 		],
 		forbiddenNow: [
 			"Do not ask the user for acceptance yet.",
@@ -800,6 +835,10 @@ export async function buildPlannerStatusText(
 		`- metadata.skillLanguage: ${settings.effective.metadata.skillLanguage}`,
 		`- idle.enabled: ${String(settings.effective.idle.enabled)}`,
 		`- idle.timeoutMinutes: ${settings.effective.idle.timeoutMinutes}`,
+		`- contracts.enabled: ${String(settings.effective.contracts.enabled)}`,
+		`- contracts.finalPolicy: ${settings.effective.contracts.finalPolicy}`,
+		`- contracts.scanBatchSize: ${settings.effective.contracts.scanBatchSize}`,
+		`- contracts.readChunkChars: ${settings.effective.contracts.readChunkChars}`,
 		"",
 		"## Git And Worktree",
 		`- worktree: ${state.worktreePath ?? "(none)"}`,
@@ -814,6 +853,12 @@ export async function buildPlannerStatusText(
 		"",
 		"## Debug Mode",
 		...formatDebugStatusLines(state),
+		"",
+		"## Planner Local Contracts",
+		...formatPlannerContractsStatus({
+			state,
+			settings: settings.effective.contracts,
+		}),
 		"",
 		"## Lifecycle Decision",
 		...formatLifecycleDecision(lifecycle),
@@ -1005,6 +1050,8 @@ function formatPlannerArtifactLinks(
 		`- questions.md: ${planPaths.questionsMd}`,
 		`- decisions.md: ${planPaths.decisionsMd}`,
 		`- verify.md: ${planPaths.verifyMd}`,
+		`- contracts manifest: ${planPaths.contractsManifestJson}`,
+		`- contracts baseline dir: ${planPaths.contractsBaselineDir}`,
 		`- tasks dir: ${planPaths.tasksDir}`,
 	];
 	if (state.activeTaskId) {
