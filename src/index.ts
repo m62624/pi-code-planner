@@ -24,6 +24,7 @@ import {
 } from "./index.tool-visibility";
 import { syncBundledInstructionFiles } from "./instructions/defaults";
 import { createInstructionPaths } from "./instructions/paths";
+import { buildPlannerAboutReport } from "./runtime/about";
 import {
 	buildAcceptedPlanCompletionPrompt,
 	finalizeAcceptedPlan,
@@ -291,7 +292,7 @@ const TASK_UPSERT_TOOL_PARAMETERS = {
 			type: "array",
 			items: { type: "string" },
 			description:
-				"Optional AGENTS.md/CLAUDE.md chain paths this task should reload before execution.",
+				"Optional AGENTS.md canonical or read-only context chain paths this task should reload before execution.",
 		},
 		relevantContracts: {
 			type: "array",
@@ -334,7 +335,7 @@ const CONTRACT_ROUTE_TOOL_PARAMETERS = {
 			type: "array",
 			items: { type: "string" },
 			description:
-				"Files or directories the model expects to read/edit. The tool maps them to relevant AGENTS.md/CLAUDE.md chains.",
+				"Files or directories the model expects to read/edit. The tool maps them to relevant AGENTS.md canonical and read-only context chains.",
 		},
 		declaredScope: {
 			type: "array",
@@ -356,7 +357,7 @@ const CONTRACT_READ_TOOL_PARAMETERS = {
 		path: {
 			type: "string",
 			description:
-				"AGENTS.md/AGENTS.MD/CLAUDE.md/CLAUDE.MD path to read. Omit to continue pendingRead from planner_status.",
+				"AGENTS.md or supported read-only context path to read. Omit to continue pendingRead from planner_status.",
 		},
 		cursor: {
 			type: "number",
@@ -1076,6 +1077,39 @@ function registerInstructionDefaultsSync(pi: ExtensionAPI): void {
 }
 
 function registerPlannerCommands(pi: ExtensionAPI): void {
+	pi.registerCommand("planner-helper", {
+		description:
+			"Show pi-code-planner settings, defaults, sources, and runtime behavior.",
+		handler: async (_args, ctx) => {
+			const fs = createNodeFs();
+			try {
+				const projectPaths = await resolveProjectStoragePaths({
+					fs,
+					agentDir: getAgentDir(),
+					cwd: ctx.cwd,
+				});
+				const settings = await loadEffectivePlannerSettings({
+					fs,
+					projectPaths,
+				});
+				pi.sendMessage(
+					{
+						customType: "planner-helper",
+						content: buildPlannerAboutReport({
+							settings,
+							projectPaths,
+							audience: "human",
+						}),
+						display: true,
+					},
+					{ triggerTurn: false } as never,
+				);
+			} catch (error) {
+				ctx.ui.notify(`Planner helper failed: ${errorMessage(error)}`, "error");
+			}
+		},
+	});
+
 	pi.registerCommand("planner-create", {
 		description:
 			"Open a multiline planner request editor, then create a worktree plan.",
@@ -1686,6 +1720,40 @@ function registerPlannerTools(
 			return {
 				content: [{ type: "text", text: orchestration.statusText }],
 				details: orchestration,
+			};
+		},
+	});
+
+	pi.registerTool({
+		name: "planner_about",
+		label: "Planner About",
+		description:
+			"Explain pi-code-planner behavior, current effective settings, default settings, and setting sources.",
+		promptSnippet:
+			"Use planner_about when the user asks what pi-code-planner is doing, what a planner setting means, or why a planner behavior is enabled. This tool is read-only.",
+		parameters: EMPTY_TOOL_PARAMETERS as never,
+		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+			const fs = createNodeFs();
+			const projectPaths = await resolveProjectStoragePaths({
+				fs,
+				agentDir: getAgentDir(),
+				cwd: ctx.cwd,
+			});
+			const settings = await loadEffectivePlannerSettings({
+				fs,
+				projectPaths,
+			});
+			const text = buildPlannerAboutReport({
+				settings,
+				projectPaths,
+				audience: "agent",
+			});
+			return {
+				content: [{ type: "text", text }],
+				details: {
+					projectRoot: projectPaths.projectRoot,
+					settings: settings.effective,
+				},
 			};
 		},
 	});
@@ -2486,11 +2554,11 @@ function contractToolLabel(toolName: PlannerContractToolName): string {
 function contractToolDescription(toolName: PlannerContractToolName): string {
 	switch (toolName) {
 		case "planner_contract_scan":
-			return "Discover AGENTS.md/CLAUDE.md local contract files in bounded batches without reading every file body.";
+			return "Discover AGENTS.md canonical contracts and read-only context files in bounded batches without reading every file body.";
 		case "planner_contract_route":
-			return "Choose the relevant AGENTS.md contract chain for target files or declared task scope.";
+			return "Choose the relevant AGENTS.md/read-only context chain for target files or declared task scope.";
 		case "planner_contract_read":
-			return "Read an AGENTS.md/CLAUDE.md contract file in chunks and preserve pendingRead state across compact.";
+			return "Read an AGENTS.md or read-only context file in chunks and preserve pendingRead state across compact.";
 		case "planner_contract_check":
 			return "Record the mandatory post-implementation check that decides whether AGENTS.md local contracts need an update.";
 		case "planner_contract_upsert":

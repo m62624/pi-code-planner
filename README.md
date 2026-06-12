@@ -77,6 +77,7 @@ These are Pi slash commands for the user. The model has separate internal tools.
 | Command | Purpose |
 | --- | --- |
 | `/planner-create` | Open a multiline request editor and create a new plan. |
+| `/planner-helper` | Show current effective settings, defaults, sources, and planner behavior. Read-only. |
 | `/planner-exit` | Return to the original project chat without finishing or deleting the active plan. |
 | `/planner-resume` | Open a TUI picker for plans in the current project. |
 | `/planner-resume <plan-id>` | Activate a plan directly and resume its most recent non-empty worktree chat. |
@@ -85,6 +86,8 @@ These are Pi slash commands for the user. The model has separate internal tools.
 | `/planner-delete` | Open a TUI picker and delete a selected plan after confirmation. |
 | `/planner-delete <plan-id>` | Delete a plan directly after confirmation. Active plans are moved through a safe handoff session first. |
 | `/planner-finish` | Finish a completed plan, export `output/<plan-id>`, remove temporary planner state, and return Pi to the original project session. |
+
+The agent also has a read-only `planner_about` tool with the same settings/about core as `/planner-helper`, so it can explain the current planner configuration when asked.
 
 ### Planner Resume And Pi Resume
 
@@ -200,11 +203,11 @@ Managed contract blocks are validated and written only through planner tools:
 <!-- pi-code-planner:contracts:end -->
 ```
 
-Existing AGENTS.md or CLAUDE.md files are still read even if they do not contain the managed block. The parser reports diagnostics, and planner updates preserve non-planner content by replacing only the managed block.
+Existing AGENTS.md files are the writable canonical planner contract format. CLAUDE.md, GEMINI.md, `.cursorrules`, WARP.md, AIDER.md, COPILOT.md, and similar discovered context files are read-only imports. They are still read even without the managed block, but durable planner memory should be distilled into the nearest AGENTS.md through `planner_contract_upsert`. The parser reports diagnostics, and planner updates preserve non-planner AGENTS.md content by replacing only the managed block.
 
 How contracts affect the workflow:
 
-- `discovery`: call `planner_contract_scan` in batches, route to relevant AGENTS.md chains, then read source files.
+- `discovery`: call `planner_contract_scan` in batches, route to relevant AGENTS.md/read-only context chains, then read source files.
 - `planning`: attach relevant contract paths and domain details to task artifacts when known.
 - `execution/contract_check`: after a green implementation and before refactor, call `planner_contract_check`; update the nearest meaningful AGENTS.md through `planner_contract_upsert` only when the task changed durable domain knowledge.
 - `finalize/doubt_review`: verify that local contracts are not stale, misleading, or missing important routing/details.

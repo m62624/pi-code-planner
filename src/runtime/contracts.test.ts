@@ -1,5 +1,7 @@
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PLANNER_SETTINGS } from "../settings/schema";
+import { createNodeFs } from "../storage/fs";
 import { createInitialPlanState } from "../storage/schema";
 import {
 	formatPlannerContractBlock,
@@ -51,6 +53,27 @@ describe("planner local contracts parser", () => {
 			severity: "warning",
 			code: "missing_managed_block",
 		});
+		expect(result.diagnostics[0]?.message).toContain("Writable AGENTS.md");
+		expect(result.diagnostics[0]?.message).toContain("planner_contract_upsert");
+	});
+
+	it("reads non-AGENTS context files as read-only imports", () => {
+		const result = parsePlannerContractMarkdown(
+			"# Gemini guidance\n\nPrefer focused tests.\n",
+			"/repo/app/GEMINI.md",
+			root,
+		);
+
+		expect(result.hasManagedBlock).toBe(false);
+		expect(result.contract).toBeNull();
+		expect(result.diagnostics[0]).toMatchObject({
+			severity: "warning",
+			code: "missing_managed_block",
+		});
+		expect(result.diagnostics[0]?.message).toContain(
+			"Read-only context import",
+		);
+		expect(result.diagnostics[0]?.message).toContain("nearest AGENTS.md");
 	});
 
 	it("rejects unknown and duplicate managed headings", () => {
@@ -73,6 +96,9 @@ describe("planner local contracts parser", () => {
 		);
 		expect(result.diagnostics.map((item) => item.code)).toContain(
 			"unknown_heading",
+		);
+		expect(result.diagnostics.map((item) => item.message).join("\n")).toContain(
+			"Allowed headings",
 		);
 	});
 
@@ -157,6 +183,33 @@ describe("planner local contracts parser", () => {
 		});
 
 		expect(second).toBe(first);
+	});
+
+	it("parses repository AGENTS.md files without schema errors", async () => {
+		const fs = createNodeFs();
+		const repoRoot = process.cwd();
+		const paths = [
+			"AGENTS.md",
+			"src/AGENTS.md",
+			"src/runtime/AGENTS.md",
+			"src/settings/AGENTS.md",
+			"src/storage/AGENTS.md",
+			"instructions/AGENTS.md",
+			".github/AGENTS.md",
+		].map((path) => join(repoRoot, path));
+
+		for (const contractPath of paths) {
+			const result = parsePlannerContractMarkdown(
+				await fs.readText(contractPath),
+				contractPath,
+				repoRoot,
+			);
+
+			expect(
+				result.diagnostics.filter((item) => item.severity === "error"),
+				contractPath,
+			).toEqual([]);
+		}
 	});
 });
 
