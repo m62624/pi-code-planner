@@ -30,8 +30,9 @@
 	],
 	"pi": {
 		"extensions": [
-			"src/index.ts"
-		]
+			"./src/index.ts"
+		],
+		"image": "assets/banner.png"
 	},
 	"license": "MIT",
 	"scripts": {
