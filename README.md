@@ -57,6 +57,7 @@ user request
   -> split work into atomic tasks
   -> write tests first
   -> implement the current task
+  -> check/update local AGENTS.md contracts
   -> refactor and verify
   -> merge completed tasks into one plan branch
   -> verify the whole plan branch
@@ -111,7 +112,7 @@ Stage behavior:
 - `intake`: restate the request in `goal.md`, propose a title and short description, and wait for explicit user approval before discovery.
 - `discovery`: inspect only useful project files, record `discovery.md`, ask evidence-based questions when needed, then compact before planning.
 - `planning`: read persisted context, write `plan.md`, split behavioral tasks, create task artifacts, verify task order, then compact before execution.
-- `execution`: for each task, prepare a task branch, write a TDD plan, write tests first, run the failing signal, implement, run structured refactor review, run final checks, merge the task, then select the next task.
+- `execution`: for each task, prepare a task branch, write a TDD plan, write tests first, run the failing signal, implement, check/update local AGENTS.md contracts, run structured refactor review, run final checks, merge the task, then select the next task.
 - `finalize`: verify the integrated plan branch, run `doubt_review` where possible errors must be proven or disproven, write `final_summary.md`, compact, then enter done.
 - `done`: present the result and wait. The user can run `/planner-finish` to export `output/<plan-id>`, or request changes; change requests append context and return to planning without repeating completed work.
 - `recovery`: inspect persisted state, Git reality, worktree state, and conflicts before repairing or resuming.
@@ -151,6 +152,63 @@ Main files:
 | `tasks/<task-id>/task.md` | Task description. |
 | `tasks/<task-id>/tdd.md` | TDD plan, test evidence, check results. |
 | `tasks/<task-id>/refactor.md` | Refactor review and final verification notes. |
+| `contracts/manifest.json` | Planner-created or planner-updated AGENTS.md files and baselines. |
+| `contracts/baseline/` | Original AGENTS.md content used if `/planner-finish` removes contract changes. |
+
+## Local Contracts 🧭
+
+`pi-code-planner` treats repository `AGENTS.md` files as local contracts: durable agent-facing architecture memory that helps the model route itself through large projects without reading irrelevant code first.
+
+The idea is inspired by [DOX](https://github.com/agent0ai/dox) and adapted for this planner's stricter state machine. DOX is MIT licensed; this project does not copy DOX runtime code.
+
+Planner local contracts are repository files by default:
+
+```text
+AGENTS.md
+src/AGENTS.md
+src/runtime/AGENTS.md
+```
+
+They belong to the repository like any other architecture document. If you do not want them in a project, delete them explicitly or set `contracts.finalPolicy` to `"remove"` before finishing a plan. They should exist only at meaningful architectural boundaries, not every folder. Higher-level contracts route the model; lower-level contracts explain the nearest domain.
+
+Managed contract blocks are validated and written only through planner tools:
+
+```md
+<!-- pi-code-planner:contracts:start -->
+## Planner Contracts
+
+### Purpose
+...
+
+### Parent
+- `../AGENTS.md`
+
+### Child Index
+- `src/runtime/AGENTS.md`: Runtime state machine and tool gates.
+
+### Stable Contracts
+- `planner_status` is the source of truth before every model action.
+
+### Read First
+- `state-machine.ts`
+
+### Do Not Touch Unless
+- Do not bypass runtime preflight from tool handlers.
+
+### Domain Details
+- This domain uses focused state-machine tests.
+<!-- pi-code-planner:contracts:end -->
+```
+
+Existing AGENTS.md or CLAUDE.md files are still read even if they do not contain the managed block. The parser reports diagnostics, and planner updates preserve non-planner content by replacing only the managed block.
+
+How contracts affect the workflow:
+
+- `discovery`: call `planner_contract_scan` in batches, route to relevant AGENTS.md chains, then read source files.
+- `planning`: attach relevant contract paths and domain details to task artifacts when known.
+- `execution/contract_check`: after a green implementation and before refactor, call `planner_contract_check`; update the nearest meaningful AGENTS.md through `planner_contract_upsert` only when the task changed durable domain knowledge.
+- `finalize/doubt_review`: verify that local contracts are not stale, misleading, or missing important routing/details.
+- `/planner-finish`: if AGENTS.md files changed and `contracts.finalPolicy` is `"ask"`, the user chooses whether to keep those repository docs or remove/restore planner changes before export.
 
 ## Settings ⚙️
 
@@ -183,13 +241,28 @@ Example:
 		"showCheckpoints": true,
 		"maxCheckpoints": 5,
 		"syncIntervalMinutes": 10
+	},
+	"contracts": {
+		"enabled": true,
+		"finalPolicy": "ask",
+		"scanBatchSize": 10,
+		"statusCharBudget": 12000,
+		"readChunkChars": 6000,
+		"maxActiveChains": 3,
+		"levelBudgets": {
+			"root": 1800,
+			"ancestor": 3000,
+			"nearest": 7000
+		},
+		"requireAfterTdd": true,
+		"requireBeforeEditOutsideChain": true
 	}
 }
 ```
 
 Settings merge in this order: defaults, global settings, then project settings.
 
-`worktree` and `compact` settings are captured when a plan is created. Changing them later does not move an existing worktree or rewrite that plan's saved `state.compactBoundaries`. `idle`, `timer`, and `metadata` settings are read while the planner is running.
+`worktree` and `compact` settings are captured when a plan is created. Changing them later does not move an existing worktree or rewrite that plan's saved `state.compactBoundaries`. `idle`, `timer`, `metadata`, and `contracts` settings are read while the planner is running.
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
@@ -204,6 +277,17 @@ Settings merge in this order: defaults, global settings, then project settings.
 | `timer.showCheckpoints` | `true` | Include recent stage checkpoint timings. |
 | `timer.maxCheckpoints` | `5` | Maximum checkpoint entries shown. |
 | `timer.syncIntervalMinutes` | `10` | How often timer heartbeat state is written to disk. |
+| `contracts.enabled` | `true` | Enable planner local AGENTS.md contract discovery, routing, checks, and upserts. |
+| `contracts.finalPolicy` | `"ask"` | What `/planner-finish` does with planner-created/updated AGENTS.md files: `"ask"`, `"keep"`, or `"remove"`. |
+| `contracts.scanBatchSize` | `10` | Directory count scanned per `planner_contract_scan` call. |
+| `contracts.statusCharBudget` | `12000` | Maximum saved contract-summary text shown in `planner_status`. |
+| `contracts.readChunkChars` | `6000` | Chunk size for `planner_contract_read`; full bodies are not injected by `planner_status`. |
+| `contracts.maxActiveChains` | `3` | Maximum active contract chains kept in `state.json`. |
+| `contracts.levelBudgets.root` | `1800` | Summary budget for root-level routing contracts. |
+| `contracts.levelBudgets.ancestor` | `3000` | Summary budget for intermediate domain contracts. |
+| `contracts.levelBudgets.nearest` | `7000` | Summary budget for the nearest applicable domain contract. |
+| `contracts.requireAfterTdd` | `true` | Require `execution/contract_check` after a green implementation. |
+| `contracts.requireBeforeEditOutsideChain` | `true` | Instruct the model to route/read contracts before leaving declared task scope. |
 
 Metadata language settings affect human-facing generated text only. Tool names, JSON fields, branch names, plan ids, parser headings, and code stay stable.
 
@@ -232,7 +316,7 @@ The idle watchdog is a planner wake-up timer, not a recovery engine. It sends a 
 
 It runs only while a planner step is `running`, the plan was activated through `/planner-create` or `/planner-resume`, and the plan is not waiting for user input, recovery, or compact.
 
-It is disabled on `done`, `recovery`, `compact_*`, user approval/acceptance waits, and discovery questions that are already waiting for answers. In `execution`, it runs only on TDD/check/implementation/refactor steps. If the model is truly stuck, it should call `planner_report_stuck`, which saves diff artifacts and starts a controlled compact.
+It is disabled on `done`, `recovery`, `compact_*`, user approval/acceptance waits, and discovery questions that are already waiting for answers. In `execution`, it runs only on TDD/check/implementation/contract/refactor steps. If the model is truly stuck, it should call `planner_report_stuck`, which saves diff artifacts and starts a controlled compact.
 
 Instruction append files can be placed under:
 

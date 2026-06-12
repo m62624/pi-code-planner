@@ -15,6 +15,10 @@ export interface UpsertTaskArtifactsInput {
 	objective: string;
 	scope: string[];
 	acceptanceCriteria: string[];
+	contractChain?: string[];
+	relevantContracts?: string[];
+	forbiddenAreas?: string[];
+	domainDetails?: string[];
 }
 
 export async function upsertTaskArtifacts(
@@ -35,6 +39,13 @@ export async function upsertTaskArtifacts(
 			input.acceptanceCriteria,
 			"acceptanceCriteria",
 		),
+		contractChain: stringArray(input.contractChain ?? [], "contractChain"),
+		relevantContracts: stringArray(
+			input.relevantContracts ?? [],
+			"relevantContracts",
+		),
+		forbiddenAreas: stringArray(input.forbiddenAreas ?? [], "forbiddenAreas"),
+		domainDetails: stringArray(input.domainDetails ?? [], "domainDetails"),
 	};
 	await fs.mkdirp(paths.taskDir);
 	await writeJson(fs, paths.taskJson, record);
@@ -82,6 +93,20 @@ function formatTaskMarkdown(task: TaskRecord): string {
 		"## TDD Rule",
 		"",
 		"Tests, mocks, fixtures, implementation, refactor, and final checks belong to this task lifecycle. Do not create a separate testing task.",
+		"",
+		"## Local Contract Context",
+		"",
+		"### Contract Chain",
+		...list(task.contractChain ?? [], "(none recorded)"),
+		"",
+		"### Relevant Contracts",
+		...list(task.relevantContracts ?? [], "(none recorded)"),
+		"",
+		"### Forbidden Areas",
+		...list(task.forbiddenAreas ?? [], "(none recorded)"),
+		"",
+		"### Domain Details",
+		...list(task.domainDetails ?? [], "(none recorded)"),
 		"",
 	].join("\n");
 }

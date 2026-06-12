@@ -91,6 +91,10 @@ function executionInstructionKeys(step: PlannerStep): InstructionKey[] {
 		return ["tdd", "git-commit"];
 	}
 
+	if (step === "contract_check") {
+		return ["tdd", "git-commit"];
+	}
+
 	if (step === "refactor_task") {
 		return ["refactor", "git-commit"];
 	}

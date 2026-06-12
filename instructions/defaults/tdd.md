@@ -23,8 +23,11 @@ Use strict tests-first development for every execution task. Production implemen
    - Record the smallest counterexample, boundary value, opposite case, regression risk, scope check, and action.
    - If the counterexample is real, add a test or explicitly record why it is out of scope before continuing.
    - If resolving the task produced a reusable verified lesson, call `planner_skill_create` to save it for future planner sessions. Do not create a skill for ordinary task summaries.
-7. During `run_final_tests`, rerun focused tests and required broader integration checks.
-8. Before finishing `merge_task_to_plan`, add `## Task Merge Scope Audit`.
+7. During `contract_check`, call `planner_contract_check`.
+   - If task work changed durable architecture, domain routing, test/check conventions, state-machine behavior, storage/recovery rules, or module boundaries, update the nearest meaningful AGENTS.md through `planner_contract_upsert`.
+   - If no update is needed, record concrete evidence. "No update" is valid only after checking the diff and task scope.
+8. During `run_final_tests`, rerun focused tests and required broader integration checks.
+9. Before finishing `merge_task_to_plan`, add `## Task Merge Scope Audit`.
    - Confirm acceptance criteria coverage, changed-file scope, commands run, debug cleanup, commit message fit, and branch drift check.
 
 ## Test Signal Rules
@@ -83,6 +86,14 @@ Required proof/audit sections:
 - regressionRisk: old behavior that could have been broken
 - scopeCheck: whether the implementation stayed inside the task scope
 - action: added test, recorded non-goal, or no action with evidence
+
+## Contract Consistency Check
+- action: no_update, upsert_existing, or create_new from planner_contract_check
+- outcome: what changed and why it does or does not affect durable AGENTS.md memory
+- domain impact: affected domain rule, or none with evidence
+- recommended path: nearest meaningful AGENTS.md path or none
+- changed files: files checked
+- evidence: diff/test/artifact facts supporting the action
 
 ## Task Merge Scope Audit
 - acceptanceCriteriaCovered: task acceptance criteria and evidence

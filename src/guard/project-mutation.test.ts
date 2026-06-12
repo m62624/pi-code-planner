@@ -111,6 +111,7 @@ describe("planner built-in Pi tool guard", () => {
 			activeExecutionState("prepare_task"),
 			activeExecutionState("write_tdd_plan"),
 			activeExecutionState("run_failing_tests"),
+			activeExecutionState("contract_check"),
 			activeState("finalize"),
 			activeState("done"),
 			activeState("recovery"),
@@ -233,6 +234,7 @@ function activeExecutionState(
 		| "write_tests"
 		| "run_failing_tests"
 		| "implement_task"
+		| "contract_check"
 		| "refactor_task"
 	>,
 ): PlannerBuiltinGuardState {

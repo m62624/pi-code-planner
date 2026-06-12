@@ -4,6 +4,7 @@ import type { ProjectStoragePaths } from "../storage/paths";
 import { createPlannerSettingsPaths, type PlannerSettingsPaths } from "./paths";
 import {
 	DEFAULT_PLANNER_SETTINGS,
+	type PlannerContractLevelBudgets,
 	type PlannerSettings,
 	type PlannerSettingsFile,
 	type WorktreeSettings,
@@ -17,6 +18,7 @@ const DEFAULT_PLANNER_SETTINGS_FILE: PlannerSettingsFile = {
 		humanLanguage: DEFAULT_PLANNER_SETTINGS.metadata.humanLanguage,
 	},
 	timer: DEFAULT_PLANNER_SETTINGS.timer,
+	contracts: DEFAULT_PLANNER_SETTINGS.contracts,
 };
 
 export interface EffectivePlannerSettings {
@@ -29,6 +31,7 @@ export interface EffectivePlannerSettings {
 	idleSource: "project" | "global" | "default";
 	metadataSource: "project" | "global" | "default";
 	timerSource: "project" | "global" | "default";
+	contractsSource: "project" | "global" | "default";
 }
 
 export async function loadEffectivePlannerSettings(input: {
@@ -93,17 +96,27 @@ export async function loadEffectivePlannerSettings(input: {
 		...(global.timer ?? {}),
 		...(project?.timer ?? {}),
 	};
+	const contractsSource = project?.contracts
+		? "project"
+		: global.contracts
+			? "global"
+			: "default";
+	const contracts = mergeContractsSettings(
+		global.contracts,
+		project?.contracts,
+	);
 
 	return {
 		paths,
 		global,
 		project,
-		effective: { worktree, compact, idle, metadata, timer },
+		effective: { worktree, compact, idle, metadata, timer, contracts },
 		worktreeSource,
 		compactSource,
 		idleSource,
 		metadataSource,
 		timerSource,
+		contractsSource,
 	};
 }
 
@@ -141,6 +154,9 @@ function normalizeSettingsFile(
 		...(record.timer === undefined
 			? {}
 			: { timer: normalizeTimerSettings(record.timer, path) }),
+		...(record.contracts === undefined
+			? {}
+			: { contracts: normalizeContractsSettings(record.contracts, path) }),
 	};
 }
 
@@ -209,7 +225,7 @@ function positiveInteger(value: unknown, key: string, path: string): number {
 		value <= 0
 	) {
 		throw new TypeError(
-			`Planner timer setting ${key} must be a positive integer: ${path}`,
+			`Planner setting ${key} must be a positive integer: ${path}`,
 		);
 	}
 	return value;
@@ -361,6 +377,164 @@ function normalizeTimerSettings(
 						path,
 					),
 				}),
+	};
+}
+
+function normalizeContractsSettings(
+	value: unknown,
+	path: string,
+): PlannerSettingsFile["contracts"] {
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		throw new TypeError(
+			`Planner contracts settings must be an object: ${path}`,
+		);
+	}
+	const record = value as Record<string, unknown>;
+	if (record.enabled !== undefined && typeof record.enabled !== "boolean") {
+		throw new TypeError(
+			`Planner contracts setting enabled must be boolean: ${path}`,
+		);
+	}
+	if (
+		record.requireAfterTdd !== undefined &&
+		typeof record.requireAfterTdd !== "boolean"
+	) {
+		throw new TypeError(
+			`Planner contracts setting requireAfterTdd must be boolean: ${path}`,
+		);
+	}
+	if (
+		record.requireBeforeEditOutsideChain !== undefined &&
+		typeof record.requireBeforeEditOutsideChain !== "boolean"
+	) {
+		throw new TypeError(
+			`Planner contracts setting requireBeforeEditOutsideChain must be boolean: ${path}`,
+		);
+	}
+	if (
+		record.finalPolicy !== undefined &&
+		record.finalPolicy !== "ask" &&
+		record.finalPolicy !== "keep" &&
+		record.finalPolicy !== "remove"
+	) {
+		throw new TypeError(
+			`Planner contracts setting finalPolicy must be "ask", "keep", or "remove": ${path}`,
+		);
+	}
+	return {
+		...(typeof record.enabled === "boolean" ? { enabled: record.enabled } : {}),
+		...(record.finalPolicy === "ask" ||
+		record.finalPolicy === "keep" ||
+		record.finalPolicy === "remove"
+			? { finalPolicy: record.finalPolicy }
+			: {}),
+		...(record.scanBatchSize === undefined
+			? {}
+			: {
+					scanBatchSize: positiveInteger(
+						record.scanBatchSize,
+						"contracts.scanBatchSize",
+						path,
+					),
+				}),
+		...(record.statusCharBudget === undefined
+			? {}
+			: {
+					statusCharBudget: positiveInteger(
+						record.statusCharBudget,
+						"contracts.statusCharBudget",
+						path,
+					),
+				}),
+		...(record.readChunkChars === undefined
+			? {}
+			: {
+					readChunkChars: positiveInteger(
+						record.readChunkChars,
+						"contracts.readChunkChars",
+						path,
+					),
+				}),
+		...(record.maxActiveChains === undefined
+			? {}
+			: {
+					maxActiveChains: positiveInteger(
+						record.maxActiveChains,
+						"contracts.maxActiveChains",
+						path,
+					),
+				}),
+		...(record.levelBudgets === undefined
+			? {}
+			: {
+					levelBudgets: normalizeContractLevelBudgets(
+						record.levelBudgets,
+						path,
+					),
+				}),
+		...(typeof record.requireAfterTdd === "boolean"
+			? { requireAfterTdd: record.requireAfterTdd }
+			: {}),
+		...(typeof record.requireBeforeEditOutsideChain === "boolean"
+			? { requireBeforeEditOutsideChain: record.requireBeforeEditOutsideChain }
+			: {}),
+	};
+}
+
+function normalizeContractLevelBudgets(
+	value: unknown,
+	path: string,
+): Partial<PlannerContractLevelBudgets> {
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		throw new TypeError(
+			`Planner contracts setting levelBudgets must be an object: ${path}`,
+		);
+	}
+	const record = value as Record<string, unknown>;
+	return {
+		...(record.root === undefined
+			? {}
+			: {
+					root: positiveInteger(
+						record.root,
+						"contracts.levelBudgets.root",
+						path,
+					),
+				}),
+		...(record.ancestor === undefined
+			? {}
+			: {
+					ancestor: positiveInteger(
+						record.ancestor,
+						"contracts.levelBudgets.ancestor",
+						path,
+					),
+				}),
+		...(record.nearest === undefined
+			? {}
+			: {
+					nearest: positiveInteger(
+						record.nearest,
+						"contracts.levelBudgets.nearest",
+						path,
+					),
+				}),
+	};
+}
+
+function mergeContractsSettings(
+	global: PlannerSettingsFile["contracts"] | undefined,
+	project: PlannerSettingsFile["contracts"] | undefined,
+): PlannerSettings["contracts"] {
+	return {
+		...DEFAULT_PLANNER_SETTINGS.contracts,
+		...(global ?? {}),
+		...(project ?? {}),
+		levelBudgets: {
+			...DEFAULT_PLANNER_SETTINGS.contracts.levelBudgets,
+			...(global?.levelBudgets ?? {}),
+			...(project?.levelBudgets ?? {}),
+		},
 	};
 }
 

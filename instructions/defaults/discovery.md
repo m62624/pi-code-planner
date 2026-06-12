@@ -2,17 +2,21 @@
 
 ## Purpose
 
-Become familiar with the project before planning. Keep this stage cheap for a local model: inspect the project tree, read only the files needed for the approved goal, and summarize useful findings in `discovery.md`.
+Become familiar with the project before planning. Keep this stage cheap for a local model: discover AGENTS.md local contracts first, inspect the project tree, read only the files needed for the approved goal, and summarize useful findings in `discovery.md`.
 
 ## Strict Step Order
 
 1. `scan_project_structure`
    - Read `goal.md`.
-   - Inspect the project tree with read-only shell commands.
-   - Read only the manifests, entrypoints, tests, configuration, and source files needed to understand the requested work.
+   - Call `planner_contract_scan` in batches. This discovers AGENTS.md/AGENTS.MD/CLAUDE.md/CLAUDE.MD paths without reading all file bodies.
+   - If contract files exist, call `planner_contract_route` for the goal/scope and `planner_contract_read` for the relevant chain before broad source reads.
+   - Inspect the project tree with read-only shell commands after the contract map is started.
+   - Read only the manifests, entrypoints, tests, configuration, and source files needed to understand the requested work after contract guidance is considered.
    - Write a concise `discovery.md`: architecture, relevant paths, commands, conventions, risks, and uncertainty.
    - Record exact test, lint, build, and format commands when they exist. Include required working directory and important flags.
    - If commands are not discoverable, record that uncertainty explicitly.
+   - If no useful AGENTS.md exists, create or propose initial contracts only for meaningful architectural zones. Do not create one in every folder.
+   - If `planner_contract_upsert` changes AGENTS.md files during discovery, commit those changes through `planner_git_commit` before finishing `scan_project_structure`.
 2. `write_questions`
    - Call `planner_questions_submit` with evidence-based unresolved questions and explicit assumptions.
    - If the project is empty or has no existing test/lint/build conventions, ask how to set up testing: framework, test command, lint command, formatter, and any required flags.
@@ -29,6 +33,8 @@ Become familiar with the project before planning. Keep this stage cheap for a lo
 
 - Do not implement production code or tests.
 - Do not read the whole repository by default.
+- Do not skip AGENTS.md routing when contract files exist. They are local architecture memory, not optional docs.
+- Do not create AGENTS.md for every directory. A contract belongs only where it prevents future agents from reading irrelevant code or breaking a durable rule.
 - Do not build or maintain a file-by-file JSONL symbol index.
 - Run project-scoped shell commands from the worktree path reported by `planner_status`.
 - Do not use raw git.
