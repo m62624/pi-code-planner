@@ -152,10 +152,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           BASE_BRANCH="main"
+          COMPARE_URL="https://github.com/${{ github.repository }}/compare/$BASE_BRANCH...${{ needs.prepare.outputs.rc_branch }}"
           EXISTING_PR=$(gh pr list --head "${{ needs.prepare.outputs.rc_branch }}" --base "$BASE_BRANCH" --json url --jq '.[0].url')
           if [ -z "$EXISTING_PR" ]; then
-            PR_URL=$(gh pr create --title "release: sync ${{ env.R_NAME }} to $BASE_BRANCH" --body "This PR was created by GitHub Actions after the npm release branch was prepared." --base "$BASE_BRANCH" --head "${{ needs.prepare.outputs.rc_branch }}")
-            echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
+            if PR_URL=$(gh pr create --title "release: sync ${{ env.R_NAME }} to $BASE_BRANCH" --body "This PR was created by GitHub Actions after the npm release branch was prepared." --base "$BASE_BRANCH" --head "${{ needs.prepare.outputs.rc_branch }}"); then
+              echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
+            else
+              echo "GitHub Actions cannot create the sync PR. Create it manually: $COMPARE_URL"
+              echo "url=$COMPARE_URL" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "url=$EXISTING_PR" >> "$GITHUB_OUTPUT"
           fi
