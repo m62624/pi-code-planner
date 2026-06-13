@@ -36,7 +36,7 @@ export interface PlannerCompactInstructionSection {
 	appendPath: string | null;
 }
 
-export type PlannerPostCompactDelivery = "immediate" | "followUp";
+export type PlannerPostCompactDelivery = "followUp";
 
 export function createPlannerCompactRuntimeState(): PlannerCompactRuntimeState {
 	return { plannerControlledCompactInFlight: false };
@@ -178,23 +178,8 @@ export function enqueuePlannerPostCompactMessage(input: {
 		options?: { streamingBehavior: "followUp" },
 	) => void;
 }): PlannerPostCompactDelivery {
-	if (input.isIdle && !input.hasPendingMessages) {
-		try {
-			input.sendUserMessage(input.message);
-			return "immediate";
-		} catch (error) {
-			if (!isAgentAlreadyProcessingError(error)) throw error;
-		}
-	}
 	input.sendUserMessage(input.message, { streamingBehavior: "followUp" });
 	return "followUp";
-}
-
-function isAgentAlreadyProcessingError(error: unknown): boolean {
-	return (
-		error instanceof Error &&
-		error.message.toLowerCase().includes("agent is already processing")
-	);
 }
 
 export function formatPlannerCompactFailure(error: Error): string {
