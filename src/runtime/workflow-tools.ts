@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { GitRunner } from "../git/runner";
+import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerFs } from "../storage/fs";
 import {
 	createTaskStoragePaths,
@@ -14,7 +15,10 @@ import {
 	type PlanStateRecord,
 } from "../storage/schema";
 import { updateTaskStatus } from "../storage/task-store";
-import { validateContractCheckCompleted } from "./contracts";
+import {
+	validateContractCheckCompleted,
+	validateDiscoveryContractRouting,
+} from "./contracts";
 import { validateDoubtReviewMarkdown } from "./doubt-review";
 import type { PlannerGitReality } from "./git-state-sync";
 import {
@@ -249,7 +253,16 @@ async function validateWorkflowExit(input: {
 	}
 	const { state } = input.orchestrator.preflight.context;
 	if (state.stage === "discovery" && state.step === "scan_project_structure") {
-		return validateCleanWorktree(input.orchestrator.preflight.gitReality);
+		const settings = await loadEffectivePlannerSettings({
+			fs: input.fs,
+			projectPaths: input.orchestrator.preflight.context.projectPaths,
+		});
+		return (
+			validateDiscoveryContractRouting({
+				state,
+				settingsEnabled: settings.effective.contracts.enabled,
+			}) ?? validateCleanWorktree(input.orchestrator.preflight.gitReality)
+		);
 	}
 	if (state.stage === "discovery" && state.step === "write_questions") {
 		const artifactBlock = await requireNonEmptyArtifact(

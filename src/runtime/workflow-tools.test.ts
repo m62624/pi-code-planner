@@ -102,6 +102,106 @@ describe("workflowToolTransition", () => {
 		expect(result.text).toContain("Call planner_status");
 	});
 
+	it("blocks discovery finish until discovered contracts are routed and read", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await ensureProjectRecord(fs, projectPaths);
+		await initializePlanFiles(
+			fs,
+			planPaths,
+			createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+		);
+		await fs.mkdirp(worktreePath);
+		await initializePlanState(fs, planPaths, {
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "discovery",
+			step: "scan_project_structure",
+			stepStatus: "running",
+			currentBranch: "plan/plan-a",
+			contracts: {
+				...createInitialPlanState({
+					baseBranch: "main",
+					planBranch: "plan/plan-a",
+					worktreePath,
+				}).contracts,
+				scanComplete: true,
+				discoveredPaths: [
+					`${worktreePath}/AGENTS.md`,
+					`${worktreePath}/src/AGENTS.md`,
+				],
+			},
+		});
+		await setActivePlan(fs, projectPaths, "plan-a");
+		await fs.writeTextAtomic(planPaths.discoveryMd, "Project overview.\n");
+
+		const unrouted = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+
+		expect(unrouted.result.status).toBe("blocked");
+		expect(unrouted.text).toContain("planner_contract_route");
+
+		await initializePlanState(fs, planPaths, {
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "discovery",
+			step: "scan_project_structure",
+			stepStatus: "running",
+			currentBranch: "plan/plan-a",
+			contracts: {
+				...createInitialPlanState({
+					baseBranch: "main",
+					planBranch: "plan/plan-a",
+					worktreePath,
+				}).contracts,
+				scanComplete: true,
+				discoveredPaths: [
+					`${worktreePath}/AGENTS.md`,
+					`${worktreePath}/src/AGENTS.md`,
+				],
+				activeChains: [
+					{
+						targetPath: `${worktreePath}/src/runtime/status.ts`,
+						chain: [
+							`${worktreePath}/AGENTS.md`,
+							`${worktreePath}/src/AGENTS.md`,
+						],
+						reason: "discovery",
+						updatedAt: 1000,
+					},
+				],
+			},
+		});
+
+		const unread = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+
+		expect(unread.result.status).toBe("blocked");
+		expect(unread.text).toContain("planner_contract_read");
+	});
+
 	it("marks existing tasks done when returning from a change request to planning", async () => {
 		const fs = new MockPlannerFs();
 		const git = new MockGitRunner();

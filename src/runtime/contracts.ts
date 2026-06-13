@@ -751,6 +751,38 @@ export function validateContractCheckCompleted(
 		: "Call planner_contract_check for the active task before refactor_task.";
 }
 
+export function validateDiscoveryContractRouting(input: {
+	state: PlanStateRecord;
+	settingsEnabled: boolean;
+}): string | null {
+	const contracts = input.state.contracts;
+	if (!input.settingsEnabled || !contracts.enabled) {
+		return null;
+	}
+	if (!contracts.scanComplete) {
+		return "Planner contract scan is incomplete. Continue planner_contract_scan until scanComplete=true before finishing discovery/scan_project_structure.";
+	}
+	if (contracts.discoveredPaths.length === 0) {
+		return null;
+	}
+	if (contracts.activeChains.length === 0) {
+		return "Planner contract scan found AGENTS.md/context files. Call planner_contract_route for the current goal/scope before finishing discovery/scan_project_structure.";
+	}
+	for (const chain of contracts.activeChains) {
+		const nearest = chain.chain.at(-1);
+		if (!nearest) {
+			continue;
+		}
+		const read = contracts.summaries.some(
+			(summary) => summary.path === nearest,
+		);
+		if (!read) {
+			return `Planner contract route selected ${nearest}, but it has not been read. Call planner_contract_read for the nearest relevant contract before finishing discovery/scan_project_structure.`;
+		}
+	}
+	return null;
+}
+
 export async function readPlannerContractsManifest(
 	fs: PlannerFs,
 	planPaths: PlanStoragePaths,
@@ -814,6 +846,30 @@ export function formatPlannerContractsStatus(input: {
 	} else if (contracts.pendingUpsert) {
 		lines.push(
 			`- guidance: Contract update required; call planner_contract_upsert for ${contracts.pendingUpsert.path}.`,
+		);
+	} else if (
+		input.state.stage === "discovery" &&
+		input.state.step === "scan_project_structure" &&
+		contracts.scanComplete &&
+		contracts.discoveredPaths.length > 0 &&
+		contracts.activeChains.length === 0
+	) {
+		lines.push(
+			"- guidance: Contract files were found. Call planner_contract_route before source reads or before finishing discovery.",
+		);
+	} else if (
+		input.state.stage === "discovery" &&
+		input.state.step === "scan_project_structure" &&
+		contracts.activeChains.some(
+			(chain) =>
+				chain.chain.length > 0 &&
+				!contracts.summaries.some(
+					(summary) => summary.path === chain.chain.at(-1),
+				),
+		)
+	) {
+		lines.push(
+			"- guidance: A relevant contract chain is selected. Call planner_contract_read for the nearest unread contract before finishing discovery.",
 		);
 	} else if (!contracts.scanComplete) {
 		lines.push(

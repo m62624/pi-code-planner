@@ -9,6 +9,7 @@ import {
 	initialWritableContractRequired,
 	parsePlannerContractMarkdown,
 	upsertPlannerContractBlock,
+	validateDiscoveryContractRouting,
 } from "./contracts";
 
 describe("planner local contracts parser", () => {
@@ -256,6 +257,80 @@ describe("planner local contract status", () => {
 });
 
 describe("planner local contract check enforcement", () => {
+	it("requires route and nearest read before finishing discovery when contracts exist", () => {
+		const state = createInitialPlanState({
+			baseBranch: "main",
+			planBranch: "plan/a",
+			worktreePath: "/repo/app",
+		});
+		state.stage = "discovery";
+		state.step = "scan_project_structure";
+		state.contracts.scanComplete = true;
+		state.contracts.discoveredPaths = [
+			"/repo/app/AGENTS.md",
+			"/repo/app/src/AGENTS.md",
+		];
+
+		expect(
+			validateDiscoveryContractRouting({
+				state,
+				settingsEnabled: true,
+			}),
+		).toContain("Call planner_contract_route");
+
+		state.contracts.activeChains = [
+			{
+				targetPath: "/repo/app/src/runtime/status.ts",
+				chain: ["/repo/app/AGENTS.md", "/repo/app/src/AGENTS.md"],
+				reason: "discovery",
+				updatedAt: 1000,
+			},
+		];
+		expect(
+			validateDiscoveryContractRouting({
+				state,
+				settingsEnabled: true,
+			}),
+		).toContain("Call planner_contract_read");
+
+		state.contracts.summaries = [
+			{
+				path: "/repo/app/src/AGENTS.md",
+				purpose: "Source domain.",
+				childIndex: [],
+				stableContracts: [],
+				readFirst: [],
+				doNotTouchUnless: [],
+				domainDetails: [],
+				diagnostics: [],
+				updatedAt: 1000,
+			},
+		];
+		expect(
+			validateDiscoveryContractRouting({
+				state,
+				settingsEnabled: true,
+			}),
+		).toBeNull();
+	});
+
+	it("allows discovery to finish when no contracts are discovered", () => {
+		const state = createInitialPlanState({
+			baseBranch: "main",
+			planBranch: "plan/a",
+			worktreePath: "/repo/app",
+		});
+		state.contracts.scanComplete = true;
+		state.contracts.discoveredPaths = [];
+
+		expect(
+			validateDiscoveryContractRouting({
+				state,
+				settingsEnabled: true,
+			}),
+		).toBeNull();
+	});
+
 	it("requires an initial AGENTS.md contract after production source changes", () => {
 		const state = createInitialPlanState({
 			baseBranch: "main",
