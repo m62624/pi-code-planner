@@ -295,6 +295,17 @@ describe("planner local contract check enforcement", () => {
 
 		state.contracts.summaries = [
 			{
+				path: "/repo/app/AGENTS.md",
+				purpose: "Root routing.",
+				childIndex: [],
+				stableContracts: [],
+				readFirst: [],
+				doNotTouchUnless: [],
+				domainDetails: [],
+				diagnostics: [],
+				updatedAt: 1000,
+			},
+			{
 				path: "/repo/app/src/AGENTS.md",
 				purpose: "Source domain.",
 				childIndex: [],
@@ -306,6 +317,83 @@ describe("planner local contract check enforcement", () => {
 				updatedAt: 1000,
 			},
 		];
+		expect(
+			validateDiscoveryContractRouting({
+				state,
+				settingsEnabled: true,
+			}),
+		).toBeNull();
+	});
+
+	it("requires a child contract read when the nearest selected contract has children", () => {
+		const state = createInitialPlanState({
+			baseBranch: "main",
+			planBranch: "plan/a",
+			worktreePath: "/repo/app",
+		});
+		state.stage = "discovery";
+		state.step = "scan_project_structure";
+		state.contracts.scanComplete = true;
+		state.contracts.discoveredPaths = [
+			"/repo/app/AGENTS.md",
+			"/repo/app/src/AGENTS.md",
+			"/repo/app/src/runtime/AGENTS.md",
+		];
+		state.contracts.childContracts = {
+			"/repo/app/AGENTS.md": ["/repo/app/src/AGENTS.md"],
+			"/repo/app/src/AGENTS.md": ["/repo/app/src/runtime/AGENTS.md"],
+		};
+		state.contracts.activeChains = [
+			{
+				targetPath: "/repo/app/src/status.ts",
+				chain: ["/repo/app/AGENTS.md", "/repo/app/src/AGENTS.md"],
+				reason: "discovery",
+				updatedAt: 1000,
+			},
+		];
+		state.contracts.summaries = [
+			{
+				path: "/repo/app/AGENTS.md",
+				purpose: "Root routing.",
+				childIndex: [],
+				stableContracts: [],
+				readFirst: [],
+				doNotTouchUnless: [],
+				domainDetails: [],
+				diagnostics: [],
+				updatedAt: 1000,
+			},
+			{
+				path: "/repo/app/src/AGENTS.md",
+				purpose: "Source domain.",
+				childIndex: ["src/runtime/AGENTS.md: Runtime contracts."],
+				stableContracts: [],
+				readFirst: [],
+				doNotTouchUnless: [],
+				domainDetails: [],
+				diagnostics: [],
+				updatedAt: 1000,
+			},
+		];
+
+		expect(
+			validateDiscoveryContractRouting({
+				state,
+				settingsEnabled: true,
+			}),
+		).toContain("child contracts");
+
+		state.contracts.summaries.push({
+			path: "/repo/app/src/runtime/AGENTS.md",
+			purpose: "Runtime contracts.",
+			childIndex: [],
+			stableContracts: [],
+			readFirst: [],
+			doNotTouchUnless: [],
+			domainDetails: [],
+			diagnostics: [],
+			updatedAt: 1000,
+		});
 		expect(
 			validateDiscoveryContractRouting({
 				state,

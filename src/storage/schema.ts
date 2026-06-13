@@ -321,6 +321,7 @@ export interface PlannerContractsState {
 	scanComplete: boolean;
 	scanQueue: string[];
 	discoveredPaths: string[];
+	childContracts: Record<string, string[]>;
 	diagnostics: string[];
 	activeChains: PlannerContractChainRecord[];
 	summaries: PlannerContractSummaryRecord[];
@@ -406,6 +407,7 @@ export function createDefaultPlannerContractsState(): PlannerContractsState {
 		scanComplete: false,
 		scanQueue: [],
 		discoveredPaths: [],
+		childContracts: {},
 		diagnostics: [],
 		activeChains: [],
 		summaries: [],

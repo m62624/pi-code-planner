@@ -194,10 +194,10 @@ export const PLANNER_STEP_RULES = {
 			"When contract/context files exist, call planner_contract_route and planner_contract_read for the relevant chain first. Treat AGENTS.md as writable routing memory; treat CLAUDE.md, GEMINI.md, .cursorrules, and similar files as read-only imported guidance.",
 			"Inspect the project tree with read-only shell commands only after the contract map is started.",
 			"Read only the source files needed to understand architecture, commands, risks, and the requested change after contract guidance is considered.",
-			"Write concise findings to discovery.md, including exact test/lint/build commands when discoverable.",
+			"Write concise findings to discovery.md, including a ## Verification Protocol section with exact test/lint/build/format commands, working directory, flags, or explicit unknowns.",
 			"If no AGENTS.md exists, create initial root/domain AGENTS.md only for meaningful architectural zones once discovery evidence proves the domains. Do not create one in every folder.",
 			"If planner_contract_upsert changes AGENTS.md files, commit them through planner_git_commit before finishing discovery/scan_project_structure.",
-			"If commands are missing or the project is empty, record that uncertainty for discovery/write_questions.",
+			"If commands are missing or the project is empty, record unknowns in ## Verification Protocol for discovery/write_questions.",
 		],
 		allowedNow: [
 			"Use planner_contract_scan/route/read, read-only shell commands, focused source reads, and discovery.md.",
@@ -207,7 +207,8 @@ export const PLANNER_STEP_RULES = {
 			"Do not read every project file by default.",
 			"Do not create AGENTS.md in every directory; contracts belong only to durable architectural domains.",
 		],
-		exitCondition: "discovery.md contains a concise useful project overview.",
+		exitCondition:
+			"discovery.md contains a concise useful project overview and ## Verification Protocol.",
 		nextInstruction:
 			"Call planner_finish_step to open and start write_questions.",
 	}),

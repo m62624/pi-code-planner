@@ -243,6 +243,7 @@ async function contractScan(
 			: state.contracts.discoveredPaths,
 		batchSize,
 	});
+	const childContracts = buildContractChildMap(result.discoveredPaths);
 	await updatePlanState(input.fs, planPaths, (current) => ({
 		...current,
 		contracts: {
@@ -250,6 +251,7 @@ async function contractScan(
 			scanComplete: result.complete,
 			scanQueue: result.queue,
 			discoveredPaths: result.discoveredPaths,
+			childContracts,
 			diagnostics: uniqueStrings([
 				...current.contracts.diagnostics,
 				...result.diagnostics,
@@ -769,15 +771,24 @@ export function validateDiscoveryContractRouting(input: {
 		return "Planner contract scan found AGENTS.md/context files. Call planner_contract_route for the current goal/scope before finishing discovery/scan_project_structure.";
 	}
 	for (const chain of contracts.activeChains) {
-		const nearest = chain.chain.at(-1);
-		if (!nearest) {
+		if (chain.chain.length === 0) {
 			continue;
 		}
-		const read = contracts.summaries.some(
-			(summary) => summary.path === nearest,
-		);
-		if (!read) {
-			return `Planner contract route selected ${nearest}, but it has not been read. Call planner_contract_read for the nearest relevant contract before finishing discovery/scan_project_structure.`;
+		for (const path of chain.chain) {
+			const read = contracts.summaries.some((summary) => summary.path === path);
+			if (!read) {
+				return `Planner contract route selected ${path}, but it has not been read. Call planner_contract_read for every contract in the selected hierarchy chain before finishing discovery/scan_project_structure.`;
+			}
+		}
+		const nearest = chain.chain.at(-1);
+		const children = nearest ? (contracts.childContracts[nearest] ?? []) : [];
+		if (children.length > 0) {
+			const childRead = children.some((childPath) =>
+				contracts.summaries.some((summary) => summary.path === childPath),
+			);
+			if (!childRead) {
+				return `Planner contract route selected ${nearest}, which has child contracts. Read at least one relevant child contract before finishing discovery/scan_project_structure, or route to a narrower target if another domain is needed.`;
+			}
 		}
 	}
 	return null;
@@ -863,13 +874,32 @@ export function formatPlannerContractsStatus(input: {
 		contracts.activeChains.some(
 			(chain) =>
 				chain.chain.length > 0 &&
-				!contracts.summaries.some(
-					(summary) => summary.path === chain.chain.at(-1),
+				chain.chain.some(
+					(path) =>
+						!contracts.summaries.some((summary) => summary.path === path),
 				),
 		)
 	) {
 		lines.push(
-			"- guidance: A relevant contract chain is selected. Call planner_contract_read for the nearest unread contract before finishing discovery.",
+			"- guidance: A relevant contract chain is selected. Call planner_contract_read for every unread contract in the selected hierarchy before finishing discovery.",
+		);
+	} else if (
+		input.state.stage === "discovery" &&
+		input.state.step === "scan_project_structure" &&
+		contracts.activeChains.some((chain) => {
+			const nearest = chain.chain.at(-1);
+			if (!nearest) return false;
+			const children = contracts.childContracts[nearest] ?? [];
+			return (
+				children.length > 0 &&
+				!children.some((childPath) =>
+					contracts.summaries.some((summary) => summary.path === childPath),
+				)
+			);
+		})
+	) {
+		lines.push(
+			"- guidance: The nearest contract has child domains. Read at least one relevant child contract, or reroute to a narrower target, before finishing discovery.",
 		);
 	} else if (!contracts.scanComplete) {
 		lines.push(
@@ -1196,6 +1226,36 @@ async function ensureKnownContractPaths(input: {
 		}
 	}
 	return [...discovered].sort();
+}
+
+function buildContractChildMap(
+	discoveredPaths: readonly string[],
+): Record<string, string[]> {
+	const normalized = [
+		...new Set(discoveredPaths.map((path) => normalize(path))),
+	];
+	const byDir = normalized.map((path) => ({
+		path,
+		dir: dirname(path),
+	}));
+	const childContracts: Record<string, string[]> = {};
+	for (const child of byDir) {
+		const parent = byDir
+			.filter(
+				(candidate) =>
+					candidate.path !== child.path &&
+					isPathInside(candidate.dir, child.dir),
+			)
+			.sort((left, right) => right.dir.length - left.dir.length)[0];
+		if (!parent) {
+			continue;
+		}
+		childContracts[parent.path] = [
+			...(childContracts[parent.path] ?? []),
+			child.path,
+		].sort();
+	}
+	return childContracts;
 }
 
 function buildContractChainForTarget(input: {
