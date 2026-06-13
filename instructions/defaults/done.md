@@ -48,6 +48,15 @@ Present the verified plan result, wait for an explicit user decision, then eithe
 - If the original Pi JSONL session is missing, `/planner-finish` warns the user, creates a replacement project-root session, and asks whether to remove the completed worktree chat.
 - Raw git is forbidden.
 
+## Evidence Discipline
+
+Treat done as a user-decision gate, not proof that the implementation is correct.
+
+- Do not reinterpret user hesitation as acceptance.
+- Do not hide risks or skipped checks from `final_summary.md`.
+- If the user reports a problem, preserve completed work and route the change request back through planning.
+- Do not cleanup or export until the persisted decision state allows it.
+
 ## Change Request Reload
 
 When returning to `planning/read_context`, reread full `plan.md`, `decisions.md`, user feedback, and `discovery.md`. Treat the previous implementation as current project context, not as a blank project. Preserve completed work, revise the plan only where the change request requires it, then continue toward execution. Existing completed task artifacts remain as audit history. Rebuild tasks only as needed for the requested change. Do not repeat tasks listed under `Completed Work`; create new revision task IDs only for work listed under `Remaining Work`.

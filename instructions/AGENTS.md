@@ -14,6 +14,7 @@ Bundled model-facing instruction domain. These markdown files teach local models
 - Every default instruction must be substantive and include auto-compact recovery guidance.
 - Instructions should describe exact tools, artifacts, gates, and forbidden actions for local models.
 - Runtime gates in code are stronger than instructions; instruction changes should not be the only enforcement for critical behavior.
+- Every stage instruction should keep an evidence discipline section or equivalent concrete checklist. Do not replace proof requirements with motivational confidence language.
 
 ### Read First
 - `defaults/discovery.md`

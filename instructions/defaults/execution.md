@@ -70,6 +70,15 @@ Execute exactly one active task at a time through tests-first development, imple
 - Refactor is mandatory design review, not formatter/linter output. Passing checks do not prove that no refactor is needed.
 - If new required work exceeds the current task, record it as a new task or return to planning.
 
+## Evidence Discipline
+
+Treat every execution step as reversible until artifacts, diff, and checks agree.
+
+- Do not continue from memory after compact, recovery, or a failed wrapper; reload the exact state.
+- Do not claim a task is done until `tdd.md`, refactor review, final checks, and task acceptance criteria all agree.
+- If a tool call fails, classify the failure before retrying. Repeating a failed action without a new hypothesis is not progress.
+- If the implementation starts drifting beyond task scope, stop and return to planning instead of broadening the task.
+
 ## Doubt Checkpoint
 
 Before finishing any execution step, doubt the proof:

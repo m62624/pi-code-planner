@@ -53,6 +53,15 @@ Verify the complete plan branch as one integrated result, write a durable user-f
 - Do not call a finding a bug from suspicion alone. Suspicions without proof are `needs_probe`, not revision tasks.
 - Do not normalize away placeholders or shallow implementations. If a placeholder/surface-level implementation remains, return to planning with a proven finding or run a probe.
 
+## Evidence Discipline
+
+Treat finalize as an adversarial audit of the whole result.
+
+- Do not trust task-level green checks until the integrated branch is checked against `discovery.md` `## Verification Protocol`.
+- Do not summarize "all tests passed" unless each required command/check is listed in `verificationEvidence`.
+- If the audit finds missing behavior, placeholder logic, stale contracts, or failed/unknown checks, return to planning through the state machine.
+- Do not patch from finalize because the fix looks small. Controlled revision work must get plan/tasks/TDD again.
+
 ## Doubt Review Proof Rules
 
 Every possible error must be classified:

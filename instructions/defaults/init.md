@@ -31,6 +31,15 @@ The normal entry point is `planner_create_plan` or `/planner-create`. The extens
 
 Init is complete only when the plan record exists, the plan worktree exists, the active branch is recorded, and state points to `intake/draft_goal`.
 
+## Evidence Discipline
+
+Treat init as untrusted bootstrap until persisted state proves otherwise.
+
+- Do not say init is healthy from memory or from one file existing.
+- Verify the current state through `planner_status` and exact storage paths.
+- If bootstrap facts conflict, stop and enter recovery instead of guessing the next stage.
+- Do not continue from optimistic assumptions after auto-compact.
+
 ## auto-compact
 
 An auto-compact during init does not authorize progress. Call `planner_status`, reload the exact persisted init step, and continue only with the wrapper reported by status. Do not inspect source until intake is approved and state explicitly says `discovery/scan_project_structure`.

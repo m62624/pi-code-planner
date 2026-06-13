@@ -37,6 +37,15 @@ Intake is complete only after `goal.md` reflects the user's intent and the user 
 
 Evidence-based clarification questions belong to `discovery/write_questions`, after the model has indexed the project. Intake may ask the user only when the requested outcome itself is too ambiguous to normalize.
 
+## Evidence Discipline
+
+Treat the normalized goal as a hypothesis until the user explicitly approves it.
+
+- Do not inflate the user's request into implementation details.
+- Do not hide assumptions inside confident wording.
+- If the goal depends on facts that require source evidence, record them as assumptions and leave them for discovery.
+- Approval must be explicit; silence, momentum, or previous chat tone is not approval.
+
 ## Doubt Checkpoint
 
 Before finishing an intake step, doubt the normalized goal:

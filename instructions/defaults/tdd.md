@@ -60,6 +60,15 @@ Record in `tdd.md`:
 - skipped checks and reasons
 - edge cases covered
 
+## Evidence Discipline
+
+Treat TDD as the proof engine. Do not trust an implementation until the test signal changes for the intended reason.
+
+- Red must prove missing behavior, not only a missing file/import/bootstrap problem.
+- Green must prove the requested behavior, not only that the harness is quiet.
+- If a counterexample is plausible, make it a test, record it as a non-goal with evidence, or mark the task blocked.
+- Do not add broad tests to feel safer; add the smallest test that can falsify the current claim.
+
 ## Planner Skill Memory
 
 `planner_skill_create` is future memory. Use it aggressively after a lesson is proven by a failing signal, debug probe, counterexample review, repeated mistake, stale-context recovery, or state-machine/tooling mistake that future planner sessions should avoid.

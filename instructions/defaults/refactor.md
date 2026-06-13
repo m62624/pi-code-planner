@@ -39,6 +39,15 @@ KISS does not mean avoiding advanced language features. Traits, interfaces, gene
 
 Refactor is complete only when `refactor.md` passes the structured review gate, checks pass, the diff stays within task scope, and changed files are committed.
 
+## Evidence Discipline
+
+Treat refactor as hostile review of the actual diff, not a style ritual.
+
+- Do not write "no refactor needed" until each category has concrete evidence.
+- Passing tests, formatters, or linters do not prove naming, coupling, control flow, or abstraction are acceptable.
+- If a cleanup would change behavior or expand scope, record it as deferred instead of smuggling it into refactor.
+- If the diff reveals missing behavior or missing tests, return to TDD/planning rather than hiding it under refactor.
+
 ## Required refactor.md Format
 
 Do not hand-write this file when `planner_refactor_review` is available. Pass semantic fields to the tool and let the wrapper write these exact level-two headings. Fill every field with concrete observations from the active task diff.

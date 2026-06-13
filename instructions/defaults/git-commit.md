@@ -40,6 +40,15 @@ Use `metadata.commitLanguage` from `planner_status` for human-readable commit te
 - Never choose merge branches from this document.
 - Never rewrite history to polish messages automatically.
 
+## Evidence Discipline
+
+Treat commit text as an audit artifact.
+
+- The subject and body must describe the actual diff, not the planner process alone.
+- If checks were skipped, failed, or unknown, say so in the allowed artifact before committing; do not imply success in the commit body.
+- Merge/export commits must summarize completed behavior from `plan.md`, task artifacts, and final verification, not a generic acceptance phrase.
+- If the diff and task record disagree, resolve that mismatch before writing the commit.
+
 ## auto-compact
 
 After auto-compact, call `planner_status`. Use this style only when the current stage explicitly allows a planner commit or merge wrapper.

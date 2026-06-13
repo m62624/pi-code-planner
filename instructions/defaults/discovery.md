@@ -46,6 +46,15 @@ Become familiar with the project before planning. Keep this stage cheap for a lo
 
 Discovery is complete when `discovery.md` contains enough context for planning, includes `## Verification Protocol`, required user questions are answered or explicitly absent, and the configured discovery compact boundary finishes.
 
+## Evidence Discipline
+
+Treat every discovery conclusion as suspect until it has a path, command, contract, or source citation.
+
+- Do not infer behavior from filenames, comments, package names, or previous chat memory alone.
+- If AGENTS.md or imported context files route to a domain, read the routed chain before broad source inspection.
+- If verification commands are unknown, say unknown and ask or record the gap; do not invent a test/lint/build command.
+- If a project is empty or lacks conventions, ask how verification should work before planning implementation.
+
 ## Doubt Checkpoint
 
 Before finishing discovery, doubt the context:
