@@ -161,6 +161,19 @@ function normalizePlannerContractsState(
 		discoveredPaths: Array.isArray(value.discoveredPaths)
 			? value.discoveredPaths
 			: [],
+		childContracts:
+			value.childContracts &&
+			typeof value.childContracts === "object" &&
+			!Array.isArray(value.childContracts)
+				? Object.fromEntries(
+						Object.entries(value.childContracts).map(([path, children]) => [
+							path,
+							Array.isArray(children)
+								? children.filter((child) => typeof child === "string")
+								: [],
+						]),
+					)
+				: {},
 		diagnostics: Array.isArray(value.diagnostics) ? value.diagnostics : [],
 		activeChains: Array.isArray(value.activeChains) ? value.activeChains : [],
 		summaries: Array.isArray(value.summaries) ? value.summaries : [],

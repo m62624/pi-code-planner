@@ -67,6 +67,15 @@ At `planning/read_context`, load context in this order:
 
 Planning is complete only when `plan.md` is coherent, every task has artifacts and acceptance criteria, task order is verified, and planning compact finishes.
 
+## Evidence Discipline
+
+Treat the plan as a falsifiable design, not a confident story.
+
+- Every task must map to discovered evidence, user-approved requirements, or an explicit assumption.
+- Do not remove or skip tasks because the implementation looks easy.
+- If a change request follows completed work, preserve completed work and add revision tasks instead of rewriting history.
+- If a risk cannot be tested or inspected, record the unresolved decision before execution.
+
 ## Doubt Checkpoint
 
 Before finishing planning, doubt the plan shape:

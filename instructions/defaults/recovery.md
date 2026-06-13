@@ -44,6 +44,15 @@ After recovery resume:
 4. Reload active `task.md`, `tdd.md`, summaries, and focused source files only when needed after resuming execution.
 5. Continue only after the git recovery gate is clear.
 
+## Evidence Discipline
+
+Treat recovery as state reconstruction, not continuation of a remembered plan.
+
+- Do not trust chat memory, branch names, or previous summaries until persisted state and git state agree.
+- Do not mark recovery complete while conflicts, dirty state, or cleanup obligations remain unexplained.
+- If the next action is unclear, prefer one smallest state probe over narrative reasoning.
+- If the probe contradicts the expected state, stop and use recovery guidance instead of forcing the old path.
+
 ## auto-compact
 
 Call `planner_status` immediately. Do not assume recovery was completed. Reload persisted state, rerun recovery inspection, and wait for explicit user approval before destructive repair.

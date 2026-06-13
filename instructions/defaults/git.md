@@ -62,6 +62,15 @@ While a planner plan is active, the persisted worktree path reported by `planner
 - Never edit the original checkout while a planner worktree is active. All project changes belong in the persisted worktree path.
 - Do not reset, force checkout, abort, delete, or discard changes without explicit user approval through recovery flow.
 
+## Evidence Discipline
+
+Treat git state as observed data, not memory.
+
+- Do not assume the current branch, worktree, dirty state, or merge target. Read it from planner wrappers/status.
+- If branch state differs from the expected planner state, stop and enter recovery instead of fixing with raw git.
+- Do not claim a commit or merge contains specific work unless the diff/task artifacts support it.
+- After every git wrapper, call `planner_status` before deciding the next action.
+
 ## manual-compact
 
 Preserve current branch, HEAD, dirty/conflict status, managed branch registry, merge targets, cleanup obligations, and exact next wrapper. After compaction, call `planner_status`.

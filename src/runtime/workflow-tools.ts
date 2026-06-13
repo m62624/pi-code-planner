@@ -261,7 +261,14 @@ async function validateWorkflowExit(input: {
 			validateDiscoveryContractRouting({
 				state,
 				settingsEnabled: settings.effective.contracts.enabled,
-			}) ?? validateCleanWorktree(input.orchestrator.preflight.gitReality)
+			}) ??
+			(await requireArtifactIncludes(
+				input.fs,
+				input.orchestrator.preflight.context.planPaths.discoveryMd,
+				"## Verification Protocol",
+				"discovery.md must include ## Verification Protocol with exact test/lint/build/format commands, working directory, flags, or explicit unknowns to ask in discovery/write_questions.",
+			)) ??
+			validateCleanWorktree(input.orchestrator.preflight.gitReality)
 		);
 	}
 	if (state.stage === "discovery" && state.step === "write_questions") {

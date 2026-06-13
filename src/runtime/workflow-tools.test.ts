@@ -200,6 +200,95 @@ describe("workflowToolTransition", () => {
 
 		expect(unread.result.status).toBe("blocked");
 		expect(unread.text).toContain("planner_contract_read");
+
+		await initializePlanState(fs, planPaths, {
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "discovery",
+			step: "scan_project_structure",
+			stepStatus: "running",
+			currentBranch: "plan/plan-a",
+			contracts: {
+				...createInitialPlanState({
+					baseBranch: "main",
+					planBranch: "plan/plan-a",
+					worktreePath,
+				}).contracts,
+				scanComplete: true,
+				discoveredPaths: [
+					`${worktreePath}/AGENTS.md`,
+					`${worktreePath}/src/AGENTS.md`,
+				],
+				activeChains: [
+					{
+						targetPath: `${worktreePath}/src/runtime/status.ts`,
+						chain: [
+							`${worktreePath}/AGENTS.md`,
+							`${worktreePath}/src/AGENTS.md`,
+						],
+						reason: "discovery",
+						updatedAt: 1000,
+					},
+				],
+				summaries: [
+					{
+						path: `${worktreePath}/AGENTS.md`,
+						purpose: "Root.",
+						childIndex: [],
+						stableContracts: [],
+						readFirst: [],
+						doNotTouchUnless: [],
+						domainDetails: [],
+						diagnostics: [],
+						updatedAt: 1000,
+					},
+					{
+						path: `${worktreePath}/src/AGENTS.md`,
+						purpose: "Source.",
+						childIndex: [],
+						stableContracts: [],
+						readFirst: [],
+						doNotTouchUnless: [],
+						domainDetails: [],
+						diagnostics: [],
+						updatedAt: 1000,
+					},
+				],
+			},
+		});
+		const missingProtocol = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(missingProtocol.result.status).toBe("blocked");
+		expect(missingProtocol.text).toContain("Verification Protocol");
+
+		await fs.writeTextAtomic(
+			planPaths.discoveryMd,
+			[
+				"# Discovery",
+				"",
+				"## Verification Protocol",
+				"- working directory: worktree root",
+				"- test: npm test",
+				"- build: npm run build",
+				"- lint: npm run check",
+			].join("\n"),
+		);
+		const applied = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(applied.result.status).toBe("applied");
 	});
 
 	it("marks existing tasks done when returning from a change request to planning", async () => {
@@ -349,6 +438,12 @@ describe("workflowToolTransition", () => {
 				"",
 				"No actionable concern found.",
 				"",
+				"## Verification Evidence",
+				"",
+				"- command: npm test",
+				"  status: passed",
+				"  evidence: Unit tests passed.",
+				"",
 				"## Possible Errors",
 				"",
 				"### 1. resume-selection-bug",
@@ -424,6 +519,12 @@ describe("workflowToolTransition", () => {
 				"## Summary",
 				"",
 				"One proven bug remains.",
+				"",
+				"## Verification Evidence",
+				"",
+				"- command: npm test",
+				"  status: failed",
+				"  evidence: Storage root test failed.",
 				"",
 				"## Possible Errors",
 				"",
@@ -518,6 +619,12 @@ describe("workflowToolTransition", () => {
 				"## Summary",
 				"",
 				"Placeholder concern dismissed.",
+				"",
+				"## Verification Evidence",
+				"",
+				"- command: npm test",
+				"  status: passed",
+				"  evidence: Unit tests passed.",
 				"",
 				"## Possible Errors",
 				"",

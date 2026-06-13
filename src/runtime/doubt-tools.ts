@@ -11,6 +11,7 @@ import {
 	type PlannerDoubtReviewToolName,
 	parseDoubtReviewParams,
 	validateDoubtReview,
+	validateDoubtReviewAgainstVerificationProtocol,
 } from "./doubt-review";
 import {
 	checkPlannerOrchestratorToolAllowed,
@@ -76,6 +77,13 @@ export async function executePlannerDoubtTool(input: {
 		const validation = validateDoubtReview(review);
 		if (!validation.valid) {
 			throw new TypeError(validation.reason ?? "Doubt Review is invalid.");
+		}
+		const protocolValidation = validateDoubtReviewAgainstVerificationProtocol(
+			review,
+			await input.fs.readText(planPaths.discoveryMd),
+		);
+		if (protocolValidation) {
+			throw new TypeError(protocolValidation);
 		}
 		const content = formatDoubtReviewMarkdown(review);
 		await input.fs.writeTextAtomic(planPaths.verifyMd, content);

@@ -14,8 +14,9 @@ Become familiar with the project before planning. Keep this stage cheap for a lo
    - Inspect the project tree with read-only shell commands after the contract map is started.
    - Read only the manifests, entrypoints, tests, configuration, and source files needed to understand the requested work after contract guidance is considered.
    - Write a concise `discovery.md`: architecture, relevant paths, commands, conventions, risks, and uncertainty.
-   - Record exact test, lint, build, and format commands when they exist. Include required working directory and important flags.
-   - If commands are not discoverable, record that uncertainty explicitly.
+   - `discovery.md` must include a `## Verification Protocol` section before this step can finish.
+   - In `## Verification Protocol`, record exact test, lint, build, and format commands when they exist. Include required working directory and important flags.
+   - If commands are not discoverable, record `unknown` entries in `## Verification Protocol` and ask the missing setup questions in `discovery/write_questions`.
    - If no useful AGENTS.md exists and discovery evidence proves meaningful architectural zones, create initial root/domain contracts through `planner_contract_upsert`. Do not create one in every folder.
    - If `planner_contract_upsert` changes AGENTS.md files during discovery, commit those changes through `planner_git_commit` before finishing `scan_project_structure`.
 2. `write_questions`
@@ -43,7 +44,16 @@ Become familiar with the project before planning. Keep this stage cheap for a lo
 
 ## Exit Condition
 
-Discovery is complete when `discovery.md` contains enough context for planning, required user questions are answered or explicitly absent, and the configured discovery compact boundary finishes.
+Discovery is complete when `discovery.md` contains enough context for planning, includes `## Verification Protocol`, required user questions are answered or explicitly absent, and the configured discovery compact boundary finishes.
+
+## Evidence Discipline
+
+Treat every discovery conclusion as suspect until it has a path, command, contract, or source citation.
+
+- Do not infer behavior from filenames, comments, package names, or previous chat memory alone.
+- If AGENTS.md or imported context files route to a domain, read the routed chain before broad source inspection.
+- If verification commands are unknown, say unknown and ask or record the gap; do not invent a test/lint/build command.
+- If a project is empty or lacks conventions, ask how verification should work before planning implementation.
 
 ## Doubt Checkpoint
 
