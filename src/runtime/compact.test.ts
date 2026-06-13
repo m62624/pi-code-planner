@@ -108,7 +108,7 @@ describe("planner compact runtime", () => {
 		]);
 	});
 
-	it("starts post-compact instructions immediately only when Pi is idle and the queue is empty", () => {
+	it("queues post-compact instructions even when Pi reports idle", () => {
 		const calls: Array<{
 			message: string;
 			options?: { streamingBehavior: "followUp" };
@@ -123,9 +123,12 @@ describe("planner compact runtime", () => {
 					calls.push({ message, options });
 				},
 			}),
-		).toBe("immediate");
+		).toBe("followUp");
 		expect(calls).toEqual([
-			{ message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status." },
+			{
+				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
+				options: { streamingBehavior: "followUp" },
+			},
 		]);
 	});
 
