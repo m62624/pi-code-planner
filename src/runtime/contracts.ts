@@ -431,6 +431,15 @@ async function contractCheck(input: {
 	const domainImpact = requiredString(params, "domainImpact");
 	const evidence = stringArray(params.evidence, "evidence", true);
 	const recommendedPath = optionalString(params.recommendedPath);
+	const initialContractReason = initialWritableContractRequired({
+		state,
+		action,
+		changedFiles,
+		evidence,
+	});
+	if (initialContractReason) {
+		throw new Error(initialContractReason);
+	}
 	const pendingUpsert: PlannerContractPendingUpsert | null =
 		action === "no_update"
 			? null
@@ -1203,6 +1212,61 @@ function defaultContractPathForChangedFiles(input: {
 	const target = resolveTargetPath(input.root, first);
 	const dir = looksLikeFilePath(target) ? dirname(target) : target;
 	return join(dir, "AGENTS.md");
+}
+
+export function initialWritableContractRequired(input: {
+	state: PlanStateRecord;
+	action: PlannerContractCheckAction;
+	changedFiles: readonly string[];
+	evidence: readonly string[];
+}): string | null {
+	if (input.action !== "no_update") {
+		return null;
+	}
+	if (hasWritableContractMemory(input.state)) {
+		return null;
+	}
+	const projectFiles = input.changedFiles.filter(
+		isContractRelevantProjectChange,
+	);
+	if (projectFiles.length === 0) {
+		return null;
+	}
+	const evidenceText = input.evidence.join("\n").toLowerCase();
+	const missingAgentsUsedAsExcuse =
+		evidenceText.includes("no agents.md") ||
+		evidenceText.includes("no existing contracts") ||
+		evidenceText.includes("no writable contract");
+	return [
+		"Cannot record planner_contract_check as no_update for project changes when no writable AGENTS.md contract exists yet.",
+		`Project changed files: ${projectFiles.join(", ")}.`,
+		missingAgentsUsedAsExcuse
+			? "Absence of AGENTS.md is not evidence for no_update; it is evidence to create the initial root/domain contract."
+			: "Create the initial meaningful root/domain AGENTS.md contract for future planner runs, or change the check action to create_new with a recommendedPath.",
+		"Call planner_contract_check again with action=create_new, then call planner_contract_upsert.",
+	].join("\n");
+}
+
+function hasWritableContractMemory(state: PlanStateRecord): boolean {
+	return [
+		...state.contracts.discoveredPaths,
+		...state.contracts.touchedFiles.map((item) => item.path),
+	].some((path) => isWritableContractPath(path));
+}
+
+function isContractRelevantProjectChange(path: string): boolean {
+	const normalizedPath = path.replace(/\\/g, "/").toLowerCase();
+	if (normalizedPath.endsWith("/agents.md") || normalizedPath === "agents.md") {
+		return false;
+	}
+	if (
+		normalizedPath.endsWith(".md") ||
+		normalizedPath.endsWith(".mdx") ||
+		normalizedPath.endsWith(".txt")
+	) {
+		return false;
+	}
+	return true;
 }
 
 function defaultParentForContract(root: string, path: string): string | null {

@@ -201,12 +201,19 @@ export const PLANNER_STAGE_BEHAVIOR = {
 
 	scan_project_structure: behavior("discovery", "scan_project_structure", {
 		projectAccess: "read_only",
-		actions: ["inspect_project", "write_artifacts"],
+		actions: ["inspect_project", "write_artifacts", "planner_git"],
 		requiredArtifacts: ["goal.md"],
 		updatedArtifacts: ["discovery.md"],
 		requiredGates: ["plan_worktree_exists"],
-		expectedTools: ["planner_status"],
-		commitPolicy: "forbidden",
+		expectedTools: [
+			"planner_status",
+			"planner_contract_scan",
+			"planner_contract_route",
+			"planner_contract_read",
+			"planner_contract_upsert",
+			"planner_git_commit",
+		],
+		commitPolicy: "required_if_dirty",
 		compactPolicy: "not_allowed",
 	}),
 	write_questions: behavior("discovery", "write_questions", {
@@ -218,6 +225,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		expectedTools: [
 			"planner_questions_submit",
 			"planner_questions_resolve",
+			"planner_contract_scan",
 			"planner_contract_route",
 			"planner_contract_read",
 		],

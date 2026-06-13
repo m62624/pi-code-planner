@@ -6,6 +6,7 @@ import { createInitialPlanState } from "../storage/schema";
 import {
 	formatPlannerContractBlock,
 	formatPlannerContractsStatus,
+	initialWritableContractRequired,
 	parsePlannerContractMarkdown,
 	upsertPlannerContractBlock,
 } from "./contracts";
@@ -251,5 +252,63 @@ describe("planner local contract status", () => {
 		expect(lines.join("\n")).toContain(
 			"/repo/app/src/AGENTS.md (summary not loaded; call planner_contract_read)",
 		);
+	});
+});
+
+describe("planner local contract check enforcement", () => {
+	it("requires an initial AGENTS.md contract after production source changes", () => {
+		const state = createInitialPlanState({
+			baseBranch: "main",
+			planBranch: "plan/a",
+			worktreePath: "/repo/app",
+		});
+
+		const reason = initialWritableContractRequired({
+			state,
+			action: "no_update",
+			changedFiles: ["src/vault/crypto.ts", "src/vault/crypto.test.ts"],
+			evidence: ["No AGENTS.md files exist in the project yet."],
+		});
+
+		expect(reason).toContain(
+			"Cannot record planner_contract_check as no_update",
+		);
+		expect(reason).toContain("src/vault/crypto.ts");
+		expect(reason).toContain("action=create_new");
+	});
+
+	it("allows no_update when a writable AGENTS.md contract is already known", () => {
+		const state = createInitialPlanState({
+			baseBranch: "main",
+			planBranch: "plan/a",
+			worktreePath: "/repo/app",
+		});
+		state.contracts.discoveredPaths = ["/repo/app/AGENTS.md"];
+
+		expect(
+			initialWritableContractRequired({
+				state,
+				action: "no_update",
+				changedFiles: ["src/vault/crypto.ts"],
+				evidence: ["Existing AGENTS.md contract does not need changes."],
+			}),
+		).toBeNull();
+	});
+
+	it("requires an initial contract for tests-only project changes too", () => {
+		const state = createInitialPlanState({
+			baseBranch: "main",
+			planBranch: "plan/a",
+			worktreePath: "/repo/app",
+		});
+
+		const reason = initialWritableContractRequired({
+			state,
+			action: "no_update",
+			changedFiles: ["src/vault/crypto.test.ts"],
+			evidence: ["Only tests changed."],
+		});
+
+		expect(reason).toContain("src/vault/crypto.test.ts");
 	});
 });

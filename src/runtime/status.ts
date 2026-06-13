@@ -191,7 +191,7 @@ export const PLANNER_STEP_RULES = {
 			"Inspect the project tree with read-only shell commands only after the contract map is started.",
 			"Read only the source files needed to understand architecture, commands, risks, and the requested change after contract guidance is considered.",
 			"Write concise findings to discovery.md, including exact test/lint/build commands when discoverable.",
-			"If no AGENTS.md exists, use discovery evidence to propose initial root/domain AGENTS.md only for meaningful architectural zones, not every folder.",
+			"If no AGENTS.md exists, create initial root/domain AGENTS.md only for meaningful architectural zones once discovery evidence proves the domains. Do not create one in every folder.",
 			"If planner_contract_upsert changes AGENTS.md files, commit them through planner_git_commit before finishing discovery/scan_project_structure.",
 			"If commands are missing or the project is empty, record that uncertainty for discovery/write_questions.",
 		],
@@ -380,6 +380,7 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Run focused checks from task/tdd/project instructions and record failure evidence.",
 			"Add ## Pre-Implementation Proof Contract to tdd.md with failingSignal, productionPath, successSignal, and outOfScopeFiles.",
+			"If the first red signal is only module-not-found/import/file missing, treat it as bootstrap only; ensure the test contains real behavior assertions before implementation is accepted.",
 		],
 		allowedNow: ["Run checks and update test summary artifacts."],
 		forbiddenNow: [
@@ -394,6 +395,7 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Implement only the behavior required by task.md and tdd.md.",
 			"After green focused checks, add ## Post-Implementation Counterexample Review to tdd.md.",
+			"Reject placeholder/stub/TODO-only/hardcoded implementations unless the task explicitly asked for a placeholder and tests prove that contract.",
 			"Run focused checks, update tdd.md with the implementation/check result, then commit through planner_git_commit when project files changed.",
 			"If a repeated failure or non-obvious verified lesson was resolved, call planner_skill_create to save the reusable method for future planner sessions.",
 		],
@@ -414,6 +416,7 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Review the task diff, changed files, task acceptance criteria, and active AGENTS.md contract chain.",
 			"Call planner_contract_check with outcomeSummary, domainImpact, changedFiles, evidence, and action no_update/upsert_existing/create_new.",
+			"If project files changed and no writable AGENTS.md exists yet, no_update is invalid. Use create_new and write the initial meaningful root/domain AGENTS.md contract.",
 			"If planner_contract_check reports an update is needed, call planner_contract_upsert for the nearest meaningful AGENTS.md domain and commit that change if the worktree becomes dirty.",
 			"Use AGENTS.md as repository-owned routing memory. Add durable domain rules, parent backlinks, child index entries, read-first hints, and domain details only when they help future agents avoid reading irrelevant code.",
 			"Do not add overly specific task trivia to AGENTS.md. Record local one-off details in tdd.md instead.",

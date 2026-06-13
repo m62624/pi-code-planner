@@ -39,6 +39,8 @@ Use strict tests-first development for every execution task. Production implemen
 - Use a contract test when the critical behavior is an interface, schema, command construction, or integration boundary.
 - If a test cannot run locally, document why and still add the strongest deterministic mock or contract test available.
 - A test that passes before implementation without proving the missing behavior is not sufficient.
+- A module-not-found, import error, or file-does-not-exist failure is only a harness/bootstrap signal. It is not a complete behavior proof unless the test already contains assertions for the task behavior and fails again or passes for that behavior after implementation.
+- Placeholder, stub, fake, TODO-only, or hardcoded implementations do not satisfy green TDD. If a minimal implementation is intentionally narrow, the tests must prove the accepted behavior and the counterexample review must name what remains out of scope.
 
 ## Editing Rules
 
@@ -132,6 +134,7 @@ For every behavioral task, choose only the cases that falsify a real acceptance 
 ### 1. Test Harness Errors
 - **Compilation Failures**: If the test code fails to compile, fix compiler/lint issues before focusing on the behavior test.
 - **No Failing Signal**: If the test passes before you write the production code, the test is invalid or testing the wrong code path.
+- **Bootstrap-Only Failure**: If the only red signal is missing module/import/file, create the module, then rerun the focused test and verify behavior assertions fail or pass for the real task. Do not treat “file now exists” as task completion.
 - **Broken Mocks**: If the test hangs, check if your mocks are waiting for network/database calls that aren't mocked.
 
 ### 2. Algorithmic Pivot Flow
