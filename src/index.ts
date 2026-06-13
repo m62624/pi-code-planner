@@ -165,6 +165,7 @@ import { resolveProjectStoragePaths } from "./storage/project-resolver";
 import {
 	ensureProjectRecord,
 	readProjectRecordIfExists,
+	setActivePlan,
 } from "./storage/project-store";
 import { PLANNER_STAGE_VALUES, PLANNER_STEP_VALUES } from "./storage/schema";
 import { readPlanStateIfExists, updatePlanState } from "./storage/state-store";
@@ -1435,6 +1436,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					);
 					return;
 				}
+				await setActivePlan(fs, projectPaths, null);
 				resetPlanActiveCache(pi);
 				await ctx.switchSession(targetSessionFile.sessionFile, {
 					withSession: async (replacementCtx) => {

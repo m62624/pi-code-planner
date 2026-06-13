@@ -79,7 +79,7 @@ These are Pi slash commands for the user. The model has separate internal tools.
 | `/planner-create` | Open a multiline request editor and create a new plan. |
 | `/planner-helper` | Show current effective settings, defaults, sources, and planner behavior. Read-only. |
 | `/planner-skills` | Search, view, and delete planner-generated skills from the shared planner skill library. |
-| `/planner-exit` | Return to the original project chat without finishing or deleting the active plan. |
+| `/planner-exit` | Return to the original project chat and clear the active-plan marker without finishing or deleting the plan. |
 | `/planner-resume` | Open a TUI picker for plans in the current project. |
 | `/planner-resume <plan-id>` | Activate a plan directly and resume its most recent non-empty worktree chat. |
 | `/planner-rename` | Open a TUI picker, then rename the selected plan title. |
@@ -95,6 +95,8 @@ The agent also has a read-only `planner_about` tool with the same settings/about
 Each plan has its own worktree, Git branch, state file, and Pi JSONL history.
 
 Use `/planner-resume` for planner work. It updates the active plan, reopens the selected worktree session, restores the worktree CWD, and resumes its latest non-empty JSONL chat. It does not create an extra Git checkout: the worktree is already attached to the persisted planner branch.
+
+`/planner-exit` closes the active planner handoff for the current Pi session. A plan whose last persisted step is still `running` can be resumed, deleted, or switched away from later as long as its worktree is clean and it is not in recovery/user-decision state.
 
 The resume picker shows the plan title first and the model-written short description on the next line.
 

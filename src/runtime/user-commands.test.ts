@@ -317,6 +317,40 @@ describe("planner user commands", () => {
 		});
 	});
 
+	it("resumes another plan when stale active state is still marked running", async () => {
+		const { fs, git, projectPaths } = await createProjectFixture({
+			activePlanId: "plan-a",
+		});
+		await initializePlanState(
+			fs,
+			createPlanStoragePaths(projectPaths, "plan-a"),
+			{
+				...createInitialPlanState({
+					baseBranch: "main",
+					planBranch: "plan/plan-a",
+					worktreePath: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
+				}),
+				stage: "execution",
+				step: "implement_task",
+				stepStatus: "running",
+				currentBranch: "plan/plan-a",
+			},
+		);
+
+		const result = await executePlannerUserCommand({
+			fs,
+			git,
+			projectPaths,
+			commandName: "planner_resume",
+			params: { planId: "plan-b" },
+		});
+
+		expect(result.status).toBe("applied");
+		await expect(readProjectRecord(fs, projectPaths)).resolves.toMatchObject({
+			activePlanId: "plan-b",
+		});
+	});
+
 	it("returns worktreePath when resuming the already active plan", async () => {
 		const { fs, git, projectPaths } = await createProjectFixture({
 			activePlanId: "plan-a",
