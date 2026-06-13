@@ -401,12 +401,6 @@ async function assertPlanSwitchable(input: {
 	planId: string;
 	state: PlanStateRecord;
 }): Promise<{ allow: true } | { allow: false; reason: string }> {
-	if (input.state.stepStatus === "running") {
-		return {
-			allow: false,
-			reason: `Planner plan is running and cannot be resumed/deleted: ${input.planId}.`,
-		};
-	}
 	if (input.state.requiresUserDecision || input.state.broken) {
 		return {
 			allow: false,
