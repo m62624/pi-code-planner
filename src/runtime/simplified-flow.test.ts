@@ -4,6 +4,10 @@ import { getInstructionKeysForPlannerStep } from "../instructions/routing";
 import { createInitialPlanState, PLANNER_STAGE_STEPS } from "../storage/schema";
 import { syncStateAfterPlannerGitMutation } from "./git-state-sync";
 import { evaluatePlannerRuntimeReality } from "./planner-runtime";
+import {
+	checkPlannerStageBehaviorWrapperTool,
+	getPlannerStageStepBehavior,
+} from "./stage-behavior";
 import { finishPlannerStep } from "./state-machine";
 
 describe("simplified local-model workflow", () => {
@@ -72,6 +76,26 @@ describe("simplified local-model workflow", () => {
 				step: "write_tests",
 			}),
 		).toEqual(["execution", "tdd", "git-commit"]);
+	});
+
+	it("keeps stage behavior aligned with discovery contract tools", () => {
+		const behavior = getPlannerStageStepBehavior({
+			stage: "discovery",
+			step: "scan_project_structure",
+		});
+
+		for (const tool of [
+			"planner_contract_scan",
+			"planner_contract_route",
+			"planner_contract_read",
+			"planner_contract_upsert",
+			"planner_git_commit",
+		] as const) {
+			expect(
+				checkPlannerStageBehaviorWrapperTool({ behavior, tool }),
+				tool,
+			).toMatchObject({ allow: true });
+		}
 	});
 });
 

@@ -152,6 +152,37 @@ describe("planner doubt review tool", () => {
 		expect(result.status).toBe("blocked");
 		expect(result.text).toContain("riskCategory");
 	});
+
+	it("blocks closing placeholder or superficial findings as not_a_bug", async () => {
+		const setup = await createDoubtSetup();
+
+		const result = await executePlannerDoubtTool({
+			...setup,
+			toolName: "planner_doubt_review",
+			params: {
+				summary: "A placeholder concern was dismissed without proof.",
+				possibleErrors: [
+					{
+						id: "placeholder-implementation",
+						riskCategory: "requirement_mismatch",
+						status: "not_a_bug",
+						proofLevel: "code_path_proven",
+						claim:
+							"Implementation may still be a placeholder for the actual vault behavior.",
+						specReference: "goal.md accepted behavior",
+						codePath: "src/vault/index.ts",
+						verification: "Only checked that files exist.",
+						evidence: ["Placeholder-looking logic remains."],
+						counterEvidence: [],
+						nextAction: "no_action",
+					},
+				],
+			},
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("must be proven_bug or needs_probe");
+	});
 });
 
 async function createDoubtSetup() {

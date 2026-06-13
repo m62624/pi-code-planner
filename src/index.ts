@@ -112,10 +112,13 @@ import {
 	REFACTOR_REVIEW_CATEGORY_STATUSES,
 } from "./runtime/refactor-tools";
 import {
+	deletePlannerSkill,
 	executePlannerSkillTool,
+	listPlannerSkillInventory,
 	listPlannerSkillResourcePaths,
 	PLANNER_SKILL_SOURCE_KINDS,
 	PLANNER_SKILL_TOOL_NAMES,
+	type PlannerSkillSummary,
 } from "./runtime/skill-library";
 import {
 	buildPlannerStuckCompactInstructions,
@@ -1106,6 +1109,102 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				);
 			} catch (error) {
 				ctx.ui.notify(`Planner helper failed: ${errorMessage(error)}`, "error");
+			}
+		},
+	});
+
+	pi.registerCommand("planner-skills", {
+		description:
+			"Search, view, and delete planner-generated skills saved by pi-code-planner.",
+		handler: async (_args, ctx) => {
+			await ctx.waitForIdle();
+			const fs = createNodeFs();
+			try {
+				const projectPaths = await resolveProjectStoragePaths({
+					fs,
+					agentDir: getAgentDir(),
+					cwd: ctx.cwd,
+				});
+				const inventory = await listPlannerSkillInventory({
+					fs,
+					projectPaths,
+				});
+				if (inventory.length === 0) {
+					ctx.ui.notify("No planner-generated skills found.", "info");
+					return;
+				}
+
+				const query = await ctx.ui.input(
+					"Search planner skills",
+					"Type keywords or leave empty",
+				);
+				if (query === undefined) {
+					ctx.ui.notify("Planner skills cancelled.", "info");
+					return;
+				}
+				const matches = filterPlannerSkillInventory(inventory, query.trim());
+				if (matches.length === 0) {
+					ctx.ui.notify("No planner skills matched that search.", "info");
+					return;
+				}
+
+				const labels = matches.map(plannerSkillOptionLabel);
+				const selectedLabel = await ctx.ui.select(
+					`Planner skills (${matches.length})`,
+					labels,
+				);
+				if (!selectedLabel) {
+					ctx.ui.notify("Planner skills cancelled.", "info");
+					return;
+				}
+				const selected = matches[labels.indexOf(selectedLabel)];
+				if (!selected) {
+					ctx.ui.notify("Planner skill selection failed.", "error");
+					return;
+				}
+
+				const viewLabel = "View details";
+				const deleteLabel = "Delete skill";
+				const action = await ctx.ui.select("Planner skill action", [
+					viewLabel,
+					deleteLabel,
+				]);
+				if (!action) {
+					ctx.ui.notify("Planner skills cancelled.", "info");
+					return;
+				}
+				if (action === viewLabel) {
+					pi.sendMessage(
+						{
+							customType: "planner-skills",
+							content: buildPlannerSkillDetailsMarkdown(selected),
+							display: true,
+						},
+						{ triggerTurn: false } as never,
+					);
+					return;
+				}
+
+				const confirmed = await ctx.ui.confirm(
+					"Delete planner skill?",
+					`Delete "${selected.name}" from the planner skill library? This removes its SKILL.md and index entry. Future planner sessions will not load it.`,
+				);
+				if (!confirmed) {
+					ctx.ui.notify("Planner skill delete cancelled.", "info");
+					return;
+				}
+				const deleted = await deletePlannerSkill({
+					fs,
+					projectPaths,
+					name: selected.name,
+				});
+				if (!deleted) {
+					ctx.ui.notify("Planner skill no longer exists.", "warning");
+					return;
+				}
+				ctx.ui.notify(`Deleted planner skill: ${deleted.name}`, "info");
+			} catch (error) {
+				ctx.ui.notify(`Planner skills failed: ${errorMessage(error)}`, "error");
 			}
 		},
 	});
@@ -2875,6 +2974,59 @@ async function readPlannerBuiltinGuardState(
 			planState: null,
 		};
 	}
+}
+
+function filterPlannerSkillInventory(
+	skills: readonly PlannerSkillSummary[],
+	query: string,
+): PlannerSkillSummary[] {
+	if (!query) {
+		return [...skills];
+	}
+	const needles = query.toLowerCase().split(/\s+/).filter(Boolean);
+	return skills.filter((skill) => {
+		const haystack = [
+			skill.name,
+			skill.description,
+			skill.sourceKind,
+			skill.skillPath,
+			...skill.tags,
+		]
+			.join("\n")
+			.toLowerCase();
+		return needles.every((needle) => haystack.includes(needle));
+	});
+}
+
+function plannerSkillOptionLabel(skill: PlannerSkillSummary): string {
+	const tags = skill.tags.length > 0 ? skill.tags.join(", ") : "no tags";
+	return [
+		`${skill.name} [${skill.sourceKind}]`,
+		`  ${skill.description}`,
+		`  tags: ${tags}`,
+	].join("\n");
+}
+
+function buildPlannerSkillDetailsMarkdown(skill: PlannerSkillSummary): string {
+	const tags =
+		skill.tags.length > 0
+			? skill.tags.map((tag) => `\`${tag}\``).join(", ")
+			: "(none)";
+	return [
+		"# Planner Skill",
+		"",
+		`- name: \`${skill.name}\``,
+		`- sourceKind: \`${skill.sourceKind}\``,
+		`- tags: ${tags}`,
+		`- updatedAt: ${new Date(skill.updatedAt).toISOString()}`,
+		`- skillPath: \`${skill.skillPath}\``,
+		"",
+		"## Description",
+		"",
+		skill.description,
+		"",
+		"Use `/planner-skills` again to delete this skill if it is too narrow, stale, or noisy.",
+	].join("\n");
 }
 
 function errorMessage(error: unknown): string {

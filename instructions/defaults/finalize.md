@@ -10,25 +10,31 @@ Verify the complete plan branch as one integrated result, write a durable user-f
 	- Inspect planner git state and confirm that all required tasks were merged.
 	- Run project-level checks defined by project instructions and task evidence from the worktree path reported by `planner_status`.
 	- Record failures, residual risks, and any checks that cannot run locally.
-2. `doubt_review`
+2. `compact_before_doubt`
+	- Request planner-controlled compact after integrated checks and before doubt review.
+	- This deliberately clears live confidence from the previous implementation loop.
+	- After compaction, call `planner_complete_compact`, then `planner_status`, then continue from persisted artifacts only.
+3. `doubt_review`
 	- Before asking for user acceptance, deliberately doubt the completed result.
 	- Reread `goal.md`, `plan.md`, task artifacts, `verify.md`, and the final worktree diff.
+	- Treat chat memory from before `compact_before_doubt` as untrusted. Reconstruct the result from artifacts, git state, and focused file reads.
 	- Start with a `Possible Errors` list written in `metadata.doubtReviewLanguage`. These are suspicions, not bugs yet.
 	- Assign every possible error to one risk category: `requirement_mismatch`, `missing_test`, `boundary_case`, `integration_break`, `state_machine_error`, `persistence_error`, `recovery_error`, `wrong_file_scope`, `user_flow_regression`, or `cleanup_or_debug_leftover`.
 	- For each possible error, prove it, disprove it, or mark it `needs_probe`. Use `planner_doubt_review`; do not hand-write `verify.md`.
 	- A suspected issue may be called `proven_bug` only after a failing test/command, exact code-path proof, or exact spec contradiction.
 	- `needs_probe` findings cannot finish the step. Run the probe or downgrade with proof.
 	- If `proven_bug` findings exist, write them to `decisions.md`, then return to `planning/read_context` for revision tasks. Do not patch ad hoc in finalize.
-	- If a proven or disproven finding teaches a reusable workflow lesson, call `planner_skill_create` with `sourceKind=doubt_review`.
+	- If a finding mentions placeholder, stub, TODO-only, hardcoded behavior, superficial implementation, missing tests, or unresolved work, it cannot be closed as `not_a_bug` or `disproven`. It must be `proven_bug` or `needs_probe`.
+	- If a proven, disproven, or probed finding teaches a reusable workflow lesson, call `planner_skill_create` with `sourceKind=doubt_review` before leaving this step.
 	- If no proven bug or probe remains, continue to `write_final_summary`.
-3. `write_final_summary`
+4. `write_final_summary`
 	- Write `final_summary.md`.
 	- Use `metadata.humanLanguage` from `planner_status` unless the user explicitly requested another language.
 	- Include completed scope, changed files, checks, risks, output branch expectations, and unresolved limitations.
 	- If the whole plan produced a reusable verified lesson not already captured, call `planner_skill_create` with `sourceKind=final_summary`.
-4. `compact_finalize`
+5. `compact_finalize`
 	- Request planner-controlled compact preserving summary, verification, branch state, and risks.
-5. `enter_done`
+6. `enter_done`
 	- Advance to `done/present_result`.
 
 ## Restrictions
@@ -41,6 +47,7 @@ Verify the complete plan branch as one integrated result, write a durable user-f
 - If checks reveal missing implementation, record the issue and return through the controlled planning flow instead of patching ad hoc.
 - During `doubt_review`, assume there may still be bugs even if tests pass. Passing checks are evidence, not acceptance.
 - Do not call a finding a bug from suspicion alone. Suspicions without proof are `needs_probe`, not revision tasks.
+- Do not normalize away placeholders or shallow implementations. If a placeholder/surface-level implementation remains, return to planning with a proven finding or run a probe.
 
 ## Doubt Review Proof Rules
 
@@ -86,6 +93,8 @@ Do not reward yourself for finding many bugs. Reward exactness. False positives 
 
 Use `planner_skill_create` only for verified lessons that should improve future planner sessions. A skill is not a final summary. It must describe a reusable trigger and workflow, for example a Pi extension stale-ctx pattern, a recovery proof method, or a specific class of state-machine mistake.
 
+In doubt review, skill creation is expected when the audit exposed a reusable bug-finding method, a repeated false assumption, a missing-test pattern, a stale-context/compact hazard, or a planner harness mistake. Do not create skills for ordinary project facts or unverified suspicions.
+
 The skill body should be written in `metadata.skillLanguage`. The wrapper writes YAML frontmatter and stores the skill under the planner extension library. The new skill is loaded through Pi `resources_discover` on future planner session start, resume, or reload.
 
 ## Exit Condition
@@ -98,7 +107,7 @@ Preserve `final_summary.md`, project-level verification results, changed-file su
 
 ## auto-compact
 
-Call `planner_status` immediately. Restore the exact finalize step and reread `final_summary.md` if it already exists. Do not export or cleanup until explicit user acceptance is recorded.
+Call `planner_status` immediately. Restore the exact finalize step. If the step is `compact_before_doubt`, complete the compact before audit work. If the step is `doubt_review`, reread `goal.md`, `plan.md`, `discovery.md`, task artifacts, `verify.md`, AGENTS.md contracts, and focused source files before deciding. Do not export or cleanup until explicit user acceptance is recorded.
 
 ## Finalization & Verification Diagnostics
 

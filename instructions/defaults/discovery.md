@@ -16,7 +16,7 @@ Become familiar with the project before planning. Keep this stage cheap for a lo
    - Write a concise `discovery.md`: architecture, relevant paths, commands, conventions, risks, and uncertainty.
    - Record exact test, lint, build, and format commands when they exist. Include required working directory and important flags.
    - If commands are not discoverable, record that uncertainty explicitly.
-   - If no useful AGENTS.md exists, create or propose initial contracts only for meaningful architectural zones. Do not create one in every folder.
+   - If no useful AGENTS.md exists and discovery evidence proves meaningful architectural zones, create initial root/domain contracts through `planner_contract_upsert`. Do not create one in every folder.
    - If `planner_contract_upsert` changes AGENTS.md files during discovery, commit those changes through `planner_git_commit` before finishing `scan_project_structure`.
 2. `write_questions`
    - Call `planner_questions_submit` with evidence-based unresolved questions and explicit assumptions.
@@ -36,6 +36,7 @@ Become familiar with the project before planning. Keep this stage cheap for a lo
 - Do not read the whole repository by default.
 - Do not skip AGENTS.md routing when contract files exist. They are local architecture memory, not optional docs.
 - Do not create AGENTS.md for every directory. A contract belongs only where it prevents future agents from reading irrelevant code or breaking a durable rule.
+- Do not use the absence of AGENTS.md as evidence that no contract update is needed. For project file changes in a project with no writable AGENTS.md, create the initial meaningful contract.
 - Do not build or maintain a file-by-file JSONL symbol index.
 - Run project-scoped shell commands from the worktree path reported by `planner_status`.
 - Do not use raw git.

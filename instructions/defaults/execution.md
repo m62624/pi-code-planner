@@ -87,6 +87,8 @@ If doubt remains, run one focused probe or record the risk. Do not add broad tes
 
 When a task resolves a verified reusable lesson, use `planner_skill_create` to save it for future planner sessions. Good candidates are repeated failure patterns, non-obvious debug probes, state-machine mistakes, stale context issues, or exact workflow rules that prevented a real bug.
 
+Skill creation is expected, not optional, when the task required multiple attempts, recovered from a non-obvious tool/state/compact issue, fixed a mistake that could recur in other projects, or proved a reusable debugging/refactor method. Create the skill after the lesson is verified and before leaving the relevant step.
+
 Do not create a skill for ordinary implementation notes, task summaries, broad advice, or unproven suspicions. The skill body should be written in `metadata.skillLanguage`; the wrapper writes frontmatter and updates the planner skill index.
 
 ## Fundamental Rules

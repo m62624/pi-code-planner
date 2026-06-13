@@ -21,7 +21,7 @@ KISS does not mean avoiding advanced language features. Traits, interfaces, gene
 6. Run focused tests from the worktree path reported by `planner_status` after each meaningful refactor group.
 7. Commit through planner wrappers if files changed.
 8. Update task artifacts when the refactor changes relevant implementation details.
-9. If the review proves a reusable refactor/debugging lesson, call `planner_skill_create` with `sourceKind=refactor`.
+9. If the review proves a reusable refactor/debugging lesson, repeated mistake, stale-context pattern, or category-specific audit method, call `planner_skill_create` with `sourceKind=refactor` before leaving this step.
 10. Commit the refactor if project files changed.
 
 ## Restrictions

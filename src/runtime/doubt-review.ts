@@ -54,6 +54,19 @@ const DISPROVEN_PROOF_LEVELS = new Set<DoubtProofLevel>([
 	"disproven_by_code",
 ]);
 
+const BLOCKING_DOUBT_PATTERNS = [
+	/\bplaceholder\b/i,
+	/\bstub\b/i,
+	/\bfake\b/i,
+	/\btodo[-\s]?only\b/i,
+	/\bhardcoded\b/i,
+	/\bsurface[-\s]?level\b/i,
+	/\bsuperficial\b/i,
+	/\bunresolved\s+(requirement|task|work|issue)\b/i,
+	/\bmissing\s+(task|implementation|behavior|test|coverage)\b/i,
+	/\bnot\s+implemented\b/i,
+];
+
 export interface DoubtFinding {
 	id: string;
 	riskCategory: DoubtRiskCategory;
@@ -280,7 +293,27 @@ function validateFindingStatus(finding: DoubtFinding): DoubtReviewValidation {
 			`Finding ${finding.id} must include evidence explaining why it is not a bug.`,
 		);
 	}
+	if (
+		finding.status !== "proven_bug" &&
+		finding.status !== "needs_probe" &&
+		mentionsBlockingDoubt(finding)
+	) {
+		return invalid(
+			`Finding ${finding.id} mentions placeholder/stub/superficial/missing or unresolved work. It must be proven_bug or needs_probe; do not close it as ${finding.status}.`,
+		);
+	}
 	return { valid: true, reason: null, provenBugCount: 0, needsProbeCount: 0 };
+}
+
+function mentionsBlockingDoubt(finding: DoubtFinding): boolean {
+	const text = [
+		finding.claim,
+		finding.specReference,
+		finding.codePath,
+		finding.verification,
+		...finding.evidence,
+	].join("\n");
+	return BLOCKING_DOUBT_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 function parseFinding(value: Record<string, unknown>): DoubtFinding {

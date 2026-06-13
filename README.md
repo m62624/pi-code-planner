@@ -78,6 +78,7 @@ These are Pi slash commands for the user. The model has separate internal tools.
 | --- | --- |
 | `/planner-create` | Open a multiline request editor and create a new plan. |
 | `/planner-helper` | Show current effective settings, defaults, sources, and planner behavior. Read-only. |
+| `/planner-skills` | Search, view, and delete planner-generated skills from the shared planner skill library. |
 | `/planner-exit` | Return to the original project chat without finishing or deleting the active plan. |
 | `/planner-resume` | Open a TUI picker for plans in the current project. |
 | `/planner-resume <plan-id>` | Activate a plan directly and resume its most recent non-empty worktree chat. |
@@ -205,6 +206,8 @@ Managed contract blocks are validated and written only through planner tools:
 
 Existing AGENTS.md files are the writable canonical planner contract format. CLAUDE.md, GEMINI.md, `.cursorrules`, WARP.md, AIDER.md, COPILOT.md, and similar discovered context files are read-only imports. They are still read even without the managed block, but durable planner memory should be distilled into the nearest AGENTS.md through `planner_contract_upsert`. The parser reports diagnostics, and planner updates preserve non-planner AGENTS.md content by replacing only the managed block.
 
+Every AGENTS.md file created or updated through `planner_contract_upsert` is tracked in the active plan's persisted state. The planner records `contracts.touchedFiles` in `state.json`, mirrors it to `contracts/manifest.json`, and stores a baseline copy under `contracts/baseline/` before changing any preexisting AGENTS.md. If `/planner-finish` uses `"remove"`, files created by that plan are deleted and preexisting files are restored from their baseline. This survives compact and planner resume because the tracking is stored in planner artifacts, not chat memory.
+
 How contracts affect the workflow:
 
 - `discovery`: call `planner_contract_scan` in batches, route to relevant AGENTS.md/read-only context chains, then read source files.
@@ -305,7 +308,7 @@ Metadata language settings affect human-facing generated text only. Tool names, 
 | `doubtReviewLanguage` | `humanLanguage` | Human-readable content inside `finalize/doubt_review`. The parser heading `Possible Errors` remains stable. |
 | `skillLanguage` | `humanLanguage` | Human-readable body text for planner-generated Pi skills. Skill names and YAML structure stay technical. |
 
-Planner may create Pi skills from verified reusable lessons during stuck/debug/refactor/doubt/finalize work. They are stored under `getAgentDir()/extensions/pi-code-planner/skills/` and exposed only to active planner sessions through Pi `resources_discover`. A skill created during a running session is available after a Pi `/reload`, `/planner-resume`, or the next planner session start. Current selection loads every `active` skill in `skills/index.json` with an existing `SKILL.md` unless `skills.maxActive` caps the list. They are future memory, not a replacement for the current stage instructions.
+Planner may create Pi skills from verified reusable lessons during stuck/debug/refactor/doubt/finalize work. They are stored under `getAgentDir()/extensions/pi-code-planner/skills/` and exposed only to active planner sessions through Pi `resources_discover`. A skill created during a running session is available after a Pi `/reload`, `/planner-resume`, or the next planner session start. Current selection loads every `active` skill in `skills/index.json` with an existing `SKILL.md` unless `skills.maxActive` caps the list. Use `/planner-skills` to search, inspect, or delete saved planner skills; the inventory command shows saved skills even when runtime exposure is disabled or capped. They are future memory, not a replacement for the current stage instructions.
 
 ### Runtime Timer
 

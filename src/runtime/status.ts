@@ -16,6 +16,10 @@ import {
 } from "./lifecycle";
 import { filterPlannerWrapperToolsForLifecycle } from "./orchestrator-gate";
 import type { PlannerPreflightResult } from "./preflight";
+import {
+	listActivePlannerSkillSummaries,
+	type PlannerSkillSummary,
+} from "./skill-library";
 import { getPlannerStageStepBehavior } from "./stage-behavior";
 import { getAllowedPlannerStateTransitionTypes } from "./state-transition";
 
@@ -191,7 +195,7 @@ export const PLANNER_STEP_RULES = {
 			"Inspect the project tree with read-only shell commands only after the contract map is started.",
 			"Read only the source files needed to understand architecture, commands, risks, and the requested change after contract guidance is considered.",
 			"Write concise findings to discovery.md, including exact test/lint/build commands when discoverable.",
-			"If no AGENTS.md exists, use discovery evidence to propose initial root/domain AGENTS.md only for meaningful architectural zones, not every folder.",
+			"If no AGENTS.md exists, create initial root/domain AGENTS.md only for meaningful architectural zones once discovery evidence proves the domains. Do not create one in every folder.",
 			"If planner_contract_upsert changes AGENTS.md files, commit them through planner_git_commit before finishing discovery/scan_project_structure.",
 			"If commands are missing or the project is empty, record that uncertainty for discovery/write_questions.",
 		],
@@ -380,6 +384,7 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Run focused checks from task/tdd/project instructions and record failure evidence.",
 			"Add ## Pre-Implementation Proof Contract to tdd.md with failingSignal, productionPath, successSignal, and outOfScopeFiles.",
+			"If the first red signal is only module-not-found/import/file missing, treat it as bootstrap only; ensure the test contains real behavior assertions before implementation is accepted.",
 		],
 		allowedNow: ["Run checks and update test summary artifacts."],
 		forbiddenNow: [
@@ -394,8 +399,9 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Implement only the behavior required by task.md and tdd.md.",
 			"After green focused checks, add ## Post-Implementation Counterexample Review to tdd.md.",
+			"Reject placeholder/stub/TODO-only/hardcoded implementations unless the task explicitly asked for a placeholder and tests prove that contract.",
 			"Run focused checks, update tdd.md with the implementation/check result, then commit through planner_git_commit when project files changed.",
-			"If a repeated failure or non-obvious verified lesson was resolved, call planner_skill_create to save the reusable method for future planner sessions.",
+			"If a repeated failure, stale-context hazard, state-machine/tooling mistake, or non-obvious verified lesson was resolved, call planner_skill_create before leaving this step.",
 		],
 		allowedNow: [
 			"Edit production/test files in scope, run checks, use planner_git_commit.",
@@ -414,6 +420,7 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Review the task diff, changed files, task acceptance criteria, and active AGENTS.md contract chain.",
 			"Call planner_contract_check with outcomeSummary, domainImpact, changedFiles, evidence, and action no_update/upsert_existing/create_new.",
+			"If project files changed and no writable AGENTS.md exists yet, no_update is invalid. Use create_new and write the initial meaningful root/domain AGENTS.md contract.",
 			"If planner_contract_check reports an update is needed, call planner_contract_upsert for the nearest meaningful AGENTS.md domain and commit that change if the worktree becomes dirty.",
 			"Use AGENTS.md as repository-owned routing memory. Add durable domain rules, parent backlinks, child index entries, read-first hints, and domain details only when they help future agents avoid reading irrelevant code.",
 			"Do not add overly specific task trivia to AGENTS.md. Record local one-off details in tdd.md instead.",
@@ -439,7 +446,7 @@ export const PLANNER_STEP_RULES = {
 			"Call planner_refactor_review with semantic review fields and every category review: duplication, naming, control_flow, abstraction_level, hidden_coupling, error_handling, test_clarity, debug_leftovers, scope_creep.",
 			"If refactor changes a durable domain contract or discovers stale AGENTS.md guidance, call planner_contract_check and planner_contract_upsert.",
 			"A passing test, linter, formatter, or build is not a refactor review.",
-			"If the review proves a reusable refactor/debug lesson, call planner_skill_create with sourceKind=refactor.",
+			"If the review proves a reusable refactor/debug lesson, repeated mistake, or category-specific audit method, call planner_skill_create with sourceKind=refactor before leaving this step.",
 			"Commit if project files changed.",
 		],
 		allowedNow: [
@@ -515,7 +522,24 @@ export const PLANNER_STEP_RULES = {
 		allowedNow: ["Run checks and inspect planner git state."],
 		forbiddenNow: ["Do not cleanup worktree before user review."],
 		exitCondition: "Plan branch is verified or risks are documented.",
-		nextInstruction: "Call planner_finish_step to open doubt_review.",
+		nextInstruction: "Call planner_finish_step to open compact_before_doubt.",
+	}),
+	compact_before_doubt: stepRule("finalize", "compact_before_doubt", {
+		objective:
+			"Compact before doubt review so the model audits from persisted artifacts instead of live confidence.",
+		requiredActions: [
+			"Request planner-controlled compact before doubt_review.",
+			"After compaction, call planner_complete_compact and planner_status before any audit work.",
+		],
+		allowedNow: ["Use planner_request_compact and planner_complete_compact."],
+		forbiddenNow: [
+			"Do not begin doubt_review from pre-compact chat memory.",
+			"Do not inspect or patch production code in this compact step.",
+		],
+		exitCondition:
+			"Planner-controlled compact has completed and the next step is doubt_review.",
+		nextInstruction:
+			"After compact completes, call planner_finish_step to open doubt_review.",
 	}),
 	doubt_review: stepRule("finalize", "doubt_review", {
 		objective: "Doubt the completed result before user acceptance.",
@@ -528,8 +552,9 @@ export const PLANNER_STEP_RULES = {
 			"Use planner_doubt_review to write verify.md. Do not hand-write weak doubt notes.",
 			"Audit AGENTS.md local contracts: check stale guidance, missing parent backlinks, wrong child routing, or missing durable domain details. Use planner_contract_check/upsert when needed.",
 			"Run every needs_probe before leaving this step; unresolved probes cannot become bugs and cannot be ignored.",
+			"Placeholder, stub, TODO-only, hardcoded, superficial, missing-test, or unresolved-work findings cannot be closed as not_a_bug/disproven. Mark them proven_bug or needs_probe.",
 			"If proven_bug findings exist, record them in decisions.md and complete with explicit target planning/read_context for revision tasks.",
-			"If a proven or disproven finding teaches a reusable workflow lesson, call planner_skill_create with sourceKind=doubt_review before leaving this step.",
+			"If a proven, disproven, or probed finding teaches a reusable workflow lesson or exposes a repeated planner/model failure pattern, call planner_skill_create with sourceKind=doubt_review before leaving this step.",
 			"If no proven bugs and no needs_probe findings remain, complete with target finalize/write_final_summary.",
 		],
 		allowedNow: [
@@ -802,6 +827,12 @@ export async function buildPlannerStatusText(
 		input.fs,
 		preflight,
 	);
+	const skillSummaries = shouldShowPlannerSkillInventory(behavior)
+		? await listActivePlannerSkillSummaries({
+				fs: input.fs,
+				projectPaths: preflight.context.projectPaths,
+			})
+		: [];
 	lines.push(
 		`- plan: ${preflight.context.activePlanId}`,
 		`- plan title: ${preflight.context.plan.title}`,
@@ -862,6 +893,13 @@ export async function buildPlannerStatusText(
 			settings: settings.effective.contracts,
 		}),
 		"",
+		...(shouldShowPlannerSkillInventory(behavior)
+			? [
+					"## Planner Skill Memory",
+					...formatPlannerSkillInventory(skillSummaries),
+					"",
+				]
+			: []),
 		"## Lifecycle Decision",
 		...formatLifecycleDecision(lifecycle),
 		"",
@@ -1066,6 +1104,44 @@ function formatPlannerArtifactLinks(
 		);
 	}
 	return lines;
+}
+
+function shouldShowPlannerSkillInventory(
+	behavior: ReturnType<typeof getPlannerStageStepBehavior>,
+): boolean {
+	return behavior.expectedTools.includes("planner_skill_create");
+}
+
+function formatPlannerSkillInventory(
+	skills: readonly PlannerSkillSummary[],
+): string[] {
+	if (skills.length === 0) {
+		return [
+			"- active skills: 0",
+			"- guidance: No planner-generated skills are currently exposed. If this step proves a reusable lesson, call planner_skill_create.",
+		];
+	}
+	const lines = [
+		`- active skills: ${skills.length}`,
+		"- guidance: Pi receives these SKILL.md paths through resources_discover. The model may see skill names/descriptions first; the full body lives at skillPath and is loaded by Pi's skill system when activated.",
+	];
+	for (const skill of skills) {
+		lines.push(
+			`- ${skill.name}`,
+			`  sourceKind: ${skill.sourceKind}`,
+			`  tags: ${skill.tags.join(", ") || "(none)"}`,
+			`  description: ${truncateStatusLine(skill.description, 240)}`,
+			`  skillPath: ${skill.skillPath}`,
+		);
+	}
+	return lines;
+}
+
+function truncateStatusLine(value: string, maxLength: number): string {
+	const normalized = value.replace(/\s+/g, " ").trim();
+	return normalized.length <= maxLength
+		? normalized
+		: `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
 }
 
 function formatBullets(values: readonly string[]): string[] {

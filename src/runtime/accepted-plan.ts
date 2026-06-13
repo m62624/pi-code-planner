@@ -189,21 +189,34 @@ async function buildAcceptedPlanCommitMessage(input: {
 	const finalSummary = await readOptionalText(
 		input.fs,
 		input.planPaths.planDir,
-		["final_summary.md"],
+		["final_summary.md", "verify.md"],
 	);
+	const planMarkdown = await readOptionalText(
+		input.fs,
+		input.planPaths.planDir,
+		["plan.md"],
+	);
+	const completedTasks = plan.tasks
+		.filter((task) => task.status === "done")
+		.map((task) => task.title || task.taskId);
 	const title = normalizeCommitTitle(plan.title || input.planId);
-	const summaryLines = summarizeFinalSummary(finalSummary);
+	const summaryLines = summarizeAcceptedPlan({
+		finalSummary,
+		planMarkdown,
+		completedTasks,
+	});
+	const verificationLines = summarizeVerification(finalSummary);
 	return [
 		`feat: export ${title}`,
 		"",
 		`Planner plan: ${plan.title || input.planId} (${input.planId})`,
 		`Output branch: ${input.outputBranch}`,
-		`Commit language: ${input.commitLanguage}`,
 		"",
 		"Summary:",
 		...summaryLines.map((line) => `- ${line}`),
-		"",
-		"Accepted through /planner-finish after the planner verification flow.",
+		...(verificationLines.length > 0
+			? ["", "Verification:", ...verificationLines.map((line) => `- ${line}`)]
+			: []),
 	].join("\n");
 }
 
@@ -227,15 +240,95 @@ function normalizeCommitTitle(value: string): string {
 	return title.length <= 52 ? title : `${title.slice(0, 49).trimEnd()}...`;
 }
 
-function summarizeFinalSummary(content: string): string[] {
-	const lines = content
-		.split(/\r?\n/)
-		.map((line) => line.replace(/^[-*]\s*/, "").trim())
-		.filter((line) => line.length > 0 && !line.startsWith("#"));
-	const unique = [...new Set(lines)].slice(0, 5);
-	return unique.length > 0
-		? unique
-		: ["Planner result was accepted and exported."];
+function summarizeAcceptedPlan(input: {
+	finalSummary: string;
+	planMarkdown: string;
+	completedTasks: string[];
+}): string[] {
+	const lines = [
+		...extractSectionLines(input.finalSummary, ["Results"]),
+		...extractSectionLines(input.finalSummary, ["Architecture"]).slice(0, 5),
+	];
+	if (input.completedTasks.length > 0) {
+		lines.push(
+			`Completed ${input.completedTasks.length} planned task${input.completedTasks.length === 1 ? "" : "s"}: ${input.completedTasks.slice(0, 8).join(", ")}${input.completedTasks.length > 8 ? ", ..." : ""}.`,
+		);
+	}
+	const normalized = normalizeSummaryLines(lines).slice(0, 8);
+	if (normalized.length > 0) {
+		return normalized;
+	}
+	const unstructuredSummary = normalizeSummaryLines(input.finalSummary).slice(
+		0,
+		5,
+	);
+	if (unstructuredSummary.length > 0) {
+		return unstructuredSummary;
+	}
+	const fallback = normalizeSummaryLines(
+		extractSectionLines(input.planMarkdown, [
+			"Goal",
+			"Implementation Strategy",
+		]),
+	).slice(0, 5);
+	return fallback.length > 0
+		? fallback
+		: ["Exported the accepted planner result."];
+}
+
+function summarizeVerification(content: string): string[] {
+	return normalizeSummaryLines(
+		extractSectionLines(content, ["Verification", "Checks", "Doubt Review"]),
+	).slice(0, 4);
+}
+
+function extractSectionLines(content: string, headings: string[]): string[] {
+	const wanted = new Set(headings.map((heading) => heading.toLowerCase()));
+	const lines = content.split(/\r?\n/);
+	const collected: string[] = [];
+	let collecting = false;
+	for (const line of lines) {
+		const heading = /^(#{2,6})\s+(.+?)\s*$/.exec(line);
+		if (heading) {
+			const title = heading[2]
+				.replace(/[#*_`]/g, "")
+				.trim()
+				.toLowerCase();
+			if (collecting) {
+				collecting = false;
+			}
+			if (wanted.has(title)) {
+				collecting = true;
+				continue;
+			}
+		}
+		if (collecting) {
+			collected.push(line);
+		}
+	}
+	return collected;
+}
+
+function normalizeSummaryLines(lines: string | string[]): string[] {
+	const sourceLines = Array.isArray(lines) ? lines : lines.split(/\r?\n/);
+	const normalized = sourceLines
+		.flatMap((line) => line.split(/\r?\n/))
+		.map((line) =>
+			line
+				.replace(/^[-*]\s*/, "")
+				.replace(/^\d+\.\s*/, "")
+				.replace(/\*\*(.+?)\*\*/g, "$1")
+				.replace(/`/g, "")
+				.trim(),
+		)
+		.filter(
+			(line) =>
+				line.length > 0 &&
+				!line.startsWith("#") &&
+				!line.startsWith("|") &&
+				!/^[-:|\s]+$/.test(line),
+		);
+	return [...new Set(normalized)];
 }
 
 export function buildAcceptedPlanCompletionPrompt(input: {

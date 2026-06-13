@@ -227,14 +227,11 @@ describe("accepted planner result", () => {
 					"",
 					"Planner plan: Improve vault session recovery (plan-a)",
 					"Output branch: output/plan-a",
-					"Commit language: English",
 					"",
 					"Summary:",
 					"- Implemented encrypted session locking.",
 					"- Added recovery checks.",
 					"- Verified build and tests.",
-					"",
-					"Accepted through /planner-finish after the planner verification flow.",
 				].join("\n"),
 			},
 		});
@@ -258,6 +255,58 @@ describe("accepted planner result", () => {
 			"task/plan-a/task-a",
 			"refactor/plan-a/task-a",
 		]);
+	});
+
+	it("uses verify.md as fallback when final_summary.md is missing", async () => {
+		const fixture = await createFixture();
+		await fixture.fs.removeFile(
+			`${fixture.planPaths.planDir}/final_summary.md`,
+		);
+		await fixture.fs.writeTextAtomic(
+			`${fixture.planPaths.planDir}/verify.md`,
+			[
+				"# Final Summary",
+				"",
+				"## Results",
+				"",
+				"All 9 tasks completed successfully. 48 tests pass.",
+				"",
+				"### Architecture",
+				"",
+				"- **Crypto**: AES-256-GCM + PBKDF2-SHA256 password-based encryption",
+				"- **Commands**: /vault-new, /vault-resume, /vault-delete, /vault-status",
+				"",
+				"### Doubt Review",
+				"",
+				"- 0 proven bugs",
+				"- All tests green",
+				"",
+			].join("\n"),
+		);
+
+		await finalizeAcceptedPlan(fixture);
+
+		expect(fixture.git.calls).toContainEqual({
+			name: "commit",
+			input: {
+				repoRoot: "/repo/app",
+				message: [
+					"feat: export Improve vault session recovery",
+					"",
+					"Planner plan: Improve vault session recovery (plan-a)",
+					"Output branch: output/plan-a",
+					"",
+					"Summary:",
+					"- All 9 tasks completed successfully. 48 tests pass.",
+					"- Crypto: AES-256-GCM + PBKDF2-SHA256 password-based encryption",
+					"- Commands: /vault-new, /vault-resume, /vault-delete, /vault-status",
+					"",
+					"Verification:",
+					"- 0 proven bugs",
+					"- All tests green",
+				].join("\n"),
+			},
+		});
 	});
 
 	it("reports missing original JSONL without blocking cleanup preparation", async () => {
