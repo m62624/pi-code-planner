@@ -64,6 +64,7 @@ describe("planner doubt review tool", () => {
 			toolName: "planner_doubt_review",
 			params: {
 				summary: "One suspected issue was disproven by code inspection.",
+				verificationEvidence: passedVerificationEvidence(),
 				possibleErrors: [
 					{
 						id: "resume-selection-bug",
@@ -101,6 +102,7 @@ describe("planner doubt review tool", () => {
 			toolName: "planner_doubt_review",
 			params: {
 				summary: "A suspected issue was not proven.",
+				verificationEvidence: passedVerificationEvidence(),
 				possibleErrors: [
 					{
 						id: "storage-root-bug",
@@ -131,6 +133,7 @@ describe("planner doubt review tool", () => {
 			toolName: "planner_doubt_review",
 			params: {
 				summary: "A suspected issue used an invalid risk category.",
+				verificationEvidence: passedVerificationEvidence(),
 				possibleErrors: [
 					{
 						id: "unknown-risk",
@@ -161,6 +164,7 @@ describe("planner doubt review tool", () => {
 			toolName: "planner_doubt_review",
 			params: {
 				summary: "A placeholder concern was dismissed without proof.",
+				verificationEvidence: passedVerificationEvidence(),
 				possibleErrors: [
 					{
 						id: "placeholder-implementation",
@@ -183,7 +187,143 @@ describe("planner doubt review tool", () => {
 		expect(result.status).toBe("blocked");
 		expect(result.text).toContain("must be proven_bug or needs_probe");
 	});
+
+	it("requires evidence for every discovery verification command", async () => {
+		const setup = await createDoubtSetup();
+
+		const result = await executePlannerDoubtTool({
+			...setup,
+			toolName: "planner_doubt_review",
+			params: {
+				summary: "Only one check was recorded.",
+				verificationEvidence: [
+					{
+						command: "npm test",
+						status: "passed",
+						evidence: "Unit tests passed.",
+					},
+				],
+				possibleErrors: [
+					{
+						id: "missing-build-evidence",
+						riskCategory: "missing_test",
+						status: "needs_probe",
+						proofLevel: "insufficient_evidence",
+						claim: "Build evidence may be missing.",
+						specReference: "discovery.md Verification Protocol",
+						codePath: "package.json",
+						verification: "Need to run the build check.",
+						evidence: ["Build command was not represented in evidence."],
+						counterEvidence: [],
+						nextAction: "run_probe",
+					},
+				],
+			},
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("npm run build");
+	});
+
+	it("requires failed verification commands to become findings", async () => {
+		const setup = await createDoubtSetup();
+
+		const result = await executePlannerDoubtTool({
+			...setup,
+			toolName: "planner_doubt_review",
+			params: {
+				summary: "The build failed but was not tied to a finding.",
+				verificationEvidence: [
+					{
+						command: "npm test",
+						status: "passed",
+						evidence: "Unit tests passed.",
+					},
+					{
+						command: "npm run build",
+						status: "failed",
+						evidence: "TypeScript failed.",
+					},
+				],
+				possibleErrors: [
+					{
+						id: "unrelated-risk",
+						riskCategory: "integration_break",
+						status: "disproven",
+						proofLevel: "disproven_by_code",
+						claim: "Resume routing might be broken.",
+						specReference: "goal.md",
+						codePath: "src/runtime/status.ts",
+						verification: "Inspected routing table.",
+						evidence: ["Routing table still has the expected entry."],
+						counterEvidence: [],
+						nextAction: "no_action",
+					},
+				],
+			},
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("Required protocol command did not pass");
+	});
+
+	it("allows failed verification commands only when a finding covers them", async () => {
+		const setup = await createDoubtSetup();
+
+		const result = await executePlannerDoubtTool({
+			...setup,
+			toolName: "planner_doubt_review",
+			params: {
+				summary: "The build failure is proven and must return to planning.",
+				verificationEvidence: [
+					{
+						command: "npm test",
+						status: "passed",
+						evidence: "Unit tests passed.",
+					},
+					{
+						command: "npm run build",
+						status: "failed",
+						evidence: "TypeScript failed on src/runtime/contracts.ts.",
+					},
+				],
+				possibleErrors: [
+					{
+						id: "build-command-fails",
+						riskCategory: "integration_break",
+						status: "proven_bug",
+						proofLevel: "reproduced_command",
+						claim: "npm run build fails after the planner changes.",
+						specReference: "discovery.md Verification Protocol",
+						codePath: "src/runtime/contracts.ts",
+						verification: "Ran npm run build and reproduced the failure.",
+						evidence: ["npm run build reports a TypeScript error."],
+						counterEvidence: [],
+						nextAction: "create_revision_task",
+					},
+				],
+			},
+		});
+
+		expect(result.status).toBe("applied");
+		expect(result.text).toContain("Proven bugs: 1");
+	});
 });
+
+function passedVerificationEvidence() {
+	return [
+		{
+			command: "npm test",
+			status: "passed",
+			evidence: "Unit tests passed.",
+		},
+		{
+			command: "npm run build",
+			status: "passed",
+			evidence: "Build passed.",
+		},
+	];
+}
 
 async function createDoubtSetup() {
 	const fs = new MockPlannerFs();
@@ -213,5 +353,16 @@ async function createDoubtSetup() {
 		currentBranch: "plan/plan-a",
 	});
 	await setActivePlan(fs, projectPaths, "plan-a");
+	await fs.writeTextAtomic(
+		planPaths.discoveryMd,
+		[
+			"# Discovery",
+			"",
+			"## Verification Protocol",
+			"- test: npm test",
+			"- build: npm run build",
+			"",
+		].join("\n"),
+	);
 	return { fs, git, projectPaths, planPaths };
 }

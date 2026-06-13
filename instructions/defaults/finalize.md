@@ -17,13 +17,17 @@ Verify the complete plan branch as one integrated result, write a durable user-f
 3. `doubt_review`
 	- Before asking for user acceptance, deliberately doubt the completed result.
 	- Reread `goal.md`, `plan.md`, task artifacts, `verify.md`, and the final worktree diff.
+	- Reread `discovery.md` `## Verification Protocol`. Every listed command/check is mandatory evidence for `planner_doubt_review`.
 	- Treat chat memory from before `compact_before_doubt` as untrusted. Reconstruct the result from artifacts, git state, and focused file reads.
 	- Start with a `Possible Errors` list written in `metadata.doubtReviewLanguage`. These are suspicions, not bugs yet.
 	- Assign every possible error to one risk category: `requirement_mismatch`, `missing_test`, `boundary_case`, `integration_break`, `state_machine_error`, `persistence_error`, `recovery_error`, `wrong_file_scope`, `user_flow_regression`, or `cleanup_or_debug_leftover`.
+	- Fill `verificationEvidence` with every command/check from `discovery.md` `## Verification Protocol`. Missing evidence means the result is not verified.
+	- If any required command/check failed, was not run, or is unknown, create a `proven_bug` or `needs_probe` finding that names that command. Do not continue to `write_final_summary`.
 	- For each possible error, prove it, disprove it, or mark it `needs_probe`. Use `planner_doubt_review`; do not hand-write `verify.md`.
 	- A suspected issue may be called `proven_bug` only after a failing test/command, exact code-path proof, or exact spec contradiction.
 	- `needs_probe` findings cannot finish the step. Run the probe or downgrade with proof.
 	- If `proven_bug` findings exist, write them to `decisions.md`, then return to `planning/read_context` for revision tasks. Do not patch ad hoc in finalize.
+	- After returning to `planning/read_context`, continue through `draft_plan`, `split_tasks`, `write_task_files`, execution, and verification again. Do not skip planning because the fix looks small.
 	- If a finding mentions placeholder, stub, TODO-only, hardcoded behavior, superficial implementation, missing tests, or unresolved work, it cannot be closed as `not_a_bug` or `disproven`. It must be `proven_bug` or `needs_probe`.
 	- If a proven, disproven, or probed finding teaches a reusable workflow lesson, call `planner_skill_create` with `sourceKind=doubt_review` before leaving this step.
 	- If no proven bug or probe remains, continue to `write_final_summary`.
@@ -59,6 +63,17 @@ Every possible error must be classified:
 - `not_a_bug`: valid behavior or design preference; no action.
 
 Tests are preferred for runtime behavior. Code-path proof is allowed only when the exact path makes the behavior impossible or directly contradicts the approved spec.
+
+## Verification Evidence Rules
+
+`planner_doubt_review` must include `verificationEvidence` for every command/check in `discovery.md` `## Verification Protocol`.
+
+- `passed`: allowed only when the command/check was actually run or the exact non-shell check was completed with concrete evidence.
+- `failed`: must be paired with a `proven_bug` or `needs_probe` finding naming that command/check.
+- `not_run`: must be paired with a `needs_probe` finding unless the user explicitly accepts the missing check later.
+- `unknown`: must be paired with a `needs_probe` finding and usually means discovery did not capture enough verification detail.
+
+Do not summarize checks as "all tests passed" unless the protocol commands are listed individually with evidence.
 
 ## Doubt Review Method
 

@@ -28,6 +28,15 @@ export const DOUBT_NEXT_ACTIONS = [
 ] as const;
 export type DoubtNextAction = (typeof DOUBT_NEXT_ACTIONS)[number];
 
+export const DOUBT_VERIFICATION_STATUSES = [
+	"passed",
+	"failed",
+	"not_run",
+	"unknown",
+] as const;
+export type DoubtVerificationStatus =
+	(typeof DOUBT_VERIFICATION_STATUSES)[number];
+
 export const DOUBT_RISK_CATEGORIES = [
 	"requirement_mismatch",
 	"missing_test",
@@ -83,7 +92,14 @@ export interface DoubtFinding {
 
 export interface DoubtReview {
 	summary: string;
+	verificationEvidence: DoubtVerificationEvidence[];
 	possibleErrors: DoubtFinding[];
+}
+
+export interface DoubtVerificationEvidence {
+	command: string;
+	status: DoubtVerificationStatus;
+	evidence: string;
 }
 
 export interface DoubtReviewValidation {
@@ -102,8 +118,18 @@ export function parseDoubtReviewParams(params: unknown): DoubtReview {
 	if (possibleErrors.length === 0) {
 		throw new TypeError("possibleErrors must contain at least one finding.");
 	}
+	const verificationEvidence = arrayOfObjects(
+		object.verificationEvidence,
+		"verificationEvidence",
+	).map(parseVerificationEvidence);
+	if (verificationEvidence.length === 0) {
+		throw new TypeError(
+			"verificationEvidence must contain at least one command/check from discovery.md ## Verification Protocol.",
+		);
+	}
 	return {
 		summary: requiredString(object, "summary"),
+		verificationEvidence,
 		possibleErrors,
 	};
 }
@@ -111,6 +137,14 @@ export function parseDoubtReviewParams(params: unknown): DoubtReview {
 export function formatDoubtReviewMarkdown(review: DoubtReview): string {
 	return [
 		"# Doubt Review",
+		"",
+		"## Verification Evidence",
+		"",
+		...review.verificationEvidence.flatMap((entry) => [
+			`- command: ${entry.command}`,
+			`  status: ${entry.status}`,
+			`  evidence: ${entry.evidence}`,
+		]),
 		"",
 		"## Possible Errors",
 		"",
@@ -146,6 +180,19 @@ export function validateDoubtReview(
 	let provenBugCount = 0;
 	let needsProbeCount = 0;
 	const ids = new Set<string>();
+	for (const entry of review.verificationEvidence) {
+		if (!entry.command.trim()) {
+			return invalid("verificationEvidence.command must be non-empty.");
+		}
+		if (!DOUBT_VERIFICATION_STATUSES.includes(entry.status)) {
+			return invalid(
+				`Invalid verificationEvidence status: ${entry.status}. Expected one of: ${DOUBT_VERIFICATION_STATUSES.join(", ")}.`,
+			);
+		}
+		if (!entry.evidence.trim()) {
+			return invalid("verificationEvidence.evidence must be non-empty.");
+		}
+	}
 	for (const finding of review.possibleErrors) {
 		if (ids.has(finding.id)) {
 			return invalid(`Duplicate finding id: ${finding.id}.`);
@@ -170,9 +217,14 @@ export function validateDoubtReviewMarkdown(
 	if (!/^# Doubt Review\s*$/m.test(content)) {
 		return invalid("verify.md must contain a top-level '# Doubt Review'.");
 	}
+	if (!/^## Verification Evidence\s*$/m.test(content)) {
+		return invalid("Doubt Review must contain '## Verification Evidence'.");
+	}
 	if (!/^## Possible Errors\s*$/m.test(content)) {
 		return invalid("Doubt Review must contain '## Possible Errors'.");
 	}
+	const evidenceValidation = validateMarkdownVerificationEvidence(content);
+	if (!evidenceValidation.valid) return evidenceValidation;
 	const findingBlocks = content
 		.split(/^###\s+/m)
 		.slice(1)
@@ -242,6 +294,79 @@ export function validateDoubtReviewMarkdown(
 		if (status === "needs_probe") needsProbeCount += 1;
 	}
 	return { valid: true, reason: null, provenBugCount, needsProbeCount };
+}
+
+function validateMarkdownVerificationEvidence(
+	content: string,
+): DoubtReviewValidation {
+	const match = content.match(
+		/^## Verification Evidence\s*$([\s\S]*?)^## Possible Errors\s*$/m,
+	);
+	const section = match?.[1]?.trim() ?? "";
+	if (!section) {
+		return invalid(
+			"Doubt Review must include command-level verification evidence.",
+		);
+	}
+	const entries = section
+		.split(/(?=^- command:\s+)/m)
+		.map((entry) => entry.trim())
+		.filter(Boolean);
+	if (entries.length === 0) {
+		return invalid(
+			"Doubt Review must include at least one verification command.",
+		);
+	}
+	for (const entry of entries) {
+		const command = fieldValue(entry, "command");
+		const status = fieldValue(entry, "status");
+		const evidence = fieldValue(entry, "evidence");
+		if (!command) {
+			return invalid("Verification evidence entry is missing command.");
+		}
+		if (!status) {
+			return invalid("Verification evidence entry is missing status.");
+		}
+		if (
+			!DOUBT_VERIFICATION_STATUSES.includes(status as DoubtVerificationStatus)
+		) {
+			return invalid(
+				`Invalid verification evidence status: ${status}. Expected one of: ${DOUBT_VERIFICATION_STATUSES.join(", ")}.`,
+			);
+		}
+		if (!evidence) {
+			return invalid("Verification evidence entry is missing evidence.");
+		}
+	}
+	return { valid: true, reason: null, provenBugCount: 0, needsProbeCount: 0 };
+}
+
+export function validateDoubtReviewAgainstVerificationProtocol(
+	review: DoubtReview,
+	discoveryMd: string,
+): string | null {
+	const protocol = extractVerificationProtocol(discoveryMd);
+	if (protocol.length === 0) {
+		return "discovery.md must include ## Verification Protocol before planner_doubt_review can prove the result.";
+	}
+	const requiredCommands = protocol
+		.map(extractProtocolCommand)
+		.filter((command): command is string => Boolean(command));
+	for (const command of requiredCommands) {
+		const evidence = review.verificationEvidence.find((entry) =>
+			commandsMatch(entry.command, command),
+		);
+		if (!evidence) {
+			return `planner_doubt_review is missing verificationEvidence for required protocol command: ${command}`;
+		}
+		if (
+			evidence.status !== "passed" &&
+			!findingCoversCommand(review, command)
+		) {
+			return `Required protocol command did not pass: ${command}. Mark a finding proven_bug/needs_probe for that command before completing doubt_review.`;
+		}
+	}
+	return null;
 }
 
 function validateFindingStatus(finding: DoubtFinding): DoubtReviewValidation {
@@ -332,8 +457,95 @@ function parseFinding(value: Record<string, unknown>): DoubtFinding {
 	};
 }
 
+function parseVerificationEvidence(
+	value: Record<string, unknown>,
+): DoubtVerificationEvidence {
+	return {
+		command: requiredString(value, "command"),
+		status: requiredEnum(value, "status", DOUBT_VERIFICATION_STATUSES),
+		evidence: requiredString(value, "evidence"),
+	};
+}
+
+function extractVerificationProtocol(content: string): string[] {
+	const lines = content.split(/\r?\n/);
+	const result: string[] = [];
+	let collecting = false;
+	for (const line of lines) {
+		const heading = /^(#{2,6})\s+(.+?)\s*$/.exec(line);
+		if (heading) {
+			const title = heading[2].trim().toLowerCase();
+			if (collecting) break;
+			collecting = title === "verification protocol";
+			continue;
+		}
+		if (collecting && line.trim()) {
+			result.push(line.trim());
+		}
+	}
+	return result;
+}
+
+function extractProtocolCommand(line: string): string | null {
+	const normalized = line
+		.replace(/^[-*]\s*/, "")
+		.replace(/`/g, "")
+		.trim();
+	if (
+		!normalized ||
+		/\b(unknown|unset|none|n\/a|not discovered)\b/i.test(normalized)
+	) {
+		return null;
+	}
+	if (/^(working directory|cwd|flags?)\s*:/i.test(normalized)) {
+		return null;
+	}
+	const match =
+		/^(test|tests|lint|format|build|ci|check|checks)\s*:\s*(.+)$/i.exec(
+			normalized,
+		);
+	const command = match?.[2]?.trim() ?? normalized;
+	return command.length > 0 ? command : null;
+}
+
+function commandsMatch(left: string, right: string): boolean {
+	const normalizedLeft = normalizeCommand(left);
+	const normalizedRight = normalizeCommand(right);
+	return (
+		normalizedLeft === normalizedRight ||
+		normalizedLeft.includes(normalizedRight) ||
+		normalizedRight.includes(normalizedLeft)
+	);
+}
+
+function normalizeCommand(value: string): string {
+	return value.replace(/`/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function findingCoversCommand(review: DoubtReview, command: string): boolean {
+	const needle = normalizeCommand(command);
+	return review.possibleErrors.some((finding) => {
+		if (finding.status !== "proven_bug" && finding.status !== "needs_probe") {
+			return false;
+		}
+		const text = normalizeCommand(
+			[
+				finding.claim,
+				finding.specReference,
+				finding.codePath,
+				finding.verification,
+				...finding.evidence,
+				...finding.counterEvidence,
+			].join("\n"),
+		);
+		return text.includes(needle);
+	});
+}
+
 function fieldValue(block: string, field: string): string {
-	const match = block.match(new RegExp(`^- ${field}:\\s*(.+)$`, "m"));
+	const match = block.match(
+		new RegExp(`^\\s*(?:-\\s*)?${field}:\\s*(.+)$`, "m"),
+	);
 	return match?.[1]?.trim() ?? "";
 }
 

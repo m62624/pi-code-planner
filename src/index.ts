@@ -742,8 +742,34 @@ const DOUBT_REVIEW_TOOL_PARAMETERS = {
 				additionalProperties: false,
 			},
 		},
+		verificationEvidence: {
+			type: "array",
+			description:
+				"Every command/check required by discovery.md ## Verification Protocol. Do not claim the result is verified unless each required command has passed evidence or a proven_bug/needs_probe finding.",
+			items: {
+				type: "object",
+				properties: {
+					command: {
+						type: "string",
+						description:
+							"Exact command or check from discovery.md ## Verification Protocol.",
+					},
+					status: {
+						type: "string",
+						enum: ["passed", "failed", "not_run", "unknown"],
+					},
+					evidence: {
+						type: "string",
+						description:
+							"Concrete output summary, failing signal, or reason this check was not run.",
+					},
+				},
+				required: ["command", "status", "evidence"],
+				additionalProperties: false,
+			},
+		},
 	},
-	required: ["summary", "possibleErrors"],
+	required: ["summary", "verificationEvidence", "possibleErrors"],
 	additionalProperties: false,
 } as const;
 
