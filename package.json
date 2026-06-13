@@ -32,7 +32,7 @@
 		"extensions": [
 			"./src/index.ts"
 		],
-		"image": "assets/banner.png"
+		"image": "https://raw.githubusercontent.com/m62624/pi-code-planner/main/assets/icon.png"
 	},
 	"license": "MIT",
 	"scripts": {

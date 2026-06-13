@@ -205,6 +205,8 @@ Managed contract blocks are validated and written only through planner tools:
 
 Existing AGENTS.md files are the writable canonical planner contract format. CLAUDE.md, GEMINI.md, `.cursorrules`, WARP.md, AIDER.md, COPILOT.md, and similar discovered context files are read-only imports. They are still read even without the managed block, but durable planner memory should be distilled into the nearest AGENTS.md through `planner_contract_upsert`. The parser reports diagnostics, and planner updates preserve non-planner AGENTS.md content by replacing only the managed block.
 
+Every AGENTS.md file created or updated through `planner_contract_upsert` is tracked in the active plan's persisted state. The planner records `contracts.touchedFiles` in `state.json`, mirrors it to `contracts/manifest.json`, and stores a baseline copy under `contracts/baseline/` before changing any preexisting AGENTS.md. If `/planner-finish` uses `"remove"`, files created by that plan are deleted and preexisting files are restored from their baseline. This survives compact and planner resume because the tracking is stored in planner artifacts, not chat memory.
+
 How contracts affect the workflow:
 
 - `discovery`: call `planner_contract_scan` in batches, route to relevant AGENTS.md/read-only context chains, then read source files.
