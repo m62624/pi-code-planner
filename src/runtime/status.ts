@@ -531,6 +531,7 @@ export const PLANNER_STEP_RULES = {
 			"Use planner_doubt_review to write verify.md. Do not hand-write weak doubt notes.",
 			"Audit AGENTS.md local contracts: check stale guidance, missing parent backlinks, wrong child routing, or missing durable domain details. Use planner_contract_check/upsert when needed.",
 			"Run every needs_probe before leaving this step; unresolved probes cannot become bugs and cannot be ignored.",
+			"Placeholder, stub, TODO-only, hardcoded, superficial, missing-test, or unresolved-work findings cannot be closed as not_a_bug/disproven. Mark them proven_bug or needs_probe.",
 			"If proven_bug findings exist, record them in decisions.md and complete with explicit target planning/read_context for revision tasks.",
 			"If a proven or disproven finding teaches a reusable workflow lesson, call planner_skill_create with sourceKind=doubt_review before leaving this step.",
 			"If no proven bugs and no needs_probe findings remain, complete with target finalize/write_final_summary.",

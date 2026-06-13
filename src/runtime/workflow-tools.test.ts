@@ -381,4 +381,78 @@ describe("workflowToolTransition", () => {
 			step: "read_context",
 		});
 	});
+
+	it("blocks final summary when doubt review dismisses placeholder work", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await ensureProjectRecord(fs, projectPaths);
+		await initializePlanFiles(
+			fs,
+			planPaths,
+			createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+		);
+		await fs.mkdirp(worktreePath);
+		await initializePlanState(fs, planPaths, {
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "finalize",
+			step: "doubt_review",
+			stepStatus: "running",
+			currentBranch: "plan/plan-a",
+		});
+		await setActivePlan(fs, projectPaths, "plan-a");
+		await fs.writeTextAtomic(
+			planPaths.verifyMd,
+			[
+				"# Doubt Review",
+				"",
+				"## Summary",
+				"",
+				"Placeholder concern dismissed.",
+				"",
+				"## Possible Errors",
+				"",
+				"### 1. placeholder-implementation",
+				"",
+				"- riskCategory: requirement_mismatch",
+				"- status: not_a_bug",
+				"- proofLevel: code_path_proven",
+				"- nextAction: no_action",
+				"- claim: Implementation may still be a placeholder.",
+				"- specReference: goal.md accepted behavior",
+				"- codePath: src/vault/index.ts",
+				"- verification: Only checked that files exist.",
+				"",
+				"#### Evidence",
+				"- Placeholder-looking logic remains.",
+				"",
+				"#### Counter Evidence",
+				"- (none)",
+				"",
+			].join("\n"),
+		);
+
+		const blocked = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {
+				nextStage: "finalize",
+				nextStep: "write_final_summary",
+			},
+		});
+
+		expect(blocked.result.status).toBe("blocked");
+		expect(blocked.text).toContain("must be proven_bug or needs_probe");
+	});
 });

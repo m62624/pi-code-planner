@@ -19,6 +19,7 @@ Verify the complete plan branch as one integrated result, write a durable user-f
 	- A suspected issue may be called `proven_bug` only after a failing test/command, exact code-path proof, or exact spec contradiction.
 	- `needs_probe` findings cannot finish the step. Run the probe or downgrade with proof.
 	- If `proven_bug` findings exist, write them to `decisions.md`, then return to `planning/read_context` for revision tasks. Do not patch ad hoc in finalize.
+	- If a finding mentions placeholder, stub, TODO-only, hardcoded behavior, superficial implementation, missing tests, or unresolved work, it cannot be closed as `not_a_bug` or `disproven`. It must be `proven_bug` or `needs_probe`.
 	- If a proven or disproven finding teaches a reusable workflow lesson, call `planner_skill_create` with `sourceKind=doubt_review`.
 	- If no proven bug or probe remains, continue to `write_final_summary`.
 3. `write_final_summary`
@@ -41,6 +42,7 @@ Verify the complete plan branch as one integrated result, write a durable user-f
 - If checks reveal missing implementation, record the issue and return through the controlled planning flow instead of patching ad hoc.
 - During `doubt_review`, assume there may still be bugs even if tests pass. Passing checks are evidence, not acceptance.
 - Do not call a finding a bug from suspicion alone. Suspicions without proof are `needs_probe`, not revision tasks.
+- Do not normalize away placeholders or shallow implementations. If a placeholder/surface-level implementation remains, return to planning with a proven finding or run a probe.
 
 ## Doubt Review Proof Rules
 
