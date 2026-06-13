@@ -62,7 +62,9 @@ Record in `tdd.md`:
 
 ## Planner Skill Memory
 
-`planner_skill_create` is optional future memory. Use it only after a lesson is proven by a failing signal, debug probe, counterexample review, or repeated mistake that future planner sessions should avoid.
+`planner_skill_create` is future memory. Use it aggressively after a lesson is proven by a failing signal, debug probe, counterexample review, repeated mistake, stale-context recovery, or state-machine/tooling mistake that future planner sessions should avoid.
+
+Create the skill before leaving the step that proved the lesson when the lesson is reusable. Do not postpone it to final summary unless the lesson only becomes clear at plan level.
 
 Do not create skills for:
 - ordinary task summaries

@@ -61,6 +61,7 @@ const COMPACT_STEPS = new Set<PlannerStep>([
 	"compact_discovery",
 	"compact_planning",
 	"compact_task",
+	"compact_before_doubt",
 	"compact_finalize",
 ]);
 

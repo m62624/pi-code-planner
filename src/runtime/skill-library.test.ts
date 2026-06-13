@@ -27,6 +27,7 @@ import {
 	executePlannerSkillTool,
 	listActivePlannerSkillPaths,
 	listActivePlannerSkillPathsForCwd,
+	listActivePlannerSkillSummaries,
 	listPlannerSkillResourcePaths,
 	validatePlannerSkillMarkdown,
 } from "./skill-library";
@@ -248,6 +249,34 @@ describe("planner skill library", () => {
 				plannerActive: true,
 			}),
 		).resolves.toEqual([]);
+	});
+
+	it("lists active planner skill summaries for status inventory", async () => {
+		const { fs, projectPaths } = await createSkillSetup();
+		await seedPlannerSkillIndex(fs, projectPaths, [
+			{ name: "pi-planner-old-11111111", updatedAt: 1000 },
+			{ name: "pi-planner-new-22222222", updatedAt: 3000 },
+			{ name: "pi-planner-mid-33333333", updatedAt: 2000 },
+		]);
+		await fs.writeTextAtomic(
+			"/repo/app/.pi/pi-code-planner/settings.json",
+			'{ "skills": { "maxActive": 2 } }\n',
+		);
+
+		await expect(
+			listActivePlannerSkillSummaries({ fs, projectPaths }),
+		).resolves.toMatchObject([
+			{
+				name: "pi-planner-new-22222222",
+				sourceKind: "other",
+				description: "Use when testing planner skill resource selection.",
+			},
+			{
+				name: "pi-planner-mid-33333333",
+				sourceKind: "other",
+				description: "Use when testing planner skill resource selection.",
+			},
+		]);
 	});
 
 	it("blocks skill creation when the planner state does not allow the wrapper", async () => {

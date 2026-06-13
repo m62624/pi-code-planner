@@ -49,6 +49,15 @@ export interface PlannerSkillIndexItem {
 	hash: string;
 }
 
+export interface PlannerSkillSummary {
+	name: string;
+	description: string;
+	sourceKind: PlannerSkillSourceKind;
+	tags: string[];
+	skillPath: string;
+	updatedAt: number;
+}
+
 export interface PlannerSkillCreateInput {
 	fs: PlannerFs;
 	git: GitRunner;
@@ -106,6 +115,41 @@ export async function listActivePlannerSkillPaths(input: {
 		}
 	}
 	return existing;
+}
+
+export async function listActivePlannerSkillSummaries(input: {
+	fs: PlannerFs;
+	projectPaths: ProjectStoragePaths;
+}): Promise<PlannerSkillSummary[]> {
+	const paths = createPlannerSkillStoragePaths(input.projectPaths);
+	const settings = await loadEffectivePlannerSettings({
+		fs: input.fs,
+		projectPaths: input.projectPaths,
+	});
+	if (!settings.effective.skills.enabled) {
+		return [];
+	}
+	const index = await readPlannerSkillIndex(input.fs, paths.indexJson);
+	const items = [...index.items].sort((left, right) => {
+		const byUpdated = right.updatedAt - left.updatedAt;
+		return byUpdated || left.name.localeCompare(right.name);
+	});
+	const maxActive = settings.effective.skills.maxActive;
+	const selected = maxActive > 0 ? items.slice(0, maxActive) : items;
+	const summaries: PlannerSkillSummary[] = [];
+	for (const item of selected) {
+		if (item.status !== "active") continue;
+		if (!(await input.fs.exists(item.skillPath))) continue;
+		summaries.push({
+			name: item.name,
+			description: item.description,
+			sourceKind: item.sourceKind,
+			tags: item.tags,
+			skillPath: item.skillPath,
+			updatedAt: item.updatedAt,
+		});
+	}
+	return summaries;
 }
 
 export async function listActivePlannerSkillPathsForCwd(input: {

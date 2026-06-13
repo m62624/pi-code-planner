@@ -222,6 +222,7 @@ describe("plan state store", () => {
 			],
 			finalize: [
 				"verify_plan_branch",
+				"compact_before_doubt",
 				"doubt_review",
 				"write_final_summary",
 				"compact_finalize",
@@ -262,7 +263,7 @@ describe("plan state store", () => {
 			discovery: 4,
 			planning: 7,
 			execution: 11,
-			finalize: 5,
+			finalize: 6,
 			done: 8,
 			recovery: 6,
 		});

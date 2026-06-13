@@ -476,6 +476,13 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
+	compact_before_doubt: compactBehavior("finalize", "compact_before_doubt", [
+		"goal.md",
+		"plan.md",
+		"discovery.md",
+		"verify.md",
+		"decisions.md",
+	]),
 	doubt_review: behavior("finalize", "doubt_review", {
 		projectAccess: "checks_only",
 		actions: ["run_checks", "planner_git", "write_artifacts"],
