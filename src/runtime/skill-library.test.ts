@@ -24,10 +24,12 @@ import { saveWorktreeProjectIndex } from "../storage/worktree-index";
 import { MockPlannerFs } from "../test/mock-fs";
 import {
 	createPlannerSkillStoragePaths,
+	deletePlannerSkill,
 	executePlannerSkillTool,
 	listActivePlannerSkillPaths,
 	listActivePlannerSkillPathsForCwd,
 	listActivePlannerSkillSummaries,
+	listPlannerSkillInventory,
 	listPlannerSkillResourcePaths,
 	validatePlannerSkillMarkdown,
 } from "./skill-library";
@@ -277,6 +279,118 @@ describe("planner skill library", () => {
 				description: "Use when testing planner skill resource selection.",
 			},
 		]);
+	});
+
+	it("lists the full planner skill inventory regardless active exposure settings", async () => {
+		const { fs, projectPaths } = await createSkillSetup();
+		await seedPlannerSkillIndex(fs, projectPaths, [
+			{ name: "pi-planner-old-11111111", updatedAt: 1000 },
+			{ name: "pi-planner-new-22222222", updatedAt: 3000 },
+			{ name: "pi-planner-mid-33333333", updatedAt: 2000 },
+		]);
+		await fs.writeTextAtomic(
+			"/repo/app/.pi/pi-code-planner/settings.json",
+			'{ "skills": { "enabled": false, "maxActive": 1 } }\n',
+		);
+
+		await expect(
+			listActivePlannerSkillSummaries({ fs, projectPaths }),
+		).resolves.toEqual([]);
+		await expect(
+			listPlannerSkillInventory({ fs, projectPaths }),
+		).resolves.toMatchObject([
+			{ name: "pi-planner-new-22222222" },
+			{ name: "pi-planner-mid-33333333" },
+			{ name: "pi-planner-old-11111111" },
+		]);
+	});
+
+	it("ignores indexed planner skills whose SKILL.md file is missing", async () => {
+		const { fs, projectPaths } = await createSkillSetup();
+		await seedPlannerSkillIndex(fs, projectPaths, [
+			{ name: "pi-planner-missing-11111111", updatedAt: 1000 },
+			{ name: "pi-planner-existing-22222222", updatedAt: 2000 },
+		]);
+		await fs.removeFile(
+			"/agent/extensions/pi-code-planner/skills/library/pi-planner-missing-11111111/SKILL.md",
+		);
+
+		await expect(
+			listPlannerSkillInventory({ fs, projectPaths }),
+		).resolves.toMatchObject([{ name: "pi-planner-existing-22222222" }]);
+	});
+
+	it("deletes a planner skill from the library and index", async () => {
+		const { fs, projectPaths } = await createSkillSetup();
+		await seedPlannerSkillIndex(fs, projectPaths, [
+			{ name: "pi-planner-delete-me-11111111", updatedAt: 1000 },
+			{ name: "pi-planner-keep-me-22222222", updatedAt: 2000 },
+		]);
+
+		const deleted = await deletePlannerSkill({
+			fs,
+			projectPaths,
+			name: "pi-planner-delete-me-11111111",
+		});
+
+		expect(deleted).toMatchObject({
+			name: "pi-planner-delete-me-11111111",
+		});
+		await expect(
+			listActivePlannerSkillSummaries({ fs, projectPaths }),
+		).resolves.toMatchObject([{ name: "pi-planner-keep-me-22222222" }]);
+		expect(
+			await fs.exists(
+				"/agent/extensions/pi-code-planner/skills/library/pi-planner-delete-me-11111111/SKILL.md",
+			),
+		).toBe(false);
+	});
+
+	it("refuses to delete skill paths outside the planner skill library", async () => {
+		const { fs, projectPaths } = await createSkillSetup();
+		const paths = createPlannerSkillStoragePaths(projectPaths);
+		await fs.writeTextAtomic(
+			"/tmp/not-a-planner-skill/SKILL.md",
+			"# Outside\n",
+		);
+		await fs.writeTextAtomic(
+			paths.indexJson,
+			`${JSON.stringify(
+				{
+					version: 1,
+					items: [
+						{
+							id: "pi-planner-outside-11111111",
+							name: "pi-planner-outside-11111111",
+							description: "Use when testing guarded deletion.",
+							status: "active",
+							tags: [],
+							sourceKind: "other",
+							sourcePlanId: null,
+							sourceTaskId: null,
+							language: "English",
+							skillPath: "/tmp/not-a-planner-skill/SKILL.md",
+							createdAt: 1000,
+							updatedAt: 1000,
+							hash: "outside",
+						},
+					],
+				},
+				null,
+				2,
+			)}\n`,
+		);
+
+		await expect(
+			deletePlannerSkill({
+				fs,
+				projectPaths,
+				name: "pi-planner-outside-11111111",
+			}),
+		).rejects.toThrow("outside library");
+		await expect(fs.exists("/tmp/not-a-planner-skill/SKILL.md")).resolves.toBe(
+			true,
+		);
 	});
 
 	it("blocks skill creation when the planner state does not allow the wrapper", async () => {

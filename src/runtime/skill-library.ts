@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { GitRunner } from "../git/runner";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerFs } from "../storage/fs";
@@ -150,6 +150,64 @@ export async function listActivePlannerSkillSummaries(input: {
 		});
 	}
 	return summaries;
+}
+
+export async function listPlannerSkillInventory(input: {
+	fs: PlannerFs;
+	projectPaths: ProjectStoragePaths;
+}): Promise<PlannerSkillSummary[]> {
+	const paths = createPlannerSkillStoragePaths(input.projectPaths);
+	const index = await readPlannerSkillIndex(input.fs, paths.indexJson);
+	const items = [...index.items].sort((left, right) => {
+		const byUpdated = right.updatedAt - left.updatedAt;
+		return byUpdated || left.name.localeCompare(right.name);
+	});
+	const summaries: PlannerSkillSummary[] = [];
+	for (const item of items) {
+		if (item.status !== "active") continue;
+		if (!(await input.fs.exists(item.skillPath))) continue;
+		summaries.push({
+			name: item.name,
+			description: item.description,
+			sourceKind: item.sourceKind,
+			tags: item.tags,
+			skillPath: item.skillPath,
+			updatedAt: item.updatedAt,
+		});
+	}
+	return summaries;
+}
+
+export async function deletePlannerSkill(input: {
+	fs: PlannerFs;
+	projectPaths: ProjectStoragePaths;
+	name: string;
+}): Promise<PlannerSkillSummary | null> {
+	const paths = createPlannerSkillStoragePaths(input.projectPaths);
+	const index = await readPlannerSkillIndex(input.fs, paths.indexJson);
+	const item = index.items.find((entry) => entry.name === input.name);
+	if (!item) {
+		return null;
+	}
+	const skillDir = dirname(item.skillPath);
+	if (!isPathInsideOrEqual(skillDir, paths.libraryDir)) {
+		throw new TypeError(
+			`Refusing to delete planner skill outside library: ${item.skillPath}`,
+		);
+	}
+	await input.fs.removeDir(skillDir);
+	await writePlannerSkillIndex(input.fs, paths.indexJson, {
+		version: 1,
+		items: index.items.filter((entry) => entry.name !== item.name),
+	});
+	return {
+		name: item.name,
+		description: item.description,
+		sourceKind: item.sourceKind,
+		tags: item.tags,
+		skillPath: item.skillPath,
+		updatedAt: item.updatedAt,
+	};
 }
 
 export async function listActivePlannerSkillPathsForCwd(input: {
@@ -641,4 +699,11 @@ function blocked(text: string): PlannerSkillCreateResult {
 
 function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
+}
+
+function isPathInsideOrEqual(path: string, root: string): boolean {
+	const resolvedPath = resolve(path);
+	const resolvedRoot = resolve(root);
+	const rel = relative(resolvedRoot, resolvedPath);
+	return rel.length === 0 || (!rel.startsWith("..") && !isAbsolute(rel));
 }
