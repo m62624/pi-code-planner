@@ -27,4 +27,6 @@ Settings domain for defaults, settings.json validation, merge order, and effecti
 ### Domain Details
 - `DEFAULT_PLANNER_SETTINGS` is the canonical defaults object.
 - `loadEffectivePlannerSettings` is the source of truth for current values and setting source labels.
+- **Who reads settings:** `runtime/orchestrator.ts` calls `loadEffectivePlannerSettings` on every planner tool call — settings are loaded fresh, not cached in state, so project-level overrides apply immediately.
+- **Settings blast radius:** `contracts.*` settings affect `runtime/contracts.ts`; `idle.*` and `timer.*` affect `runtime/idle-watchdog.ts` and `runtime/timer.ts`. Changing a setting key or type requires: `schema.ts` type, `manager.ts` merge, `DEFAULT_PLANNER_SETTINGS` default, tests, and README table.
 <!-- pi-code-planner:contracts:end -->

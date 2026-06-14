@@ -30,4 +30,7 @@ Source domain for the Pi extension implementation. Route to narrower AGENTS.md f
 ### Domain Details
 - Most extension work starts in `src/index.ts`, then moves to a runtime/storage helper once behavior needs tests.
 - Keep model-facing strings explicit: local models need exact next actions, allowed wrappers, and blocked reasons.
+- **Connection map:** `index.ts` → registers tools/commands → calls into `runtime/` executors → which call `storage/` readers/writers → which persist to `state.json`/`plan.json`. Settings flow: `settings/` → loaded by `runtime/orchestrator.ts` → affect gate policies and status formatting.
+- **Cross-domain dependency:** `runtime/contracts.ts` reads AGENTS.md files via `storage/fs.ts` and writes contract summaries into `state.json` via `storage/state-store.ts`. Changes to storage schema (PlannerContractsState) break contracts.ts state reads.
+- **Guard layer:** `guard/tool-policy.ts` is checked in `index.ts` before any tool reaches runtime. Changes to allowed tool lists require updating both the guard and `stage-behavior.ts` expectedTools.
 <!-- pi-code-planner:contracts:end -->

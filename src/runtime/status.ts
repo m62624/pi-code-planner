@@ -420,14 +420,16 @@ export const PLANNER_STEP_RULES = {
 	}),
 	contract_check: stepRule("execution", "contract_check", {
 		objective:
-			"Check whether the green task changed durable AGENTS.md local contracts before refactor.",
+			"Check whether the green task changed durable AGENTS.md local contracts before refactor. Also check for hidden component dependencies the implementation revealed.",
 		requiredActions: [
-			"Review the task diff, changed files, task acceptance criteria, and active AGENTS.md contract chain.",
+			"Run planner_git_inspect or review the diff to identify the exact changed files and their directories.",
+			"For each changed component: who calls or imports it? What does it read from? What does it write to? If you discovered a non-obvious dependency or invariant during implementation, it belongs in AGENTS.md Domain Details — not only in tdd.md. tdd.md is erased between sessions. AGENTS.md is not.",
+			"Check the level: is the nearest AGENTS.md in your active chain at the same directory level as the changed files, or is it a parent? If it is a parent and the changed area has its own distinct domain, prefer create_new at the specific directory level.",
 			"Call planner_contract_check with outcomeSummary, domainImpact, changedFiles, evidence, and action no_update/upsert_existing/create_new.",
 			"If project files changed and no writable AGENTS.md exists yet, no_update is invalid. Use create_new and write the initial meaningful root/domain AGENTS.md contract.",
 			"If planner_contract_check reports an update is needed, call planner_contract_upsert for the nearest meaningful AGENTS.md domain and commit that change if the worktree becomes dirty.",
-			"Use AGENTS.md as repository-owned routing memory. Add durable domain rules, parent backlinks, child index entries, read-first hints, and domain details only when they help future agents avoid reading irrelevant code.",
-			"Do not add overly specific task trivia to AGENTS.md. Record local one-off details in tdd.md instead.",
+			"Use AGENTS.md as repository-owned routing memory. Add durable domain rules, parent backlinks, child index entries, read-first hints, stable contracts, and domain details that help future agents avoid reading irrelevant code.",
+			"Do not add overly specific task trivia to AGENTS.md. Record one-off task details in tdd.md.",
 		],
 		allowedNow: [
 			"Inspect the task diff, read/update AGENTS.md through planner_contract tools, and commit contract documentation changes.",
@@ -435,7 +437,7 @@ export const PLANNER_STEP_RULES = {
 		forbiddenNow: [
 			"Do not refactor before contract_check is complete.",
 			"Do not write managed contract blocks by hand; use planner_contract_upsert.",
-			"Do not create AGENTS.md in every folder.",
+			"Do not create AGENTS.md in every folder — only at meaningful architectural boundaries.",
 		],
 		exitCondition:
 			"planner_contract_check is recorded for the active task, pending upserts are resolved, and the worktree is clean.",
@@ -494,11 +496,13 @@ export const PLANNER_STEP_RULES = {
 		nextInstruction: "Call planner_finish_step to open compact_task.",
 	}),
 	compact_task: stepRule("execution", "compact_task", {
-		objective: "Compact the completed task boundary.",
+		objective:
+			"Compact the completed task boundary and verify no hidden connections were missed.",
 		requiredActions: [
+			"Before requesting compact: briefly check — did the task change any component that is called, imported, or depended upon by code outside the task scope? If yes and this was not captured in tdd.md or AGENTS.md, add a note to tdd.md before compacting.",
 			"Request Pi compact preserving task result, checks, artifacts, and next-task context.",
 		],
-		allowedNow: ["Compact flow only."],
+		allowedNow: ["Brief connection check, then compact flow only."],
 		forbiddenNow: ["Do not edit task code while compact is required/pending."],
 		exitCondition:
 			"Compaction finished and resume context points back to planner_status.",

@@ -842,8 +842,32 @@ export function formatPlannerContractsStatus(input: {
 		input.state.step === "contract_check"
 	) {
 		lines.push(
-			"- guidance: Implementation is green; call planner_contract_check before refactor_task.",
+			"- guidance: Implementation is green. Before calling planner_contract_check, review the diff and ask: what other components call or import the code you changed? Did your change affect any shared behavior, state field, or exported interface that other domains depend on?",
 		);
+		if (contracts.activeChains.length > 0) {
+			const summaryByPath = new Map(
+				contracts.summaries.map((s) => [s.path, s]),
+			);
+			for (const chain of contracts.activeChains) {
+				const nearest = chain.chain.at(-1);
+				if (!nearest) continue;
+				const nearestSummary = summaryByPath.get(nearest);
+				if (nearestSummary?.childIndex.length) {
+					lines.push(
+						`- guidance: Nearest contract ${nearest} has child domains: ${nearestSummary.childIndex.join("; ")}. If changed files belong to a subdomain listed above, consider creating a more specific AGENTS.md there instead of updating the parent.`,
+					);
+				}
+			}
+		}
+		if (contracts.touchedFiles.length > 0) {
+			lines.push(
+				`- guidance: AGENTS.md files touched in this plan: ${contracts.touchedFiles.map((f) => f.path).join(", ")}. These are tracked and will be offered as keep/remove at /planner-finish.`,
+			);
+		} else {
+			lines.push(
+				"- guidance: No AGENTS.md files have been created or updated in this plan yet. We recommend capturing durable domain knowledge here — after memory wipes between sessions, this is what helps the next agent avoid reading irrelevant code.",
+			);
+		}
 	} else if (contracts.pendingUpsert) {
 		lines.push(
 			`- guidance: Contract update required; call planner_contract_upsert for ${contracts.pendingUpsert.path}.`,
@@ -888,9 +912,7 @@ export function formatPlannerContractsStatus(input: {
 			);
 		})
 	) {
-		lines.push(
-			"- guidance: The nearest contract has child domains. If a child domain directly covers the goal's primary changed area, read it before finishing discovery. If the nearest contract's purpose already covers the goal, stop here and use its Read First files.",
-		);
+		lines.push(...buildChildDomainHints(contracts));
 	} else if (!contracts.scanComplete) {
 		lines.push(
 			"- guidance: During discovery, call planner_contract_scan before broad source reads.",
@@ -900,6 +922,33 @@ export function formatPlannerContractsStatus(input: {
 		lines.push(`- diagnostic: ${diagnostic}`);
 	}
 	return lines;
+}
+
+function buildChildDomainHints(contracts: PlannerContractsState): string[] {
+	const summaryByPath = new Map(contracts.summaries.map((s) => [s.path, s]));
+	const hints: string[] = [];
+	for (const chain of contracts.activeChains) {
+		const nearest = chain.chain.at(-1);
+		if (!nearest) continue;
+		const children = contracts.childContracts[nearest] ?? [];
+		if (children.length === 0) continue;
+		const unread = children.filter(
+			(c) => !contracts.summaries.some((s) => s.path === c),
+		);
+		if (unread.length === 0) continue;
+		const nearestSummary = summaryByPath.get(nearest);
+		const childDescriptions = nearestSummary?.childIndex ?? [];
+		if (childDescriptions.length > 0) {
+			hints.push(
+				`- guidance: Nearest contract ${nearest} has unread child domains: ${childDescriptions.join("; ")}. If your goal's primary changed area matches a child description above, read that child before finishing discovery. If the nearest contract's purpose already covers the goal, stop here.`,
+			);
+		} else {
+			hints.push(
+				`- guidance: Nearest contract ${nearest} has child domains (${unread.join(", ")}). If any directly covers the goal's primary changed area, read it before finishing discovery. If the nearest contract's purpose already covers the goal, stop here.`,
+			);
+		}
+	}
+	return hints;
 }
 
 function buildActiveContractSummaryLines(input: {
