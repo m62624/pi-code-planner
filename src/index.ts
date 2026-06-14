@@ -1926,7 +1926,38 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					);
 					return;
 				}
-				await git.switchBranch({ repoRoot: projectRoot, branch: planBranch });
+				const dirty = await git
+					.statusPorcelain({ repoRoot: projectRoot })
+					.catch(() => "");
+				if (dirty.trim()) {
+					ctx.ui.notify(
+						`${projectRoot} has uncommitted changes. Stash or commit them first, then run /planner-preview again.`,
+						"warning",
+					);
+					return;
+				}
+				const branchExists = await git
+					.branchExists({ repoRoot: projectRoot, branch: planBranch })
+					.catch(() => false);
+				if (!branchExists) {
+					ctx.ui.notify(
+						`Plan branch ${planBranch} is not available in ${projectRoot}. The plan may have been removed or the worktree is not linked to this repo.`,
+						"warning",
+					);
+					return;
+				}
+				try {
+					await git.switchBranch({
+						repoRoot: projectRoot,
+						branch: planBranch,
+					});
+				} catch {
+					ctx.ui.notify(
+						`Could not switch ${projectRoot} to ${planBranch}. Try running /planner-preview again after resolving any git issues.`,
+						"warning",
+					);
+					return;
+				}
 				await savePlanPreviewRecord(fs, planPaths.previewJson, {
 					restoreBranch,
 					planBranch,
