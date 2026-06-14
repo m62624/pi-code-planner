@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="assets/banner.webp" alt="pi-code-planner banner">
-</p>
+> ⚠️ This repository is an experiment built with Pi and Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf for local coding work. It is maintained with local AI assistance and may contain non-professional design choices, rough edges, broken behavior, or mistakes. Use it at your own risk.
 
 # pi-code-planner
 
