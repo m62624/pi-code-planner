@@ -146,6 +146,34 @@ async function inspectGitTool(
 	const repoRoot = ready.state.worktreePath ?? input.projectPaths.projectRoot;
 	const mode = asObject(input.params).mode;
 
+	if (mode === "plan_summary") {
+		const baseBranch = ready.state.activeBranches.base;
+		const planBranch = ready.state.activeBranches.plan;
+		const [log, stat] = await Promise.all([
+			input.git
+				.logOneline({ repoRoot, fromRef: baseBranch, toRef: planBranch })
+				.catch((e: unknown) => `(log unavailable: ${String(e)})`),
+			input.git
+				.diffRange({ repoRoot, fromRef: baseBranch, toRef: planBranch })
+				.catch((e: unknown) => `(diff unavailable: ${String(e)})`),
+		]);
+		return applied(
+			input.toolName,
+			[
+				`Plan branch: ${planBranch}`,
+				`Base branch: ${baseBranch}`,
+				`Worktree: ${repoRoot}`,
+				"",
+				"## Commits",
+				log || "(no commits yet)",
+				"",
+				"## Changed files",
+				stat || "(no changes yet)",
+			].join("\n"),
+			{ baseBranch, planBranch },
+		);
+	}
+
 	if (mode === "task_diff") {
 		const taskId = requiredString(input.params, "taskId");
 		const planId = ready.planId;

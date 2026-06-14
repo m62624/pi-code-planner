@@ -72,6 +72,12 @@ export class NodeGitRunner implements GitRunner {
 		return await runGitCommandOutput(buildGitDiffRangeArgs(input));
 	}
 
+	async logOneline(
+		input: GitRepoInput & { fromRef: string; toRef: string },
+	): Promise<string> {
+		return await runGitCommandOutput(buildGitLogOnelineArgs(input));
+	}
+
 	async diffPatch(input: GitRepoInput): Promise<string> {
 		return await runGitCommandOutput(buildGitDiffPatchArgs(input));
 	}
@@ -170,6 +176,18 @@ export function buildGitDiffRangeArgs(
 		input.repoRoot,
 		"diff",
 		"--stat",
+		`${input.fromRef}..${input.toRef}`,
+	];
+}
+
+export function buildGitLogOnelineArgs(
+	input: GitRepoInput & { fromRef: string; toRef: string },
+): string[] {
+	return [
+		"-C",
+		input.repoRoot,
+		"log",
+		"--oneline",
 		`${input.fromRef}..${input.toRef}`,
 	];
 }

@@ -60,6 +60,9 @@ export interface GitRunner {
 	diffRange(
 		input: GitRepoInput & { fromRef: string; toRef: string },
 	): Promise<string>;
+	logOneline(
+		input: GitRepoInput & { fromRef: string; toRef: string },
+	): Promise<string>;
 	resolveGitPath?(input: GitPathInput): Promise<string>;
 	listProjectFiles(input: GitRepoInput): Promise<string[]>;
 	branchExists(input: GitBranchInput): Promise<boolean>;

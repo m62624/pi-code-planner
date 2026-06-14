@@ -162,6 +162,13 @@ export async function finalizeAcceptedPlan(input: {
 			worktreePath: preview.worktreePath,
 		}),
 	);
+	await restorePreviewCheckoutIfActive({
+		fs: input.fs,
+		git: input.git,
+		planPaths,
+		planBranch: preview.state.activeBranches.plan,
+		projectRoot: input.projectPaths.projectRoot,
+	});
 	await input.fs.removeDir(planPaths.planDir);
 	await saveProjectRecord(input.fs, input.projectPaths, {
 		...preview.project,
@@ -176,6 +183,59 @@ export async function finalizeAcceptedPlan(input: {
 		removedPlanDir: planPaths.planDir,
 		removedChildBranches: childBranches,
 	};
+}
+
+export interface PlanPreviewRecord {
+	restoreBranch: string;
+	planBranch: string;
+	projectRoot: string;
+}
+
+export async function readPlanPreviewRecord(
+	fs: PlannerFs,
+	previewJsonPath: string,
+): Promise<PlanPreviewRecord | null> {
+	try {
+		const text = await fs.readText(previewJsonPath);
+		return JSON.parse(text) as PlanPreviewRecord;
+	} catch {
+		return null;
+	}
+}
+
+export async function savePlanPreviewRecord(
+	fs: PlannerFs,
+	previewJsonPath: string,
+	record: PlanPreviewRecord,
+): Promise<void> {
+	await fs.writeText(previewJsonPath, JSON.stringify(record, null, 2));
+}
+
+async function restorePreviewCheckoutIfActive(input: {
+	fs: PlannerFs;
+	git: GitRunner;
+	planPaths: ReturnType<typeof createPlanStoragePaths>;
+	planBranch: string;
+	projectRoot: string;
+}): Promise<void> {
+	const record = await readPlanPreviewRecord(
+		input.fs,
+		input.planPaths.previewJson,
+	);
+	if (!record) return;
+	try {
+		const current = await input.git.currentBranch({
+			repoRoot: input.projectRoot,
+		});
+		if (current === input.planBranch) {
+			await input.git.switchBranch({
+				repoRoot: input.projectRoot,
+				branch: record.restoreBranch,
+			});
+		}
+	} catch {
+		// if restore fails (e.g. user already moved or dirty), just continue
+	}
 }
 
 async function buildAcceptedPlanCommitMessage(input: {

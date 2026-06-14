@@ -32,6 +32,8 @@ import {
 	buildAcceptedPlanCompletionPrompt,
 	finalizeAcceptedPlan,
 	inspectAcceptedPlan,
+	readPlanPreviewRecord,
+	savePlanPreviewRecord,
 } from "./runtime/accepted-plan";
 import { readActivePlanContext } from "./runtime/active-plan";
 import {
@@ -1057,9 +1059,9 @@ const GIT_INSPECT_TOOL_PARAMETERS = {
 	properties: {
 		mode: {
 			type: "string",
-			enum: ["inspect", "task_diff"],
+			enum: ["inspect", "plan_summary", "task_diff"],
 			description:
-				"inspect: git reality (branch, HEAD, dirty, conflicts). task_diff: diff stat between plan branch and task branch.",
+				"inspect: git reality (branch, HEAD, dirty, conflicts). plan_summary: all commits and changed files from base to plan branch. task_diff: diff stat between plan branch and task branch.",
 		},
 		taskId: {
 			type: "string",
@@ -1857,6 +1859,89 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			});
 			notifyPlannerCommandResult(ctx, result);
 			resetPlanActiveCache(pi);
+		},
+	});
+
+	pi.registerCommand("planner-preview", {
+		description:
+			"Preview the planner result in your editor without finishing. Checks out the plan branch in your main repository so you can browse files. Run again to see current status. /planner-finish will restore your branch automatically.",
+		handler: async (_args, ctx) => {
+			await ctx.waitForIdle();
+			const fs = createNodeFs();
+			const git = new NodeGitRunner();
+			try {
+				const agentDir = getAgentDir();
+				const projectPaths = await resolveProjectStoragePaths({
+					fs,
+					agentDir,
+					cwd: ctx.cwd,
+				});
+				const project = await readProjectRecordIfExists(fs, projectPaths);
+				const activePlanId = project?.activePlanId;
+				if (!activePlanId) {
+					ctx.ui.notify("No active plan to preview.", "info");
+					return;
+				}
+				const planPaths = createPlanStoragePaths(projectPaths, activePlanId);
+				const state = await readPlanStateIfExists(fs, planPaths);
+				if (!state) {
+					ctx.ui.notify("Plan state not found.", "error");
+					return;
+				}
+				const planBranch = state.activeBranches.plan;
+				const projectRoot = projectPaths.projectRoot;
+
+				const existing = await readPlanPreviewRecord(fs, planPaths.previewJson);
+				if (existing) {
+					const current = await git
+						.currentBranch({ repoRoot: projectRoot })
+						.catch(() => "(unknown)");
+					const onPlan = current === planBranch;
+					ctx.ui.notify(
+						onPlan
+							? `Preview active — ${projectRoot} is on ${planBranch}. Open this folder in your editor to browse files. /planner-finish will restore branch "${existing.restoreBranch}".`
+							: `Preview was active but you switched away. ${projectRoot} is now on "${current}". Run /planner-preview again to reactivate.`,
+						"info",
+					);
+					if (!onPlan) {
+						await fs.removeFile(planPaths.previewJson).catch(() => {});
+					}
+					return;
+				}
+
+				const restoreBranch = await git
+					.currentBranch({ repoRoot: projectRoot })
+					.catch(() => "");
+				if (!restoreBranch) {
+					ctx.ui.notify(
+						"Could not read current branch in project root.",
+						"error",
+					);
+					return;
+				}
+				if (restoreBranch === planBranch) {
+					ctx.ui.notify(
+						`Already on plan branch ${planBranch}. Open ${projectRoot} in your editor to browse files.`,
+						"info",
+					);
+					return;
+				}
+				await git.switchBranch({ repoRoot: projectRoot, branch: planBranch });
+				await savePlanPreviewRecord(fs, planPaths.previewJson, {
+					restoreBranch,
+					planBranch,
+					projectRoot,
+				});
+				ctx.ui.notify(
+					`Preview ready — ${projectRoot} is now on ${planBranch}. Open this folder in your editor to browse accumulated plan files. /planner-finish will restore "${restoreBranch}" automatically.`,
+					"info",
+				);
+			} catch (error) {
+				ctx.ui.notify(
+					`Planner preview failed: ${errorMessage(error)}`,
+					"error",
+				);
+			}
 		},
 	});
 
