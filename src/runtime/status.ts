@@ -908,12 +908,11 @@ export async function buildPlannerStatusText(
 			settings: settings.effective.contracts,
 		}),
 		"",
-		...(state.stage === "finalize" &&
-		state.step === "doubt_review" &&
-		preflight.planPaths
+		...(state.stage === "finalize" && preflight.planPaths
 			? await formatDoubtReviewProtocolSection(
 					input.fs,
 					preflight.planPaths.discoveryMd,
+					state.step === "doubt_review",
 				)
 			: []),
 		...(shouldShowPlannerSkillInventory(behavior)
@@ -1100,20 +1099,25 @@ function formatInstructionBundle(
 async function formatDoubtReviewProtocolSection(
 	fs: PlannerFs,
 	discoveryMdPath: string,
+	isDoubtReviewStep: boolean,
 ): Promise<string[]> {
 	const content = await fs.readText(discoveryMdPath).catch(() => "");
 	const commands = extractVerificationProtocolCommands(content);
 	if (commands.length === 0) {
 		return [
-			"## Doubt Review: Verification Protocol",
+			"## Verification Protocol",
 			"WARNING: discovery.md has no ## Verification Protocol section or no parseable commands.",
-			"Add a ## Verification Protocol with exact test/build/check commands to discovery.md before calling planner_doubt_review.",
+			isDoubtReviewStep
+				? "Add a ## Verification Protocol with exact test/build/check commands to discovery.md before calling planner_doubt_review."
+				: "Add a ## Verification Protocol with exact test/build/check commands to discovery.md before reaching doubt_review.",
 			"",
 		];
 	}
 	return [
-		"## Doubt Review: Verification Protocol",
-		"These commands are required in verificationEvidence for planner_doubt_review:",
+		"## Verification Protocol",
+		isDoubtReviewStep
+			? "These commands are required in verificationEvidence for planner_doubt_review:"
+			: "These commands will be required in verificationEvidence during doubt_review:",
 		...commands.map((c) => `- ${c}`),
 		"",
 	];

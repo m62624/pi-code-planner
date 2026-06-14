@@ -1052,6 +1052,24 @@ const GIT_OPTIONAL_MESSAGE_TOOL_PARAMETERS = {
 	additionalProperties: false,
 } as const;
 
+const GIT_INSPECT_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		mode: {
+			type: "string",
+			enum: ["inspect", "task_diff"],
+			description:
+				"inspect: git reality (branch, HEAD, dirty, conflicts). task_diff: diff stat between plan branch and task branch.",
+		},
+		taskId: {
+			type: "string",
+			description:
+				"Required when mode=task_diff. The task ID to diff against the plan branch.",
+		},
+	},
+	additionalProperties: false,
+} as const;
+
 interface PlannerIdleRuntimeState {
 	latestCwd: string | null;
 	checking: boolean;
@@ -3047,6 +3065,7 @@ function gitToolParameters(toolName: PlannerGitToolName) {
 		case "planner_git_merge_task_to_plan":
 			return GIT_OPTIONAL_MESSAGE_TOOL_PARAMETERS;
 		case "planner_git_inspect":
+			return GIT_INSPECT_TOOL_PARAMETERS;
 		case "planner_git_init":
 		case "planner_git_create_refactor_branch":
 			return EMPTY_TOOL_PARAMETERS;

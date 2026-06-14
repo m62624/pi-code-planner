@@ -298,9 +298,9 @@ async function mergeTaskTool(
 				state: ready.state,
 				message: optionalMessage(input.params, "merge task into plan"),
 			}),
-		afterSave: async () => {
+		afterSave: async (commitHash) => {
 			if (!taskId) return;
-			await markTaskDone(input.fs, ready, taskId);
+			await markTaskDone(input.fs, ready, taskId, commitHash);
 		},
 	});
 }
@@ -310,7 +310,7 @@ async function runStateChangingGitOperation(input: {
 	ready: ReadyGitContext;
 	text: string;
 	operation: () => Promise<{ state: PlanStateRecord }>;
-	afterSave?: () => Promise<void>;
+	afterSave?: (afterHeadCommit: string) => Promise<void>;
 }): Promise<PlannerGitToolExecutionResult> {
 	const repoRoot = requireWorktreePath(input.ready.state);
 	const before = await inspectPlannerGitReality({
@@ -332,7 +332,7 @@ async function runStateChangingGitOperation(input: {
 		input.ready.orchestrator.preflight.context.planPaths,
 		state,
 	);
-	await input.afterSave?.();
+	await input.afterSave?.(after.headCommit);
 	return applied(input.input.toolName, input.text, {
 		before,
 		after,
@@ -344,6 +344,7 @@ async function markTaskDone(
 	fs: PlannerFs,
 	ready: ReadyGitContext,
 	taskId: string,
+	commitHash: string,
 ): Promise<void> {
 	const planPaths = ready.orchestrator.preflight.context.planPaths;
 	await updatePlanRecord(fs, planPaths, (plan) => ({
@@ -354,7 +355,7 @@ async function markTaskDone(
 	}));
 	const taskPaths = createTaskStoragePaths(planPaths, taskId);
 	if (await fs.exists(taskPaths.taskJson)) {
-		await updateTaskStatus(fs, taskPaths, "done");
+		await updateTaskStatus(fs, taskPaths, "done", commitHash);
 	}
 }
 
