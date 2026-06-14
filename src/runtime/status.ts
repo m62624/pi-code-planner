@@ -10,6 +10,7 @@ import type { PlannerFs } from "../storage/fs";
 import type { PlannerStage, PlannerStep } from "../storage/schema";
 import { formatPlannerContractsStatus } from "./contracts";
 import { formatDebugStatusLines } from "./debug-tools";
+import { extractVerificationProtocolCommands } from "./doubt-review";
 import {
 	decidePlannerLifecycleNext,
 	type PlannerLifecycleDecision,
@@ -907,6 +908,14 @@ export async function buildPlannerStatusText(
 			settings: settings.effective.contracts,
 		}),
 		"",
+		...(state.stage === "finalize" &&
+		state.step === "doubt_review" &&
+		preflight.planPaths
+			? await formatDoubtReviewProtocolSection(
+					input.fs,
+					preflight.planPaths.discoveryMd,
+				)
+			: []),
 		...(shouldShowPlannerSkillInventory(behavior)
 			? [
 					"## Planner Skill Memory",
@@ -1086,6 +1095,28 @@ function formatInstructionBundle(
 		);
 	}
 	return lines;
+}
+
+async function formatDoubtReviewProtocolSection(
+	fs: PlannerFs,
+	discoveryMdPath: string,
+): Promise<string[]> {
+	const content = await fs.readText(discoveryMdPath).catch(() => "");
+	const commands = extractVerificationProtocolCommands(content);
+	if (commands.length === 0) {
+		return [
+			"## Doubt Review: Verification Protocol",
+			"WARNING: discovery.md has no ## Verification Protocol section or no parseable commands.",
+			"Add a ## Verification Protocol with exact test/build/check commands to discovery.md before calling planner_doubt_review.",
+			"",
+		];
+	}
+	return [
+		"## Doubt Review: Verification Protocol",
+		"These commands are required in verificationEvidence for planner_doubt_review:",
+		...commands.map((c) => `- ${c}`),
+		"",
+	];
 }
 
 function formatPlannerArtifactLinks(

@@ -116,7 +116,9 @@ export function parseDoubtReviewParams(params: unknown): DoubtReview {
 		"possibleErrors",
 	).map(parseFinding);
 	if (possibleErrors.length === 0) {
-		throw new TypeError("possibleErrors must contain at least one finding.");
+		throw new TypeError(
+			"possibleErrors must contain at least one finding. If everything is clean, add a finding with status=not_a_bug (plus evidence) or status=disproven (proofLevel=disproven_by_test or disproven_by_code). Do not pass an empty array.",
+		);
 	}
 	const verificationEvidence = arrayOfObjects(
 		object.verificationEvidence,
@@ -352,19 +354,34 @@ export function validateDoubtReviewAgainstVerificationProtocol(
 	const requiredCommands = protocol
 		.map(extractProtocolCommand)
 		.filter((command): command is string => Boolean(command));
+	const missing: string[] = [];
+	const failed: string[] = [];
 	for (const command of requiredCommands) {
 		const evidence = review.verificationEvidence.find((entry) =>
 			commandsMatch(entry.command, command),
 		);
 		if (!evidence) {
-			return `planner_doubt_review is missing verificationEvidence for required protocol command: ${command}`;
-		}
-		if (
+			missing.push(command);
+		} else if (
 			evidence.status !== "passed" &&
 			!findingCoversCommand(review, command)
 		) {
-			return `Required protocol command did not pass: ${command}. Mark a finding proven_bug/needs_probe for that command before completing doubt_review.`;
+			failed.push(command);
 		}
+	}
+	if (missing.length > 0) {
+		return (
+			`planner_doubt_review is missing verificationEvidence for ${missing.length} required protocol command(s):\n` +
+			missing.map((c) => `  - ${c}`).join("\n") +
+			"\nAdd all of them to verificationEvidence in one call."
+		);
+	}
+	if (failed.length > 0) {
+		return (
+			`Required protocol command(s) did not pass:\n` +
+			failed.map((c) => `  - ${c}`).join("\n") +
+			"\nMark a finding proven_bug or needs_probe for each failing command before completing doubt_review."
+		);
 	}
 	return null;
 }
@@ -467,7 +484,13 @@ function parseVerificationEvidence(
 	};
 }
 
-function extractVerificationProtocol(content: string): string[] {
+export function extractVerificationProtocolCommands(content: string): string[] {
+	return extractVerificationProtocol(content)
+		.map(extractProtocolCommand)
+		.filter((c): c is string => Boolean(c));
+}
+
+export function extractVerificationProtocol(content: string): string[] {
 	const lines = content.split(/\r?\n/);
 	const result: string[] = [];
 	let collecting = false;

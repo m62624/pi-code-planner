@@ -121,6 +121,23 @@ In doubt review, skill creation is expected when the audit exposed a reusable bu
 
 The skill body should be written in `metadata.skillLanguage`. The wrapper writes YAML frontmatter and stores the skill under the planner extension library. The new skill is loaded through Pi `resources_discover` on future planner session start, resume, or reload.
 
+## Overnight Loop — Autonomous Bug Return
+
+If `doubt_review` produces any `proven_bug` finding, do **not** wait for the user.
+
+1. Write the bugs to `decisions.md`.
+2. Call `planner_doubt_review` to close the step with `nextStep: planning/read_context`.
+3. Immediately advance: planning → execution → finalize again.
+4. Notify the user only after the next full finalize cycle completes or when you hit a blocker that requires their input.
+
+This loop is your responsibility. An overnight run that pauses to ask "should I go back to planning?" has failed the contract. The state machine already permits the transition; your job is to take it without hesitation.
+
+The only exceptions are:
+- A finding that requires user clarification on requirements (e.g., spec is genuinely ambiguous — not just code uncertainty).
+- A `needs_probe` finding that cannot be run locally (e.g., needs production credentials the plan does not have).
+
+In those cases, surface the blocker clearly and wait. For everything else: loop.
+
 ## Exit Condition
 
 Finalize is complete only when the integrated plan branch is checked, `final_summary.md` exists, final compact finishes, and state enters `done/present_result`.

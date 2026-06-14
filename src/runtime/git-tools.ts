@@ -1,3 +1,4 @@
+import { planBranchName, taskBranchName } from "../git/branches";
 import {
 	createAndSwitchRefactorBranch,
 	createAndSwitchTaskBranch,
@@ -143,6 +144,29 @@ async function inspectGitTool(
 	ready: ReadyGitContext,
 ): Promise<PlannerGitToolExecutionResult> {
 	const repoRoot = ready.state.worktreePath ?? input.projectPaths.projectRoot;
+	const mode = asObject(input.params).mode;
+
+	if (mode === "task_diff") {
+		const taskId = requiredString(input.params, "taskId");
+		const planId = ready.planId;
+		const planBranch = planBranchName(planId);
+		const taskBranch = taskBranchName(planId, taskId);
+		const diff = await input.git
+			.diffRange({ repoRoot, fromRef: planBranch, toRef: taskBranch })
+			.catch((e: unknown) => `(diff unavailable: ${String(e)})`);
+		return applied(
+			input.toolName,
+			[
+				`Task diff: ${taskId}`,
+				`Plan branch: ${planBranch}`,
+				`Task branch: ${taskBranch}`,
+				"",
+				diff || "(no changes)",
+			].join("\n"),
+			{ taskId, planBranch, taskBranch },
+		);
+	}
+
 	const reality = await inspectPlannerGitReality({ git: input.git, repoRoot });
 	return applied(
 		input.toolName,
