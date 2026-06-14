@@ -289,7 +289,6 @@ export function getAllowedPlannerWrapperTools(
 		| "broken"
 		| "requiresUserDecision"
 		| "requiresCompact"
-		| "lastStuckAttemptId"
 		| "debugArtifactsDir"
 	>,
 ): readonly PlannerWrapperTool[] {
@@ -322,7 +321,6 @@ export function checkPlannerWrapperAllowed(input: {
 		| "broken"
 		| "requiresUserDecision"
 		| "requiresCompact"
-		| "lastStuckAttemptId"
 		| "debugArtifactsDir"
 	>;
 }): PlannerToolPolicyDecision {
@@ -408,9 +406,9 @@ function withAlwaysAllowed(
 
 function filterDebugToolsForState(
 	tools: readonly PlannerWrapperTool[],
-	state: Pick<PlanStateRecord, "lastStuckAttemptId" | "debugArtifactsDir">,
+	state: Pick<PlanStateRecord, "debugArtifactsDir">,
 ): readonly PlannerWrapperTool[] {
-	if (state.lastStuckAttemptId || state.debugArtifactsDir) {
+	if (state.debugArtifactsDir) {
 		return tools;
 	}
 	return tools.filter(

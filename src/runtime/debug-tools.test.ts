@@ -126,6 +126,66 @@ describe("planner debug tools", () => {
 		});
 	});
 
+	it("blocks probe if strategy has not been written", async () => {
+		const setup = await createDebugSetup();
+
+		const result = await executePlannerDebugTool({
+			...setup,
+			toolName: "planner_debug_probe",
+			params: {
+				question: "Which branch loses the sign?",
+				hypothesis: "The mask drops the sign flag.",
+				method: "add_temp_log",
+				instrumentation: "temp_file",
+				target: "focused codec test",
+				expectedSignal: "temp output shows sign flag before decode",
+				cleanupRequired: true,
+			},
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("planner_debug_strategy");
+	});
+
+	it("blocks probe if a previous probe has no result yet", async () => {
+		const setup = await createDebugSetup();
+
+		await executePlannerDebugTool({
+			...setup,
+			toolName: "planner_debug_strategy",
+			params: strategyParams(),
+		});
+		await executePlannerDebugTool({
+			...setup,
+			toolName: "planner_debug_probe",
+			params: {
+				question: "Which branch loses the sign?",
+				hypothesis: "The mask drops the sign flag.",
+				method: "add_temp_log",
+				instrumentation: "temp_file",
+				target: "focused codec test",
+				expectedSignal: "temp output shows sign flag",
+				cleanupRequired: true,
+			},
+		});
+		const second = await executePlannerDebugTool({
+			...setup,
+			toolName: "planner_debug_probe",
+			params: {
+				question: "Does the issue occur before masking?",
+				hypothesis: "The problem is earlier in the pipeline.",
+				method: "inspect_file",
+				instrumentation: "none",
+				target: "codec.ts",
+				expectedSignal: "no sign flag in input",
+				cleanupRequired: false,
+			},
+		});
+
+		expect(second.status).toBe("blocked");
+		expect(second.text).toContain("planner_debug_result");
+	});
+
 	it("cleanup removes debug artifacts and clears commit guard state", async () => {
 		const setup = await createDebugSetup();
 

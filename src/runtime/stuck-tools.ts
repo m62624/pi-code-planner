@@ -305,10 +305,7 @@ async function readDiffPatch(
 	git: GitRunner,
 	repoRoot: string,
 ): Promise<string> {
-	const maybe = git as GitRunner & {
-		diffPatch?: (input: { repoRoot: string }) => Promise<string>;
-	};
-	return maybe.diffPatch ? await maybe.diffPatch({ repoRoot }) : "";
+	return git.diffPatch({ repoRoot });
 }
 
 function blocked(toolName: PlannerStuckToolName, text: string) {
