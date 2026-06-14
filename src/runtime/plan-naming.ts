@@ -6,6 +6,11 @@ export interface PlannerCreateCommandArgs {
 	request?: string;
 }
 
+export interface PlannerImproveCommandArgs {
+	request?: string;
+	compatibilityMode: "additive" | "breaking";
+}
+
 const MAX_GENERATED_PLAN_TITLE_LENGTH = 80;
 const MAX_GENERATED_PLAN_TITLE_WORDS = 6;
 const MAX_PLAN_DESCRIPTION_LENGTH = 90;
@@ -68,6 +73,56 @@ export function parsePlannerCreateCommandArgs(
 
 	const request = requestParts.join(" ").trim();
 	return {
+		...(request.length > 0 ? { request } : {}),
+	};
+}
+
+export function parsePlannerImproveCommandArgs(
+	args: string,
+): PlannerImproveCommandArgs | null {
+	const tokens = tokenizeCommandArgs(args);
+	let compatibilityMode: "additive" | "breaking" = "additive";
+	let explicitMode: "additive" | "breaking" | null = null;
+	const requestParts: string[] = [];
+
+	for (let index = 0; index < tokens.length; index += 1) {
+		const token = tokens[index];
+		if (token === "--additive") {
+			if (explicitMode === "breaking") return null;
+			explicitMode = "additive";
+			compatibilityMode = "additive";
+			continue;
+		}
+		if (token === "--breaking") {
+			if (explicitMode === "additive") return null;
+			explicitMode = "breaking";
+			compatibilityMode = "breaking";
+			continue;
+		}
+		if (token === "--compat") {
+			const value = tokens[index + 1];
+			if (value !== "additive" && value !== "breaking") return null;
+			if (explicitMode && explicitMode !== value) return null;
+			explicitMode = value;
+			compatibilityMode = value;
+			index += 1;
+			continue;
+		}
+		if (token.startsWith("--compat=")) {
+			const value = token.slice("--compat=".length);
+			if (value !== "additive" && value !== "breaking") return null;
+			if (explicitMode && explicitMode !== value) return null;
+			explicitMode = value;
+			compatibilityMode = value;
+			continue;
+		}
+		if (token.startsWith("--")) return null;
+		requestParts.push(token);
+	}
+
+	const request = requestParts.join(" ").trim();
+	return {
+		compatibilityMode,
 		...(request.length > 0 ? { request } : {}),
 	};
 }

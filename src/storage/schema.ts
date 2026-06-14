@@ -3,6 +3,8 @@ import { SCHEMA_VERSION } from "../constants";
 export type PlanSummaryStatus = "active" | "paused" | "done" | "broken";
 export type PlanStatus = "draft" | "active" | "paused" | "done" | "broken";
 export type TaskStatus = "pending" | "active" | "done" | "blocked";
+export type PlanCreationMethod = "create" | "improve";
+export type PlanCompatibilityMode = "additive" | "breaking";
 
 export type PlannerStage =
 	| "init"
@@ -334,6 +336,8 @@ export interface PlannerContractsState {
 
 export interface PlanStateRecord {
 	schemaVersion: typeof SCHEMA_VERSION;
+	creationMethod?: PlanCreationMethod;
+	compatibilityMode?: PlanCompatibilityMode;
 	stage: PlannerStage;
 	step: PlannerStep;
 	stepStatus: StepStatus;
@@ -424,9 +428,13 @@ export function createInitialPlanState(input: {
 	planBranch: string;
 	worktreePath?: string | null;
 	compactBoundaries?: PlannerCompactBoundaries;
+	creationMethod?: PlanCreationMethod;
+	compatibilityMode?: PlanCompatibilityMode;
 }): PlanStateRecord {
 	return {
 		schemaVersion: SCHEMA_VERSION,
+		creationMethod: input.creationMethod ?? "create",
+		compatibilityMode: input.compatibilityMode ?? "additive",
 		stage: "init",
 		step: "check_project",
 		stepStatus: "pending",

@@ -283,6 +283,45 @@ describe("planner state machine", () => {
 		});
 	});
 
+	it("allows discovery-first improve flow to return from discovery to intake", () => {
+		const current = state({
+			creationMethod: "improve",
+			stage: "discovery",
+			step: "enter_planning",
+			stepStatus: "running",
+		});
+
+		expect(getAllowedNextPlannerPositions(current)).toEqual([
+			{ stage: "planning", step: "read_context" },
+			{ stage: "intake", step: "draft_goal" },
+		] satisfies PlannerPosition[]);
+		expect(() => completePlannerStep(current)).toThrowStateMachine(
+			"ambiguous_next_step",
+		);
+		expect(
+			completePlannerStep(current, {
+				next: { stage: "intake", step: "draft_goal" },
+			}),
+		).toMatchObject({
+			nextStep: "draft_goal",
+		});
+	});
+
+	it("keeps normal discovery enter_planning linear for create plans", () => {
+		const current = state({
+			stage: "discovery",
+			step: "enter_planning",
+			stepStatus: "running",
+		});
+
+		expect(getAllowedNextPlannerPositions(current)).toEqual([
+			{ stage: "planning", step: "read_context" },
+		] satisfies PlannerPosition[]);
+		expect(completePlannerStep(current)).toMatchObject({
+			nextStep: "read_context",
+		});
+	});
+
 	it("requests and completes compact only at compact steps", () => {
 		expect(() =>
 			requestPlannerCompact(

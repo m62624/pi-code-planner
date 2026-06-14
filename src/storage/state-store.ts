@@ -126,6 +126,8 @@ export async function markPlanBroken(
 function normalizePlanState(state: PlanStateRecord): PlanStateRecord {
 	return {
 		...state,
+		creationMethod: state.creationMethod ?? "create",
+		compatibilityMode: state.compatibilityMode ?? "additive",
 		questionsSubmitted: state.questionsSubmitted ?? false,
 		questionsResolved: state.questionsResolved ?? false,
 		compactBoundaries: state.compactBoundaries ?? {

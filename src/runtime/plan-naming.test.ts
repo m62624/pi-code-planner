@@ -5,6 +5,7 @@ import {
 	createPlannerPlanDescription,
 	createPlannerPlanTitle,
 	parsePlannerCreateCommandArgs,
+	parsePlannerImproveCommandArgs,
 	resolvePlannerPlanId,
 	validatePlannerPlanTitle,
 } from "./plan-naming";
@@ -46,6 +47,36 @@ describe("planner plan naming", () => {
 
 	it("allows the multiline editor to collect a missing request", () => {
 		expect(parsePlannerCreateCommandArgs("")).toEqual({});
+	});
+
+	it("parses improve command compatibility flags and optional request", () => {
+		expect(parsePlannerImproveCommandArgs("")).toEqual({
+			compatibilityMode: "additive",
+		});
+		expect(parsePlannerImproveCommandArgs("--additive")).toEqual({
+			compatibilityMode: "additive",
+		});
+		expect(parsePlannerImproveCommandArgs("--breaking")).toEqual({
+			compatibilityMode: "breaking",
+		});
+		expect(parsePlannerImproveCommandArgs("--compat breaking")).toEqual({
+			compatibilityMode: "breaking",
+		});
+		expect(parsePlannerImproveCommandArgs("--compat=additive")).toEqual({
+			compatibilityMode: "additive",
+		});
+		expect(
+			parsePlannerImproveCommandArgs("--breaking improve release automation"),
+		).toEqual({
+			compatibilityMode: "breaking",
+			request: "improve release automation",
+		});
+	});
+
+	it("rejects invalid or conflicting improve command flags", () => {
+		expect(parsePlannerImproveCommandArgs("--compat unsafe")).toBeNull();
+		expect(parsePlannerImproveCommandArgs("--breaking --additive")).toBeNull();
+		expect(parsePlannerImproveCommandArgs("--unknown")).toBeNull();
 	});
 
 	it("uses sanitized explicit id when provided", () => {

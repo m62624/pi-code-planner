@@ -247,10 +247,14 @@ export {
 	checkPlannerWrapperToolForLifecycle,
 	filterPlannerWrapperToolsForLifecycle,
 } from "./runtime/orchestrator-gate";
-export type { PlannerCreateCommandArgs } from "./runtime/plan-naming";
+export type {
+	PlannerCreateCommandArgs,
+	PlannerImproveCommandArgs,
+} from "./runtime/plan-naming";
 export {
 	createPlannerPlanTitle,
 	parsePlannerCreateCommandArgs,
+	parsePlannerImproveCommandArgs,
 	resolvePlannerPlanId,
 } from "./runtime/plan-naming";
 export type {

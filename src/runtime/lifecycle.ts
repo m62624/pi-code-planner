@@ -23,6 +23,7 @@ export type PlannerLifecycleAction =
 	| "start_step"
 	| "request_compact"
 	| "finish_step"
+	| "self_written_goal"
 	| "advance_step"
 	| "retry_step"
 	| "blocked_step";
@@ -197,6 +198,24 @@ function stateMachineDecision(
 				"Append the user's requested corrections to decisions.md, add a Change Request Replan note near the start of plan.md, and append a Post-Implementation Snapshot to discovery.md. Both plan.md and discovery.md must include Completed Work and Remaining Work subsections. Preserve completed work and do not rewrite old artifacts wholesale. Existing tasks become completed history; create new revision task IDs for remaining work in the follow-up planning pass. Then call planner_finish_step with target {stage: 'planning', step: 'read_context'}.",
 		});
 	}
+	if (
+		state.stage === "discovery" &&
+		state.step === "enter_planning" &&
+		state.stepStatus === "running" &&
+		state.creationMethod === "improve"
+	) {
+		return transitionDecision({
+			base,
+			action: "self_written_goal",
+			transition: "finish_step",
+			tool: "planner_finish_step",
+			allowedTransitions,
+			reason:
+				"Discovery-first improve flow must return to intake so the model can write goal.md from discovery findings.",
+			modelMessage:
+				"Finish discovery/enter_planning with target {stage: 'intake', step: 'draft_goal'}. Then write goal.md from discovery findings and call planner_goal_submit. Do not read request.md as the source goal; the improve flow derives the goal from discovery evidence.",
+		});
+	}
 	switch (state.stepStatus) {
 		case "pending":
 			return transitionDecision({
@@ -352,10 +371,12 @@ function baseDecision(
 function getBranchingTargets(state: {
 	stage: PlannerStage;
 	step: PlannerStep;
+	creationMethod?: "create" | "improve";
 }): { stage: string; step: string }[] | null {
 	const allowed = getAllowedNextPlannerPositions({
 		stage: state.stage,
 		step: state.step,
+		creationMethod: state.creationMethod,
 	});
 	if (allowed.length <= 1) {
 		return null;

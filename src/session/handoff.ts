@@ -105,16 +105,60 @@ export function buildPlannerHandoffPrompt(input: {
 	].join("\n");
 }
 
+export function buildPlannerImproveHandoffPrompt(input: {
+	planId: string;
+	worktreePath: string;
+	titleLanguage?: string;
+	descriptionLanguage?: string;
+	compatibilityMode?: "additive" | "breaking";
+}): string {
+	const descriptionLanguage = input.descriptionLanguage ?? "English";
+	const titleLanguage = input.titleLanguage ?? descriptionLanguage;
+	const compatibilityMode = input.compatibilityMode ?? "additive";
+	return [
+		`Planner plan ${input.planId} was created via /planner-improve and this session is now in the planner worktree.`,
+		`Worktree: ${input.worktreePath}`,
+		`Compatibility mode: ${compatibilityMode}`,
+		`Planner title language: ${titleLanguage}`,
+		`Planner-list description language: ${descriptionLanguage}`,
+		"",
+		"This is a discovery-first flow. You will write your own goal.md after discovery.",
+		"",
+		"Call planner_status now.",
+		"Start from the stage/step reported by planner_status.",
+		"Run discovery first: contract scan/route/read when available, project tree, focused source reads, and verification command discovery.",
+		"Do not read request.md as the source goal. The request only says to improve this repository.",
+		"After discovery reaches enter_planning, finish with target {stage: 'intake', step: 'draft_goal'}.",
+		"At intake/draft_goal, write goal.md from discovery findings, then call planner_goal_submit.",
+		"Show the full goal draft to the user and wait for explicit approval.",
+		compatibilityMode === "breaking"
+			? "Breaking changes may be proposed only from evidence and require explicit user approval before implementation."
+			: "Additive compatibility is required: do not remove or rename public APIs, commands, settings, persisted fields, package metadata, or documented behavior.",
+		"Do not use raw git while the planner plan is active.",
+	].join("\n");
+}
+
 export function buildPlannerResumePrompt(input: {
 	planId: string;
 	worktreePath: string;
+	creationMethod?: "create" | "improve";
+	compatibilityMode?: "additive" | "breaking";
 }): string {
-	return [
+	const lines = [
 		`Planner plan ${input.planId} is now active and this session is in its planner worktree.`,
 		`Worktree: ${input.worktreePath}`,
 		"",
 		"Call planner_status now.",
 		"Resume only from the stage/step reported by planner_status.",
 		"Do not use raw git while the planner plan is active.",
-	].join("\n");
+	];
+	if (input.creationMethod === "improve") {
+		lines.push(
+			"",
+			"This plan was created via /planner-improve (discovery-first flow).",
+			`Compatibility mode: ${input.compatibilityMode ?? "additive"}.`,
+			"If planner_status reports intake/draft_goal, write goal.md from discovery findings rather than request.md.",
+		);
+	}
+	return lines.join("\n");
 }

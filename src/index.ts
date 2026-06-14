@@ -86,6 +86,7 @@ import {
 import { runPlannerOrchestrator } from "./runtime/orchestrator";
 import {
 	parsePlannerCreateCommandArgs,
+	parsePlannerImproveCommandArgs,
 	resolvePlannerPlanId,
 } from "./runtime/plan-naming";
 import {
@@ -153,6 +154,7 @@ import {
 } from "./runtime/workflow-tools";
 import {
 	buildPlannerHandoffPrompt,
+	buildPlannerImproveHandoffPrompt,
 	buildPlannerResumePrompt,
 	createPlannerHandoffSession,
 	removePlannerHandoffBootstrapFile,
@@ -1106,6 +1108,35 @@ function registerInstructionDefaultsSync(pi: ExtensionAPI): void {
 	});
 }
 
+function buildPlannerImproveRequest(input: {
+	request?: string;
+	compatibilityMode: "additive" | "breaking";
+}): string {
+	const compatibility =
+		input.compatibilityMode === "breaking"
+			? [
+					"Compatibility mode: breaking.",
+					"Breaking changes may be proposed only when discovery evidence proves they are needed.",
+					"Ask the user for explicit approval before implementing any breaking change.",
+				]
+			: [
+					"Compatibility mode: additive.",
+					"Keep public commands, tool schemas, settings, persisted artifact fields, package metadata, and documented behavior backward compatible.",
+					"If a breaking change looks better, record it as a future proposal unless the user explicitly approves breaking work.",
+				];
+	return [
+		"# Planner Improve Request",
+		"",
+		"Create a discovery-first self-improvement plan for this repository.",
+		...(input.request ? ["", "User focus:", input.request] : []),
+		"",
+		...compatibility,
+		"",
+		"Run discovery before writing goal.md. Use repository evidence to choose one bounded, high-value improvement for planner reliability, tests, documentation, local-model guidance, or developer workflow.",
+		"After discovery, write goal.md from your findings and ask the user for explicit approval before planning implementation.",
+	].join("\n");
+}
+
 function registerPlannerCommands(pi: ExtensionAPI): void {
 	pi.registerCommand("planner-helper", {
 		description:
@@ -1387,6 +1418,154 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 		},
 	});
 
+	pi.registerCommand("planner-improve", {
+		description:
+			"Create a discovery-first self-improvement plan for this repository.",
+		handler: async (args, ctx) => {
+			try {
+				await ctx.waitForIdle();
+				const parsed = parsePlannerImproveCommandArgs(args);
+				if (!parsed) {
+					ctx.ui.notify(
+						"Usage: /planner-improve [--additive|--breaking|--compat additive|breaking] [optional focus]",
+						"error",
+					);
+					return;
+				}
+
+				const fs = createNodeFs();
+				const agentDir = getAgentDir();
+				const projectPaths = await resolveProjectStoragePaths({
+					fs,
+					agentDir,
+					cwd: ctx.cwd,
+				});
+				const request = buildPlannerImproveRequest({
+					request: parsed.request,
+					compatibilityMode: parsed.compatibilityMode,
+				});
+				const project = await ensureProjectRecord(fs, projectPaths);
+				let planId: string;
+				try {
+					planId = resolvePlannerPlanId({
+						request,
+						project,
+					});
+				} catch (error) {
+					ctx.ui.notify(errorMessage(error), "error");
+					return;
+				}
+				const result = await executePlannerPlanTool({
+					fs,
+					git: new NodeGitRunner(),
+					projectPaths,
+					toolName: "planner_create_plan",
+					params: {
+						planId,
+						request,
+						title:
+							parsed.compatibilityMode === "breaking"
+								? "Improve planner with breaking proposals"
+								: "Improve planner compatibility",
+						description:
+							parsed.compatibilityMode === "breaking"
+								? "Discovery-first self-improvement plan that may propose approved breaking changes."
+								: "Discovery-first additive self-improvement plan for this repository.",
+					},
+				});
+
+				if (result.status !== "applied") {
+					ctx.ui.notify(result.text, "error");
+					return;
+				}
+				markPlannerToolVisibilityActive();
+
+				const details = result.details as {
+					state?: { worktreePath?: string | null };
+					plan?: { planId?: string };
+					settings?: {
+						effective?: {
+							metadata?: {
+								titleLanguage?: string;
+								descriptionLanguage?: string;
+							};
+						};
+					};
+				};
+				const worktreePath = details.state?.worktreePath;
+				const createdPlanId = details.plan?.planId ?? planId;
+				const descriptionLanguage =
+					details.settings?.effective?.metadata?.descriptionLanguage ??
+					"English";
+				const titleLanguage =
+					details.settings?.effective?.metadata?.titleLanguage ??
+					descriptionLanguage;
+				if (!worktreePath) {
+					ctx.ui.notify(
+						"Planner plan was created without worktreePath.",
+						"error",
+					);
+					return;
+				}
+
+				const planPaths = createPlanStoragePaths(projectPaths, createdPlanId);
+				await updatePlanState(fs, planPaths, (current) => ({
+					...current,
+					stage: "discovery",
+					step: "scan_project_structure",
+					stepStatus: "running",
+					nextStep: null,
+					creationMethod: "improve",
+					compatibilityMode: parsed.compatibilityMode,
+				}));
+
+				const originalSessionFile = ctx.sessionManager.getSessionFile();
+				await bindWorktreeRootSession({
+					fs,
+					agentDir,
+					worktreePath,
+					projectRoot: projectPaths.projectRoot,
+					projectId: projectPaths.projectId,
+					planId: createdPlanId,
+					createdFromSessionFile: originalSessionFile ?? null,
+					lastRootSessionFile: originalSessionFile ?? null,
+				});
+
+				const session = await createPlannerHandoffSession({
+					fs,
+					agentDir,
+					worktreePath,
+					parentSession: originalSessionFile,
+				});
+				await persistPlannerToolVisibilityActiveToSession({
+					fs,
+					sessionFile: session.sessionFile,
+				});
+				await ctx.switchSession(session.sessionFile, {
+					withSession: async (replacementCtx) => {
+						await replacementCtx.sendUserMessage(
+							buildPlannerImproveHandoffPrompt({
+								planId: createdPlanId,
+								worktreePath,
+								titleLanguage,
+								descriptionLanguage,
+								compatibilityMode: parsed.compatibilityMode,
+							}),
+							FOLLOW_UP_MESSAGE_OPTIONS,
+						);
+					},
+				});
+			} catch (error) {
+				const msg = error instanceof Error ? error.message : String(error);
+				if (msg.includes("stale")) {
+					await safeNotify(ctx, "Planner improve cancelled.", "info");
+				} else {
+					await safeNotify(ctx, msg, "error");
+				}
+			}
+		},
+	});
+
 	pi.registerCommand("planner-exit", {
 		description:
 			"Return from the active planner worktree session to the original project chat without finishing or deleting the plan.",
@@ -1535,6 +1714,8 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			markPlannerToolVisibilityActive();
 			const details = result.details as {
 				worktreePath?: string | null;
+				creationMethod?: "create" | "improve";
+				compatibilityMode?: "additive" | "breaking";
 			};
 			if (!details.worktreePath) {
 				ctx.ui.notify("Planner resume did not return worktreePath.", "error");
@@ -1579,6 +1760,8 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 						buildPlannerResumePrompt({
 							planId,
 							worktreePath,
+							creationMethod: details.creationMethod,
+							compatibilityMode: details.compatibilityMode,
 						}),
 						FOLLOW_UP_MESSAGE_OPTIONS,
 					);

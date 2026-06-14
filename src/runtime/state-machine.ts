@@ -12,6 +12,10 @@ export interface PlannerPosition {
 	step: PlannerStep;
 }
 
+interface PlannerPositionContext extends PlannerPosition {
+	creationMethod?: PlanStateRecord["creationMethod"];
+}
+
 export type PlannerStateMachineErrorCode =
 	| "invalid_position"
 	| "invalid_step_status"
@@ -100,7 +104,7 @@ export function isPlannerStepInStage(input: PlannerPosition): boolean {
 }
 
 export function getAllowedNextPlannerPositions(
-	input: PlannerPosition,
+	input: PlannerPositionContext,
 ): PlannerPosition[] {
 	assertValidPosition(input);
 
@@ -118,7 +122,12 @@ export function getAllowedNextPlannerPositions(
 		];
 	}
 	if (input.stage === "discovery" && input.step === "enter_planning") {
-		return [{ stage: "planning", step: "read_context" }];
+		return input.creationMethod === "improve"
+			? [
+					{ stage: "planning", step: "read_context" },
+					{ stage: "intake", step: "draft_goal" },
+				]
+			: [{ stage: "planning", step: "read_context" }];
 	}
 	if (input.stage === "planning" && input.step === "enter_execution") {
 		return [{ stage: "execution", step: "prepare_task" }];
