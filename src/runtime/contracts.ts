@@ -405,6 +405,105 @@ async function contractRead(
 	);
 }
 
+interface DirectoryCoverageEntry {
+	dir: string;
+	files: string[];
+	agentsMdPath: string | null;
+	agentsMdLevel: "exact" | "parent" | "none";
+}
+
+async function buildDirCoverageMap(input: {
+	fs: PlannerFs;
+	git: GitRunner;
+	root: string;
+}): Promise<DirectoryCoverageEntry[]> {
+	const raw = await input.git
+		.headFiles({ repoRoot: input.root })
+		.catch(() => "");
+	const touched = raw
+		.split("\n")
+		.map((l) => l.trim())
+		.filter(
+			(l) =>
+				l.length > 0 &&
+				!l.startsWith("commit") &&
+				!l.startsWith("Author") &&
+				!l.startsWith("Date") &&
+				!l.startsWith("Merge"),
+		)
+		.map((f) => join(input.root, f));
+
+	const dirMap = new Map<string, string[]>();
+	for (const f of touched) {
+		const d = dirname(f);
+		const existing = dirMap.get(d) ?? [];
+		existing.push(f);
+		dirMap.set(d, existing);
+	}
+
+	const entries: DirectoryCoverageEntry[] = [];
+	for (const [dir, files] of dirMap) {
+		const exactPath = join(dir, "AGENTS.md");
+		if (await input.fs.exists(exactPath)) {
+			entries.push({
+				dir,
+				files,
+				agentsMdPath: exactPath,
+				agentsMdLevel: "exact",
+			});
+			continue;
+		}
+		let parentDir = dirname(dir);
+		let found: string | null = null;
+		while (parentDir !== dir && parentDir.startsWith(input.root)) {
+			const candidate = join(parentDir, "AGENTS.md");
+			if (await input.fs.exists(candidate)) {
+				found = candidate;
+				break;
+			}
+			const next = dirname(parentDir);
+			if (next === parentDir) break;
+			parentDir = next;
+		}
+		entries.push({
+			dir,
+			files,
+			agentsMdPath: found,
+			agentsMdLevel: found ? "parent" : "none",
+		});
+	}
+	return entries;
+}
+
+function formatCoverageMap(
+	entries: DirectoryCoverageEntry[],
+	root: string,
+): string[] {
+	if (entries.length === 0) return ["No committed files detected in HEAD."];
+	const lines: string[] = ["Touched directories (from git HEAD commit):"];
+	for (const entry of entries) {
+		const relDir = relative(root, entry.dir) || ".";
+		const badge =
+			entry.agentsMdLevel === "exact"
+				? "[AGENTS.md ✓]"
+				: entry.agentsMdLevel === "parent"
+					? `[AGENTS.md at parent: ${relative(root, dirname(entry.agentsMdPath ?? ""))}]`
+					: "[NO AGENTS.md]";
+		lines.push(`  ${relDir}/ ${badge}`);
+		for (const f of entry.files) {
+			lines.push(`    - ${relative(root, f)}`);
+		}
+		const rule =
+			entry.agentsMdLevel === "exact"
+				? "→ default: upsert_existing (prove no_update if nothing durable changed)"
+				: entry.agentsMdLevel === "parent"
+					? "→ default: upsert_existing or create_new at this dir (prove no_update if subdomain is trivial)"
+					: "→ default: create_new (prove no_update if change is fully self-contained)";
+		lines.push(`    ${rule}`);
+	}
+	return lines;
+}
+
 async function contractCheck(input: {
 	fs: PlannerFs;
 	git: GitRunner;
@@ -470,6 +569,12 @@ async function contractCheck(input: {
 		evidence,
 		recommendedPath: pendingUpsert?.path ?? null,
 	});
+	const root = requireWorktreePath(state);
+	const coverageEntries = await buildDirCoverageMap({
+		fs: input.fs,
+		git: input.git,
+		root,
+	});
 	const checkedAt = Date.now();
 	await updatePlanState(input.fs, planPaths, (current) => ({
 		...current,
@@ -486,6 +591,7 @@ async function contractCheck(input: {
 			},
 		},
 	}));
+	const coverageLines = formatCoverageMap(coverageEntries, root);
 	return applied(
 		input.toolName,
 		[
@@ -494,9 +600,12 @@ async function contractCheck(input: {
 			pendingUpsert
 				? `Contract update required: call planner_contract_upsert for ${pendingUpsert.path}.`
 				: "No contract update is required for this task.",
+			"",
+			...coverageLines,
+			"",
 			"Call planner_status before choosing the next planner action.",
 		].join("\n"),
-		{ taskId, action, pendingUpsert },
+		{ taskId, action, pendingUpsert, coverageEntries },
 	);
 }
 
@@ -780,18 +889,21 @@ export function validateDiscoveryContractRouting(input: {
 				return `Planner contract route selected ${path}, but it has not been read. Call planner_contract_read for every contract in the selected hierarchy chain before finishing discovery/scan_project_structure.`;
 			}
 		}
-		const nearest = chain.chain.at(-1);
-		const children = nearest ? (contracts.childContracts[nearest] ?? []) : [];
-		if (children.length > 0) {
-			const childRead = children.some((childPath) =>
-				contracts.summaries.some((summary) => summary.path === childPath),
-			);
-			if (!childRead) {
-				return `Planner contract route selected ${nearest}, which has child contracts. Read at least one relevant child contract before finishing discovery/scan_project_structure, or route to a narrower target if another domain is needed.`;
-			}
-		}
 	}
 	return null;
+}
+
+export function isContractChainTraversalComplete(
+	state: PlanStateRecord,
+): boolean {
+	const c = state.contracts;
+	if (!c.enabled) return true;
+	if (!c.scanComplete) return false;
+	if (c.discoveredPaths.length === 0) return true;
+	if (c.activeChains.length === 0) return false;
+	return c.activeChains.every((chain) =>
+		chain.chain.every((path) => c.summaries.some((s) => s.path === path)),
+	);
 }
 
 export async function readPlannerContractsManifest(
@@ -812,8 +924,13 @@ export function formatPlannerContractsStatus(input: {
 	if (!input.settings.enabled || !contracts.enabled) {
 		return ["- enabled: false"];
 	}
+	const traversalComplete = isContractChainTraversalComplete(input.state);
+	const inDiscoveryScan =
+		input.state.stage === "discovery" &&
+		input.state.step === "scan_project_structure";
 	const lines = [
 		`- enabled: true`,
+		`- chainTraversalComplete: ${String(traversalComplete)}`,
 		`- scanComplete: ${String(contracts.scanComplete)}`,
 		`- discoveredPaths: ${contracts.discoveredPaths.length}`,
 		`- dirty: ${String(contracts.dirty)}`,
@@ -852,8 +969,32 @@ export function formatPlannerContractsStatus(input: {
 		input.state.step === "contract_check"
 	) {
 		lines.push(
-			"- guidance: Implementation is green; call planner_contract_check before refactor_task.",
+			"- guidance: Implementation is green. Before calling planner_contract_check, review the diff and ask: what other components call or import the code you changed? Did your change affect any shared behavior, state field, or exported interface that other domains depend on?",
 		);
+		if (contracts.activeChains.length > 0) {
+			const summaryByPath = new Map(
+				contracts.summaries.map((s) => [s.path, s]),
+			);
+			for (const chain of contracts.activeChains) {
+				const nearest = chain.chain.at(-1);
+				if (!nearest) continue;
+				const nearestSummary = summaryByPath.get(nearest);
+				if (nearestSummary?.childIndex.length) {
+					lines.push(
+						`- guidance: Nearest contract ${nearest} has child domains: ${nearestSummary.childIndex.join("; ")}. If changed files belong to a subdomain listed above, consider creating a more specific AGENTS.md there instead of updating the parent.`,
+					);
+				}
+			}
+		}
+		if (contracts.touchedFiles.length > 0) {
+			lines.push(
+				`- guidance: AGENTS.md files touched in this plan: ${contracts.touchedFiles.map((f) => f.path).join(", ")}. These are tracked and will be offered as keep/remove at /planner-finish.`,
+			);
+		} else {
+			lines.push(
+				"- guidance: No AGENTS.md files have been created or updated in this plan yet. We recommend capturing durable domain knowledge here — after memory wipes between sessions, this is what helps the next agent avoid reading irrelevant code.",
+			);
+		}
 	} else if (contracts.pendingUpsert) {
 		lines.push(
 			`- guidance: Contract update required; call planner_contract_upsert for ${contracts.pendingUpsert.path}.`,
@@ -898,18 +1039,48 @@ export function formatPlannerContractsStatus(input: {
 			);
 		})
 	) {
-		lines.push(
-			"- guidance: The nearest contract has child domains. Read at least one relevant child contract, or reroute to a narrower target, before finishing discovery.",
-		);
+		lines.push(...buildChildDomainHints(contracts));
 	} else if (!contracts.scanComplete) {
 		lines.push(
 			"- guidance: During discovery, call planner_contract_scan before broad source reads.",
+		);
+	}
+	if (inDiscoveryScan && !traversalComplete) {
+		lines.push(
+			"- LOCKED: Project file reads and shell calls are restricted. You must complete the AGENTS.md chain traversal first. Call planner_contract_scan (if not done), then planner_contract_route, then planner_contract_read for every contract in the chain. Once chainTraversalComplete is true, all tools are available.",
 		);
 	}
 	for (const diagnostic of contracts.diagnostics.slice(-5)) {
 		lines.push(`- diagnostic: ${diagnostic}`);
 	}
 	return lines;
+}
+
+function buildChildDomainHints(contracts: PlannerContractsState): string[] {
+	const summaryByPath = new Map(contracts.summaries.map((s) => [s.path, s]));
+	const hints: string[] = [];
+	for (const chain of contracts.activeChains) {
+		const nearest = chain.chain.at(-1);
+		if (!nearest) continue;
+		const children = contracts.childContracts[nearest] ?? [];
+		if (children.length === 0) continue;
+		const unread = children.filter(
+			(c) => !contracts.summaries.some((s) => s.path === c),
+		);
+		if (unread.length === 0) continue;
+		const nearestSummary = summaryByPath.get(nearest);
+		const childDescriptions = nearestSummary?.childIndex ?? [];
+		if (childDescriptions.length > 0) {
+			hints.push(
+				`- guidance: Nearest contract ${nearest} has unread child domains: ${childDescriptions.join("; ")}. If your goal's primary changed area matches a child description above, read that child before finishing discovery. If the nearest contract's purpose already covers the goal, stop here.`,
+			);
+		} else {
+			hints.push(
+				`- guidance: Nearest contract ${nearest} has child domains (${unread.join(", ")}). If any directly covers the goal's primary changed area, read it before finishing discovery. If the nearest contract's purpose already covers the goal, stop here.`,
+			);
+		}
+	}
+	return hints;
 }
 
 function buildActiveContractSummaryLines(input: {
@@ -1084,6 +1255,23 @@ export function parsePlannerContractMarkdown(
 			});
 		}
 	}
+	const domainDetailsLines = sections.get("Domain Details") ?? [];
+	const domainDetailsText = domainDetailsLines.join(" ").trim();
+	if (domainDetailsText.length > 0) {
+		// Language-neutral structural signals: flow arrows or bold role labels
+		const hasArrow =
+			domainDetailsText.includes("→") || domainDetailsText.includes("->");
+		const hasBold = domainDetailsText.includes("**");
+		if (!hasArrow && !hasBold) {
+			diagnostics.push({
+				severity: "warning",
+				code: "domain_details_missing_connections",
+				message:
+					"Domain Details should include structural signals: flow arrows (→ or ->) to show call chains, or bold role labels (**Who writes:**, **Who calls:**). These conventions work regardless of language or project type.",
+				path,
+			});
+		}
+	}
 	const contract: PlannerContract = {
 		path,
 		purpose: sectionText(sections.get("Purpose") ?? []),
@@ -1092,7 +1280,7 @@ export function parsePlannerContractMarkdown(
 		stableContracts: parseList(sections.get("Stable Contracts") ?? []),
 		readFirst: parseList(sections.get("Read First") ?? []),
 		doNotTouchUnless: parseList(sections.get("Do Not Touch Unless") ?? []),
-		domainDetails: parseList(sections.get("Domain Details") ?? []),
+		domainDetails: parseList(domainDetailsLines),
 	};
 	diagnostics.push(...validateContractReferences(contract, root));
 	return { path, hasManagedBlock: true, contract, diagnostics };

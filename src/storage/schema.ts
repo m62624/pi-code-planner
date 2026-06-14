@@ -207,6 +207,7 @@ export interface TaskRecord {
 	relevantContracts?: string[];
 	forbiddenAreas?: string[];
 	domainDetails?: string[];
+	commitHash?: string;
 }
 
 export interface PlanRecord {

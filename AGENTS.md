@@ -29,4 +29,8 @@ Root routing memory for pi-code-planner. Use this file to choose the project dom
 ### Domain Details
 - The package is a Pi extension with `pi.extensions` pointing at `src/index.ts`.
 - Runtime behavior should be deterministic where possible; stochastic model behavior is constrained through persisted artifacts and wrappers.
+- **Data flow:** `src/storage/` owns all JSON read/write and state normalization → `src/runtime/` reads storage via `runPlannerOrchestrator` (preflight context) → `src/runtime/status.ts` formats the prompt surface the model sees → `src/runtime/workflow-tools.ts` validates exit gates before each step transition.
+- **Instructions flow:** `instructions/defaults/` markdown files are loaded by `src/instructions/manager.ts` and injected into compact boundaries and idle wake-ups; they are the model's stage-specific memory after compaction.
+- **Contract flow:** `src/runtime/contracts.ts` scans/reads/writes AGENTS.md files in the worktree → contract state is persisted in `state.json` via storage → `planner_status` surfaces summaries and guidance to the model.
+- **Git flow:** `src/git/` provides a runner used by runtime git wrappers; raw git is blocked during active plans to prevent worktree drift.
 <!-- pi-code-planner:contracts:end -->

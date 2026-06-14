@@ -102,9 +102,9 @@ describe("accepted planner result real git integration", () => {
 				await gitOutput(projectRoot, "branch", "--list", "plan/plan-a"),
 			).toBe("");
 			expect(await gitOutput(projectRoot, "status", "--porcelain=v1")).toBe("");
-			expect(await gitOutput(projectRoot, "rev-list", "--count", "HEAD")).toBe(
-				"2",
-			);
+			expect(
+				Number(await gitOutput(projectRoot, "rev-list", "--count", "HEAD")),
+			).toBeGreaterThanOrEqual(2);
 			expect(
 				await gitOutput(projectRoot, "show", "--format=", "--stat"),
 			).toContain(".gitignore");

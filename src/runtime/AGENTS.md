@@ -28,7 +28,11 @@ Runtime domain for planner stages, model-facing status, tool wrappers, timers, r
 - Do not add a new planner tool without updating guard policy, tool visibility expectations, status/instructions, and tests.
 
 ### Domain Details
-- `status.ts` is the primary prompt surface for local models.
-- `workflow-tools.ts` enforces exit gates for steps that need durable proof.
-- `contracts.ts` implements the DOX-like local contract scanner/parser/upsert flow.
+- `status.ts` is the primary prompt surface for local models; it reads `PlanStateRecord` from the orchestrator and formats step rules, contract summaries, and guidance lines.
+- `workflow-tools.ts` enforces exit gates: each step's finish is blocked unless required artifacts/sections exist and the worktree is clean.
+- `contracts.ts` implements DOX-like local contract flow: scans AGENTS.md files → routes chains → reads → upserts → validates. Contract state (summaries, chains, touchedFiles) lives in `PlannerContractsState` inside `state.json`.
+- `stage-behavior.ts` defines per-step policy tables (allowed tools, commit policy, compact policy, required gates). These are the source of truth for `orchestrator-gate.ts` checks.
+- `orchestrator.ts` runs preflight (reads storage, loads git reality, checks context) and is called by every planner tool before it executes.
+- `idle-watchdog.ts` reads `state.activeTaskId` and `state.step` → sends follow-up wake-up if no activity for `idle.timeoutMinutes`. Depends on step being `running` and not in a blocked/compact/user-wait state.
+- **Key dependency chain:** tool call → `index.ts` → `guard/tool-policy.ts` → `runtime/<tool>.ts` → `runPlannerOrchestrator` (reads storage + git) → executes → `updatePlanState` (writes storage). Any tool that skips `runPlannerOrchestrator` bypasses all stage/step/gate checks.
 <!-- pi-code-planner:contracts:end -->

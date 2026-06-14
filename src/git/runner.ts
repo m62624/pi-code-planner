@@ -56,6 +56,13 @@ export interface GitRunner {
 	statusPorcelain(input: GitRepoInput): Promise<string>;
 	diffStat(input: GitRepoInput): Promise<string>;
 	diffNameOnly(input: GitRepoInput): Promise<string>;
+	headFiles(input: GitRepoInput): Promise<string>;
+	diffRange(
+		input: GitRepoInput & { fromRef: string; toRef: string },
+	): Promise<string>;
+	logOneline(
+		input: GitRepoInput & { fromRef: string; toRef: string },
+	): Promise<string>;
 	resolveGitPath?(input: GitPathInput): Promise<string>;
 	listProjectFiles(input: GitRepoInput): Promise<string[]>;
 	branchExists(input: GitBranchInput): Promise<boolean>;

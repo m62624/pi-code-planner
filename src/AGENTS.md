@@ -11,6 +11,12 @@ Source domain for the Pi extension implementation. Route to narrower AGENTS.md f
 - `runtime/AGENTS.md`: Planner state machine, tool execution, status text, timers, stuck/debug/refactor/doubt/contracts/skills.
 - `storage/AGENTS.md`: JSON schemas, project/plan/task stores, paths, state normalization, worktree index.
 - `settings/AGENTS.md`: Global/project settings schema, defaults, validation, and merge order.
+- `git/AGENTS.md`: Git shell wrapper (GitRunner), branch naming, worktree add/remove, planner branch ops.
+- `guard/AGENTS.md`: Tool call policy, git command interception, project mutation safety checks.
+- `instructions/AGENTS.md`: Stage/step → instruction file routing, defaults sync, user append merge.
+- `session/AGENTS.md`: Pi session file creation, handoff between sessions, resume candidate discovery.
+- `worktree/AGENTS.md`: Plan worktree lifecycle, path resolution, gitignore registration.
+- `project-local/AGENTS.md`: Gitignore rule management for planner-owned paths.
 
 ### Stable Contracts
 - `src/index.ts` registers commands, tools, events, and Pi integration points; shared behavior should live in focused runtime/storage modules.
@@ -30,4 +36,7 @@ Source domain for the Pi extension implementation. Route to narrower AGENTS.md f
 ### Domain Details
 - Most extension work starts in `src/index.ts`, then moves to a runtime/storage helper once behavior needs tests.
 - Keep model-facing strings explicit: local models need exact next actions, allowed wrappers, and blocked reasons.
+- **Connection map:** `index.ts` → registers tools/commands → calls into `runtime/` executors → which call `storage/` readers/writers → which persist to `state.json`/`plan.json`. Settings flow: `settings/` → loaded by `runtime/orchestrator.ts` → affect gate policies and status formatting.
+- **Cross-domain dependency:** `runtime/contracts.ts` reads AGENTS.md files via `storage/fs.ts` and writes contract summaries into `state.json` via `storage/state-store.ts`. Changes to storage schema (PlannerContractsState) break contracts.ts state reads.
+- **Guard layer:** `guard/tool-policy.ts` is checked in `index.ts` before any tool reaches runtime. Changes to allowed tool lists require updating both the guard and `stage-behavior.ts` expectedTools.
 <!-- pi-code-planner:contracts:end -->

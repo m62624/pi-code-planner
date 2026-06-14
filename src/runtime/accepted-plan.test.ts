@@ -215,13 +215,7 @@ describe("accepted planner result", () => {
 			input: {
 				repoRoot: "/repo/app",
 				sourceBranch: "plan/plan-a",
-				squash: true,
-			},
-		});
-		expect(fixture.git.calls).toContainEqual({
-			name: "commit",
-			input: {
-				repoRoot: "/repo/app",
+				noFastForward: true,
 				message: [
 					"feat: export Improve vault session recovery",
 					"",
@@ -287,9 +281,11 @@ describe("accepted planner result", () => {
 		await finalizeAcceptedPlan(fixture);
 
 		expect(fixture.git.calls).toContainEqual({
-			name: "commit",
+			name: "merge",
 			input: {
 				repoRoot: "/repo/app",
+				sourceBranch: "plan/plan-a",
+				noFastForward: true,
 				message: [
 					"feat: export Improve vault session recovery",
 					"",

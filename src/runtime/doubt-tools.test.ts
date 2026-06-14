@@ -264,7 +264,7 @@ describe("planner doubt review tool", () => {
 		});
 
 		expect(result.status).toBe("blocked");
-		expect(result.text).toContain("Required protocol command did not pass");
+		expect(result.text).toContain("Required protocol command(s) did not pass");
 	});
 
 	it("allows failed verification commands only when a finding covers them", async () => {

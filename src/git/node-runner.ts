@@ -62,6 +62,22 @@ export class NodeGitRunner implements GitRunner {
 		return await runGitCommandOutput(buildGitDiffNameOnlyArgs(input));
 	}
 
+	async headFiles(input: GitRepoInput): Promise<string> {
+		return await runGitCommandOutput(buildGitHeadFilesArgs(input));
+	}
+
+	async diffRange(
+		input: GitRepoInput & { fromRef: string; toRef: string },
+	): Promise<string> {
+		return await runGitCommandOutput(buildGitDiffRangeArgs(input));
+	}
+
+	async logOneline(
+		input: GitRepoInput & { fromRef: string; toRef: string },
+	): Promise<string> {
+		return await runGitCommandOutput(buildGitLogOnelineArgs(input));
+	}
+
 	async diffPatch(input: GitRepoInput): Promise<string> {
 		return await runGitCommandOutput(buildGitDiffPatchArgs(input));
 	}
@@ -146,6 +162,34 @@ export function buildGitDiffStatArgs(input: GitRepoInput): string[] {
 
 export function buildGitDiffNameOnlyArgs(input: GitRepoInput): string[] {
 	return ["-C", input.repoRoot, "diff", "--name-only"];
+}
+
+export function buildGitHeadFilesArgs(input: GitRepoInput): string[] {
+	return ["-C", input.repoRoot, "show", "--name-only", "--format=", "HEAD"];
+}
+
+export function buildGitDiffRangeArgs(
+	input: GitRepoInput & { fromRef: string; toRef: string },
+): string[] {
+	return [
+		"-C",
+		input.repoRoot,
+		"diff",
+		"--stat",
+		`${input.fromRef}..${input.toRef}`,
+	];
+}
+
+export function buildGitLogOnelineArgs(
+	input: GitRepoInput & { fromRef: string; toRef: string },
+): string[] {
+	return [
+		"-C",
+		input.repoRoot,
+		"log",
+		"--oneline",
+		`${input.fromRef}..${input.toRef}`,
+	];
 }
 
 export function buildGitDiffPatchArgs(input: GitRepoInput): string[] {

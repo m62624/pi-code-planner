@@ -16,11 +16,14 @@ import {
 } from "./guard/project-mutation";
 import {
 	activatePlannerToolVisibility,
+	isContractGateActive,
 	isPlanActive,
 	markPlannerToolVisibilityActive,
 	persistPlannerToolVisibilityActiveToSession,
 	registerPlannerToolVisibility,
 	resetPlanActiveCache,
+	setContractGateActive,
+	updateToolVisibility,
 } from "./index.tool-visibility";
 import { syncBundledInstructionFiles } from "./instructions/defaults";
 import { createInstructionPaths } from "./instructions/paths";
@@ -47,6 +50,7 @@ import {
 	applyPlannerContractFinishPolicy,
 	executePlannerContractTool,
 	hasPendingContractFinishDecision,
+	isContractChainTraversalComplete,
 	PLANNER_CONTRACT_TOOL_NAMES,
 	type PlannerContractToolName,
 } from "./runtime/contracts";
@@ -1048,6 +1052,24 @@ const GIT_OPTIONAL_MESSAGE_TOOL_PARAMETERS = {
 	additionalProperties: false,
 } as const;
 
+const GIT_INSPECT_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		mode: {
+			type: "string",
+			enum: ["inspect", "plan_summary", "task_diff"],
+			description:
+				"inspect: git reality (branch, HEAD, dirty, conflicts). plan_summary: all commits and changed files from base to plan branch. task_diff: diff stat between plan branch and task branch.",
+		},
+		taskId: {
+			type: "string",
+			description:
+				"Required when mode=task_diff. The task ID to diff against the plan branch.",
+		},
+	},
+	additionalProperties: false,
+} as const;
+
 interface PlannerIdleRuntimeState {
 	latestCwd: string | null;
 	checking: boolean;
@@ -1112,28 +1134,81 @@ function buildPlannerImproveRequest(input: {
 	request?: string;
 	compatibilityMode: "additive" | "breaking";
 }): string {
-	const compatibility =
-		input.compatibilityMode === "breaking"
+	const isBreaking = input.compatibilityMode === "breaking";
+	const compatibilityBlock = isBreaking
+		? [
+				"## Compatibility Mode: BREAKING",
+				"",
+				"Breaking changes are permitted when discovery evidence proves they are needed.",
+				"",
+				"What this means for goal.md:",
+				"- You may propose removing or renaming public APIs, commands, settings, or persisted fields IF evidence shows the current design is wrong.",
+				"- Every breaking proposal must be explicitly listed in goal.md under a ## Breaking Changes section.",
+				"- Breaking implementation still requires explicit user approval before planning starts.",
+				"- If no breaking change is needed, treat this session as additive.",
+			]
+		: [
+				"## Compatibility Mode: ADDITIVE",
+				"",
+				"This session must not break existing behavior.",
+				"",
+				"What this means for goal.md:",
+				"- Do not propose removing or renaming public commands, tool schemas, settings keys, persisted JSON fields, package metadata, or documented behavior.",
+				"- Additive: new features, new options, improved defaults, better instructions, more tests, documentation.",
+				"- If a breaking change looks better, record it as a future proposal in a ## Future Proposals section but do not implement it.",
+				"- If discovery reveals that the only real improvement requires breaking changes, state that clearly and let the user decide whether to restart with --breaking.",
+			];
+	const goalTemplate = [
+		"## goal.md template for improve sessions",
+		"",
+		"After discovery, write goal.md through planner_goal_submit (not a file write tool) with this structure:",
+		"",
+		"```",
+		"## Objective",
+		"One sentence: what this improvement achieves and why it matters based on discovery evidence.",
+		"",
+		"## Discovery Evidence",
+		"Bullet list: what you found in the repository that motivates this improvement.",
+		"",
+		"## Scope",
+		"What is in scope. Be specific — name files, commands, or behaviors.",
+		"",
+		"## Non-Goals",
+		"What you are NOT changing. Especially: list any public APIs / commands / settings you are explicitly preserving.",
+		...(isBreaking
 			? [
-					"Compatibility mode: breaking.",
-					"Breaking changes may be proposed only when discovery evidence proves they are needed.",
-					"Ask the user for explicit approval before implementing any breaking change.",
+					"",
+					"## Breaking Changes",
+					"List every breaking change proposed. Each entry: what changes, why evidence requires it, what migration looks like.",
 				]
-			: [
-					"Compatibility mode: additive.",
-					"Keep public commands, tool schemas, settings, persisted artifact fields, package metadata, and documented behavior backward compatible.",
-					"If a breaking change looks better, record it as a future proposal unless the user explicitly approves breaking work.",
-				];
+			: []),
+		"",
+		"## Acceptance Criteria",
+		"Concrete, testable conditions: tests pass, command works, behavior matches description.",
+		"```",
+	];
 	return [
 		"# Planner Improve Request",
 		"",
-		"Create a discovery-first self-improvement plan for this repository.",
-		...(input.request ? ["", "User focus:", input.request] : []),
+		"This is a discovery-first self-improvement flow for this repository.",
+		...(input.request ? ["", "## User Focus", input.request] : []),
 		"",
-		...compatibility,
+		...compatibilityBlock,
 		"",
-		"Run discovery before writing goal.md. Use repository evidence to choose one bounded, high-value improvement for planner reliability, tests, documentation, local-model guidance, or developer workflow.",
-		"After discovery, write goal.md from your findings and ask the user for explicit approval before planning implementation.",
+		"## How This Flow Works",
+		"",
+		"1. Run discovery first. Do not write goal.md before reading repository evidence.",
+		"   - Scan AGENTS.md contracts, read relevant source, find real gaps.",
+		"   - Choose one bounded, high-value improvement (reliability, tests, documentation, local-model guidance, developer workflow).",
+		"2. After discovery reaches enter_planning, return to intake/draft_goal.",
+		"3. At intake/draft_goal: call planner_goal_submit with the drafted goal.",
+		"   - planner_goal_submit is the ONLY way to write goal.md.",
+		"   - Do NOT use file write/edit tools for goal.md. The tool does it.",
+		"   - Writing goal.md by hand bypasses validation and will not advance the step.",
+		"4. Show the full goal to the user and wait for explicit approval.",
+		"5. Do not start planning without approval.",
+		"",
+		...goalTemplate,
 	].join("\n");
 }
 
@@ -1420,7 +1495,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 
 	pi.registerCommand("planner-improve", {
 		description:
-			"Create a discovery-first self-improvement plan for this repository.",
+			"Create a discovery-first self-improvement plan for this repository. Use --breaking to allow breaking proposals.",
 		handler: async (args, ctx) => {
 			try {
 				await ctx.waitForIdle();
@@ -1838,6 +1913,57 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 		},
 	});
 
+	pi.registerCommand("planner-preview", {
+		description:
+			"Show the planner worktree path so you can open it in your editor and browse the current plan files directly.",
+		handler: async (_args, ctx) => {
+			await ctx.waitForIdle();
+			const fs = createNodeFs();
+			const git = new NodeGitRunner();
+			try {
+				const agentDir = getAgentDir();
+				const projectPaths = await resolveProjectStoragePaths({
+					fs,
+					agentDir,
+					cwd: ctx.cwd,
+				});
+				const project = await readProjectRecordIfExists(fs, projectPaths);
+				const activePlanId = project?.activePlanId;
+				if (!activePlanId) {
+					ctx.ui.notify("No active plan to preview.", "info");
+					return;
+				}
+				const planPaths = createPlanStoragePaths(projectPaths, activePlanId);
+				const state = await readPlanStateIfExists(fs, planPaths);
+				if (!state?.worktreePath) {
+					ctx.ui.notify("Plan worktree not found.", "warning");
+					return;
+				}
+				const worktreePath = state.worktreePath;
+				const currentBranch = await git
+					.currentBranch({ repoRoot: worktreePath })
+					.catch(() => state.currentBranch ?? "(unknown)");
+				const planBranch = state.activeBranches.plan;
+				const onPlanBranch = currentBranch === planBranch;
+				ctx.ui.notify(
+					[
+						`Planner worktree: ${worktreePath}`,
+						`Branch: ${currentBranch}`,
+						onPlanBranch
+							? "Open this folder in your editor to browse all completed plan work."
+							: `Currently on a task branch. Plan branch (${planBranch}) contains all completed tasks merged so far.`,
+					].join("\n"),
+					"info",
+				);
+			} catch (error) {
+				ctx.ui.notify(
+					`Planner preview failed: ${errorMessage(error)}`,
+					"error",
+				);
+			}
+		},
+	});
+
 	pi.registerCommand("planner-finish", {
 		description:
 			"Finish the completed planner result, keep one output branch, clean temporary planner state, and return to the original project session.",
@@ -2220,6 +2346,18 @@ function registerPlannerTools(
 					toolName,
 					params,
 				});
+				const freshCtx = await readActivePlanContext({ fs, projectPaths });
+				if (freshCtx.status === "ready") {
+					const inDiscoveryScan =
+						freshCtx.state.stage === "discovery" &&
+						freshCtx.state.step === "scan_project_structure";
+					const complete = isContractChainTraversalComplete(freshCtx.state);
+					const shouldGate = inDiscoveryScan && !complete;
+					if (shouldGate !== isContractGateActive()) {
+						setContractGateActive(shouldGate);
+						updateToolVisibility(pi);
+					}
+				}
 				return {
 					content: [{ type: "text", text: result.text }],
 					details: result,
@@ -3031,6 +3169,7 @@ function gitToolParameters(toolName: PlannerGitToolName) {
 		case "planner_git_merge_task_to_plan":
 			return GIT_OPTIONAL_MESSAGE_TOOL_PARAMETERS;
 		case "planner_git_inspect":
+			return GIT_INSPECT_TOOL_PARAMETERS;
 		case "planner_git_init":
 		case "planner_git_create_refactor_branch":
 			return EMPTY_TOOL_PARAMETERS;

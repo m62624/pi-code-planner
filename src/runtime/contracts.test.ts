@@ -28,7 +28,9 @@ describe("planner local contracts parser", () => {
 				stableContracts: ["planner_status is source of truth."],
 				readFirst: ["state-machine.ts"],
 				doNotTouchUnless: ["Do not bypass preflight."],
-				domainDetails: ["Workflow tools enforce exits."],
+				domainDetails: [
+					"Workflow tools enforce exits. gate → orchestrator → tools.",
+				],
 			}),
 			path,
 			root,
@@ -196,7 +198,14 @@ describe("planner local contracts parser", () => {
 			"src/runtime/AGENTS.md",
 			"src/settings/AGENTS.md",
 			"src/storage/AGENTS.md",
+			"src/git/AGENTS.md",
+			"src/guard/AGENTS.md",
+			"src/instructions/AGENTS.md",
+			"src/session/AGENTS.md",
+			"src/worktree/AGENTS.md",
+			"src/project-local/AGENTS.md",
 			"instructions/AGENTS.md",
+			"instructions/defaults/AGENTS.md",
 			".github/AGENTS.md",
 		].map((path) => join(repoRoot, path));
 
@@ -325,7 +334,7 @@ describe("planner local contract check enforcement", () => {
 		).toBeNull();
 	});
 
-	it("requires a child contract read when the nearest selected contract has children", () => {
+	it("allows discovery to finish when the nearest contract has children but child read is the model's choice", () => {
 		const state = createInitialPlanState({
 			baseBranch: "main",
 			planBranch: "plan/a",
@@ -376,24 +385,7 @@ describe("planner local contract check enforcement", () => {
 			},
 		];
 
-		expect(
-			validateDiscoveryContractRouting({
-				state,
-				settingsEnabled: true,
-			}),
-		).toContain("child contracts");
-
-		state.contracts.summaries.push({
-			path: "/repo/app/src/runtime/AGENTS.md",
-			purpose: "Runtime contracts.",
-			childIndex: [],
-			stableContracts: [],
-			readFirst: [],
-			doNotTouchUnless: [],
-			domainDetails: [],
-			diagnostics: [],
-			updatedAt: 1000,
-		});
+		// Child read is now guidance-only; the model decides when to stop navigating deeper.
 		expect(
 			validateDiscoveryContractRouting({
 				state,

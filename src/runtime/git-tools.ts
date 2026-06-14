@@ -1,3 +1,4 @@
+import { planBranchName, taskBranchName } from "../git/branches";
 import {
 	createAndSwitchRefactorBranch,
 	createAndSwitchTaskBranch,
@@ -143,6 +144,57 @@ async function inspectGitTool(
 	ready: ReadyGitContext,
 ): Promise<PlannerGitToolExecutionResult> {
 	const repoRoot = ready.state.worktreePath ?? input.projectPaths.projectRoot;
+	const mode = asObject(input.params).mode;
+
+	if (mode === "plan_summary") {
+		const baseBranch = ready.state.activeBranches.base;
+		const planBranch = ready.state.activeBranches.plan;
+		const [log, stat] = await Promise.all([
+			input.git
+				.logOneline({ repoRoot, fromRef: baseBranch, toRef: planBranch })
+				.catch((e: unknown) => `(log unavailable: ${String(e)})`),
+			input.git
+				.diffRange({ repoRoot, fromRef: baseBranch, toRef: planBranch })
+				.catch((e: unknown) => `(diff unavailable: ${String(e)})`),
+		]);
+		return applied(
+			input.toolName,
+			[
+				`Plan branch: ${planBranch}`,
+				`Base branch: ${baseBranch}`,
+				`Worktree: ${repoRoot}`,
+				"",
+				"## Commits",
+				log || "(no commits yet)",
+				"",
+				"## Changed files",
+				stat || "(no changes yet)",
+			].join("\n"),
+			{ baseBranch, planBranch },
+		);
+	}
+
+	if (mode === "task_diff") {
+		const taskId = requiredString(input.params, "taskId");
+		const planId = ready.planId;
+		const planBranch = planBranchName(planId);
+		const taskBranch = taskBranchName(planId, taskId);
+		const diff = await input.git
+			.diffRange({ repoRoot, fromRef: planBranch, toRef: taskBranch })
+			.catch((e: unknown) => `(diff unavailable: ${String(e)})`);
+		return applied(
+			input.toolName,
+			[
+				`Task diff: ${taskId}`,
+				`Plan branch: ${planBranch}`,
+				`Task branch: ${taskBranch}`,
+				"",
+				diff || "(no changes)",
+			].join("\n"),
+			{ taskId, planBranch, taskBranch },
+		);
+	}
+
 	const reality = await inspectPlannerGitReality({ git: input.git, repoRoot });
 	return applied(
 		input.toolName,
@@ -274,9 +326,9 @@ async function mergeTaskTool(
 				state: ready.state,
 				message: optionalMessage(input.params, "merge task into plan"),
 			}),
-		afterSave: async () => {
+		afterSave: async (commitHash) => {
 			if (!taskId) return;
-			await markTaskDone(input.fs, ready, taskId);
+			await markTaskDone(input.fs, ready, taskId, commitHash);
 		},
 	});
 }
@@ -286,7 +338,7 @@ async function runStateChangingGitOperation(input: {
 	ready: ReadyGitContext;
 	text: string;
 	operation: () => Promise<{ state: PlanStateRecord }>;
-	afterSave?: () => Promise<void>;
+	afterSave?: (afterHeadCommit: string) => Promise<void>;
 }): Promise<PlannerGitToolExecutionResult> {
 	const repoRoot = requireWorktreePath(input.ready.state);
 	const before = await inspectPlannerGitReality({
@@ -308,7 +360,7 @@ async function runStateChangingGitOperation(input: {
 		input.ready.orchestrator.preflight.context.planPaths,
 		state,
 	);
-	await input.afterSave?.();
+	await input.afterSave?.(after.headCommit);
 	return applied(input.input.toolName, input.text, {
 		before,
 		after,
@@ -320,6 +372,7 @@ async function markTaskDone(
 	fs: PlannerFs,
 	ready: ReadyGitContext,
 	taskId: string,
+	commitHash: string,
 ): Promise<void> {
 	const planPaths = ready.orchestrator.preflight.context.planPaths;
 	await updatePlanRecord(fs, planPaths, (plan) => ({
@@ -330,7 +383,7 @@ async function markTaskDone(
 	}));
 	const taskPaths = createTaskStoragePaths(planPaths, taskId);
 	if (await fs.exists(taskPaths.taskJson)) {
-		await updateTaskStatus(fs, taskPaths, "done");
+		await updateTaskStatus(fs, taskPaths, "done", commitHash);
 	}
 }
 

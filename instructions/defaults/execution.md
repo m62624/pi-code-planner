@@ -31,10 +31,9 @@ Execute exactly one active task at a time through tests-first development, imple
    - Implement only the behavior required by `task.md` and `tdd.md`.
    - Run focused checks, update `tdd.md` with results, and commit through planner git if files changed.
 6. `contract_check`
-   - Inspect the green task diff and decide whether durable AGENTS.md local contracts changed.
-   - Call `planner_contract_check`.
-   - If the tool reports an update is needed, call `planner_contract_upsert` and commit the AGENTS.md change.
-   - Add only durable domain guidance. Do not store task trivia or create AGENTS.md in every folder.
+   - For every directory where you edited or created files: if AGENTS.md exists there or above → default is `upsert_existing`; if none exists → default is `create_new`. `no_update` requires concrete evidence, not vague confidence.
+   - Call `planner_contract_check`, then `planner_contract_upsert` for every upsert or create decision.
+   - Add durable domain guidance: connections, call chains, blast radius, non-obvious invariants. Do not store task trivia.
 7. `refactor_task`
    - Challenge the implementation without changing behavior.
    - Write `refactor.md` with a concrete KISS review, changes applied, and decisions to keep code unchanged.

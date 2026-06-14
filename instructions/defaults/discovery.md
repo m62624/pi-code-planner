@@ -9,10 +9,22 @@ Become familiar with the project before planning. Keep this stage cheap for a lo
 1. `scan_project_structure`
    - Read `goal.md` for normal `/planner-create` plans.
    - If `planner_status` reports `creationMethod: improve`, this is a discovery-first plan: do not treat empty `goal.md` as a blocker and do not read `request.md` as the source goal. Use repository evidence to discover a bounded self-improvement goal, then return to intake/draft_goal after discovery.
-   - Call `planner_contract_scan` in batches. This discovers AGENTS.md/AGENTS.MD canonical contracts and read-only context imports such as CLAUDE.md, GEMINI.md, .cursorrules, WARP.md, AIDER.md, and COPILOT.md without reading all file bodies.
-   - If contract files exist, call `planner_contract_route` for the goal/scope and `planner_contract_read` for the relevant chain before broad source reads.
+
+   **AGENTS.md First Gate — do this before reading any project file or running any shell command:**
+   1. Call `planner_contract_scan` to discover all AGENTS.md/context files.
+   2. If scan returns 0 discovered paths: skip routing entirely. Proceed directly to project tree inspection below. Do not call `planner_contract_route` or `planner_contract_read`.
+   3. If scan returns 1+ paths: call `planner_contract_route` with the goal's target paths to select the relevant chain.
+   4. Call `planner_contract_read` for every contract in the selected chain from root to nearest.
+   5. **Depth stop rule:** Stop reading deeper when any of these is true:
+      - The nearest contract's Child Index is `(none)` — it is a leaf; no children exist to read.
+      - No child domain in the Child Index matches the goal's primary changed area.
+      - The nearest contract's Purpose already fully covers the goal scope.
+   6. Only read a child contract when the child domain explicitly covers the goal's primary implementation area. Do not read children "just to be safe."
+   7. If after reading a contract you realize it is the wrong domain, call `planner_contract_route` again with a more specific target or a sibling path.
+   8. After reading the relevant chain, use the `Read First` files listed in the nearest contract before broad source reads.
+
    - Treat AGENTS.md as the only writable/canonical planner memory format. Treat non-AGENTS context files as read-only guidance; if they contain durable planner knowledge, copy the distilled rule into the nearest AGENTS.md via `planner_contract_upsert`.
-   - Inspect the project tree with read-only shell commands after the contract map is started.
+   - Inspect the project tree with read-only shell commands after the contract map is processed.
    - Read only the manifests, entrypoints, tests, configuration, and source files needed to understand the requested work after contract guidance is considered.
    - Write a concise `discovery.md`: architecture, relevant paths, commands, conventions, risks, and uncertainty.
    - `discovery.md` must include a `## Verification Protocol` section before this step can finish.
@@ -38,6 +50,8 @@ Become familiar with the project before planning. Keep this stage cheap for a lo
 - Do not implement production code or tests.
 - Do not read the whole repository by default.
 - Do not skip AGENTS.md routing when contract files exist. They are local architecture memory, not optional docs.
+- Do not read child contracts unless the child domain directly covers the goal's primary changed area. Stop at the depth where the contract purpose matches the goal.
+- Do not panic when AGENTS.md files are absent. Run the scan, confirm 0 paths, then proceed with normal tree inspection. Absence is not an error.
 - Do not create AGENTS.md for every directory. A contract belongs only where it prevents future agents from reading irrelevant code or breaking a durable rule.
 - Do not use the absence of AGENTS.md as evidence that no contract update is needed. For project file changes in a project with no writable AGENTS.md, create the initial meaningful contract.
 - Do not build or maintain a file-by-file JSONL symbol index.

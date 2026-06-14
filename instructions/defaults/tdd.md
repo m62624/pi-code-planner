@@ -18,14 +18,37 @@ Use strict tests-first development for every execution task. Production implemen
 4. During `run_failing_tests`, execute focused checks and record the exact failing signal in `tdd.md`.
    - Before finishing `run_failing_tests`, add `## Pre-Implementation Proof Contract`.
    - Record the exact missing-behavior signal, intended production path, success signal, and files that must stay out of scope.
+   - **Test Signal Doubt — mandatory before advancing:**
+     Answer each question in `tdd.md` before moving to `implement_task`:
+     1. Would a trivial implementation (`return null`, empty function, hardcoded value) pass this test? If yes — the test does not prove the missing behavior. Rewrite it.
+     2. Does the failure message name the missing behavior, or only a missing file/import/module? If only harness bootstrap — add a real behavior assertion first.
+     3. Is there any way to make this test green without implementing the actual requested behavior? If yes — the test is underspecified. Add the constraint that blocks the shortcut.
+     If any answer is "yes" or "I'm not sure" — fix the test before touching production code.
 5. Begin production edits only during `implement_task`.
 6. Before finishing `implement_task`, add `## Post-Implementation Counterexample Review`.
    - Record the smallest counterexample, boundary value, opposite case, regression risk, scope check, and action.
    - If the counterexample is real, add a test or explicitly record why it is out of scope before continuing.
    - If resolving the task produced a reusable verified lesson, call `planner_skill_create` to save it for future planner sessions. Do not create a skill for ordinary task summaries.
 7. During `contract_check`, call `planner_contract_check`.
-   - If task work changed durable architecture, domain routing, test/check conventions, state-machine behavior, storage/recovery rules, or module boundaries, update the nearest meaningful AGENTS.md through `planner_contract_upsert`.
-   - If no update is needed, record concrete evidence. "No update" is valid only after checking the diff and task scope.
+
+   **Watcher rule — presumption is always UPDATE or CREATE:**
+   For every directory where you edited or created files this task, ask two questions:
+
+   - **Does an AGENTS.md exist at or above that directory level?**
+     - YES → default action is `upsert_existing`. Only downgrade to `no_update` if you can state concretely: "the diff introduced zero new domain rules, connection changes, or non-obvious invariants." Vague confidence ("nothing important changed") is not evidence.
+     - NO → default action is `create_new`. Only downgrade to `no_update` if the change is a single isolated fix with no new module boundary, no new integration point, and no rule that future sessions need. Absence of AGENTS.md is not a reason to skip — it is a reason to create one.
+
+   - **Connection audit:** For each changed component ask: what calls it? What does it import from? What state does it write that other components read? Non-obvious dependencies or invariants found during implementation belong in AGENTS.md Domain Details — that section survives memory wipes; tdd.md does not.
+
+   - **Level check:** If the nearest AGENTS.md is in a parent directory but the changed area is a distinct subdomain, prefer `create_new` at the specific directory over updating an overly abstract parent.
+
+   - After `planner_contract_check`, call `planner_contract_upsert` for every `upsert_existing` or `create_new` decision.
+   - **AGENTS.md Self-Doubt — after every upsert or create:**
+     Re-read what you just wrote and answer:
+     1. Does Domain Details name at least one concrete caller or dependency (→ flow, **Who writes:**, **Who calls:**)? If it's generic description with no connections — it's a template, not a contract. Rewrite Domain Details.
+     2. If you removed this AGENTS.md entirely, would a fresh model reading the code know less about blast radius and routing? If the answer is "not really" — the content is too shallow. Add what surprised you during implementation.
+     3. Does the Child Index list every subdirectory that has its own domain logic? If you created a new module but didn't add it to the parent's Child Index — fix the parent too.
+   - AGENTS.md files created or updated here are tracked by the planner and offered as keep/remove at `/planner-finish`. Keep them — they are the primary memory for future sessions in this codebase.
 8. During `run_final_tests`, rerun focused tests and required broader integration checks.
 9. Before finishing `merge_task_to_plan`, add `## Task Merge Scope Audit`.
    - Confirm acceptance criteria coverage, changed-file scope, commands run, debug cleanup, commit message fit, and branch drift check.

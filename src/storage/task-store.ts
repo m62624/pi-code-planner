@@ -67,9 +67,14 @@ export async function updateTaskStatus(
 	fs: PlannerFs,
 	paths: TaskStoragePaths,
 	status: TaskStatus,
+	commitHash?: string,
 ): Promise<TaskRecord> {
 	const current = await readTaskRecord(fs, paths);
-	const next = { ...current, status };
+	const next: TaskRecord = {
+		...current,
+		status,
+		...(commitHash ? { commitHash } : {}),
+	};
 	await writeJson(fs, paths.taskJson, next);
 	return next;
 }

@@ -8,7 +8,7 @@ Bundled model-facing instruction domain. These markdown files teach local models
 - `../AGENTS.md`
 
 ### Child Index
-- (none)
+- `defaults/AGENTS.md`: All 12 stage/step instruction files with purpose map and load chain.
 
 ### Stable Contracts
 - Every default instruction must be substantive and include auto-compact recovery guidance.
