@@ -36,15 +36,31 @@ Pi opens a multiline editor. Describe the outcome you want. The extension create
 ```
 After editing the file, run `/reload` in Pi to apply the changes.
 
-## Why Pi? 🪶
+---
 
-Pi was chosen because it is intentionally small. It does not assume cloud-scale context, many subagents, or extra infrastructure. That matters on consumer hardware where KV cache, RAM, VRAM, and prompt length are constrained.
+## Why I wrote this
 
-This extension adds the minimum structure a local model often lacks during long work: persisted state, one isolated Git worktree per plan, stage-specific instructions, controlled Git wrappers, recovery checks, and `planner_status` as the model-facing source of truth.
+Local models handle small, well-scoped tasks reasonably well — fix this function, add a test, rename something. The kind of thing that fits in one action without much context needed.
+
+They can also run on their own for a few minutes. How long depends on your inference speed. On my machine, Qwen3.6-35B with MTP runs at around 30–40 tokens per second. That's enough to get through a chunk of work before the context starts filling up.
+
+The problem shows up in longer agent loops. After a compaction or a long chain of tool calls, the model starts losing the thread. It re-reads things it already read, second-guesses completed decisions, or drifts toward whatever is loudest in the recent context rather than the original goal. There are no subagents or extra orchestration here — just one model doing one thing at a time.
+
+Every 10 minutes or so I was stepping in to remind it what it was doing. That got old fast. So I wrote this extension to do the reminding for it.
+
+The planner keeps a small JSON state file with the current stage, step, and active task. After compaction the model calls `planner_status` and reads `discovery.md` instead of trying to reconstruct the situation from a half-summarized chat. If the model gets stuck in a reasoning loop or just goes quiet, the idle watchdog sends a follow-up after 10 minutes (configurable in settings) to nudge it back on track.
+
+It is not perfect. The model still makes mistakes — sometimes it spirals on a wrong hypothesis, sometimes it misreads the persisted state. But the failure mode changes: instead of silently drifting for 30 minutes, it tends to get stuck in a visible way and either self-corrects or calls `planner_report_stuck` with an explicit description of what is wrong.
+
+In practice, the session I ran today for implementing a nontrivial feature went about 3 hours without me touching it. That is the goal.
+
+---
 
 This is not a guarantee of better output. The extension can make results worse by adding overhead or constraining the model at the wrong time. It is an experiment, not a stable product.
 
 The extension was tested primarily with `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf`, but the workflow is model-agnostic.
+
+---
 
 ## Basic Workflow 🔄
 
@@ -124,7 +140,7 @@ Stage behavior:
 
 - `init`: validate the Git project, create planner storage, choose the worktree location, create the plan branch/worktree, then enter intake.
 - `intake`: restate the request in `goal.md`, propose a title and short description, and wait for explicit user approval before discovery.
-- `discovery`: inspect only useful project files, record `discovery.md`, ask evidence-based questions when needed, then compact before planning.
+- `discovery`: scan AGENTS.md contracts first, inspect only useful project files, record `discovery.md`, ask evidence-based questions when needed, then compact before planning.
 - `planning`: read persisted context, write `plan.md`, split behavioral tasks, create task artifacts, verify task order, then compact before execution.
 - `execution`: for each task, prepare a task branch, write a TDD plan, write tests first, run the failing signal, implement, check/update local AGENTS.md contracts, run structured refactor review, run final checks, merge the task, then select the next task.
 - `finalize`: verify the integrated plan branch, run `doubt_review` where possible errors must be proven or disproven, write `final_summary.md`, compact, then enter done.
@@ -220,9 +236,9 @@ Every AGENTS.md file created or updated through `planner_contract_upsert` is tra
 
 How contracts affect the workflow:
 
-- `discovery`: call `planner_contract_scan` in batches, route to relevant AGENTS.md/read-only context chains, then read source files.
+- `discovery`: call `planner_contract_scan` first; if AGENTS.md files are found, route to the relevant chain and read it before any source reads; the model decides when to stop navigating deeper based on the contract's purpose and Child Index.
 - `planning`: attach relevant contract paths and domain details to task artifacts when known.
-- `execution/contract_check`: after a green implementation and before refactor, call `planner_contract_check`; update the nearest meaningful AGENTS.md through `planner_contract_upsert` only when the task changed durable domain knowledge.
+- `execution/contract_check`: after a green implementation and before refactor, call `planner_contract_check`; update or create the nearest meaningful AGENTS.md through `planner_contract_upsert` only when the task changed durable domain knowledge.
 - `finalize/doubt_review`: verify that local contracts are not stale, misleading, or missing important routing/details.
 - `/planner-finish`: if AGENTS.md files changed and `contracts.finalPolicy` is `"ask"`, the user chooses whether to keep those repository docs or remove/restore planner changes before export.
 
