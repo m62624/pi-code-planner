@@ -15,7 +15,7 @@
 		}
 	},
 	"files": {
-		"includes": ["**", "!!**/.pi"],
+		"includes": ["**", "!!**/.pi", "!!**/.claude"],
 		"ignoreUnknown": false
 	},
 	"vcs": {

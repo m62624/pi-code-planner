@@ -28,7 +28,9 @@ describe("planner local contracts parser", () => {
 				stableContracts: ["planner_status is source of truth."],
 				readFirst: ["state-machine.ts"],
 				doNotTouchUnless: ["Do not bypass preflight."],
-				domainDetails: ["Workflow tools enforce exits."],
+				domainDetails: [
+					"Workflow tools enforce exits. gate → orchestrator → tools.",
+				],
 			}),
 			path,
 			root,
@@ -196,6 +198,12 @@ describe("planner local contracts parser", () => {
 			"src/runtime/AGENTS.md",
 			"src/settings/AGENTS.md",
 			"src/storage/AGENTS.md",
+			"src/git/AGENTS.md",
+			"src/guard/AGENTS.md",
+			"src/instructions/AGENTS.md",
+			"src/session/AGENTS.md",
+			"src/worktree/AGENTS.md",
+			"src/project-local/AGENTS.md",
 			"instructions/AGENTS.md",
 			".github/AGENTS.md",
 		].map((path) => join(repoRoot, path));

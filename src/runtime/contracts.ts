@@ -784,6 +784,19 @@ export function validateDiscoveryContractRouting(input: {
 	return null;
 }
 
+export function isContractChainTraversalComplete(
+	state: PlanStateRecord,
+): boolean {
+	const c = state.contracts;
+	if (!c.enabled) return true;
+	if (!c.scanComplete) return false;
+	if (c.discoveredPaths.length === 0) return true;
+	if (c.activeChains.length === 0) return false;
+	return c.activeChains.every((chain) =>
+		chain.chain.every((path) => c.summaries.some((s) => s.path === path)),
+	);
+}
+
 export async function readPlannerContractsManifest(
 	fs: PlannerFs,
 	planPaths: PlanStoragePaths,
@@ -802,8 +815,13 @@ export function formatPlannerContractsStatus(input: {
 	if (!input.settings.enabled || !contracts.enabled) {
 		return ["- enabled: false"];
 	}
+	const traversalComplete = isContractChainTraversalComplete(input.state);
+	const inDiscoveryScan =
+		input.state.stage === "discovery" &&
+		input.state.step === "scan_project_structure";
 	const lines = [
 		`- enabled: true`,
+		`- chainTraversalComplete: ${String(traversalComplete)}`,
 		`- scanComplete: ${String(contracts.scanComplete)}`,
 		`- discoveredPaths: ${contracts.discoveredPaths.length}`,
 		`- dirty: ${String(contracts.dirty)}`,
@@ -916,6 +934,11 @@ export function formatPlannerContractsStatus(input: {
 	} else if (!contracts.scanComplete) {
 		lines.push(
 			"- guidance: During discovery, call planner_contract_scan before broad source reads.",
+		);
+	}
+	if (inDiscoveryScan && !traversalComplete) {
+		lines.push(
+			"- LOCKED: Project file reads and shell calls are restricted. You must complete the AGENTS.md chain traversal first. Call planner_contract_scan (if not done), then planner_contract_route, then planner_contract_read for every contract in the chain. Once chainTraversalComplete is true, all tools are available.",
 		);
 	}
 	for (const diagnostic of contracts.diagnostics.slice(-5)) {
@@ -1123,6 +1146,23 @@ export function parsePlannerContractMarkdown(
 			});
 		}
 	}
+	const domainDetailsLines = sections.get("Domain Details") ?? [];
+	const domainDetailsText = domainDetailsLines.join(" ").trim();
+	if (domainDetailsText.length > 0) {
+		// Language-neutral structural signals: flow arrows or bold role labels
+		const hasArrow =
+			domainDetailsText.includes("→") || domainDetailsText.includes("->");
+		const hasBold = domainDetailsText.includes("**");
+		if (!hasArrow && !hasBold) {
+			diagnostics.push({
+				severity: "warning",
+				code: "domain_details_missing_connections",
+				message:
+					"Domain Details should include structural signals: flow arrows (→ or ->) to show call chains, or bold role labels (**Who writes:**, **Who calls:**). These conventions work regardless of language or project type.",
+				path,
+			});
+		}
+	}
 	const contract: PlannerContract = {
 		path,
 		purpose: sectionText(sections.get("Purpose") ?? []),
@@ -1131,7 +1171,7 @@ export function parsePlannerContractMarkdown(
 		stableContracts: parseList(sections.get("Stable Contracts") ?? []),
 		readFirst: parseList(sections.get("Read First") ?? []),
 		doNotTouchUnless: parseList(sections.get("Do Not Touch Unless") ?? []),
-		domainDetails: parseList(sections.get("Domain Details") ?? []),
+		domainDetails: parseList(domainDetailsLines),
 	};
 	diagnostics.push(...validateContractReferences(contract, root));
 	return { path, hasManagedBlock: true, contract, diagnostics };

@@ -19,6 +19,27 @@ interface PlannerToolVisibilityState {
 /** Cached plan active state — false by default, updated after planner commands. */
 let planActiveCache: boolean = false;
 
+/**
+ * When true, restrict visible tools to contract traversal tools only.
+ * Active during discovery/scan_project_structure while AGENTS.md chain is unread.
+ */
+let contractGateActive: boolean = false;
+
+const CONTRACT_GATE_ALLOWED: ReadonlySet<string> = new Set([
+	"planner_status",
+	"planner_contract_scan",
+	"planner_contract_route",
+	"planner_contract_read",
+]);
+
+export function setContractGateActive(active: boolean): void {
+	contractGateActive = active;
+}
+
+export function isContractGateActive(): boolean {
+	return contractGateActive;
+}
+
 export function isPlanActive(): boolean {
 	return planActiveCache;
 }
@@ -112,10 +133,16 @@ export function resetPlanActiveCache(pi: ExtensionAPI): void {
 /** Update the list of active tools in the Pi extension API. */
 export function updateToolVisibility(pi: ExtensionAPI): void {
 	const allTools = pi.getAllTools();
-	const toolNames = planActiveCache
-		? allTools.map((t) => t.name)
-		: filterPlannerTools(allTools).map((t) => t.name);
-
+	let toolNames: string[];
+	if (!planActiveCache) {
+		toolNames = filterPlannerTools(allTools).map((t) => t.name);
+	} else if (contractGateActive) {
+		toolNames = allTools
+			.map((t) => t.name)
+			.filter((name) => CONTRACT_GATE_ALLOWED.has(name));
+	} else {
+		toolNames = allTools.map((t) => t.name);
+	}
 	pi.setActiveTools(toolNames);
 }
 

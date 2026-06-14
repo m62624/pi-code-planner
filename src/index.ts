@@ -16,11 +16,14 @@ import {
 } from "./guard/project-mutation";
 import {
 	activatePlannerToolVisibility,
+	isContractGateActive,
 	isPlanActive,
 	markPlannerToolVisibilityActive,
 	persistPlannerToolVisibilityActiveToSession,
 	registerPlannerToolVisibility,
 	resetPlanActiveCache,
+	setContractGateActive,
+	updateToolVisibility,
 } from "./index.tool-visibility";
 import { syncBundledInstructionFiles } from "./instructions/defaults";
 import { createInstructionPaths } from "./instructions/paths";
@@ -47,6 +50,7 @@ import {
 	applyPlannerContractFinishPolicy,
 	executePlannerContractTool,
 	hasPendingContractFinishDecision,
+	isContractChainTraversalComplete,
 	PLANNER_CONTRACT_TOOL_NAMES,
 	type PlannerContractToolName,
 } from "./runtime/contracts";
@@ -2220,6 +2224,18 @@ function registerPlannerTools(
 					toolName,
 					params,
 				});
+				const freshCtx = await readActivePlanContext({ fs, projectPaths });
+				if (freshCtx.status === "ready") {
+					const inDiscoveryScan =
+						freshCtx.state.stage === "discovery" &&
+						freshCtx.state.step === "scan_project_structure";
+					const complete = isContractChainTraversalComplete(freshCtx.state);
+					const shouldGate = inDiscoveryScan && !complete;
+					if (shouldGate !== isContractGateActive()) {
+						setContractGateActive(shouldGate);
+						updateToolVisibility(pi);
+					}
+				}
 				return {
 					content: [{ type: "text", text: result.text }],
 					details: result,

@@ -11,6 +11,12 @@ Source domain for the Pi extension implementation. Route to narrower AGENTS.md f
 - `runtime/AGENTS.md`: Planner state machine, tool execution, status text, timers, stuck/debug/refactor/doubt/contracts/skills.
 - `storage/AGENTS.md`: JSON schemas, project/plan/task stores, paths, state normalization, worktree index.
 - `settings/AGENTS.md`: Global/project settings schema, defaults, validation, and merge order.
+- `git/AGENTS.md`: Git shell wrapper (GitRunner), branch naming, worktree add/remove, planner branch ops.
+- `guard/AGENTS.md`: Tool call policy, git command interception, project mutation safety checks.
+- `instructions/AGENTS.md`: Stage/step → instruction file routing, defaults sync, user append merge.
+- `session/AGENTS.md`: Pi session file creation, handoff between sessions, resume candidate discovery.
+- `worktree/AGENTS.md`: Plan worktree lifecycle, path resolution, gitignore registration.
+- `project-local/AGENTS.md`: Gitignore rule management for planner-owned paths.
 
 ### Stable Contracts
 - `src/index.ts` registers commands, tools, events, and Pi integration points; shared behavior should live in focused runtime/storage modules.
