@@ -82,39 +82,7 @@ While a plan is active, raw `git` is blocked. Use planner Git wrappers. Run test
 
 ## Settings
 
-Optional settings files:
-
-```
-getAgentDir()/extensions/pi-code-planner/settings.json
-<project-root>/.pi/pi-code-planner/settings.json
-```
-
-Example:
-
-```json
-{
-  "worktree": { "mode": "custom", "root": "/mnt/fast/pi-worktrees" },
-  "compact": { "stage": true, "task": false },
-  "idle": { "enabled": true, "timeoutMinutes": 10 },
-  "metadata": { "humanLanguage": "English" },
-  "timer": { "enabled": true, "mode": "status" },
-  "contracts": { "enabled": true, "finalPolicy": "ask" }
-}
-```
-
-| Setting | Default | Purpose |
-| --- | --- | --- |
-| `worktree.mode` | `"project-local"` | `"project-local"` stores under `<project-root>/.pi/pi-code-planner/worktrees/`. `"custom"` uses `worktree.root`. |
-| `compact.stage` | `true` | Compact at stage boundaries. |
-| `compact.task` | `false` | Compact at task boundaries. |
-| `idle.enabled` | `true` | Idle watchdog — sends a follow-up when the model goes quiet for `timeoutMinutes`. |
-| `idle.timeoutMinutes` | `10` | Inactivity threshold before the watchdog fires. |
-| `timer.mode` | `"status"` | `"status"` = one footer line. `"widget"` = passive block above editor. |
-| `metadata.humanLanguage` | `"English"` | Language for user-facing generated text (summaries, titles, doubt review). |
-| `contracts.enabled` | `true` | Enable AGENTS.md contract discovery, routing, checks, and upserts. |
-| `contracts.finalPolicy` | `"ask"` | What `/planner-finish` does with planner AGENTS.md changes: `"ask"`, `"keep"`, or `"remove"`. |
-
-Settings merge: defaults → global → project. `worktree` and `compact` are captured at plan creation and don't change mid-plan.
+See [SETTINGS.md](SETTINGS.md) for the full reference — worktree, compact, idle watchdog, timer, metadata language, skills, and contracts.
 
 ---
 
