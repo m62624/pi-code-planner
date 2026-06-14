@@ -119,10 +119,10 @@ import {
 import {
 	deletePlannerSkill,
 	executePlannerSkillTool,
+	executePlannerSkillUpdateTool,
 	listPlannerSkillInventory,
 	listPlannerSkillResourcePaths,
 	PLANNER_SKILL_SOURCE_KINDS,
-	PLANNER_SKILL_TOOL_NAMES,
 	type PlannerSkillSummary,
 } from "./runtime/skill-library";
 import {
@@ -820,6 +820,29 @@ const SKILL_CREATE_TOOL_PARAMETERS = {
 		},
 	},
 	required: ["nameHint", "description", "bodyMarkdown", "sourceKind"],
+	additionalProperties: false,
+} as const;
+
+const SKILL_UPDATE_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		name: {
+			type: "string",
+			description:
+				"Exact skill name from the index (pi-planner-xxx-uuid format). Must match an existing skill.",
+		},
+		description: {
+			type: "string",
+			description:
+				"Revised Pi skill trigger description, <=1024 chars. Include ACTIVATE/Use when conditions.",
+		},
+		bodyMarkdown: {
+			type: "string",
+			description:
+				"Revised SKILL.md body without YAML frontmatter. Must include a markdown H1 and concrete workflow/checks. Use metadata.skillLanguage for human-facing prose.",
+		},
+	},
+	required: ["name", "description", "bodyMarkdown"],
 	additionalProperties: false,
 } as const;
 
@@ -2467,36 +2490,63 @@ function registerPlannerTools(
 		});
 	}
 
-	for (const toolName of PLANNER_SKILL_TOOL_NAMES) {
-		pi.registerTool({
-			name: toolName,
-			label: "Planner Skill Create",
-			description:
-				"Create a validated Pi skill from a proven reusable planner lesson for future planner sessions.",
-			promptSnippet:
-				"Use planner_skill_create only after a reusable lesson is proven by stuck/debug/refactor/doubt/final evidence. The wrapper writes YAML frontmatter and stores the skill for future planner sessions.",
-			parameters: SKILL_CREATE_TOOL_PARAMETERS as never,
-			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
-				const result = await executePlannerSkillTool({
-					fs,
-					git: new NodeGitRunner(),
-					projectPaths,
-					params,
-				});
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
-			},
-		});
-	}
+	pi.registerTool({
+		name: "planner_skill_create",
+		label: "Planner Skill Create",
+		description:
+			"Create a validated Pi skill from a proven reusable planner lesson for future planner sessions.",
+		promptSnippet:
+			"Use planner_skill_create only after a reusable lesson is proven by stuck/debug/refactor/doubt/final evidence. The wrapper writes YAML frontmatter and stores the skill for future planner sessions. At capture_skill step you MUST decide: create, update an existing skill, or explicitly record in decisions.md why no skill is needed.",
+		parameters: SKILL_CREATE_TOOL_PARAMETERS as never,
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const fs = createNodeFs();
+			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+			await recordPlannerToolActivityForProject({
+				fs,
+				projectPaths,
+				now: Date.now(),
+			});
+			const result = await executePlannerSkillTool({
+				fs,
+				git: new NodeGitRunner(),
+				projectPaths,
+				params,
+			});
+			return {
+				content: [{ type: "text", text: result.text }],
+				details: result,
+			};
+		},
+	});
+
+	pi.registerTool({
+		name: "planner_skill_update",
+		label: "Planner Skill Update",
+		description:
+			"Update an existing Pi skill by name with revised description and body.",
+		promptSnippet:
+			"Use planner_skill_update when an existing skill is outdated or wrong. Provide the exact name from the skill index. If no existing skill matches by meaning, use planner_skill_create instead. After updating, run the skill probe if applicable and call planner_git_discard_changes if it dirtied the worktree.",
+		parameters: SKILL_UPDATE_TOOL_PARAMETERS as never,
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const fs = createNodeFs();
+			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+			await recordPlannerToolActivityForProject({
+				fs,
+				projectPaths,
+				now: Date.now(),
+			});
+			const result = await executePlannerSkillUpdateTool({
+				fs,
+				git: new NodeGitRunner(),
+				projectPaths,
+				params,
+			});
+			return {
+				content: [{ type: "text", text: result.text }],
+				details: result,
+			};
+		},
+	});
 
 	for (const toolName of PLANNER_DEBUG_TOOL_NAMES) {
 		pi.registerTool({
@@ -3129,6 +3179,8 @@ function gitToolLabel(toolName: PlannerGitToolName): string {
 			return "Planner Git Init";
 		case "planner_git_commit":
 			return "Planner Git Commit";
+		case "planner_git_discard_changes":
+			return "Planner Git Discard Changes";
 		case "planner_git_create_task_branch":
 			return "Planner Git Create Task Branch";
 		case "planner_git_create_refactor_branch":
@@ -3148,6 +3200,8 @@ function gitToolDescription(toolName: PlannerGitToolName): string {
 			return "Initialize git for the project during the init/check_git step.";
 		case "planner_git_commit":
 			return "Create a planner-controlled commit.";
+		case "planner_git_discard_changes":
+			return "Discard all uncommitted worktree changes (git restore .). Use only at capture_skill after a skill probe to clean up side effects.";
 		case "planner_git_create_task_branch":
 			return "Create and switch to the current task branch from the plan branch.";
 		case "planner_git_create_refactor_branch":
@@ -3172,6 +3226,7 @@ function gitToolParameters(toolName: PlannerGitToolName) {
 			return GIT_INSPECT_TOOL_PARAMETERS;
 		case "planner_git_init":
 		case "planner_git_create_refactor_branch":
+		case "planner_git_discard_changes":
 			return EMPTY_TOOL_PARAMETERS;
 	}
 }

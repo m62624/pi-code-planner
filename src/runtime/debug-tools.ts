@@ -261,6 +261,18 @@ async function writeDebugProbe(
 	planPaths: PlanStoragePaths,
 	state: PlanStateRecord,
 ): Promise<PlannerDebugToolExecutionResult> {
+	if (!state.debugStrategyPath) {
+		return blocked(
+			input.toolName,
+			"planner_debug_strategy must be called before planner_debug_probe to define the debugging approach.",
+		);
+	}
+	if (state.activeDebugProbeId) {
+		return blocked(
+			input.toolName,
+			`planner_debug_result must be called before opening a new probe. Active probe: ${state.activeDebugProbeId}.`,
+		);
+	}
 	const dir = requireDebugArtifactsDir(state);
 	const params = asObject(input.params);
 	const method = requiredEnum(

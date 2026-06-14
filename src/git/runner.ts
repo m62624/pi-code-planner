@@ -56,6 +56,7 @@ export interface GitRunner {
 	statusPorcelain(input: GitRepoInput): Promise<string>;
 	diffStat(input: GitRepoInput): Promise<string>;
 	diffNameOnly(input: GitRepoInput): Promise<string>;
+	diffPatch(input: GitRepoInput): Promise<string>;
 	headFiles(input: GitRepoInput): Promise<string>;
 	diffRange(
 		input: GitRepoInput & { fromRef: string; toRef: string },
@@ -74,4 +75,5 @@ export interface GitRunner {
 	merge(input: GitMergeInput): Promise<void>;
 	worktreeAdd(input: GitWorktreeAddInput): Promise<void>;
 	worktreeRemove(input: GitWorktreeRemoveInput): Promise<void>;
+	discardWorktreeChanges(input: GitRepoInput): Promise<void>;
 }

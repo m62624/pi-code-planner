@@ -479,6 +479,27 @@ export const PLANNER_STEP_RULES = {
 			"Do not merge task to plan while tests fail or project files remain uncommitted.",
 		],
 		exitCondition: "Final checks pass and the worktree is clean.",
+		nextInstruction: "Call planner_finish_step to open capture_skill.",
+	}),
+	capture_skill: stepRule("execution", "capture_skill", {
+		objective:
+			"Decide whether this task produced a reusable planner lesson and create or update a skill.",
+		requiredActions: [
+			"Review skills already loaded in this session.",
+			"If an existing skill is outdated or wrong: call planner_skill_update.",
+			"If a new reusable lesson exists with no matching skill: call planner_skill_create.",
+			"If the skill body describes a runnable probe, run it, then call planner_git_inspect. If the worktree is dirty, call planner_git_discard_changes immediately.",
+			"If no skill action is taken: write an explicit no-skill note in decisions.md with the reason.",
+		],
+		allowedNow: [
+			"planner_skill_create, planner_skill_update, planner_git_inspect, planner_git_discard_changes.",
+		],
+		forbiddenNow: [
+			"Do not commit at this step.",
+			"Do not merge before capture_skill is complete.",
+		],
+		exitCondition:
+			"A skill was created/updated, or a no-skill decision is recorded in decisions.md.",
 		nextInstruction: "Call planner_finish_step to open merge_task_to_plan.",
 	}),
 	merge_task_to_plan: stepRule("execution", "merge_task_to_plan", {

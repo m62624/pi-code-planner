@@ -51,6 +51,7 @@ export type ExecutionStep =
 	| "contract_check"
 	| "refactor_task"
 	| "run_final_tests"
+	| "capture_skill"
 	| "merge_task_to_plan"
 	| "compact_task"
 	| "select_next_task";
@@ -126,6 +127,7 @@ export const PLANNER_STAGE_STEPS = {
 		"contract_check",
 		"refactor_task",
 		"run_final_tests",
+		"capture_skill",
 		"merge_task_to_plan",
 		"compact_task",
 		"select_next_task",

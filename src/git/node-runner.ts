@@ -134,6 +134,10 @@ export class NodeGitRunner implements GitRunner {
 	async worktreeRemove(input: GitWorktreeRemoveInput): Promise<void> {
 		await runGitCommand(buildGitWorktreeRemoveArgs(input));
 	}
+
+	async discardWorktreeChanges(input: GitRepoInput): Promise<void> {
+		await runGitCommand(buildGitRestoreArgs(input));
+	}
 }
 
 export function buildGitInitArgs(input: GitRepoInput): string[] {
@@ -294,6 +298,10 @@ export function buildGitWorktreeRemoveArgs(
 		...(input.force ? ["--force"] : []),
 		input.path,
 	];
+}
+
+export function buildGitRestoreArgs(input: GitRepoInput): string[] {
+	return ["-C", input.repoRoot, "restore", "."];
 }
 
 async function runGitCommand(args: string[]): Promise<void> {

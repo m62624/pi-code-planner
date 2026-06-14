@@ -11,7 +11,10 @@ import {
 	runPlannerOrchestrator,
 } from "./orchestrator";
 
-export const PLANNER_SKILL_TOOL_NAMES = ["planner_skill_create"] as const;
+export const PLANNER_SKILL_TOOL_NAMES = [
+	"planner_skill_create",
+	"planner_skill_update",
+] as const;
 
 export type PlannerSkillToolName = (typeof PLANNER_SKILL_TOOL_NAMES)[number];
 
@@ -65,6 +68,14 @@ export interface PlannerSkillCreateInput {
 	params: unknown;
 	now?: number;
 	uuid?: string;
+}
+
+export interface PlannerSkillUpdateInput {
+	fs: PlannerFs;
+	git: GitRunner;
+	projectPaths: ProjectStoragePaths;
+	params: unknown;
+	now?: number;
 }
 
 export interface PlannerSkillCreateResult {
@@ -331,6 +342,125 @@ export async function executePlannerSkillTool(
 	} catch (error) {
 		return blocked(errorMessage(error));
 	}
+}
+
+export async function executePlannerSkillUpdateTool(
+	input: PlannerSkillUpdateInput,
+): Promise<PlannerSkillCreateResult> {
+	try {
+		const orchestrator = await runPlannerOrchestrator(input);
+		if (orchestrator.preflight.context.status !== "ready") {
+			return blocked(orchestrator.preflight.context.reason);
+		}
+		const policy = checkPlannerOrchestratorToolAllowed({
+			orchestrator,
+			toolName: "planner_skill_update",
+		});
+		if (!policy.allow) {
+			return blocked(
+				policy.reason ?? "planner_skill_update is blocked by planner state.",
+			);
+		}
+
+		const params = parseSkillUpdateParams(input.params);
+		const paths = createPlannerSkillStoragePaths(input.projectPaths);
+		const settings = await loadEffectivePlannerSettings({
+			fs: input.fs,
+			projectPaths: input.projectPaths,
+		});
+		const language = settings.effective.metadata.skillLanguage;
+		const index = await readPlannerSkillIndex(input.fs, paths.indexJson);
+		const existing = index.items.find((item) => item.name === params.name);
+		if (!existing) {
+			return blocked(
+				`Planner skill not found: ${params.name}.\nUse planner_skill_create to add a new skill, or check the name in the skill index.`,
+			);
+		}
+
+		const content = formatPlannerSkillMarkdown({
+			name: existing.name,
+			description: params.description,
+			bodyMarkdown: params.bodyMarkdown,
+		});
+		const skillValidation = validatePlannerSkillMarkdown(content);
+		if (!skillValidation.valid) {
+			throw new TypeError(skillValidation.reason);
+		}
+		const hash = createHash("sha256")
+			.update(`${params.description}\n\n${params.bodyMarkdown}`)
+			.digest("hex");
+		const now = input.now ?? Date.now();
+
+		const updated: PlannerSkillIndexItem = {
+			...existing,
+			description: params.description,
+			hash,
+			updatedAt: now,
+			language,
+		};
+
+		await input.fs.writeTextAtomic(existing.skillPath, content);
+		await writePlannerSkillIndex(input.fs, paths.indexJson, {
+			version: 1,
+			items: index.items.map((item) =>
+				item.name === params.name ? updated : item,
+			),
+		});
+
+		return {
+			status: "applied",
+			toolName: "planner_skill_update",
+			text: [
+				"Planner skill updated.",
+				`Skill: ${existing.name}`,
+				`Skill path: ${existing.skillPath}`,
+				`Index: ${paths.indexJson}`,
+				`Language: ${language}`,
+				"Pi loads updated skills through resources_discover on the next planner session start, resume, or reload.",
+			].join("\n"),
+			details: {
+				indexPath: paths.indexJson,
+				skillPath: existing.skillPath,
+				item: updated,
+			},
+		};
+	} catch (error) {
+		return blocked(errorMessage(error));
+	}
+}
+
+function parseSkillUpdateParams(value: unknown): {
+	name: string;
+	description: string;
+	bodyMarkdown: string;
+} {
+	const record = asObject(value);
+	const name = requiredString(record, "name");
+	const description = requiredString(record, "description");
+	const bodyMarkdown = requiredString(record, "bodyMarkdown");
+	if (description.length > 1024) {
+		throw new TypeError(
+			"planner_skill_update.description must be <= 1024 characters.",
+		);
+	}
+	if (
+		bodyMarkdown.includes("\n---\n") ||
+		bodyMarkdown.trimStart().startsWith("---")
+	) {
+		throw new TypeError(
+			"planner_skill_update.bodyMarkdown must not include YAML frontmatter.",
+		);
+	}
+	if (!/^#\s+\S/m.test(bodyMarkdown)) {
+		throw new TypeError(
+			"planner_skill_update.bodyMarkdown must contain a markdown H1 heading.",
+		);
+	}
+	return {
+		name,
+		description: normalizeDescription(description),
+		bodyMarkdown: bodyMarkdown.trim(),
+	};
 }
 
 async function readPlannerSkillIndex(

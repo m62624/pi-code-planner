@@ -15,6 +15,7 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_refactor_review",
 	"planner_doubt_review",
 	"planner_skill_create",
+	"planner_skill_update",
 	"planner_contract_scan",
 	"planner_contract_route",
 	"planner_contract_read",
@@ -29,6 +30,7 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_git_inspect",
 	"planner_git_init",
 	"planner_git_commit",
+	"planner_git_discard_changes",
 	"planner_git_create_task_branch",
 	"planner_git_create_refactor_branch",
 	"planner_git_merge_refactor_to_task",
@@ -128,6 +130,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_git_inspect",
 			"planner_report_stuck",
 			"planner_skill_create",
+			"planner_skill_update",
 			"planner_debug_strategy",
 			"planner_debug_probe",
 			"planner_debug_result",
@@ -138,6 +141,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_git_commit",
 			"planner_report_stuck",
 			"planner_skill_create",
+			"planner_skill_update",
 			"planner_debug_strategy",
 			"planner_debug_probe",
 			"planner_debug_result",
@@ -147,6 +151,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_git_inspect",
 			"planner_report_stuck",
 			"planner_skill_create",
+			"planner_skill_update",
 			"planner_debug_strategy",
 			"planner_debug_probe",
 			"planner_debug_result",
@@ -159,6 +164,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_contract_read",
 			"planner_report_stuck",
 			"planner_skill_create",
+			"planner_skill_update",
 			"planner_debug_strategy",
 			"planner_debug_probe",
 			"planner_debug_result",
@@ -173,6 +179,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_contract_upsert",
 			"planner_report_stuck",
 			"planner_skill_create",
+			"planner_skill_update",
 		],
 		refactor_task: [
 			"planner_git_inspect",
@@ -186,6 +193,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_git_merge_refactor_to_task",
 			"planner_report_stuck",
 			"planner_skill_create",
+			"planner_skill_update",
 			"planner_debug_strategy",
 			"planner_debug_probe",
 			"planner_debug_result",
@@ -196,10 +204,17 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_git_commit",
 			"planner_report_stuck",
 			"planner_skill_create",
+			"planner_skill_update",
 			"planner_debug_strategy",
 			"planner_debug_probe",
 			"planner_debug_result",
 			"planner_debug_cleanup",
+		],
+		capture_skill: [
+			"planner_git_inspect",
+			"planner_skill_create",
+			"planner_skill_update",
+			"planner_git_discard_changes",
 		],
 		merge_task_to_plan: [
 			"planner_git_inspect",
@@ -218,6 +233,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_git_inspect",
 			"planner_doubt_review",
 			"planner_skill_create",
+			"planner_skill_update",
 			"planner_contract_route",
 			"planner_contract_read",
 			"planner_contract_check",
@@ -225,6 +241,7 @@ const STEP_ALLOWED_TOOLS = {
 		],
 		write_final_summary: [
 			"planner_skill_create",
+			"planner_skill_update",
 			"planner_contract_route",
 			"planner_contract_read",
 			"planner_contract_check",
@@ -234,7 +251,11 @@ const STEP_ALLOWED_TOOLS = {
 		enter_done: [],
 	},
 	done: {
-		present_result: ["planner_skill_create", "planner_contract_decide"],
+		present_result: [
+			"planner_skill_create",
+			"planner_skill_update",
+			"planner_contract_decide",
+		],
 		await_user_acceptance: ["planner_contract_decide"],
 		handle_change_request: [],
 		prepare_output_branch: [],
@@ -268,7 +289,6 @@ export function getAllowedPlannerWrapperTools(
 		| "broken"
 		| "requiresUserDecision"
 		| "requiresCompact"
-		| "lastStuckAttemptId"
 		| "debugArtifactsDir"
 	>,
 ): readonly PlannerWrapperTool[] {
@@ -301,7 +321,6 @@ export function checkPlannerWrapperAllowed(input: {
 		| "broken"
 		| "requiresUserDecision"
 		| "requiresCompact"
-		| "lastStuckAttemptId"
 		| "debugArtifactsDir"
 	>;
 }): PlannerToolPolicyDecision {
@@ -387,9 +406,9 @@ function withAlwaysAllowed(
 
 function filterDebugToolsForState(
 	tools: readonly PlannerWrapperTool[],
-	state: Pick<PlanStateRecord, "lastStuckAttemptId" | "debugArtifactsDir">,
+	state: Pick<PlanStateRecord, "debugArtifactsDir">,
 ): readonly PlannerWrapperTool[] {
-	if (state.lastStuckAttemptId || state.debugArtifactsDir) {
+	if (state.debugArtifactsDir) {
 		return tools;
 	}
 	return tools.filter(
