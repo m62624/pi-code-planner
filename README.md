@@ -3,7 +3,7 @@
 # pi-code-planner 🧭
 
 <p align="center">
-  <img src="assets/icon.png" alt="pi-code-planner icon" width="180">
+  <img src="assets/icon.webp" alt="pi-code-planner icon" width="180">
 </p>
 
 `pi-code-planner` is an experimental [Pi](https://github.com/badlogic/pi-mono) package for local coding models. It adds a deterministic planner state machine so long coding tasks can survive compaction, Git branching, and user approval steps.

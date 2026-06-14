@@ -21,6 +21,7 @@
 	"main": "src/index.ts",
 	"files": [
 		"assets/*.png",
+		"assets/*.webp",
 		"src/**/*.ts",
 		"!src/**/*.test.ts",
 		"!src/test/**",
@@ -32,7 +33,7 @@
 		"extensions": [
 			"./src/index.ts"
 		],
-		"image": "https://raw.githubusercontent.com/m62624/pi-code-planner/main/assets/icon.png"
+		"image": "https://raw.githubusercontent.com/m62624/pi-code-planner/main/assets/icon.webp"
 	},
 	"license": "MIT",
 	"scripts": {
