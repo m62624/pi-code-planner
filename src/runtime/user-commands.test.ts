@@ -295,6 +295,23 @@ describe("planner user commands", () => {
 		const { fs, git, projectPaths } = await createProjectFixture({
 			activePlanId: "plan-a",
 		});
+		await initializePlanState(
+			fs,
+			createPlanStoragePaths(projectPaths, "plan-b"),
+			{
+				...createInitialPlanState({
+					baseBranch: "main",
+					planBranch: "plan/plan-b",
+					worktreePath: "/repo/app/.pi/pi-code-planner/worktrees/plan-b",
+					creationMethod: "improve",
+					compatibilityMode: "breaking",
+				}),
+				stage: "discovery",
+				step: "scan_project_structure",
+				stepStatus: "running",
+				currentBranch: "plan/plan-b",
+			},
+		);
 
 		const result = await executePlannerUserCommand({
 			fs,
@@ -310,6 +327,8 @@ describe("planner user commands", () => {
 		});
 		expect(result.details).toMatchObject({
 			worktreePath: "/repo/app/.pi/pi-code-planner/worktrees/plan-b",
+			creationMethod: "improve",
+			compatibilityMode: "breaking",
 		});
 		expect(git.calls).toContainEqual({
 			name: "statusPorcelain",

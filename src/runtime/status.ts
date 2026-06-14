@@ -154,7 +154,7 @@ export const PLANNER_STEP_RULES = {
 	draft_goal: stepRule("intake", "draft_goal", {
 		objective: "Rewrite the raw user request as a precise reviewable goal.",
 		requiredActions: [
-			"Read request.md.",
+			"Read request.md for normal /planner-create plans. For creationMethod=improve, use discovery.md findings as the source goal instead.",
 			"Draft goal.md content in your own words with outcome, assumptions, non-goals, and constraints.",
 			"Propose a short user-facing title in metadata.titleLanguage unless the user explicitly requested another language.",
 			"Propose a very short planner-list description in the metadata.descriptionLanguage reported by planner_status.",
@@ -162,7 +162,7 @@ export const PLANNER_STEP_RULES = {
 		],
 		allowedNow: ["Use planner_goal_submit only after the draft is complete."],
 		forbiddenNow: [
-			"Do not inspect project source.",
+			"Do not inspect project source during normal intake. For creationMethod=improve, source inspection already happened during discovery; do not perform new broad source reads here.",
 			"Do not infer implementation details from the request.",
 		],
 		exitCondition: "goal.md exists and the planner is waiting for user review.",
@@ -244,12 +244,15 @@ export const PLANNER_STEP_RULES = {
 	}),
 	enter_planning: stepRule("discovery", "enter_planning", {
 		objective: "Enter planning after verified discovery.",
-		requiredActions: ["Persist stage=planning and step=read_context."],
+		requiredActions: [
+			"Persist stage=planning and step=read_context for normal plans.",
+			"For creationMethod=improve, persist stage=intake and step=draft_goal so goal.md can be written from discovery findings.",
+		],
 		allowedNow: ["State transition only."],
 		forbiddenNow: ["Do not draft tasks until planning/read_context is active."],
-		exitCondition: "State points to planning/read_context.",
-		nextInstruction:
-			"Continue with planning/read_context and call planner_status again.",
+		exitCondition:
+			"State points to planning/read_context, or to intake/draft_goal for creationMethod=improve.",
+		nextInstruction: "Continue with the next state reported by planner_status.",
 	}),
 
 	read_context: stepRule("planning", "read_context", {
@@ -841,6 +844,8 @@ export async function buildPlannerStatusText(
 	lines.push(
 		`- plan: ${preflight.context.activePlanId}`,
 		`- plan title: ${preflight.context.plan.title}`,
+		`- creationMethod: ${state.creationMethod ?? "create"}`,
+		`- compatibilityMode: ${state.compatibilityMode ?? "additive"}`,
 		`- stage: ${state.stage}`,
 		`- step: ${state.step}`,
 		`- stepStatus: ${state.stepStatus}`,

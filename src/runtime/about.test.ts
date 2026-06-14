@@ -28,6 +28,7 @@ describe("planner about report", () => {
 		});
 
 		expect(report).toContain("# Planner About");
+		expect(report).toContain("/planner-improve");
 		expect(report).toContain("AGENTS.md");
 		expect(report).toContain("GEMINI.md");
 		expect(report).toContain(".cursorrules");

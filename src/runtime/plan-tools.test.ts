@@ -135,6 +135,8 @@ describe("planner plan tools", () => {
 			tasks: [],
 		});
 		await expect(readPlanState(fs, planPaths)).resolves.toMatchObject({
+			creationMethod: "create",
+			compatibilityMode: "additive",
 			stage: "intake",
 			step: "draft_goal",
 			stepStatus: "running",

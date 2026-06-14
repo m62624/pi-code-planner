@@ -7,7 +7,8 @@ Become familiar with the project before planning. Keep this stage cheap for a lo
 ## Strict Step Order
 
 1. `scan_project_structure`
-   - Read `goal.md`.
+   - Read `goal.md` for normal `/planner-create` plans.
+   - If `planner_status` reports `creationMethod: improve`, this is a discovery-first plan: do not treat empty `goal.md` as a blocker and do not read `request.md` as the source goal. Use repository evidence to discover a bounded self-improvement goal, then return to intake/draft_goal after discovery.
    - Call `planner_contract_scan` in batches. This discovers AGENTS.md/AGENTS.MD canonical contracts and read-only context imports such as CLAUDE.md, GEMINI.md, .cursorrules, WARP.md, AIDER.md, and COPILOT.md without reading all file bodies.
    - If contract files exist, call `planner_contract_route` for the goal/scope and `planner_contract_read` for the relevant chain before broad source reads.
    - Treat AGENTS.md as the only writable/canonical planner memory format. Treat non-AGENTS context files as read-only guidance; if they contain durable planner knowledge, copy the distilled rule into the nearest AGENTS.md via `planner_contract_upsert`.
@@ -29,7 +30,8 @@ Become familiar with the project before planning. Keep this stage cheap for a lo
 3. `compact_discovery`
    - Request planner-controlled compact only after `discovery.md` is useful and questions are resolved.
 4. `enter_planning`
-   - Advance to `planning/read_context`.
+   - For normal `/planner-create` plans, advance to `planning/read_context`.
+   - For `/planner-improve` plans (`creationMethod: improve`), finish with target `intake/draft_goal` so the model can write `goal.md` from discovery findings and ask for approval.
 
 ## Restrictions
 

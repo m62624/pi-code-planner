@@ -77,6 +77,8 @@ These are Pi slash commands for the user. The model has separate internal tools.
 | Command | Purpose |
 | --- | --- |
 | `/planner-create` | Open a multiline request editor and create a new plan. |
+| `/planner-improve` | Create a discovery-first self-improvement plan. The model writes `goal.md` from discovery findings. |
+| `/planner-improve --breaking` | Allow breaking proposals, but implementation still requires explicit user approval. |
 | `/planner-helper` | Show current effective settings, defaults, sources, and planner behavior. Read-only. |
 | `/planner-skills` | Search, view, and delete planner-generated skills from the shared planner skill library. |
 | `/planner-exit` | Return to the original project chat and clear the active-plan marker without finishing or deleting the plan. |
@@ -101,6 +103,12 @@ Use `/planner-resume` for planner work. It updates the active plan, reopens the 
 The resume picker shows the plan title first and the model-written short description on the next line.
 
 Pi's built-in `/resume` starts in `Current Folder` scope. Press `Tab` to show `All` sessions, including worktree sessions. Directly resuming an inactive planner worktree through `/resume` is possible, but it does not update the planner's active plan record. Prefer `/planner-resume`.
+
+### Planner Improve
+
+`/planner-improve` creates a normal isolated planner worktree, but starts at `discovery/scan_project_structure` instead of `intake/draft_goal`. Discovery runs first, then the planner returns to intake so the model can write `goal.md` from repository evidence and ask for approval.
+
+By default it uses additive compatibility: keep public commands, tools, settings, persisted fields, package metadata, and documented behavior compatible. Use `--breaking`, `--compat breaking`, or `--compat=breaking` only when you want discovery to consider breaking proposals. Breaking implementation still requires explicit user approval.
 
 ## State Machine 🧱
 

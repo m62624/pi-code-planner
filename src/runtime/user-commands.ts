@@ -241,6 +241,8 @@ async function resumePlan(
 		project: nextProject,
 		target,
 		worktreePath: target.state.worktreePath,
+		creationMethod: target.state.creationMethod ?? "create",
+		compatibilityMode: target.state.compatibilityMode ?? "additive",
 	});
 }
 

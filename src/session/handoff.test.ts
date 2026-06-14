@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MockPlannerFs } from "../test/mock-fs";
 import {
 	buildPlannerHandoffPrompt,
+	buildPlannerImproveHandoffPrompt,
 	buildPlannerResumePrompt,
 	createPiSessionDir,
 	createPlannerHandoffSession,
@@ -90,6 +91,20 @@ describe("planner session handoff", () => {
 		).toContain("Do not edit goal.md directly");
 	});
 
+	it("builds the discovery-first improve handoff prompt", () => {
+		const prompt = buildPlannerImproveHandoffPrompt({
+			planId: "plan-improve",
+			worktreePath: "/repo/worktree",
+			compatibilityMode: "breaking",
+		});
+
+		expect(prompt).toContain("created via /planner-improve");
+		expect(prompt).toContain("Compatibility mode: breaking");
+		expect(prompt).toContain("This is a discovery-first flow");
+		expect(prompt).toContain("finish with target {stage: 'intake'");
+		expect(prompt).toContain("Breaking changes may be proposed only");
+	});
+
 	it("builds the resume prompt for switching between planner worktrees", () => {
 		expect(
 			buildPlannerResumePrompt({
@@ -97,6 +112,19 @@ describe("planner session handoff", () => {
 				worktreePath: "/repo/worktree-b",
 			}),
 		).toContain("Resume only from the stage/step reported by planner_status.");
+	});
+
+	it("adds improve context to resume prompts", () => {
+		const prompt = buildPlannerResumePrompt({
+			planId: "plan-improve",
+			worktreePath: "/repo/worktree",
+			creationMethod: "improve",
+			compatibilityMode: "additive",
+		});
+
+		expect(prompt).toContain("created via /planner-improve");
+		expect(prompt).toContain("Compatibility mode: additive");
+		expect(prompt).toContain("write goal.md from discovery findings");
 	});
 
 	it("resumes the most recent non-empty planner session", () => {
