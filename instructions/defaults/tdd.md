@@ -24,8 +24,11 @@ Use strict tests-first development for every execution task. Production implemen
    - If the counterexample is real, add a test or explicitly record why it is out of scope before continuing.
    - If resolving the task produced a reusable verified lesson, call `planner_skill_create` to save it for future planner sessions. Do not create a skill for ordinary task summaries.
 7. During `contract_check`, call `planner_contract_check`.
-   - If task work changed durable architecture, domain routing, test/check conventions, state-machine behavior, storage/recovery rules, or module boundaries, update the nearest meaningful AGENTS.md through `planner_contract_upsert`.
-   - If no update is needed, record concrete evidence. "No update" is valid only after checking the diff and task scope.
+   - First decide the action: `no_update`, `upsert_existing`, or `create_new`.
+   - Use `upsert_existing` if a writable AGENTS.md already exists in the affected domain and task work changed durable architecture, domain routing, test/check conventions, state-machine behavior, storage/recovery rules, or module boundaries.
+   - Use `create_new` if no writable AGENTS.md exists in the affected domain AND the task introduced a meaningful new domain boundary (new module, new storage pattern, new state machine behavior, new integration point) that future planner sessions should know about.
+   - Use `no_update` only if no writable AGENTS.md exists AND the change is entirely self-contained with no new domain rules, OR if an AGENTS.md exists and the diff introduces nothing durable. Record concrete evidence for `no_update`; absence of AGENTS.md alone is not sufficient evidence.
+   - After `planner_contract_check`, call `planner_contract_upsert` if the action is `upsert_existing` or `create_new`.
 8. During `run_final_tests`, rerun focused tests and required broader integration checks.
 9. Before finishing `merge_task_to_plan`, add `## Task Merge Scope Audit`.
    - Confirm acceptance criteria coverage, changed-file scope, commands run, debug cleanup, commit message fit, and branch drift check.

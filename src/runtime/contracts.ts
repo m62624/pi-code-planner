@@ -780,16 +780,6 @@ export function validateDiscoveryContractRouting(input: {
 				return `Planner contract route selected ${path}, but it has not been read. Call planner_contract_read for every contract in the selected hierarchy chain before finishing discovery/scan_project_structure.`;
 			}
 		}
-		const nearest = chain.chain.at(-1);
-		const children = nearest ? (contracts.childContracts[nearest] ?? []) : [];
-		if (children.length > 0) {
-			const childRead = children.some((childPath) =>
-				contracts.summaries.some((summary) => summary.path === childPath),
-			);
-			if (!childRead) {
-				return `Planner contract route selected ${nearest}, which has child contracts. Read at least one relevant child contract before finishing discovery/scan_project_structure, or route to a narrower target if another domain is needed.`;
-			}
-		}
 	}
 	return null;
 }
@@ -899,7 +889,7 @@ export function formatPlannerContractsStatus(input: {
 		})
 	) {
 		lines.push(
-			"- guidance: The nearest contract has child domains. Read at least one relevant child contract, or reroute to a narrower target, before finishing discovery.",
+			"- guidance: The nearest contract has child domains. If a child domain directly covers the goal's primary changed area, read it before finishing discovery. If the nearest contract's purpose already covers the goal, stop here and use its Read First files.",
 		);
 	} else if (!contracts.scanComplete) {
 		lines.push(

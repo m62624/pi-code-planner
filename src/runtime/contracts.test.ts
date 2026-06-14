@@ -325,7 +325,7 @@ describe("planner local contract check enforcement", () => {
 		).toBeNull();
 	});
 
-	it("requires a child contract read when the nearest selected contract has children", () => {
+	it("allows discovery to finish when the nearest contract has children but child read is the model's choice", () => {
 		const state = createInitialPlanState({
 			baseBranch: "main",
 			planBranch: "plan/a",
@@ -376,24 +376,7 @@ describe("planner local contract check enforcement", () => {
 			},
 		];
 
-		expect(
-			validateDiscoveryContractRouting({
-				state,
-				settingsEnabled: true,
-			}),
-		).toContain("child contracts");
-
-		state.contracts.summaries.push({
-			path: "/repo/app/src/runtime/AGENTS.md",
-			purpose: "Runtime contracts.",
-			childIndex: [],
-			stableContracts: [],
-			readFirst: [],
-			doNotTouchUnless: [],
-			domainDetails: [],
-			diagnostics: [],
-			updatedAt: 1000,
-		});
+		// Child read is now guidance-only; the model decides when to stop navigating deeper.
 		expect(
 			validateDiscoveryContractRouting({
 				state,
