@@ -1495,7 +1495,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 
 	pi.registerCommand("planner-improve", {
 		description:
-			"Create a discovery-first self-improvement plan for this repository.",
+			"Create a discovery-first self-improvement plan for this repository. Use --breaking to allow breaking proposals.",
 		handler: async (args, ctx) => {
 			try {
 				await ctx.waitForIdle();
