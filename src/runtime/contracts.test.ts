@@ -205,6 +205,7 @@ describe("planner local contracts parser", () => {
 			"src/worktree/AGENTS.md",
 			"src/project-local/AGENTS.md",
 			"instructions/AGENTS.md",
+			"instructions/defaults/AGENTS.md",
 			".github/AGENTS.md",
 		].map((path) => join(repoRoot, path));
 
