@@ -74,4 +74,5 @@ export interface GitRunner {
 	merge(input: GitMergeInput): Promise<void>;
 	worktreeAdd(input: GitWorktreeAddInput): Promise<void>;
 	worktreeRemove(input: GitWorktreeRemoveInput): Promise<void>;
+	discardWorktreeChanges(input: GitRepoInput): Promise<void>;
 }

@@ -32,6 +32,7 @@ export const PLANNER_GIT_TOOL_NAMES = [
 	"planner_git_inspect",
 	"planner_git_init",
 	"planner_git_commit",
+	"planner_git_discard_changes",
 	"planner_git_create_task_branch",
 	"planner_git_create_refactor_branch",
 	"planner_git_merge_refactor_to_task",
@@ -94,6 +95,8 @@ export async function executePlannerGitTool(
 				return await mergeRefactorTool(input, ready);
 			case "planner_git_merge_task_to_plan":
 				return await mergeTaskTool(input, ready);
+			case "planner_git_discard_changes":
+				return await discardChangesTool(input, ready);
 		}
 	} catch (error) {
 		return blocked(input.toolName, errorMessage(error), { error });
@@ -366,6 +369,27 @@ async function runStateChangingGitOperation(input: {
 		after,
 		state,
 	});
+}
+
+async function discardChangesTool(
+	input: PlannerGitToolExecutionInput,
+	ready: ReadyGitContext,
+): Promise<PlannerGitToolExecutionResult> {
+	const repoRoot = requireWorktreePath(ready.state);
+	const status = await input.git.statusPorcelain({ repoRoot });
+	if (!status.trim()) {
+		return applied(
+			input.toolName,
+			"Planner worktree is already clean — nothing to discard.",
+			{ repoRoot },
+		);
+	}
+	await input.git.discardWorktreeChanges({ repoRoot });
+	return applied(
+		input.toolName,
+		"Planner discarded all uncommitted worktree changes (git restore .).",
+		{ repoRoot },
+	);
 }
 
 async function markTaskDone(

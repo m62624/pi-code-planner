@@ -41,13 +41,20 @@ Execute exactly one active task at a time through tests-first development, imple
 8. `run_final_tests`
    - Run final focused and integration checks from the planner worktree.
    - Record final check results and scope review in `refactor.md`.
-9. `merge_task_to_plan`
-   - Merge the task branch into the plan branch through the planner wrapper.
-   - Call `planner_status` after merge.
-10. `compact_task`
-   - Compact the completed task result if enabled.
-11. `select_next_task`
-   - Choose `execution/prepare_task` for the next task or `finalize/verify_plan_branch` when execution is complete.
+9. `capture_skill`
+   - Review skills already loaded in this session (visible as resources).
+   - For each loaded skill relevant to this task: confirm it is still accurate. If outdated or wrong, call `planner_skill_update` with the corrected content.
+   - If this task produced a reusable lesson not covered by any existing skill, call `planner_skill_create`.
+   - If you updated or created a skill whose body describes a runnable probe, run it now. After running, call `planner_git_inspect` to check worktree status. If dirty, call `planner_git_discard_changes` immediately — this is mandatory.
+   - If no skill action is taken, write an explicit "no skill" note in `decisions.md` with the reason.
+   - Skill capture is not optional. A decision must be recorded either way.
+10. `merge_task_to_plan`
+    - Merge the task branch into the plan branch through the planner wrapper.
+    - Call `planner_status` after merge.
+11. `compact_task`
+    - Compact the completed task result if enabled.
+12. `select_next_task`
+    - Choose `execution/prepare_task` for the next task or `finalize/verify_plan_branch` when execution is complete.
 
 ## Atomic Unit Rules
 
@@ -93,9 +100,13 @@ If doubt remains, run one focused probe or record the risk. Do not add broad tes
 
 ## Planner Skill Memory
 
-When a task resolves a verified reusable lesson, use `planner_skill_create` to save it for future planner sessions. Good candidates are repeated failure patterns, non-obvious debug probes, state-machine mistakes, stale context issues, or exact workflow rules that prevented a real bug.
+Every task has a dedicated `capture_skill` step (step 9 in the lifecycle). At that step you must decide: create a new skill, update an existing one, or explicitly record in `decisions.md` why neither is needed.
 
-Skill creation is expected, not optional, when the task required multiple attempts, recovered from a non-obvious tool/state/compact issue, fixed a mistake that could recur in other projects, or proved a reusable debugging/refactor method. Create the skill after the lesson is verified and before leaving the relevant step.
+Good candidates for a new skill: repeated failure patterns, non-obvious debug probes, state-machine mistakes, stale context issues, exact workflow rules that prevented a real bug.
+
+Good candidates for updating an existing skill: the skill was partially wrong or missing a case proven by this task; the trigger condition has changed; the probe command has a newer form.
+
+A skill may also be created or updated earlier (at any execution step) if the lesson is already verified and proven before `capture_skill`. In that case, still confirm at `capture_skill` that the existing skill is accurate.
 
 Do not create a skill for ordinary implementation notes, task summaries, broad advice, or unproven suspicions. The skill body should be written in `metadata.skillLanguage`; the wrapper writes frontmatter and updates the planner skill index.
 
