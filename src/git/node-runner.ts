@@ -62,6 +62,10 @@ export class NodeGitRunner implements GitRunner {
 		return await runGitCommandOutput(buildGitDiffNameOnlyArgs(input));
 	}
 
+	async headFiles(input: GitRepoInput): Promise<string> {
+		return await runGitCommandOutput(buildGitHeadFilesArgs(input));
+	}
+
 	async diffPatch(input: GitRepoInput): Promise<string> {
 		return await runGitCommandOutput(buildGitDiffPatchArgs(input));
 	}
@@ -146,6 +150,10 @@ export function buildGitDiffStatArgs(input: GitRepoInput): string[] {
 
 export function buildGitDiffNameOnlyArgs(input: GitRepoInput): string[] {
 	return ["-C", input.repoRoot, "diff", "--name-only"];
+}
+
+export function buildGitHeadFilesArgs(input: GitRepoInput): string[] {
+	return ["-C", input.repoRoot, "show", "--name-only", "--format=", "HEAD"];
 }
 
 export function buildGitDiffPatchArgs(input: GitRepoInput): string[] {

@@ -405,6 +405,105 @@ async function contractRead(
 	);
 }
 
+interface DirectoryCoverageEntry {
+	dir: string;
+	files: string[];
+	agentsMdPath: string | null;
+	agentsMdLevel: "exact" | "parent" | "none";
+}
+
+async function buildDirCoverageMap(input: {
+	fs: PlannerFs;
+	git: GitRunner;
+	root: string;
+}): Promise<DirectoryCoverageEntry[]> {
+	const raw = await input.git
+		.headFiles({ repoRoot: input.root })
+		.catch(() => "");
+	const touched = raw
+		.split("\n")
+		.map((l) => l.trim())
+		.filter(
+			(l) =>
+				l.length > 0 &&
+				!l.startsWith("commit") &&
+				!l.startsWith("Author") &&
+				!l.startsWith("Date") &&
+				!l.startsWith("Merge"),
+		)
+		.map((f) => join(input.root, f));
+
+	const dirMap = new Map<string, string[]>();
+	for (const f of touched) {
+		const d = dirname(f);
+		const existing = dirMap.get(d) ?? [];
+		existing.push(f);
+		dirMap.set(d, existing);
+	}
+
+	const entries: DirectoryCoverageEntry[] = [];
+	for (const [dir, files] of dirMap) {
+		const exactPath = join(dir, "AGENTS.md");
+		if (await input.fs.exists(exactPath)) {
+			entries.push({
+				dir,
+				files,
+				agentsMdPath: exactPath,
+				agentsMdLevel: "exact",
+			});
+			continue;
+		}
+		let parentDir = dirname(dir);
+		let found: string | null = null;
+		while (parentDir !== dir && parentDir.startsWith(input.root)) {
+			const candidate = join(parentDir, "AGENTS.md");
+			if (await input.fs.exists(candidate)) {
+				found = candidate;
+				break;
+			}
+			const next = dirname(parentDir);
+			if (next === parentDir) break;
+			parentDir = next;
+		}
+		entries.push({
+			dir,
+			files,
+			agentsMdPath: found,
+			agentsMdLevel: found ? "parent" : "none",
+		});
+	}
+	return entries;
+}
+
+function formatCoverageMap(
+	entries: DirectoryCoverageEntry[],
+	root: string,
+): string[] {
+	if (entries.length === 0) return ["No committed files detected in HEAD."];
+	const lines: string[] = ["Touched directories (from git HEAD commit):"];
+	for (const entry of entries) {
+		const relDir = relative(root, entry.dir) || ".";
+		const badge =
+			entry.agentsMdLevel === "exact"
+				? "[AGENTS.md ✓]"
+				: entry.agentsMdLevel === "parent"
+					? `[AGENTS.md at parent: ${relative(root, dirname(entry.agentsMdPath ?? ""))}]`
+					: "[NO AGENTS.md]";
+		lines.push(`  ${relDir}/ ${badge}`);
+		for (const f of entry.files) {
+			lines.push(`    - ${relative(root, f)}`);
+		}
+		const rule =
+			entry.agentsMdLevel === "exact"
+				? "→ default: upsert_existing (prove no_update if nothing durable changed)"
+				: entry.agentsMdLevel === "parent"
+					? "→ default: upsert_existing or create_new at this dir (prove no_update if subdomain is trivial)"
+					: "→ default: create_new (prove no_update if change is fully self-contained)";
+		lines.push(`    ${rule}`);
+	}
+	return lines;
+}
+
 async function contractCheck(input: {
 	fs: PlannerFs;
 	git: GitRunner;
@@ -470,6 +569,12 @@ async function contractCheck(input: {
 		evidence,
 		recommendedPath: pendingUpsert?.path ?? null,
 	});
+	const root = requireWorktreePath(state);
+	const coverageEntries = await buildDirCoverageMap({
+		fs: input.fs,
+		git: input.git,
+		root,
+	});
 	const checkedAt = Date.now();
 	await updatePlanState(input.fs, planPaths, (current) => ({
 		...current,
@@ -486,6 +591,7 @@ async function contractCheck(input: {
 			},
 		},
 	}));
+	const coverageLines = formatCoverageMap(coverageEntries, root);
 	return applied(
 		input.toolName,
 		[
@@ -494,9 +600,12 @@ async function contractCheck(input: {
 			pendingUpsert
 				? `Contract update required: call planner_contract_upsert for ${pendingUpsert.path}.`
 				: "No contract update is required for this task.",
+			"",
+			...coverageLines,
+			"",
 			"Call planner_status before choosing the next planner action.",
 		].join("\n"),
-		{ taskId, action, pendingUpsert },
+		{ taskId, action, pendingUpsert, coverageEntries },
 	);
 }
 
