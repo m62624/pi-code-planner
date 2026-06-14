@@ -32,8 +32,6 @@ import {
 	buildAcceptedPlanCompletionPrompt,
 	finalizeAcceptedPlan,
 	inspectAcceptedPlan,
-	readPlanPreviewRecord,
-	savePlanPreviewRecord,
 } from "./runtime/accepted-plan";
 import { readActivePlanContext } from "./runtime/active-plan";
 import {
@@ -1864,7 +1862,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 
 	pi.registerCommand("planner-preview", {
 		description:
-			"Preview the planner result in your editor without finishing. Checks out the plan branch in your main repository so you can browse files. Run again to see current status. /planner-finish will restore your branch automatically.",
+			"Show the planner worktree path so you can open it in your editor and browse the current plan files directly.",
 		handler: async (_args, ctx) => {
 			await ctx.waitForIdle();
 			const fs = createNodeFs();
@@ -1884,87 +1882,24 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				}
 				const planPaths = createPlanStoragePaths(projectPaths, activePlanId);
 				const state = await readPlanStateIfExists(fs, planPaths);
-				if (!state) {
-					ctx.ui.notify("Plan state not found.", "error");
+				if (!state?.worktreePath) {
+					ctx.ui.notify("Plan worktree not found.", "warning");
 					return;
 				}
+				const worktreePath = state.worktreePath;
+				const currentBranch = await git
+					.currentBranch({ repoRoot: worktreePath })
+					.catch(() => state.currentBranch ?? "(unknown)");
 				const planBranch = state.activeBranches.plan;
-				const projectRoot = projectPaths.projectRoot;
-
-				const existing = await readPlanPreviewRecord(fs, planPaths.previewJson);
-				if (existing) {
-					const current = await git
-						.currentBranch({ repoRoot: projectRoot })
-						.catch(() => "(unknown)");
-					const onPlan = current === planBranch;
-					ctx.ui.notify(
-						onPlan
-							? `Preview active — ${projectRoot} is on ${planBranch}. Open this folder in your editor to browse files. /planner-finish will restore branch "${existing.restoreBranch}".`
-							: `Preview was active but you switched away. ${projectRoot} is now on "${current}". Run /planner-preview again to reactivate.`,
-						"info",
-					);
-					if (!onPlan) {
-						await fs.removeFile(planPaths.previewJson).catch(() => {});
-					}
-					return;
-				}
-
-				const restoreBranch = await git
-					.currentBranch({ repoRoot: projectRoot })
-					.catch(() => "");
-				if (!restoreBranch) {
-					ctx.ui.notify(
-						"Could not read current branch in project root.",
-						"error",
-					);
-					return;
-				}
-				if (restoreBranch === planBranch) {
-					ctx.ui.notify(
-						`Already on plan branch ${planBranch}. Open ${projectRoot} in your editor to browse files.`,
-						"info",
-					);
-					return;
-				}
-				const dirty = await git
-					.statusPorcelain({ repoRoot: projectRoot })
-					.catch(() => "");
-				if (dirty.trim()) {
-					ctx.ui.notify(
-						`${projectRoot} has uncommitted changes. Stash or commit them first, then run /planner-preview again.`,
-						"warning",
-					);
-					return;
-				}
-				const branchExists = await git
-					.branchExists({ repoRoot: projectRoot, branch: planBranch })
-					.catch(() => false);
-				if (!branchExists) {
-					ctx.ui.notify(
-						`Plan branch ${planBranch} is not available in ${projectRoot}. The plan may have been removed or the worktree is not linked to this repo.`,
-						"warning",
-					);
-					return;
-				}
-				try {
-					await git.switchBranch({
-						repoRoot: projectRoot,
-						branch: planBranch,
-					});
-				} catch {
-					ctx.ui.notify(
-						`Could not switch ${projectRoot} to ${planBranch}. Try running /planner-preview again after resolving any git issues.`,
-						"warning",
-					);
-					return;
-				}
-				await savePlanPreviewRecord(fs, planPaths.previewJson, {
-					restoreBranch,
-					planBranch,
-					projectRoot,
-				});
+				const onPlanBranch = currentBranch === planBranch;
 				ctx.ui.notify(
-					`Preview ready — ${projectRoot} is now on ${planBranch}. Open this folder in your editor to browse accumulated plan files. /planner-finish will restore "${restoreBranch}" automatically.`,
+					[
+						`Planner worktree: ${worktreePath}`,
+						`Branch: ${currentBranch}`,
+						onPlanBranch
+							? "Open this folder in your editor to browse all completed plan work."
+							: `Currently on a task branch. Plan branch (${planBranch}) contains all completed tasks merged so far.`,
+					].join("\n"),
 					"info",
 				);
 			} catch (error) {
