@@ -4,6 +4,10 @@ import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
 import { savePlanState } from "../storage/state-store";
 import {
+	ARTIFACT_CANONICAL_SCHEMA,
+	formatCanonicalSchemaHint,
+} from "./artifact-echo";
+import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
@@ -82,6 +86,10 @@ export async function executePlannerQuestionTool(
 				"",
 				"## Questions For User",
 				content.trim(),
+				"",
+				formatCanonicalSchemaHint(
+					ARTIFACT_CANONICAL_SCHEMA.planner_questions_submit,
+				),
 				"",
 				hasOpenQuestions
 					? "Show these questions to the user verbatim. Wait for the user's answers, then call planner_questions_resolve. Do not finish discovery/write_questions yet."

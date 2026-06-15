@@ -6,6 +6,7 @@ import type { PlannerFs } from "../storage/fs";
 import { readJsonIfExists, writeJson } from "../storage/json";
 import type { ProjectStoragePaths } from "../storage/paths";
 import { resolveProjectStoragePaths } from "../storage/project-resolver";
+import { ARTIFACT_CANONICAL_SCHEMA, formatArtifactEcho } from "./artifact-echo";
 import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
@@ -334,6 +335,12 @@ export async function executePlannerSkillTool(
 				`Skill path: ${skillPath}`,
 				`Index: ${paths.indexJson}`,
 				`Language: ${language}`,
+				"",
+				formatArtifactEcho({
+					canonicalSchema: ARTIFACT_CANONICAL_SCHEMA.planner_skill_create,
+					writtenMarkdown: content,
+				}),
+				"",
 				"Pi loads planner skills through resources_discover on the next planner session start, resume, or reload.",
 				"Continue the current planner state from planner_status; this skill is future memory, not a replacement for the current stage instructions.",
 			].join("\n"),
@@ -416,6 +423,12 @@ export async function executePlannerSkillUpdateTool(
 				`Skill path: ${existing.skillPath}`,
 				`Index: ${paths.indexJson}`,
 				`Language: ${language}`,
+				"",
+				formatArtifactEcho({
+					canonicalSchema: ARTIFACT_CANONICAL_SCHEMA.planner_skill_update,
+					writtenMarkdown: content,
+				}),
+				"",
 				"Pi loads updated skills through resources_discover on the next planner session start, resume, or reload.",
 			].join("\n"),
 			details: {

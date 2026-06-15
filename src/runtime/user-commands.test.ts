@@ -36,6 +36,10 @@ import { executePlannerUserCommand } from "./user-commands";
 class MockGitRunner implements GitRunner {
 	status = "";
 	readonly calls: Array<{ name: string; input: unknown }> = [];
+	/** Branches reported as already gone by branchExists. */
+	readonly missingBranches = new Set<string>();
+	/** Branches whose deleteBranch should throw (e.g. unmerged, force:false). */
+	readonly failDeleteBranches = new Set<string>();
 
 	async init(_input: GitRepoInput): Promise<void> {}
 	async currentBranch(_input: GitRepoInput): Promise<string> {
@@ -57,12 +61,17 @@ class MockGitRunner implements GitRunner {
 	async listProjectFiles(_input: GitRepoInput): Promise<string[]> {
 		return [];
 	}
-	async branchExists(_input: GitBranchInput): Promise<boolean> {
-		return true;
+	async branchExists(input: GitBranchInput): Promise<boolean> {
+		return !this.missingBranches.has(input.branch);
 	}
 	async createBranch(_input: GitCreateBranchInput): Promise<void> {}
 	async deleteBranch(input: GitDeleteBranchInput): Promise<void> {
 		this.calls.push({ name: "deleteBranch", input });
+		if (this.failDeleteBranches.has(input.branch)) {
+			throw new Error(
+				`git -C ${input.repoRoot} branch -d ${input.branch} failed`,
+			);
+		}
 	}
 	async switchBranch(_input: GitSwitchBranchInput): Promise<void> {}
 	async stageAll(_input: GitRepoInput): Promise<void> {}
@@ -577,5 +586,58 @@ describe("planner user commands", () => {
 				},
 			},
 		]);
+	});
+
+	it("completes deletion when a child branch was already removed by hand", async () => {
+		const { fs, git, projectPaths } = await createProjectFixture({
+			activePlanId: "plan-a",
+		});
+		// The worktree was deleted manually, so its task branch is already gone.
+		git.missingBranches.add("task/plan-b/task-1");
+
+		const result = await executePlannerUserCommand({
+			fs,
+			git,
+			projectPaths,
+			commandName: "planner_delete",
+			params: { planId: "plan-b" },
+		});
+
+		expect(result.status).toBe("applied");
+		expect(result.text).toContain("was already gone");
+		// The missing branch is not deleted, but the others still are.
+		expect(
+			git.calls
+				.filter((call) => call.name === "deleteBranch")
+				.map((call) => (call.input as { branch: string }).branch),
+		).toEqual(["refactor/plan-b/task-1"]);
+		// The plan is pruned from the project despite the missing branch.
+		await expect(readProjectRecord(fs, projectPaths)).resolves.toMatchObject({
+			plans: [expect.objectContaining({ planId: "plan-a" })],
+		});
+		await expect(
+			fs.exists(createPlanStoragePaths(projectPaths, "plan-b").planDir),
+		).resolves.toBe(false);
+	});
+
+	it("completes deletion and warns when a child branch delete fails", async () => {
+		const { fs, git, projectPaths } = await createProjectFixture({
+			activePlanId: "plan-a",
+		});
+		git.failDeleteBranches.add("task/plan-b/task-1");
+
+		const result = await executePlannerUserCommand({
+			fs,
+			git,
+			projectPaths,
+			commandName: "planner_delete",
+			params: { planId: "plan-b" },
+		});
+
+		expect(result.status).toBe("applied");
+		expect(result.text).toContain("could not be deleted");
+		await expect(
+			fs.exists(createPlanStoragePaths(projectPaths, "plan-b").planDir),
+		).resolves.toBe(false);
 	});
 });

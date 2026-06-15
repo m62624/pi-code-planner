@@ -2,6 +2,7 @@ import { join } from "node:path";
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
+import { ARTIFACT_CANONICAL_SCHEMA, formatArtifactEcho } from "./artifact-echo";
 import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
@@ -58,33 +59,37 @@ export async function executePlannerArtifactTool(input: {
 		switch (input.toolName) {
 			case "planner_plan_submit": {
 				const content = requiredString(params, "content");
-				await input.fs.writeTextAtomic(planPaths.planMd, `${content}\n`);
-				return applied(input.toolName, planPaths.planMd, "Planner plan saved.");
+				const written = `${content}\n`;
+				await input.fs.writeTextAtomic(planPaths.planMd, written);
+				return applied(
+					input.toolName,
+					planPaths.planMd,
+					"Planner plan saved.",
+					written,
+				);
 			}
 			case "planner_discovery_submit": {
 				const body = requiredString(params, "body");
 				const protocol = requiredStringArray(params, "verificationProtocol");
-				const content = [
-					body,
-					"",
-					"## Verification Protocol",
-					...protocol.map((command) => `- ${command}`),
-				].join("\n");
-				await input.fs.writeTextAtomic(planPaths.discoveryMd, `${content}\n`);
+				const written = `${buildDiscoveryMarkdown(body, protocol)}\n`;
+				await input.fs.writeTextAtomic(planPaths.discoveryMd, written);
 				return applied(
 					input.toolName,
 					planPaths.discoveryMd,
-					"Planner discovery saved with a ## Verification Protocol section.",
+					"Planner discovery saved. The ## Verification Protocol section is rebuilt from the verificationProtocol argument (any protocol section written in body is dropped).",
+					written,
 				);
 			}
 			case "planner_summary_submit": {
 				const content = requiredString(params, "content");
 				const summaryPath = join(planPaths.planDir, "final_summary.md");
-				await input.fs.writeTextAtomic(summaryPath, `${content}\n`);
+				const written = `${content}\n`;
+				await input.fs.writeTextAtomic(summaryPath, written);
 				return applied(
 					input.toolName,
 					summaryPath,
 					"Planner final summary saved.",
+					written,
 				);
 			}
 			case "planner_tdd_submit": {
@@ -111,6 +116,7 @@ export async function executePlannerArtifactTool(input: {
 					input.toolName,
 					tddPath,
 					`Planner tdd.md updated (${Object.keys(updates).join(", ")}).`,
+					content,
 				);
 			}
 		}
@@ -140,6 +146,7 @@ function applied(
 	toolName: PlannerArtifactToolName,
 	path: string,
 	headline: string,
+	written: string,
 ): PlannerArtifactToolExecutionResult {
 	return {
 		status: "applied",
@@ -147,10 +154,51 @@ function applied(
 		text: [
 			headline,
 			`Artifact: ${path}`,
-			"Continue the current step; the next-step hint follows after planner_finish_step.",
+			"",
+			formatArtifactEcho({
+				canonicalSchema: ARTIFACT_CANONICAL_SCHEMA[toolName],
+				writtenMarkdown: written,
+			}),
+			"",
+			"The next-step hint follows after planner_finish_step.",
 		].join("\n"),
 		details: { path },
 	};
+}
+
+/** Assemble discovery.md from a free-form body plus the structured protocol
+ * commands. The verificationProtocol argument is the single source of truth for
+ * the ## Verification Protocol section, so any protocol section the model also
+ * wrote into body is stripped first — otherwise discovery.md would carry two
+ * `## Verification Protocol` sections and break the doubt_review protocol
+ * parser. */
+export function buildDiscoveryMarkdown(
+	body: string,
+	protocol: readonly string[],
+): string {
+	return [
+		stripVerificationProtocolSection(body).trimEnd(),
+		"",
+		"## Verification Protocol",
+		...protocol.map((command) => `- ${command}`),
+	].join("\n");
+}
+
+/** Remove any `verification protocol` section (heading at any level plus its
+ * lines, up to the next heading) from body. */
+export function stripVerificationProtocolSection(body: string): string {
+	const lines = body.split(/\r?\n/);
+	const out: string[] = [];
+	let skipping = false;
+	for (const line of lines) {
+		const heading = /^(#{1,6})\s+(.+?)\s*$/.exec(line.trim());
+		if (heading) {
+			skipping = heading[2].trim().toLowerCase() === "verification protocol";
+			if (skipping) continue;
+		}
+		if (!skipping) out.push(line);
+	}
+	return out.join("\n");
 }
 
 function blocked(

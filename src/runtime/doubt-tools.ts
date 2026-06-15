@@ -1,6 +1,7 @@
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
+import { ARTIFACT_CANONICAL_SCHEMA, formatArtifactEcho } from "./artifact-echo";
 import {
 	DOUBT_FINDING_STATUSES,
 	DOUBT_NEXT_ACTIONS,
@@ -95,6 +96,12 @@ export async function executePlannerDoubtTool(input: {
 				`Verify artifact: ${planPaths.verifyMd}`,
 				`Proven bugs: ${validation.provenBugCount}`,
 				`Needs probe: ${validation.needsProbeCount}`,
+				"",
+				formatArtifactEcho({
+					canonicalSchema: ARTIFACT_CANONICAL_SCHEMA.planner_doubt_review,
+					writtenMarkdown: content,
+				}),
+				"",
 				validation.provenBugCount > 0
 					? "Complete finalize/doubt_review with target planning/read_context after recording the proven findings in decisions.md."
 					: validation.needsProbeCount > 0
