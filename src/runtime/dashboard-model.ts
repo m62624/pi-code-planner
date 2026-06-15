@@ -456,6 +456,59 @@ function renderCompactBody(input: BodyInput): string[] {
 	return lines;
 }
 
+/**
+ * Compact top band for the workspace: header + stage ribbon + ticker.
+ * Returns content lines only (no outer frame).
+ */
+export function renderDashboardBand(
+	model: PlannerDashboardModel,
+	inner: number,
+	tickerOffset: number,
+	palette: DashboardPalette,
+): string[] {
+	if (!model.available) {
+		return [padTo(palette.warning(model.reason), inner, palette)];
+	}
+	return [
+		renderHeaderLine(model, inner, palette),
+		...renderStageRibbon(model, inner, palette),
+		renderTicker(model, inner, tickerOffset, palette),
+	];
+}
+
+/**
+ * Expanded dashboard area: task list + detail/timings columns.
+ * Returns exactly `height` content lines (no outer frame).
+ */
+export function renderDashboardColumns(
+	model: DashboardModel,
+	inner: number,
+	height: number,
+	palette: DashboardPalette,
+	ui: DashboardUiState,
+): string[] {
+	const leftWidth = Math.max(22, Math.floor(inner * 0.42));
+	const rightWidth = inner - leftWidth - 3;
+	const left = renderTaskColumn(model, {
+		width: leftWidth,
+		height,
+		palette,
+		ui,
+	});
+	const right = renderDetailColumn(model, {
+		width: rightWidth,
+		height,
+		palette,
+	});
+	const lines: string[] = [];
+	for (let i = 0; i < height; i++) {
+		const l = padTo(left[i] ?? "", leftWidth, palette);
+		const r = padTo(right[i] ?? "", rightWidth, palette);
+		lines.push(`${l} ${palette.border("│")} ${r}`);
+	}
+	return lines;
+}
+
 function renderHeaderLine(
 	model: DashboardModel,
 	inner: number,
@@ -786,6 +839,26 @@ function statusBadge(
 // ---------------------------------------------------------------------------
 // Frame + layout primitives
 // ---------------------------------------------------------------------------
+
+/** Wrap body content lines in the planner frame (title + clock + borders). */
+export function frameWorkspace(input: {
+	palette: DashboardPalette;
+	width: number;
+	height: number;
+	title: string;
+	clock: string;
+	body: string[];
+}): string[] {
+	return frame(input);
+}
+
+/** Inner divider line (full inner width). */
+export function dashboardDivider(
+	inner: number,
+	palette: DashboardPalette,
+): string {
+	return divider(inner, palette);
+}
 
 function frame(input: {
 	palette: DashboardPalette;

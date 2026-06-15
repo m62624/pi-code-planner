@@ -1,0 +1,183 @@
+import type { SessionEntry } from "@earendil-works/pi-coding-agent";
+import { describe, expect, it } from "vitest";
+import {
+	type ChatRow,
+	projectSessionEntries,
+	renderTranscript,
+	type TranscriptOptions,
+} from "./chat-view";
+import type { DashboardPalette } from "./dashboard-model";
+
+const palette: DashboardPalette = {
+	text: (s) => s,
+	accent: (s) => s,
+	muted: (s) => s,
+	dim: (s) => s,
+	success: (s) => s,
+	warning: (s) => s,
+	error: (s) => s,
+	border: (s) => s,
+	bold: (s) => s,
+	inverse: (s) => s,
+	stage: (_stage, s) => s,
+	measure: (s) => s.length,
+	clip: (s, width) => (s.length <= width ? s : s.slice(0, Math.max(0, width))),
+};
+
+function messageEntry(id: string, message: unknown): SessionEntry {
+	return {
+		type: "message",
+		id,
+		parentId: null,
+		timestamp: "2026-06-15T00:00:00.000Z",
+		message,
+	} as SessionEntry;
+}
+
+function baseOptions(over: Partial<TranscriptOptions> = {}): TranscriptOptions {
+	return {
+		width: 60,
+		height: 10,
+		scrollFromBottom: 0,
+		expanded: new Set(),
+		focused: false,
+		...over,
+	};
+}
+
+describe("projectSessionEntries", () => {
+	it("projects user, assistant text, tool calls, and tool results", () => {
+		const entries: SessionEntry[] = [
+			messageEntry("u1", { role: "user", content: "hello model" }),
+			messageEntry("a1", {
+				role: "assistant",
+				content: [
+					{ type: "thinking", thinking: "let me think" },
+					{ type: "text", text: "Sure, doing it." },
+					{
+						type: "toolCall",
+						name: "planner_status",
+						arguments: { verbose: true },
+					},
+				],
+			}),
+			messageEntry("r1", {
+				role: "toolResult",
+				toolName: "planner_status",
+				isError: false,
+				content: [{ type: "text", text: "stage: execution" }],
+			}),
+		];
+
+		const rows = projectSessionEntries(entries);
+		const roles = rows.map((r) => r.role);
+		expect(roles).toContain("user");
+		expect(roles).toContain("thinking");
+		expect(roles).toContain("assistant");
+		expect(roles).toContain("tool");
+		expect(roles).toContain("tool_result");
+
+		const tool = rows.find((r) => r.role === "tool") as ChatRow;
+		expect(tool.label).toBe("planner_status");
+		expect(tool.text).toContain("verbose=true");
+
+		const result = rows.find((r) => r.role === "tool_result") as ChatRow;
+		expect(result.isError).toBe(false);
+	});
+
+	it("marks tool result errors and skips hidden custom messages", () => {
+		const entries: SessionEntry[] = [
+			messageEntry("r1", {
+				role: "toolResult",
+				toolName: "planner_git_commit",
+				isError: true,
+				content: [{ type: "text", text: "blocked" }],
+			}),
+			{
+				type: "custom_message",
+				id: "c1",
+				parentId: null,
+				timestamp: "2026-06-15T00:00:00.000Z",
+				customType: "planner-internal",
+				content: "hidden",
+				display: false,
+			} as SessionEntry,
+		];
+		const rows = projectSessionEntries(entries);
+		expect(rows).toHaveLength(1);
+		expect(rows[0].isError).toBe(true);
+	});
+});
+
+describe("renderTranscript", () => {
+	const rows: ChatRow[] = [
+		{ role: "user", text: "first question", collapsible: false, key: "u1" },
+		{
+			role: "assistant",
+			text: "a long answer ".repeat(10).trim(),
+			collapsible: false,
+			key: "a1",
+		},
+		{
+			role: "tool",
+			label: "planner_status",
+			text: "verbose=true extra=1",
+			collapsible: true,
+			key: "t1",
+		},
+	];
+
+	it("returns exactly height lines bounded to width", () => {
+		const result = renderTranscript(rows, baseOptions(), palette);
+		expect(result.lines).toHaveLength(10);
+		for (const line of result.lines) {
+			expect(line.length).toBe(60);
+		}
+	});
+
+	it("collapses tool rows to a single line by default and expands on demand", () => {
+		const longTool: ChatRow[] = [
+			{
+				role: "tool",
+				label: "planner_status",
+				text: "line one\nline two\nline three",
+				collapsible: true,
+				key: "t1",
+			},
+		];
+		const collapsed = renderTranscript(longTool, baseOptions(), palette);
+		const collapsedText = collapsed.lines.join("\n");
+		expect(collapsedText).toContain("…");
+
+		const expanded = renderTranscript(
+			longTool,
+			baseOptions({ expanded: new Set(["t1"]) }),
+			palette,
+		);
+		const expandedText = expanded.lines.join("\n");
+		expect(expandedText).toContain("line two");
+		expect(expandedText).toContain("line three");
+	});
+
+	it("shows an empty-state hint when there are no rows", () => {
+		const result = renderTranscript([], baseOptions(), palette);
+		expect(result.lines.join("\n")).toContain("No conversation yet");
+	});
+
+	it("scrolls up from the bottom", () => {
+		const many: ChatRow[] = Array.from({ length: 40 }, (_, i) => ({
+			role: "user" as const,
+			text: `message ${i}`,
+			collapsible: false,
+			key: `m${i}`,
+		}));
+		const bottom = renderTranscript(many, baseOptions(), palette);
+		const scrolled = renderTranscript(
+			many,
+			baseOptions({ scrollFromBottom: 5 }),
+			palette,
+		);
+		expect(bottom.lines.join("\n")).not.toBe(scrolled.lines.join("\n"));
+		expect(bottom.totalLines).toBe(40);
+	});
+});
