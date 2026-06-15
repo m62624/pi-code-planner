@@ -13,42 +13,98 @@ import {
 	getPlannerStageStepBehavior,
 } from "./stage-behavior";
 
-// Invariant: a planner tool is usable at a step only if it passes BOTH gates —
-// the guard policy (STEP_ALLOWED_TOOLS) and the stage-behavior expectedTools
-// gate. So everything the guard permits MUST also pass the behavior gate;
-// otherwise the guard advertises a tool the model can never actually call
-// (a deadlock when no fallback exists, as happened with the artifact fill-tools).
+// A planner tool is usable at a step only if it passes BOTH gates: the guard
+// policy (STEP_ALLOWED_TOOLS) and the stage-behavior expectedTools gate. The
+// two gates are composed in orchestrator-gate.ts, but ONLY on the normal
+// `allow_stage_machine` path — i.e. when the plan is not broken, not awaiting a
+// user decision, and not at a compact boundary. In those special states the
+// behavior gate is bypassed and the guard returns a fixed recovery/compact set.
 //
-// This guards against the two allowlists drifting apart for any tool — debug
-// wrappers, git wrappers, contract tools, skills, or future additions.
-describe("planner tool gating invariant", () => {
-	it("every guard-allowed wrapper passes the behavior gate at every step", () => {
-		const steps = Object.entries(PLANNER_STAGE_STEPS) as Array<
-			[PlannerStage, readonly PlannerStep[]]
-		>;
-		const violations: string[] = [];
+// So the deadlock invariant has two halves, and this test enforces both so any
+// drift between the allowlists (debug, git, contract, fill-tools, or future
+// additions) is caught before publish.
 
-		for (const [stage, stepList] of steps) {
+const STEPS = Object.entries(PLANNER_STAGE_STEPS) as Array<
+	[PlannerStage, readonly PlannerStep[]]
+>;
+
+describe("planner tool gating invariant", () => {
+	// Half 1 — normal (allow_stage_machine) path: everything the guard permits
+	// MUST also pass the behavior gate, or the guard advertises a tool the model
+	// can never actually call (a deadlock when no fallback exists, as happened
+	// with the artifact fill-tools). Checked with debug artifacts both present
+	// and absent, since debugArtifactsDir changes the guard set.
+	for (const debugArtifactsDir of [null, "/tmp/planner-debug"]) {
+		it(`guard-allowed wrappers pass the behavior gate at every step (debug=${debugArtifactsDir ? "on" : "off"})`, () => {
+			const violations: string[] = [];
+			for (const [stage, stepList] of STEPS) {
+				for (const step of stepList) {
+					const allowed = getAllowedPlannerWrapperTools({
+						stage,
+						step,
+						broken: false,
+						requiresUserDecision: false,
+						requiresCompact: false,
+						debugArtifactsDir,
+					});
+					const behavior = getPlannerStageStepBehavior({ stage, step });
+					for (const tool of allowed as readonly PlannerWrapperTool[]) {
+						if (
+							!checkPlannerStageBehaviorWrapperTool({ behavior, tool }).allow
+						) {
+							violations.push(`${stage}/${step}: ${tool}`);
+						}
+					}
+				}
+			}
+			expect(violations, violations.join("\n")).toEqual([]);
+		});
+	}
+
+	// Half 2 — special states bypass the behavior gate, so the guard is the sole
+	// gate. Their allowed set must therefore be FIXED (independent of the frozen
+	// stage/step); otherwise a step-scoped tool could leak into a state where
+	// nothing checks it against stage behavior. We pin that the set is identical
+	// across every stage/step for each special flag.
+	for (const flags of [
+		{ name: "broken", broken: true, requiresUserDecision: false },
+		{ name: "requiresUserDecision", broken: false, requiresUserDecision: true },
+	] as const) {
+		it(`guard set is fixed (step-independent) when ${flags.name}`, () => {
+			const sets = STEPS.flatMap(([stage, stepList]) =>
+				stepList.map((step) =>
+					[
+						...getAllowedPlannerWrapperTools({
+							stage,
+							step,
+							broken: flags.broken,
+							requiresUserDecision: flags.requiresUserDecision,
+							requiresCompact: false,
+							debugArtifactsDir: "/tmp/planner-debug",
+						}),
+					].sort(),
+				),
+			);
+			const first = JSON.stringify(sets[0]);
+			for (const set of sets) {
+				expect(JSON.stringify(set)).toEqual(first);
+			}
+		});
+	}
+
+	it("guard set is exactly [planner_status] at a compact boundary", () => {
+		for (const [stage, stepList] of STEPS) {
 			for (const step of stepList) {
-				// debugArtifactsDir set so debug wrappers are included in the guard
-				// set and therefore checked against the behavior gate too.
 				const allowed = getAllowedPlannerWrapperTools({
 					stage,
 					step,
 					broken: false,
 					requiresUserDecision: false,
-					requiresCompact: false,
+					requiresCompact: true,
 					debugArtifactsDir: "/tmp/planner-debug",
 				});
-				const behavior = getPlannerStageStepBehavior({ stage, step });
-				for (const tool of allowed as readonly PlannerWrapperTool[]) {
-					if (!checkPlannerStageBehaviorWrapperTool({ behavior, tool }).allow) {
-						violations.push(`${stage}/${step}: ${tool}`);
-					}
-				}
+				expect([...allowed]).toEqual(["planner_status"]);
 			}
 		}
-
-		expect(violations, violations.join("\n")).toEqual([]);
 	});
 });
