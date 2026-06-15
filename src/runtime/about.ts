@@ -118,6 +118,21 @@ const SETTING_DESCRIPTORS: SettingDescriptor[] = [
 			"Instruct the model to route/read contracts before leaving declared task scope.",
 	},
 	{
+		path: "workspace.enabled",
+		purpose:
+			"Master switch for the /planner-dashboard workspace window (dashboard + model chat).",
+	},
+	{
+		path: "workspace.autoOpen",
+		purpose:
+			"Open the workspace automatically for planner-worktree sessions (create/resume/improve).",
+	},
+	{
+		path: "workspace.footerReserveRows",
+		purpose:
+			"Terminal rows left for Pi's native footer below the workspace overlay (raise if the footer overlaps).",
+	},
+	{
 		path: "metadata.humanLanguage",
 		purpose: "Default language for user-facing planner text.",
 	},

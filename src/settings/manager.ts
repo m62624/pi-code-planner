@@ -20,6 +20,7 @@ const DEFAULT_PLANNER_SETTINGS_FILE: PlannerSettingsFile = {
 	timer: DEFAULT_PLANNER_SETTINGS.timer,
 	skills: DEFAULT_PLANNER_SETTINGS.skills,
 	contracts: DEFAULT_PLANNER_SETTINGS.contracts,
+	workspace: DEFAULT_PLANNER_SETTINGS.workspace,
 };
 
 export interface EffectivePlannerSettings {
@@ -34,6 +35,7 @@ export interface EffectivePlannerSettings {
 	timerSource: "project" | "global" | "default";
 	skillsSource: "project" | "global" | "default";
 	contractsSource: "project" | "global" | "default";
+	workspaceSource: "project" | "global" | "default";
 }
 
 export async function loadEffectivePlannerSettings(input: {
@@ -117,12 +119,31 @@ export async function loadEffectivePlannerSettings(input: {
 		global.contracts,
 		project?.contracts,
 	);
+	const workspaceSource = project?.workspace
+		? "project"
+		: global.workspace
+			? "global"
+			: "default";
+	const workspace = {
+		...DEFAULT_PLANNER_SETTINGS.workspace,
+		...(global.workspace ?? {}),
+		...(project?.workspace ?? {}),
+	};
 
 	return {
 		paths,
 		global,
 		project,
-		effective: { worktree, compact, idle, metadata, timer, skills, contracts },
+		effective: {
+			worktree,
+			compact,
+			idle,
+			metadata,
+			timer,
+			skills,
+			contracts,
+			workspace,
+		},
 		worktreeSource,
 		compactSource,
 		idleSource,
@@ -130,6 +151,7 @@ export async function loadEffectivePlannerSettings(input: {
 		timerSource,
 		skillsSource,
 		contractsSource,
+		workspaceSource,
 	};
 }
 
@@ -173,7 +195,53 @@ function normalizeSettingsFile(
 		...(record.contracts === undefined
 			? {}
 			: { contracts: normalizeContractsSettings(record.contracts, path) }),
+		...(record.workspace === undefined
+			? {}
+			: { workspace: normalizeWorkspaceSettings(record.workspace, path) }),
 	};
+}
+
+function normalizeWorkspaceSettings(
+	value: unknown,
+	path: string,
+): PlannerSettingsFile["workspace"] {
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		throw new TypeError(
+			`Planner workspace settings must be an object: ${path}`,
+		);
+	}
+	const record = value as Record<string, unknown>;
+	const result: NonNullable<PlannerSettingsFile["workspace"]> = {};
+	if (record.enabled !== undefined) {
+		if (typeof record.enabled !== "boolean") {
+			throw new TypeError(
+				`Planner workspace setting enabled must be boolean: ${path}`,
+			);
+		}
+		result.enabled = record.enabled;
+	}
+	if (record.autoOpen !== undefined) {
+		if (typeof record.autoOpen !== "boolean") {
+			throw new TypeError(
+				`Planner workspace setting autoOpen must be boolean: ${path}`,
+			);
+		}
+		result.autoOpen = record.autoOpen;
+	}
+	if (record.footerReserveRows !== undefined) {
+		if (
+			typeof record.footerReserveRows !== "number" ||
+			!Number.isInteger(record.footerReserveRows) ||
+			record.footerReserveRows < 0 ||
+			record.footerReserveRows > 20
+		) {
+			throw new TypeError(
+				`Planner workspace setting footerReserveRows must be an integer from 0 to 20: ${path}`,
+			);
+		}
+		result.footerReserveRows = record.footerReserveRows;
+	}
+	return result;
 }
 
 function normalizeCompactSettings(

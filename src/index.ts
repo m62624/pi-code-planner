@@ -1149,7 +1149,7 @@ function registerPlannerWorkspaceAutoOpen(pi: ExtensionAPI): void {
 			const worktreePath = context.state.worktreePath;
 			if (!worktreePath || !isPathInsideOrEqual(ctx.cwd, worktreePath)) return;
 			openedSessions.add(sessionId);
-			void openPlannerWorkspace(pi, ctx);
+			void openPlannerWorkspace(pi, ctx, { auto: true });
 		} catch {
 			// Best-effort: never block session start on the workspace.
 		}

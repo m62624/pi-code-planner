@@ -12,6 +12,7 @@ export interface PlannerSettings {
 	timer: PlannerTimerSettings;
 	skills: PlannerSkillsSettings;
 	contracts: PlannerContractsSettings;
+	workspace: PlannerWorkspaceSettings;
 }
 
 export interface PlannerSettingsFile {
@@ -22,6 +23,16 @@ export interface PlannerSettingsFile {
 	timer?: Partial<PlannerTimerSettings>;
 	skills?: Partial<PlannerSkillsSettings>;
 	contracts?: PlannerContractsSettingsFile;
+	workspace?: Partial<PlannerWorkspaceSettings>;
+}
+
+export interface PlannerWorkspaceSettings {
+	/** Master switch for the planner workspace TUI window. */
+	enabled: boolean;
+	/** Open the workspace automatically for planner-worktree sessions. */
+	autoOpen: boolean;
+	/** Terminal rows left for Pi's native footer below the workspace. */
+	footerReserveRows: number;
 }
 
 export interface PlannerIdleSettings {
@@ -117,5 +128,10 @@ export const DEFAULT_PLANNER_SETTINGS = {
 		},
 		requireAfterTdd: true,
 		requireBeforeEditOutsideChain: true,
+	},
+	workspace: {
+		enabled: true,
+		autoOpen: true,
+		footerReserveRows: 3,
 	},
 } as const satisfies PlannerSettings;

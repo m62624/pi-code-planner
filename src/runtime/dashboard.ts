@@ -12,6 +12,7 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
+import { loadEffectivePlannerSettings } from "../settings/manager";
 import { createNodeFs, type PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
 import { resolveProjectStoragePaths } from "../storage/project-resolver";
@@ -37,6 +38,8 @@ import {
 const TICK_MS = 180;
 /** Reload the model from disk every Nth tick (~1s). */
 const RELOAD_EVERY_TICKS = 6;
+/** Rows left for Pi's native footer below the workspace overlay. */
+const DEFAULT_FOOTER_RESERVE = 3;
 
 const STAGE_THEME_COLOR: Record<PlannerStage, ThemeColor> = {
 	init: "syntaxComment",
@@ -62,27 +65,86 @@ export function registerPlannerDashboard(pi: ExtensionAPI): void {
 export async function openPlannerWorkspace(
 	pi: ExtensionAPI,
 	ctx: ExtensionContext,
+	options: { auto?: boolean } = {},
 ): Promise<void> {
 	if (!ctx.hasUI) {
-		ctx.ui.notify("The planner workspace requires interactive mode.", "error");
+		if (!options.auto) {
+			ctx.ui.notify(
+				"The planner workspace requires interactive mode.",
+				"error",
+			);
+		}
 		return;
 	}
 	const fs = createNodeFs();
+	const workspace = await loadWorkspaceSettings(fs, ctx.cwd);
+	if (!workspace.enabled) {
+		if (!options.auto) {
+			ctx.ui.notify(
+				"The planner workspace is disabled (settings: workspace.enabled).",
+				"info",
+			);
+		}
+		return;
+	}
+	if (options.auto && !workspace.autoOpen) return;
+	const footerReserve = Math.max(0, workspace.footerReserveRows);
 	const load = () => loadDashboardModel(fs, ctx.cwd);
 	const getRows = () => projectSessionEntries(ctx.sessionManager.getBranch());
 	const initial = await load();
-	await ctx.ui.custom<void>((tui, theme, _keybindings, done) => {
-		return new PlannerWorkspaceComponent({
-			tui,
-			theme,
-			initial,
-			initialRows: getRows(),
-			load,
-			getRows,
-			sendUserMessage: (text) => pi.sendUserMessage(text),
-			onClose: () => done(undefined),
+	await ctx.ui.custom<void>(
+		(tui, theme, _keybindings, done) => {
+			return new PlannerWorkspaceComponent({
+				tui,
+				theme,
+				initial,
+				initialRows: getRows(),
+				footerReserve,
+				load,
+				getRows,
+				sendUserMessage: (text) => pi.sendUserMessage(text),
+				onClose: () => done(undefined),
+			});
+		},
+		{
+			// Render as a fixed top overlay so the workspace does not live in the
+			// chat scrollback (mouse-wheel no longer drags it off-screen) and the
+			// native footer stays visible in the reserved rows below it.
+			overlay: true,
+			overlayOptions: () => {
+				const rows = process.stdout.rows ?? 40;
+				const cols = process.stdout.columns ?? 100;
+				return {
+					width: cols,
+					maxHeight: Math.max(16, rows - footerReserve),
+					anchor: "top-left",
+					row: 0,
+					col: 0,
+				};
+			},
+		},
+	);
+}
+
+async function loadWorkspaceSettings(
+	fs: PlannerFs,
+	cwd: string,
+): Promise<{ enabled: boolean; autoOpen: boolean; footerReserveRows: number }> {
+	try {
+		const projectPaths = await resolveProjectStoragePaths({
+			fs,
+			agentDir: getAgentDir(),
+			cwd,
 		});
-	});
+		const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
+		return settings.effective.workspace;
+	} catch {
+		return {
+			enabled: true,
+			autoOpen: true,
+			footerReserveRows: DEFAULT_FOOTER_RESERVE,
+		};
+	}
 }
 
 async function loadDashboardModel(
@@ -117,6 +179,7 @@ class PlannerWorkspaceComponent implements Component {
 	private readonly getRows: () => ChatRow[];
 	private readonly sendUserMessage: (text: string) => void;
 	private readonly onClose: () => void;
+	private readonly footerReserve: number;
 
 	private model: PlannerDashboardModel;
 	private rows: ChatRow[];
@@ -148,6 +211,7 @@ class PlannerWorkspaceComponent implements Component {
 		theme: Theme;
 		initial: PlannerDashboardModel;
 		initialRows: ChatRow[];
+		footerReserve: number;
 		load: () => Promise<PlannerDashboardModel>;
 		getRows: () => ChatRow[];
 		sendUserMessage: (text: string) => void;
@@ -155,6 +219,7 @@ class PlannerWorkspaceComponent implements Component {
 	}) {
 		this.tui = input.tui;
 		this.palette = buildPalette(input.theme);
+		this.footerReserve = input.footerReserve;
 		this.load = input.load;
 		this.getRows = input.getRows;
 		this.sendUserMessage = input.sendUserMessage;
@@ -332,7 +397,7 @@ class PlannerWorkspaceComponent implements Component {
 	}
 
 	render(width: number): string[] {
-		const height = Math.max(16, this.tui.terminal.rows - 1);
+		const height = Math.max(16, this.tui.terminal.rows - this.footerReserve);
 		if (
 			width === this.cachedWidth &&
 			height === this.cachedHeight &&
