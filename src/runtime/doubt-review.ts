@@ -502,7 +502,10 @@ export function extractVerificationProtocol(content: string): string[] {
 			collecting = title === "verification protocol";
 			continue;
 		}
-		if (collecting && line.trim()) {
+		// Only bullet list items count as protocol commands. Prose lines (e.g. an
+		// introductory "These commands are available:") under the heading are
+		// ignored so they never become phantom required commands.
+		if (collecting && /^[-*]\s+\S/.test(line.trim())) {
 			result.push(line.trim());
 		}
 	}
@@ -521,6 +524,11 @@ function extractProtocolCommand(line: string): string | null {
 		return null;
 	}
 	if (/^(working directory|cwd|flags?)\s*:/i.test(normalized)) {
+		return null;
+	}
+	// A line ending in a colon is a prose heading (e.g. "Commands available:"),
+	// not a runnable command — never treat it as a required protocol command.
+	if (normalized.endsWith(":")) {
 		return null;
 	}
 	const match =

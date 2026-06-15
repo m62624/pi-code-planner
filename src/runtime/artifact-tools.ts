@@ -58,33 +58,37 @@ export async function executePlannerArtifactTool(input: {
 		switch (input.toolName) {
 			case "planner_plan_submit": {
 				const content = requiredString(params, "content");
-				await input.fs.writeTextAtomic(planPaths.planMd, `${content}\n`);
-				return applied(input.toolName, planPaths.planMd, "Planner plan saved.");
+				const written = `${content}\n`;
+				await input.fs.writeTextAtomic(planPaths.planMd, written);
+				return applied(
+					input.toolName,
+					planPaths.planMd,
+					"Planner plan saved.",
+					written,
+				);
 			}
 			case "planner_discovery_submit": {
 				const body = requiredString(params, "body");
 				const protocol = requiredStringArray(params, "verificationProtocol");
-				const content = [
-					body,
-					"",
-					"## Verification Protocol",
-					...protocol.map((command) => `- ${command}`),
-				].join("\n");
-				await input.fs.writeTextAtomic(planPaths.discoveryMd, `${content}\n`);
+				const written = `${buildDiscoveryMarkdown(body, protocol)}\n`;
+				await input.fs.writeTextAtomic(planPaths.discoveryMd, written);
 				return applied(
 					input.toolName,
 					planPaths.discoveryMd,
-					"Planner discovery saved with a ## Verification Protocol section.",
+					"Planner discovery saved. The ## Verification Protocol section is rebuilt from the verificationProtocol argument (any protocol section written in body is dropped).",
+					written,
 				);
 			}
 			case "planner_summary_submit": {
 				const content = requiredString(params, "content");
 				const summaryPath = join(planPaths.planDir, "final_summary.md");
-				await input.fs.writeTextAtomic(summaryPath, `${content}\n`);
+				const written = `${content}\n`;
+				await input.fs.writeTextAtomic(summaryPath, written);
 				return applied(
 					input.toolName,
 					summaryPath,
 					"Planner final summary saved.",
+					written,
 				);
 			}
 			case "planner_tdd_submit": {
@@ -111,6 +115,7 @@ export async function executePlannerArtifactTool(input: {
 					input.toolName,
 					tddPath,
 					`Planner tdd.md updated (${Object.keys(updates).join(", ")}).`,
+					content,
 				);
 			}
 		}
@@ -140,6 +145,7 @@ function applied(
 	toolName: PlannerArtifactToolName,
 	path: string,
 	headline: string,
+	written: string,
 ): PlannerArtifactToolExecutionResult {
 	return {
 		status: "applied",
@@ -147,11 +153,94 @@ function applied(
 		text: [
 			headline,
 			`Artifact: ${path}`,
-			"Continue the current step; the next-step hint follows after planner_finish_step.",
+			"",
+			"## Expected shape (canonical schema)",
+			CANONICAL_SCHEMA[toolName],
+			"",
+			"## What you submitted (saved to disk)",
+			"```markdown",
+			written.trimEnd(),
+			"```",
+			"",
+			"Compare the two: the saved artifact should follow the canonical shape above (headings/sections of the same kind — the exact wording of your prose is up to you). If a required section is missing or wrong, call the same tool again to overwrite it; otherwise continue. The next-step hint follows after planner_finish_step.",
 		].join("\n"),
 		details: { path },
 	};
 }
+
+/** Assemble discovery.md from a free-form body plus the structured protocol
+ * commands. The verificationProtocol argument is the single source of truth for
+ * the ## Verification Protocol section, so any protocol section the model also
+ * wrote into body is stripped first — otherwise discovery.md would carry two
+ * `## Verification Protocol` sections and break the doubt_review protocol
+ * parser. */
+export function buildDiscoveryMarkdown(
+	body: string,
+	protocol: readonly string[],
+): string {
+	return [
+		stripVerificationProtocolSection(body).trimEnd(),
+		"",
+		"## Verification Protocol",
+		...protocol.map((command) => `- ${command}`),
+	].join("\n");
+}
+
+/** Remove any `verification protocol` section (heading at any level plus its
+ * lines, up to the next heading) from body. */
+export function stripVerificationProtocolSection(body: string): string {
+	const lines = body.split(/\r?\n/);
+	const out: string[] = [];
+	let skipping = false;
+	for (const line of lines) {
+		const heading = /^(#{1,6})\s+(.+?)\s*$/.exec(line.trim());
+		if (heading) {
+			skipping = heading[2].trim().toLowerCase() === "verification protocol";
+			if (skipping) continue;
+		}
+		if (!skipping) out.push(line);
+	}
+	return out.join("\n");
+}
+
+/** Compact reference templates echoed back so the model sees the canonical
+ * shape of each artifact next to what it actually wrote. */
+export const CANONICAL_SCHEMA: Record<PlannerArtifactToolName, string> = {
+	planner_plan_submit: [
+		"# Plan: <title>",
+		"## Goal",
+		"## Scope        (in-scope vs out-of-scope)",
+		"## Constraints",
+		"## Risks",
+		"## Checks       (how each task is verified)",
+		"## Tasks        (ordered task sequence)",
+	].join("\n"),
+	planner_discovery_submit: [
+		"# Discovery: <title>",
+		"## Project Overview / boundaries / findings / fundamental rules",
+		"(for change requests: ## Post-Implementation Snapshot / Completed Work / Remaining Work)",
+		"",
+		"NOTE: Do NOT write a `## Verification Protocol` heading in body — pass",
+		"the commands in the verificationProtocol argument; the wrapper renders",
+		"`## Verification Protocol` with one `- <command>` per line. That section",
+		"is the single source doubt_review checks against.",
+	].join("\n"),
+	planner_tdd_submit: [
+		"# tdd.md (per active task; sections added as the lifecycle reaches them)",
+		`## ${TDD_SECTIONS[0].title}`,
+		...TDD_SECTIONS[0].fields.map((f) => `- ${f}: <concrete evidence>`),
+		`## ${TDD_SECTIONS[1].title}`,
+		...TDD_SECTIONS[1].fields.map((f) => `- ${f}: <concrete evidence>`),
+		`## ${TDD_SECTIONS[2].title}`,
+		...TDD_SECTIONS[2].fields.map((f) => `- ${f}: <concrete evidence>`),
+	].join("\n"),
+	planner_summary_submit: [
+		"# Final Summary",
+		"## What changed",
+		"## Verification evidence  (command → result)",
+		"## Follow-ups",
+	].join("\n"),
+};
 
 function blocked(
 	toolName: PlannerArtifactToolName,

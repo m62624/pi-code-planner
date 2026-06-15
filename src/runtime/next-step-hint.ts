@@ -53,6 +53,11 @@ export function buildNextStepHint(state: PlanStateRecord): string {
 		// Name the wrappers permitted at this exact step so the model reaches for
 		// the right planner tool instead of a built-in write/edit.
 		lines.push(`Tools allowed now: ${tools.join(", ")}.`);
+		// Each planner_*_submit belongs to one step. The model often reaches for
+		// the next step's submit tool early and gets blocked; spell out the order.
+		lines.push(
+			"Order: only the tools listed above work at this step. A planner_*_submit for a later step is blocked until you call planner_finish_step to advance there.",
+		);
 	}
 	lines.push(
 		`If unsure, re-read \`${getPlannerStepStage(state.step)}.md\` or call planner_status.`,
