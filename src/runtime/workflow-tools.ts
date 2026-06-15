@@ -240,6 +240,14 @@ function fallbackWorkflowToolTransition(
 	}
 }
 
+const INTERNAL_DONE_STEPS = new Set<string>([
+	"prepare_output_branch",
+	"merge_or_export_result",
+	"cleanup_worktree",
+	"mark_done",
+	"cleanup_plan_files",
+]);
+
 async function validateWorkflowExit(input: {
 	fs: PlannerFs;
 	git: GitRunner;
@@ -283,6 +291,24 @@ async function validateWorkflowExit(input: {
 				? null
 				: "Discovery questions are still unresolved. Show them to the user verbatim, wait for answers, and call planner_questions_resolve before finishing discovery/write_questions.")
 		);
+	}
+	if (state.stage === "done" && INTERNAL_DONE_STEPS.has(state.step)) {
+		return "Internal done steps are managed by /planner-finish. Do not call planner_finish_step here — run /planner-finish from done/await_user_acceptance instead.";
+	}
+	if (
+		state.stage === "done" &&
+		state.step === "await_user_acceptance" &&
+		state.stepStatus === "running"
+	) {
+		const target =
+			input.transition.type === "finish_step"
+				? input.transition.next
+				: undefined;
+		const isChangeRequest =
+			target?.stage === "done" && target.step === "handle_change_request";
+		if (!isChangeRequest) {
+			return "Run /planner-finish (the CLI slash command) to accept the result — do not advance done/await_user_acceptance via planner_finish_step. Only change requests are allowed here: call planner_finish_step with target {stage: 'done', step: 'handle_change_request'}.";
+		}
 	}
 	if (state.stage === "done" && state.step === "handle_change_request") {
 		return (
