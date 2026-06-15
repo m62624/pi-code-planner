@@ -1,13 +1,18 @@
 import type { PlannerFs } from "../storage/fs";
 
-const PRE_IMPLEMENTATION_FIELDS = [
+export const PRE_IMPLEMENTATION_SECTION = "Pre-Implementation Proof Contract";
+export const POST_IMPLEMENTATION_SECTION =
+	"Post-Implementation Counterexample Review";
+export const MERGE_SCOPE_AUDIT_SECTION = "Task Merge Scope Audit";
+
+export const PRE_IMPLEMENTATION_FIELDS = [
 	"failingSignal",
 	"productionPath",
 	"successSignal",
 	"outOfScopeFiles",
 ] as const;
 
-const POST_IMPLEMENTATION_FIELDS = [
+export const POST_IMPLEMENTATION_FIELDS = [
 	"counterexample",
 	"boundaryValue",
 	"oppositeCase",
@@ -16,7 +21,7 @@ const POST_IMPLEMENTATION_FIELDS = [
 	"action",
 ] as const;
 
-const MERGE_SCOPE_AUDIT_FIELDS = [
+export const MERGE_SCOPE_AUDIT_FIELDS = [
 	"acceptanceCriteriaCovered",
 	"changedFilesMatchScope",
 	"testsRun",
@@ -25,6 +30,11 @@ const MERGE_SCOPE_AUDIT_FIELDS = [
 	"branchDriftCheck",
 ] as const;
 
+/** True when the value is empty or a known placeholder token. */
+export function isTddPlaceholder(value: string): boolean {
+	return isPlaceholder(value);
+}
+
 export async function validatePreImplementationProofContract(
 	fs: PlannerFs,
 	path: string,
@@ -32,7 +42,7 @@ export async function validatePreImplementationProofContract(
 	return await validateTddSection({
 		fs,
 		path,
-		section: "Pre-Implementation Proof Contract",
+		section: PRE_IMPLEMENTATION_SECTION,
 		fields: PRE_IMPLEMENTATION_FIELDS,
 	});
 }
@@ -44,7 +54,7 @@ export async function validatePostImplementationCounterexampleReview(
 	return await validateTddSection({
 		fs,
 		path,
-		section: "Post-Implementation Counterexample Review",
+		section: POST_IMPLEMENTATION_SECTION,
 		fields: POST_IMPLEMENTATION_FIELDS,
 	});
 }
@@ -56,7 +66,7 @@ export async function validateTaskMergeScopeAudit(
 	return await validateTddSection({
 		fs,
 		path,
-		section: "Task Merge Scope Audit",
+		section: MERGE_SCOPE_AUDIT_SECTION,
 		fields: MERGE_SCOPE_AUDIT_FIELDS,
 	});
 }

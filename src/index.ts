@@ -35,6 +35,11 @@ import {
 } from "./runtime/accepted-plan";
 import { readActivePlanContext } from "./runtime/active-plan";
 import {
+	executePlannerArtifactTool,
+	PLANNER_ARTIFACT_TOOL_NAMES,
+	type PlannerArtifactToolName,
+} from "./runtime/artifact-tools";
+import {
 	buildPlannerCompactInstructionBundle,
 	buildPlannerPostCompactMessage,
 	clearPlannerControlledCompact,
@@ -663,6 +668,150 @@ const REFACTOR_REVIEW_TOOL_PARAMETERS = {
 		"categoryReviews",
 		"decision",
 	],
+	additionalProperties: false,
+} as const;
+
+const PLAN_SUBMIT_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		content: {
+			type: "string",
+			description:
+				"Full plan.md markdown: scope, constraints, risks, checks, and the intended task sequence. The wrapper writes the file atomically.",
+		},
+	},
+	required: ["content"],
+	additionalProperties: false,
+} as const;
+
+const DISCOVERY_SUBMIT_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		body: {
+			type: "string",
+			description:
+				"Full discovery.md markdown WITHOUT the Verification Protocol section: system boundaries, findings, fundamental rules, and (for change requests) Post-Implementation Snapshot / Completed Work / Remaining Work.",
+		},
+		verificationProtocol: {
+			type: "array",
+			description:
+				"Exact test/lint/build/format commands (with working directory and flags) that doubt_review must later evidence. Rendered as the ## Verification Protocol section.",
+			items: { type: "string" },
+		},
+	},
+	required: ["body", "verificationProtocol"],
+	additionalProperties: false,
+} as const;
+
+const SUMMARY_SUBMIT_TOOL_PARAMETERS = {
+	type: "object",
+	properties: {
+		content: {
+			type: "string",
+			description:
+				"Full final_summary.md markdown: what changed, verification evidence, and any follow-ups.",
+		},
+	},
+	required: ["content"],
+	additionalProperties: false,
+} as const;
+
+const TDD_SECTION_FIELD = (description: string) =>
+	({ type: "string", description }) as const;
+
+const TDD_SUBMIT_TOOL_PARAMETERS = {
+	type: "object",
+	description:
+		"Fill or update tdd.md for the active task. Provide each section as the lifecycle reaches it; the wrapper assembles the markdown and preserves sections you do not pass. Built-in edit/write cannot modify tdd.md.",
+	properties: {
+		preImplementation: {
+			type: "object",
+			description:
+				"Pre-Implementation Proof Contract (write before run_failing_tests).",
+			properties: {
+				failingSignal: TDD_SECTION_FIELD(
+					"The exact failing test/assertion signal proving the behavior is absent.",
+				),
+				productionPath: TDD_SECTION_FIELD(
+					"The production file/symbol that will make the test pass.",
+				),
+				successSignal: TDD_SECTION_FIELD(
+					"The exact signal that will prove success after implementation.",
+				),
+				outOfScopeFiles: TDD_SECTION_FIELD(
+					"Files/areas explicitly out of scope for this task.",
+				),
+			},
+			required: [
+				"failingSignal",
+				"productionPath",
+				"successSignal",
+				"outOfScopeFiles",
+			],
+			additionalProperties: false,
+		},
+		postImplementation: {
+			type: "object",
+			description:
+				"Post-Implementation Counterexample Review (write before finishing implement_task).",
+			properties: {
+				counterexample: TDD_SECTION_FIELD(
+					"A concrete counterexample considered against the implementation.",
+				),
+				boundaryValue: TDD_SECTION_FIELD("Boundary/edge value checked."),
+				oppositeCase: TDD_SECTION_FIELD("The opposite/negative case checked."),
+				regressionRisk: TDD_SECTION_FIELD(
+					"Regression risk and how it was mitigated or verified.",
+				),
+				scopeCheck: TDD_SECTION_FIELD(
+					"Confirmation that changes stayed within the task scope.",
+				),
+				action: TDD_SECTION_FIELD(
+					"Action taken from this review, or why none.",
+				),
+			},
+			required: [
+				"counterexample",
+				"boundaryValue",
+				"oppositeCase",
+				"regressionRisk",
+				"scopeCheck",
+				"action",
+			],
+			additionalProperties: false,
+		},
+		mergeScopeAudit: {
+			type: "object",
+			description: "Task Merge Scope Audit (write before merge_task_to_plan).",
+			properties: {
+				acceptanceCriteriaCovered: TDD_SECTION_FIELD(
+					"Evidence each acceptance criterion is covered.",
+				),
+				changedFilesMatchScope: TDD_SECTION_FIELD(
+					"Confirmation changed files match the task scope.",
+				),
+				testsRun: TDD_SECTION_FIELD("The tests run and their result."),
+				debugRemoved: TDD_SECTION_FIELD(
+					"Confirmation temporary debug/instrumentation was removed.",
+				),
+				commitMessageMatchesBehavior: TDD_SECTION_FIELD(
+					"Confirmation the commit message matches the behavior change.",
+				),
+				branchDriftCheck: TDD_SECTION_FIELD(
+					"Confirmation the task branch did not drift from the plan branch.",
+				),
+			},
+			required: [
+				"acceptanceCriteriaCovered",
+				"changedFilesMatchScope",
+				"testsRun",
+				"debugRemoved",
+				"commitMessageMatchesBehavior",
+				"branchDriftCheck",
+			],
+			additionalProperties: false,
+		},
+	},
 	additionalProperties: false,
 } as const;
 
@@ -2477,6 +2626,36 @@ function registerPlannerTools(
 		});
 	}
 
+	for (const toolName of PLANNER_ARTIFACT_TOOL_NAMES) {
+		pi.registerTool({
+			name: toolName,
+			label: artifactToolLabel(toolName),
+			description: artifactToolDescription(toolName),
+			promptSnippet: artifactToolPromptSnippet(toolName),
+			parameters: artifactToolParameters(toolName) as never,
+			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const fs = createNodeFs();
+				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				await recordPlannerToolActivityForProject({
+					fs,
+					projectPaths,
+					now: Date.now(),
+				});
+				const result = await executePlannerArtifactTool({
+					fs,
+					git: new NodeGitRunner(),
+					projectPaths,
+					toolName,
+					params,
+				});
+				return {
+					content: [{ type: "text", text: result.text }],
+					details: result,
+				};
+			},
+		});
+	}
+
 	pi.registerTool({
 		name: "planner_skill_create",
 		label: "Planner Skill Create",
@@ -3116,6 +3295,58 @@ function doubtToolParameters(toolName: PlannerDoubtReviewToolName) {
 	switch (toolName) {
 		case "planner_doubt_review":
 			return DOUBT_REVIEW_TOOL_PARAMETERS;
+	}
+}
+
+function artifactToolLabel(toolName: PlannerArtifactToolName): string {
+	switch (toolName) {
+		case "planner_plan_submit":
+			return "Planner Plan Submit";
+		case "planner_discovery_submit":
+			return "Planner Discovery Submit";
+		case "planner_tdd_submit":
+			return "Planner TDD Submit";
+		case "planner_summary_submit":
+			return "Planner Summary Submit";
+	}
+}
+
+function artifactToolDescription(toolName: PlannerArtifactToolName): string {
+	switch (toolName) {
+		case "planner_plan_submit":
+			return "Write plan.md from a single content argument during planning/draft_plan (and change-request replans).";
+		case "planner_discovery_submit":
+			return "Write discovery.md from a body argument plus a verificationProtocol list that becomes the ## Verification Protocol section.";
+		case "planner_tdd_submit":
+			return "Fill or update tdd.md for the active task from structured section fields. Built-in edit/write cannot modify tdd.md.";
+		case "planner_summary_submit":
+			return "Write final_summary.md from a single content argument during finalize/write_final_summary.";
+	}
+}
+
+function artifactToolPromptSnippet(toolName: PlannerArtifactToolName): string {
+	switch (toolName) {
+		case "planner_plan_submit":
+			return "Use planner_plan_submit to save plan.md instead of hand-formatting the file.";
+		case "planner_discovery_submit":
+			return "Use planner_discovery_submit so the ## Verification Protocol section is always well-formed.";
+		case "planner_tdd_submit":
+			return "Use planner_tdd_submit to fill tdd.md section by section; it validates the required fields immediately.";
+		case "planner_summary_submit":
+			return "Use planner_summary_submit to save final_summary.md.";
+	}
+}
+
+function artifactToolParameters(toolName: PlannerArtifactToolName) {
+	switch (toolName) {
+		case "planner_plan_submit":
+			return PLAN_SUBMIT_TOOL_PARAMETERS;
+		case "planner_discovery_submit":
+			return DISCOVERY_SUBMIT_TOOL_PARAMETERS;
+		case "planner_tdd_submit":
+			return TDD_SUBMIT_TOOL_PARAMETERS;
+		case "planner_summary_submit":
+			return SUMMARY_SUBMIT_TOOL_PARAMETERS;
 	}
 }
 

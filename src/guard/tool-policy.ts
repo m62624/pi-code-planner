@@ -11,6 +11,10 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_goal_decide",
 	"planner_questions_submit",
 	"planner_questions_resolve",
+	"planner_plan_submit",
+	"planner_discovery_submit",
+	"planner_tdd_submit",
+	"planner_summary_submit",
 	"planner_task_upsert",
 	"planner_refactor_review",
 	"planner_doubt_review",
@@ -95,6 +99,7 @@ const STEP_ALLOWED_TOOLS = {
 	discovery: {
 		scan_project_structure: [
 			"planner_git_inspect",
+			"planner_discovery_submit",
 			"planner_contract_scan",
 			"planner_contract_route",
 			"planner_contract_read",
@@ -113,7 +118,11 @@ const STEP_ALLOWED_TOOLS = {
 	},
 	planning: {
 		read_context: ["planner_contract_route", "planner_contract_read"],
-		draft_plan: ["planner_contract_route", "planner_contract_read"],
+		draft_plan: [
+			"planner_plan_submit",
+			"planner_contract_route",
+			"planner_contract_read",
+		],
 		split_tasks: ["planner_contract_route", "planner_contract_read"],
 		write_task_files: [
 			"planner_task_upsert",
@@ -128,6 +137,7 @@ const STEP_ALLOWED_TOOLS = {
 		prepare_task: ["planner_git_inspect", "planner_git_create_task_branch"],
 		write_tdd_plan: [
 			"planner_git_inspect",
+			"planner_tdd_submit",
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
@@ -138,6 +148,7 @@ const STEP_ALLOWED_TOOLS = {
 		],
 		write_tests: [
 			"planner_git_inspect",
+			"planner_tdd_submit",
 			"planner_git_commit",
 			"planner_report_stuck",
 			"planner_skill_create",
@@ -149,6 +160,7 @@ const STEP_ALLOWED_TOOLS = {
 		],
 		run_failing_tests: [
 			"planner_git_inspect",
+			"planner_tdd_submit",
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
@@ -159,6 +171,7 @@ const STEP_ALLOWED_TOOLS = {
 		],
 		implement_task: [
 			"planner_git_inspect",
+			"planner_tdd_submit",
 			"planner_git_commit",
 			"planner_contract_route",
 			"planner_contract_read",
@@ -172,6 +185,7 @@ const STEP_ALLOWED_TOOLS = {
 		],
 		contract_check: [
 			"planner_git_inspect",
+			"planner_tdd_submit",
 			"planner_git_commit",
 			"planner_contract_route",
 			"planner_contract_read",
@@ -183,6 +197,7 @@ const STEP_ALLOWED_TOOLS = {
 		],
 		refactor_task: [
 			"planner_git_inspect",
+			"planner_tdd_submit",
 			"planner_refactor_review",
 			"planner_git_commit",
 			"planner_contract_route",
@@ -201,6 +216,7 @@ const STEP_ALLOWED_TOOLS = {
 		],
 		run_final_tests: [
 			"planner_git_inspect",
+			"planner_tdd_submit",
 			"planner_git_commit",
 			"planner_report_stuck",
 			"planner_skill_create",
@@ -218,6 +234,7 @@ const STEP_ALLOWED_TOOLS = {
 		],
 		merge_task_to_plan: [
 			"planner_git_inspect",
+			"planner_tdd_submit",
 			"planner_git_merge_task_to_plan",
 		],
 		compact_task: [],
@@ -240,6 +257,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_contract_upsert",
 		],
 		write_final_summary: [
+			"planner_summary_submit",
 			"planner_skill_create",
 			"planner_skill_update",
 			"planner_contract_route",
@@ -257,7 +275,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_contract_decide",
 		],
 		await_user_acceptance: ["planner_contract_decide"],
-		handle_change_request: [],
+		handle_change_request: ["planner_plan_submit", "planner_discovery_submit"],
 		prepare_output_branch: [],
 		merge_or_export_result: [],
 		cleanup_worktree: [],

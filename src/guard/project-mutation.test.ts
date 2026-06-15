@@ -70,8 +70,38 @@ describe("planner built-in Pi tool guard", () => {
 		for (const path of [state.planPaths.goalMd, state.planPaths.requestMd]) {
 			const result = decision({ toolName: "write", path, state });
 			expect(result.allow, path).toBe(false);
-			expect(result.reason).toContain("planner wrapper");
+			expect(result.reason).toContain("planner-managed file");
 		}
+	});
+
+	it("blocks direct writes to questions.md and the active task tdd.md", () => {
+		const planDir =
+			"/agent/extensions/pi-code-planner/projects/app/plans/plan-a";
+		const state = activeExecutionState("implement_task");
+		state.planPaths = {
+			planDir,
+			requestMd: `${planDir}/request.md`,
+			goalMd: `${planDir}/goal.md`,
+			questionsMd: `${planDir}/questions.md`,
+			tasksDir: `${planDir}/tasks`,
+		};
+		state.planState = { ...state.planState, activeTaskId: "parse-config" };
+
+		const questions = decision({
+			toolName: "edit",
+			path: `${planDir}/questions.md`,
+			state,
+		});
+		expect(questions.allow).toBe(false);
+		expect(questions.reason).toContain("planner_questions_submit");
+
+		const tdd = decision({
+			toolName: "edit",
+			path: `${planDir}/tasks/parse-config/tdd.md`,
+			state,
+		});
+		expect(tdd.allow).toBe(false);
+		expect(tdd.reason).toContain("planner_tdd_submit");
 	});
 
 	it("blocks write and edit when an active planner state cannot be loaded", () => {
