@@ -507,21 +507,23 @@ function renderStageCell(
 	const fillRatio = isDone ? 1 : isCurrent ? model.stageRatio : 0;
 	const filledCount = Math.round(segWidth * fillRatio);
 
-	const label = segWidth >= 6 ? STAGE_LABEL[stage] : STAGE_CODE[stage];
-	const labelClipped = label.slice(0, Math.max(0, segWidth - 2));
-	const labelStart = Math.max(
-		0,
-		Math.floor((segWidth - labelClipped.length) / 2),
-	);
+	// Reserve a label band with a blank cell on each side so the fill glyphs
+	// never butt up against the letters (keeps the labels readable).
+	const maxLabel = Math.max(0, segWidth - 4);
+	const rawLabel = segWidth >= 8 ? STAGE_LABEL[stage] : STAGE_CODE[stage];
+	const labelText = rawLabel.slice(0, maxLabel);
+	const band = labelText ? ` ${labelText} ` : "";
+	const bandStart = Math.max(0, Math.floor((segWidth - band.length) / 2));
+	const bandEnd = bandStart + band.length;
 
 	let out = "";
 	for (let c = 0; c < segWidth; c++) {
-		const inLabel = c >= labelStart && c < labelStart + labelClipped.length;
-		const ch = inLabel
-			? labelClipped[c - labelStart]
-			: c < filledCount
-				? "▰"
-				: "░";
+		if (band && c >= bandStart && c < bandEnd) {
+			const ch = band[c - bandStart];
+			out += paintLabel({ ch, isCurrent, isDone, palette });
+			continue;
+		}
+		const ch = c < filledCount ? "▰" : "░";
 		out += paintCell({
 			ch,
 			stage,
@@ -532,6 +534,19 @@ function renderStageCell(
 		});
 	}
 	return out;
+}
+
+function paintLabel(input: {
+	ch: string;
+	isCurrent: boolean;
+	isDone: boolean;
+	palette: DashboardPalette;
+}): string {
+	const { ch, isCurrent, isDone, palette } = input;
+	if (ch === " ") return ch;
+	if (isCurrent) return palette.bold(palette.text(ch));
+	if (isDone) return palette.text(ch);
+	return palette.muted(ch);
 }
 
 function paintCell(input: {
