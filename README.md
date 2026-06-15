@@ -53,10 +53,10 @@ After compaction, the model calls `planner_status`, reloads from persisted JSON/
 
 | Command | Purpose |
 | --- | --- |
-| `/planner-create` | Create a new plan from a multiline request. |
-| `/planner-improve` | Discovery-first self-improvement plan. |
-| `/planner-preview` | Check out the plan branch in your main repo to browse accumulated files. Run again for status. `/planner-finish` restores your branch automatically. |
-| `/planner-resume` | Pick a plan and resume its worktree session. |
+| `/planner-create` | Create a new plan from a multiline request. Opens the planner workspace. |
+| `/planner-improve` | Discovery-first self-improvement plan. Opens the planner workspace. |
+| `/planner-resume` | Pick a plan and resume its worktree session. Opens the planner workspace. |
+| `/planner-dashboard` | Open the planner workspace: live stage dashboard, task list, and the model chat in one window. Opens automatically for planner-worktree sessions. |
 | `/planner-helper` | Show current effective settings and planner behavior. |
 | `/planner-skills` | Search, view, and delete planner-generated skills. |
 | `/planner-finish` | Export `output/<plan-id>`, remove temporary planner state, return Pi to the original session. |

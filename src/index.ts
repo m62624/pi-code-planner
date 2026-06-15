@@ -54,7 +54,10 @@ import {
 	PLANNER_CONTRACT_TOOL_NAMES,
 	type PlannerContractToolName,
 } from "./runtime/contracts";
-import { registerPlannerDashboard } from "./runtime/dashboard";
+import {
+	openPlannerWorkspace,
+	registerPlannerDashboard,
+} from "./runtime/dashboard";
 import {
 	DEBUG_INSTRUMENTATION_TYPES,
 	DEBUG_PROBE_METHODS,
@@ -1113,11 +1116,44 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 	registerPlannerIdleWatchdog(pi, idleRuntime);
 	registerPlannerRuntimeTimer(pi, timerRuntime);
 	registerPlannerDashboard(pi);
+	registerPlannerWorkspaceAutoOpen(pi);
 	registerPlannerBuiltinToolGuard(pi);
 	registerPlannerCompactEvents(pi, compactRuntime);
 	registerPlannerSkillResources(pi);
 	registerInstructionDefaultsSync(pi);
 	registerPlannerToolVisibility(pi);
+}
+
+/**
+ * Auto-open the planner workspace once per session when the active session is a
+ * planner worktree session. This covers /planner-create, /planner-resume, and
+ * /planner-improve (each hands off to a worktree session) without coupling to
+ * the fragile session-switch flow. The user can reopen anytime with
+ * /planner-dashboard, or close the workspace to fall back to the plain chat.
+ */
+function registerPlannerWorkspaceAutoOpen(pi: ExtensionAPI): void {
+	const openedSessions = new Set<string>();
+	pi.on("session_start", async (_event, ctx) => {
+		if (!ctx.hasUI) return;
+		try {
+			const sessionId = ctx.sessionManager.getSessionId();
+			if (openedSessions.has(sessionId)) return;
+			const fs = createNodeFs();
+			const projectPaths = await resolveProjectStoragePaths({
+				fs,
+				agentDir: getAgentDir(),
+				cwd: ctx.cwd,
+			});
+			const context = await readActivePlanContext({ fs, projectPaths });
+			if (context.status !== "ready") return;
+			const worktreePath = context.state.worktreePath;
+			if (!worktreePath || !isPathInsideOrEqual(ctx.cwd, worktreePath)) return;
+			openedSessions.add(sessionId);
+			void openPlannerWorkspace(pi, ctx);
+		} catch {
+			// Best-effort: never block session start on the workspace.
+		}
+	});
 }
 
 function registerPlannerSkillResources(pi: ExtensionAPI): void {
@@ -1935,57 +1971,6 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			});
 			notifyPlannerCommandResult(ctx, result);
 			resetPlanActiveCache(pi);
-		},
-	});
-
-	pi.registerCommand("planner-preview", {
-		description:
-			"Show the planner worktree path so you can open it in your editor and browse the current plan files directly.",
-		handler: async (_args, ctx) => {
-			await ctx.waitForIdle();
-			const fs = createNodeFs();
-			const git = new NodeGitRunner();
-			try {
-				const agentDir = getAgentDir();
-				const projectPaths = await resolveProjectStoragePaths({
-					fs,
-					agentDir,
-					cwd: ctx.cwd,
-				});
-				const project = await readProjectRecordIfExists(fs, projectPaths);
-				const activePlanId = project?.activePlanId;
-				if (!activePlanId) {
-					ctx.ui.notify("No active plan to preview.", "info");
-					return;
-				}
-				const planPaths = createPlanStoragePaths(projectPaths, activePlanId);
-				const state = await readPlanStateIfExists(fs, planPaths);
-				if (!state?.worktreePath) {
-					ctx.ui.notify("Plan worktree not found.", "warning");
-					return;
-				}
-				const worktreePath = state.worktreePath;
-				const currentBranch = await git
-					.currentBranch({ repoRoot: worktreePath })
-					.catch(() => state.currentBranch ?? "(unknown)");
-				const planBranch = state.activeBranches.plan;
-				const onPlanBranch = currentBranch === planBranch;
-				ctx.ui.notify(
-					[
-						`Planner worktree: ${worktreePath}`,
-						`Branch: ${currentBranch}`,
-						onPlanBranch
-							? "Open this folder in your editor to browse all completed plan work."
-							: `Currently on a task branch. Plan branch (${planBranch}) contains all completed tasks merged so far.`,
-					].join("\n"),
-					"info",
-				);
-			} catch (error) {
-				ctx.ui.notify(
-					`Planner preview failed: ${errorMessage(error)}`,
-					"error",
-				);
-			}
 		},
 	});
 
