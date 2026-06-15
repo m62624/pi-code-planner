@@ -437,7 +437,11 @@ class PlannerWorkspaceComponent implements Component {
 			? `${this.model.stage}/${this.model.step}/${this.model.stepStatus}/${this.model.tasksDone}/${this.model.tasksTotal}`
 			: "unavailable";
 		const uiSig = `${this.focus}|${this.input}|${this.cursor}|${this.ui.selectedIndex}|${this.atBottom}:${this.topLine}|${this.expandAll}|${this.hideThinking}`;
-		return `${clock}#${rowsSig}#${modelSig}#${uiSig}`;
+		// Terminal size is part of the signature so a resize triggers a redraw.
+		// Without it the idle tick keeps the same signature after a resize and
+		// never calls requestRender(), leaving the overlay frozen at the old size.
+		const termSig = `${process.stdout.columns ?? 0}x${process.stdout.rows ?? 0}`;
+		return `${clock}#${rowsSig}#${modelSig}#${uiSig}#${termSig}`;
 	}
 
 	private scheduleRender(signature = this.computeSignature()): void {
