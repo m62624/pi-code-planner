@@ -207,6 +207,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["plan_worktree_exists"],
 		expectedTools: [
 			"planner_status",
+			"planner_discovery_submit",
 			"planner_contract_scan",
 			"planner_contract_route",
 			"planner_contract_read",
@@ -256,12 +257,14 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		"draft_plan",
 		["plan.md"],
 		["discovery.md"],
+		["planner_plan_submit", "planner_contract_route", "planner_contract_read"],
 	),
 	split_tasks: artifactBehavior(
 		"planning",
 		"split_tasks",
 		["plan.md"],
 		["plan.md"],
+		["planner_contract_route", "planner_contract_read"],
 	),
 	write_task_files: behavior("planning", "write_task_files", {
 		projectAccess: "planner_artifacts",
@@ -314,6 +317,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["active_task_selected", "task_branch_ready"],
 		expectedTools: [
 			"planner_status",
+			"planner_tdd_submit",
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
@@ -332,6 +336,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		updatedArtifacts: ["tdd.md"],
 		requiredGates: ["tdd_plan_written"],
 		expectedTools: [
+			"planner_tdd_submit",
 			"planner_git_inspect",
 			"planner_git_commit",
 			"planner_report_stuck",
@@ -353,6 +358,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["tests_written_first"],
 		expectedTools: [
 			"planner_status",
+			"planner_tdd_submit",
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
@@ -371,6 +377,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		updatedArtifacts: ["tdd.md"],
 		requiredGates: ["failing_signal_recorded"],
 		expectedTools: [
+			"planner_tdd_submit",
 			"planner_git_commit",
 			"planner_contract_route",
 			"planner_contract_read",
@@ -392,6 +399,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		updatedArtifacts: ["tdd.md", "contracts/manifest.json"],
 		requiredGates: ["task_implemented"],
 		expectedTools: [
+			"planner_tdd_submit",
 			"planner_contract_check",
 			"planner_contract_upsert",
 			"planner_contract_route",
@@ -411,6 +419,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		updatedArtifacts: ["refactor.md"],
 		requiredGates: ["task_implemented", "contract_check_completed"],
 		expectedTools: [
+			"planner_tdd_submit",
 			"planner_refactor_review",
 			"planner_git_commit",
 			"planner_contract_check",
@@ -435,6 +444,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		updatedArtifacts: ["refactor.md"],
 		requiredGates: ["refactor_checked"],
 		expectedTools: [
+			"planner_tdd_submit",
 			"planner_git_commit",
 			"planner_report_stuck",
 			"planner_skill_create",
@@ -468,7 +478,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["refactor.md"],
 		updatedArtifacts: ["state.json"],
 		requiredGates: ["final_tests_passed"],
-		expectedTools: ["planner_git_merge_task_to_plan"],
+		expectedTools: ["planner_tdd_submit", "planner_git_merge_task_to_plan"],
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
@@ -494,7 +504,11 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["plan.md"],
 		updatedArtifacts: ["verify.md"],
 		requiredGates: ["next_task_decided"],
-		expectedTools: ["planner_git_inspect"],
+		expectedTools: [
+			"planner_git_inspect",
+			"planner_contract_route",
+			"planner_contract_read",
+		],
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
@@ -532,10 +546,13 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["plan_branch_verified"],
 		expectedTools: [
 			"planner_status",
+			"planner_summary_submit",
 			"planner_skill_create",
 			"planner_skill_update",
 			"planner_contract_check",
 			"planner_contract_upsert",
+			"planner_contract_route",
+			"planner_contract_read",
 		],
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
@@ -558,6 +575,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 			"planner_status",
 			"planner_skill_create",
 			"planner_skill_update",
+			"planner_contract_decide",
 		],
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
@@ -568,7 +586,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["final_summary.md"],
 		updatedArtifacts: ["decisions.md"],
 		requiredGates: ["user_acceptance_required"],
-		expectedTools: ["planner_status"],
+		expectedTools: ["planner_status", "planner_contract_decide"],
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
@@ -578,7 +596,11 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["decisions.md"],
 		updatedArtifacts: ["plan.md", "decisions.md", "discovery.md", "state.json"],
 		requiredGates: ["user_acceptance_required"],
-		expectedTools: ["planner_finish_step"],
+		expectedTools: [
+			"planner_finish_step",
+			"planner_plan_submit",
+			"planner_discovery_submit",
+		],
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
@@ -738,6 +760,7 @@ function artifactBehavior(
 	step: PlannerStep,
 	updatedArtifacts: readonly PlannerBehaviorArtifact[],
 	requiredArtifacts: readonly PlannerBehaviorArtifact[],
+	extraTools: readonly string[] = [],
 ): PlannerStageStepBehavior {
 	return behavior(stage, step, {
 		projectAccess: "planner_artifacts",
@@ -745,7 +768,7 @@ function artifactBehavior(
 		requiredArtifacts,
 		updatedArtifacts,
 		requiredGates: [],
-		expectedTools: ["planner_status"],
+		expectedTools: ["planner_status", ...extraTools],
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	});
