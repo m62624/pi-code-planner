@@ -165,13 +165,35 @@ jobs:
             echo "url=$EXISTING_PR" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Generate Release Notes
+        id: notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          R_TAG=${{ needs.prepare.outputs.tag }}
+          # Compare against the previous v* tag explicitly. Without this, GitHub
+          # anchors auto-notes to the last *published* (non-draft) release; since
+          # every release is created as a draft, the baseline is stale and each
+          # new release re-lists every PR since the last published one, so old
+          # feat/fix entries pile onto the new ones.
+          PREV_TAG=$(git tag --list 'v*' --sort=-v:refname | grep -vx "$R_TAG" | head -n1)
+          ARGS=(-f tag_name="$R_TAG")
+          if [ -n "$PREV_TAG" ]; then
+            ARGS+=(-f previous_tag_name="$PREV_TAG")
+          fi
+          NOTES=$(gh api -X POST "repos/${{ github.repository }}/releases/generate-notes" "${ARGS[@]}" --jq '.body')
+          {
+            echo "body<<EOF_NOTES"
+            echo "$NOTES"
+            echo "EOF_NOTES"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create Draft Release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ env.R_NAME }}
           tag_name: ${{ needs.prepare.outputs.tag }}
           draft: true
-          generate_release_notes: true
           body: |
             This is a draft release.
 
@@ -179,4 +201,8 @@ jobs:
             - npm package `pi-code-planner@${{ needs.prepare.outputs.version }}` is available.
             - Pi can install it with `pi install npm:pi-code-planner@${{ needs.prepare.outputs.version }}`.
             - The sync PR is ready: ${{ steps.sync_pr.outputs.url }}
+
+            ---
+
+            ${{ steps.notes.outputs.body }}
           token: ${{ secrets.GITHUB_TOKEN }}
