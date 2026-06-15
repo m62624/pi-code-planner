@@ -662,4 +662,117 @@ describe("workflowToolTransition", () => {
 		expect(blocked.result.status).toBe("blocked");
 		expect(blocked.text).toContain("must be proven_bug or needs_probe");
 	});
+
+	it("blocks planner_finish_step at done/await_user_acceptance unless targeting handle_change_request", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await ensureProjectRecord(fs, projectPaths);
+		await initializePlanFiles(
+			fs,
+			planPaths,
+			createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+		);
+		await fs.mkdirp(worktreePath);
+		await initializePlanState(fs, planPaths, {
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "done",
+			step: "await_user_acceptance",
+			stepStatus: "running",
+			currentBranch: "plan/plan-a",
+		});
+		await setActivePlan(fs, projectPaths, "plan-a");
+
+		const blockedNoTarget = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(blockedNoTarget.result.status).toBe("blocked");
+		expect(blockedNoTarget.text).toContain("/planner-finish");
+
+		const blockedWrongTarget = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: { nextStage: "done", nextStep: "prepare_output_branch" },
+		});
+		expect(blockedWrongTarget.result.status).toBe("blocked");
+		expect(blockedWrongTarget.text).toContain("/planner-finish");
+
+		const allowed = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: { nextStage: "done", nextStep: "handle_change_request" },
+		});
+		expect(allowed.result.status).toBe("applied");
+		expect(allowed.result.state).toMatchObject({
+			stage: "done",
+			step: "handle_change_request",
+		});
+	});
+
+	it("blocks planner_finish_step at internal done steps (prepare_output_branch, etc.)", async () => {
+		const internalSteps = [
+			"prepare_output_branch",
+			"merge_or_export_result",
+			"cleanup_worktree",
+			"mark_done",
+			"cleanup_plan_files",
+		] as const;
+
+		for (const step of internalSteps) {
+			const fs = new MockPlannerFs();
+			const git = new MockGitRunner();
+			const projectPaths = createProjectStoragePaths({
+				agentDir: "/agent",
+				projectRoot: "/repo/app",
+			});
+			const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+			const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+			await ensureProjectRecord(fs, projectPaths);
+			await initializePlanFiles(
+				fs,
+				planPaths,
+				createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+			);
+			await fs.mkdirp(worktreePath);
+			await initializePlanState(fs, planPaths, {
+				...createInitialPlanState({
+					baseBranch: "main",
+					planBranch: "plan/plan-a",
+					worktreePath,
+				}),
+				stage: "done",
+				step,
+				stepStatus: "running",
+				currentBranch: "plan/plan-a",
+			});
+			await setActivePlan(fs, projectPaths, "plan-a");
+
+			const result = await executePlannerWorkflowTool({
+				fs,
+				git,
+				projectPaths,
+				toolName: "planner_finish_step",
+				params: {},
+			});
+			expect(result.result.status, `step=${step}`).toBe("blocked");
+			expect(result.text, `step=${step}`).toContain("/planner-finish");
+		}
+	});
 });
