@@ -3,6 +3,7 @@ import {
 	type ExtensionContext,
 	getAgentDir,
 	type KeybindingsManager,
+	type SessionEntry,
 	type Theme,
 	type ThemeColor,
 } from "@earendil-works/pi-coding-agent";
@@ -49,6 +50,12 @@ const TICK_MS = 180;
 const RELOAD_EVERY_TICKS = 16;
 /** Rows left for Pi's native footer below the workspace overlay. */
 const DEFAULT_FOOTER_RESERVE = 3;
+/**
+ * How many trailing session entries to project at a time. The transcript shows
+ * a sliding window over the conversation; scrolling to the top loads another
+ * chunk so very long sessions never project everything at once.
+ */
+const HISTORY_WINDOW = 400;
 
 const STAGE_THEME_COLOR: Record<PlannerStage, ThemeColor> = {
 	init: "syntaxComment",
@@ -119,13 +126,7 @@ export async function openPlannerWorkspace(
 	if (options.auto && !config.autoOpen) return;
 	const footerReserve = Math.max(0, config.footerReserveRows);
 	const load = () => loadDashboardModel(fs, ctx.cwd, config.syncMs);
-	const getRows = () => {
-		const rows = projectSessionEntries(ctx.sessionManager.getBranch());
-		if (liveAssistantMessage) {
-			rows.push(...projectLiveAssistant(liveAssistantMessage));
-		}
-		return rows;
-	};
+	const getEntries = () => ctx.sessionManager.getBranch();
 	const initial = await load();
 	await ctx.ui.custom<void>(
 		(tui, theme, keybindings, done) => {
@@ -134,10 +135,9 @@ export async function openPlannerWorkspace(
 				theme,
 				keybindings,
 				initial,
-				initialRows: getRows(),
 				footerReserve,
 				load,
-				getRows,
+				getEntries,
 				sendUserMessage: (text) => pi.sendUserMessage(text),
 				onClose: () => done(undefined),
 			});
@@ -222,20 +222,27 @@ class PlannerWorkspaceComponent implements Component {
 	private readonly tui: TUI;
 	private readonly palette: DashboardPalette;
 	private readonly load: () => Promise<PlannerDashboardModel>;
-	private readonly getRows: () => ChatRow[];
+	private readonly getEntries: () => SessionEntry[];
 	private readonly sendUserMessage: (text: string) => void;
 	private readonly onClose: () => void;
 	private readonly footerReserve: number;
 	private readonly keybindings: KeybindingsManager;
 
 	private model: PlannerDashboardModel;
-	private rows: ChatRow[];
+	private rows: ChatRow[] = [];
 	private input = "";
 	private cursor = 0;
 	private focus: WorkspaceFocus = "input";
-	private chatScroll = 0;
+	/** Follow the live tail (true) or hold an absolute scroll position. */
+	private atBottom = true;
+	private topLine = 0;
 	private expandAll = false;
 	private hideThinking = false;
+	// Sliding-window projection state.
+	private windowEntries = HISTORY_WINDOW;
+	private hasMoreHistory = false;
+	private cachedEntryKey = "";
+	private cachedBaseRows: ChatRow[] = [];
 	private readonly ui: DashboardUiState = {
 		selectedIndex: 0,
 		taskScroll: 0,
@@ -261,10 +268,9 @@ class PlannerWorkspaceComponent implements Component {
 		theme: Theme;
 		keybindings: KeybindingsManager;
 		initial: PlannerDashboardModel;
-		initialRows: ChatRow[];
 		footerReserve: number;
 		load: () => Promise<PlannerDashboardModel>;
-		getRows: () => ChatRow[];
+		getEntries: () => SessionEntry[];
 		sendUserMessage: (text: string) => void;
 		onClose: () => void;
 	}) {
@@ -273,11 +279,11 @@ class PlannerWorkspaceComponent implements Component {
 		this.keybindings = input.keybindings;
 		this.footerReserve = input.footerReserve;
 		this.load = input.load;
-		this.getRows = input.getRows;
+		this.getEntries = input.getEntries;
 		this.sendUserMessage = input.sendUserMessage;
 		this.onClose = input.onClose;
 		this.model = input.initial;
-		this.rows = input.initialRows;
+		this.refreshRows();
 		this.interval = setInterval(() => this.onTick(), TICK_MS);
 		this.interval.unref?.();
 		// Redraw immediately on each streaming token for smooth output.
@@ -300,10 +306,35 @@ class PlannerWorkspaceComponent implements Component {
 
 	private refreshRows(): void {
 		try {
-			this.rows = this.getRows();
+			const entries = this.getEntries();
+			const total = entries.length;
+			const start = Math.max(0, total - this.windowEntries);
+			this.hasMoreHistory = start > 0;
+			const lastId = total > 0 ? (entries[total - 1].id ?? "") : "";
+			// Reproject only when the windowed slice actually changed, so we do not
+			// rebuild the whole transcript on every 180ms tick.
+			const key = `${total}:${start}:${lastId}`;
+			if (key !== this.cachedEntryKey) {
+				this.cachedBaseRows = projectSessionEntries(entries.slice(start));
+				this.cachedEntryKey = key;
+			}
+			this.rows = liveAssistantMessage
+				? [
+						...this.cachedBaseRows,
+						...projectLiveAssistant(liveAssistantMessage),
+					]
+				: this.cachedBaseRows;
 		} catch {
 			// Keep last rows on transient read failure.
 		}
+	}
+
+	/** Load the next older chunk of history when scrolled to the top. */
+	private growHistory(): void {
+		if (!this.hasMoreHistory) return;
+		this.windowEntries += HISTORY_WINDOW;
+		this.cachedEntryKey = "";
+		this.refreshRows();
 	}
 
 	private async reloadModel(): Promise<void> {
@@ -335,7 +366,7 @@ class PlannerWorkspaceComponent implements Component {
 		const modelSig = this.model.available
 			? `${this.model.stage}/${this.model.step}/${this.model.stepStatus}/${this.model.tasksDone}/${this.model.tasksTotal}`
 			: "unavailable";
-		const uiSig = `${this.focus}|${this.input}|${this.cursor}|${this.ui.selectedIndex}|${this.chatScroll}|${this.expandAll}|${this.hideThinking}`;
+		const uiSig = `${this.focus}|${this.input}|${this.cursor}|${this.ui.selectedIndex}|${this.atBottom}:${this.topLine}|${this.expandAll}|${this.hideThinking}`;
 		// When the ticker overflows, advance it one cell per tick for a smooth
 		// marquee; otherwise it contributes nothing so the UI stays calm.
 		const marquee = this.tickerOverflow ? this.ui.tickerOffset : 0;
@@ -435,22 +466,21 @@ class PlannerWorkspaceComponent implements Component {
 	private handleChatFocus(data: string): void {
 		const page = Math.max(1, this.lastTranscriptHeight - 1);
 		if (matchesKey(data, "up")) {
-			this.scrollChat(1);
+			this.scrollBy(-1);
 		} else if (matchesKey(data, "down")) {
-			this.scrollChat(-1);
+			this.scrollBy(1);
 		} else if (matchesKey(data, "pageUp")) {
-			this.scrollChat(page);
+			this.scrollBy(-page);
 		} else if (matchesKey(data, "pageDown")) {
-			this.scrollChat(-page);
+			this.scrollBy(page);
 		} else if (matchesKey(data, "end") || data === "G") {
 			// Jump back to the live tail (newest output).
-			this.chatScroll = 0;
+			this.atBottom = true;
 			this.bump();
 		} else if (matchesKey(data, "home") || data === "g") {
-			this.chatScroll = Math.max(
-				0,
-				this.lastTranscriptTotal - this.lastTranscriptHeight,
-			);
+			this.atBottom = false;
+			this.topLine = 0;
+			if (this.hasMoreHistory) this.growHistory();
 			this.bump();
 		} else if (data === "x" || data === "X") {
 			this.expandAll = !this.expandAll;
@@ -478,12 +508,26 @@ class PlannerWorkspaceComponent implements Component {
 		}
 	}
 
-	private scrollChat(delta: number): void {
-		const maxScroll = Math.max(
+	/**
+	 * Scroll by `delta` lines (negative = toward older). Anchors to an absolute
+	 * top line so newly streamed content appended below never moves the view.
+	 * Reaching the bottom re-enables tail-following; reaching the top loads more
+	 * history.
+	 */
+	private scrollBy(delta: number): void {
+		const maxTop = Math.max(
 			0,
 			this.lastTranscriptTotal - this.lastTranscriptHeight,
 		);
-		this.chatScroll = Math.min(maxScroll, Math.max(0, this.chatScroll + delta));
+		const currentTop = this.atBottom ? maxTop : Math.min(this.topLine, maxTop);
+		const nextTop = currentTop + delta;
+		if (nextTop >= maxTop) {
+			this.atBottom = true;
+		} else {
+			this.atBottom = false;
+			this.topLine = Math.max(0, nextTop);
+			if (this.topLine === 0 && this.hasMoreHistory) this.growHistory();
+		}
 		this.bump();
 	}
 
@@ -492,7 +536,7 @@ class PlannerWorkspaceComponent implements Component {
 		if (!text) return;
 		this.input = "";
 		this.cursor = 0;
-		this.chatScroll = 0;
+		this.atBottom = true;
 		try {
 			this.sendUserMessage(text);
 		} catch {
@@ -565,14 +609,15 @@ class PlannerWorkspaceComponent implements Component {
 			{
 				width: inner,
 				height: transcriptHeight,
-				scrollFromBottom: this.chatScroll,
+				atBottom: this.atBottom,
+				topLine: this.topLine,
 				expanded: this.expandedKeys(),
-				focused: this.focus === "chat",
 			},
 			this.palette,
 		);
 		this.lastTranscriptTotal = transcript.totalLines;
 		this.lastTranscriptHeight = transcriptHeight;
+		if (!this.atBottom) this.topLine = transcript.topLine;
 
 		const body = [...top, ...transcript.lines, ...bottom];
 		const lines = frameWorkspace({
@@ -660,12 +705,12 @@ const EMPTY_SET: ReadonlySet<string> = new Set<string>();
  * and ANSI escapes, fold tabs/newlines to spaces, strip other control bytes.
  */
 function toInsertableText(data: string): string {
-	const bracket = new RegExp("\\u001B\\[20[01]~", "g");
-	const ansi = new RegExp("\\u001B\\[[0-9;?]*[ -/]*[@-~]", "g");
-	const control = new RegExp(
-		"[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]",
-		"g",
-	);
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control-byte stripping
+	const bracket = /\u001B\[20[01]~/g;
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control-byte stripping
+	const ansi = /\u001B\[[0-9;?]*[ -/]*[@-~]/g;
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control-byte stripping
+	const control = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 	return data
 		.replace(bracket, "")
 		.replace(ansi, "")

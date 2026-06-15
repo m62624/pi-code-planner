@@ -38,9 +38,9 @@ function baseOptions(over: Partial<TranscriptOptions> = {}): TranscriptOptions {
 	return {
 		width: 60,
 		height: 10,
-		scrollFromBottom: 0,
+		atBottom: true,
+		topLine: 0,
 		expanded: new Set(),
-		focused: false,
 		...over,
 	};
 }
@@ -187,20 +187,31 @@ describe("renderTranscript", () => {
 		expect(result.lines.join("\n")).toContain("No conversation yet");
 	});
 
-	it("scrolls up from the bottom", () => {
-		const many: ChatRow[] = Array.from({ length: 40 }, (_, i) => ({
-			role: "user" as const,
-			text: `message ${i}`,
-			collapsible: false,
-			key: `m${i}`,
-		}));
-		const bottom = renderTranscript(many, baseOptions(), palette);
-		const scrolled = renderTranscript(
-			many,
-			baseOptions({ scrollFromBottom: 5 }),
+	it("anchors to an absolute top line and stays put as content appends", () => {
+		const make = (n: number): ChatRow[] =>
+			Array.from({ length: n }, (_, i) => ({
+				role: "user" as const,
+				text: `message ${i}`,
+				collapsible: false,
+				key: `m${i}`,
+			}));
+
+		const bottom = renderTranscript(make(40), baseOptions(), palette);
+		expect(bottom.totalLines).toBe(40);
+		expect(bottom.topLine).toBe(30);
+
+		// Anchored at top line 5; appending more rows must NOT move the view.
+		const before = renderTranscript(
+			make(40),
+			baseOptions({ atBottom: false, topLine: 5 }),
 			palette,
 		);
-		expect(bottom.lines.join("\n")).not.toBe(scrolled.lines.join("\n"));
-		expect(bottom.totalLines).toBe(40);
+		const after = renderTranscript(
+			make(60),
+			baseOptions({ atBottom: false, topLine: 5 }),
+			palette,
+		);
+		expect(after.topLine).toBe(5);
+		expect(after.lines.join("\n")).toBe(before.lines.join("\n"));
 	});
 });

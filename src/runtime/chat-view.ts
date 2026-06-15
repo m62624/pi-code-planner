@@ -160,16 +160,22 @@ function projectAssistantBlocks(id: string, blocks: unknown[]): ChatRow[] {
 export interface TranscriptOptions {
 	width: number;
 	height: number;
-	/** Lines scrolled up from the bottom (0 = pinned to newest). */
-	scrollFromBottom: number;
+	/** Follow the newest output (pinned to the live tail). */
+	atBottom: boolean;
+	/**
+	 * Absolute index of the first visible line when not following the tail.
+	 * Anchoring from the top keeps the view fixed while new lines append below.
+	 */
+	topLine: number;
 	expanded: ReadonlySet<string>;
-	focused: boolean;
 }
 
 export interface TranscriptResult {
 	lines: string[];
 	/** Total renderable lines (for scroll clamping by the caller). */
 	totalLines: number;
+	/** Resolved (clamped) first visible line index. */
+	topLine: number;
 }
 
 export function renderTranscript(
@@ -192,15 +198,16 @@ export function renderTranscript(
 	}
 
 	const total = all.length;
-	const maxScroll = Math.max(0, total - height);
-	const scroll = Math.min(Math.max(0, options.scrollFromBottom), maxScroll);
-	const end = total - scroll;
-	const start = Math.max(0, end - height);
-	const window = all.slice(start, end);
+	const maxTop = Math.max(0, total - height);
+	const start = options.atBottom
+		? maxTop
+		: Math.min(Math.max(0, options.topLine), maxTop);
+	const window = all.slice(start, start + height);
 	while (window.length < height) window.push("");
 	return {
 		lines: window.map((line) => clipPad(line, width, palette)),
 		totalLines: total,
+		topLine: start,
 	};
 }
 

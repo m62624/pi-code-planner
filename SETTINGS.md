@@ -151,6 +151,8 @@ Inside the workspace, `Tab` cycles three focus panes:
 | chat | `↑`/`↓`, `PageUp`/`PageDown` scroll; `End` jumps back to the live tail, `Home` to the top; `x` toggles expand-all for collapsed tool calls |
 | tasks | `↑`/`↓` select a task and reveal the task list + stage timings; `←`/`→` nudge the ticker |
 
+While scrolled up, the transcript stays anchored — new streamed output appends below without moving your view. Press `End` to jump back to the live tail. History is projected as a sliding window over the session (a chunk of trailing entries); scrolling to the top loads the next older chunk, so very long sessions never project the whole conversation at once.
+
 Pasting text into the input works (bracketed paste is handled; newlines fold to spaces). Pasting **images** is not supported in the workspace window — Pi's image paste targets its built-in editor, which the workspace replaces; close the workspace (`Esc`) to use the plain editor for image input.
 
 The workspace also inherits two Pi bindings (work in any pane): `app.thinking.toggle` (default `Ctrl+T`) shows/hides thinking blocks, and `app.tools.expand` (default `Ctrl+O`) expands/collapses tool output. Rebind them in `~/.pi/agent/keybindings.json`.
