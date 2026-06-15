@@ -358,6 +358,7 @@ function buildTimerStatusLine(input: {
 			? pauseReason(input.state)
 			: `${input.state.stage} stage ${formatDuration(currentStageActiveMs(input.state, input.displayActiveMs))}`,
 		`${input.state.stage}/${input.state.step}`,
+		theme.fg("dim", "· /planner-dashboard"),
 	];
 	return parts.join(" ");
 }
@@ -394,6 +395,7 @@ function buildTimerWidgetLines(input: {
 	if (input.settings.showCheckpoints && checkpointTrail) {
 		lines.push(`| ${padRight(`route ${checkpointTrail}`, width - 4)} |`);
 	}
+	lines.push(`| ${padRight("/planner-dashboard for stats", width - 4)} |`);
 	lines.push(`+${"-".repeat(width - 2)}+`);
 	return lines;
 }

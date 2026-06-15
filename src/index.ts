@@ -54,6 +54,7 @@ import {
 	PLANNER_CONTRACT_TOOL_NAMES,
 	type PlannerContractToolName,
 } from "./runtime/contracts";
+import { registerPlannerDashboard } from "./runtime/dashboard";
 import {
 	DEBUG_INSTRUMENTATION_TYPES,
 	DEBUG_PROBE_METHODS,
@@ -1111,6 +1112,7 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 	registerPlannerTools(pi, compactRuntime);
 	registerPlannerIdleWatchdog(pi, idleRuntime);
 	registerPlannerRuntimeTimer(pi, timerRuntime);
+	registerPlannerDashboard(pi);
 	registerPlannerBuiltinToolGuard(pi);
 	registerPlannerCompactEvents(pi, compactRuntime);
 	registerPlannerSkillResources(pi);
