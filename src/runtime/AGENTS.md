@@ -25,7 +25,7 @@ Runtime domain for planner stages, model-facing status, tool wrappers, timers, r
 
 ### Do Not Touch Unless
 - Do not change lifecycle transitions without updating `state-machine.ts`, `state-transition.ts`, `workflow-tools.ts`, tests, and instructions.
-- Do not add a new planner tool without updating guard policy, tool visibility expectations, status/instructions, and tests.
+- Do not add or re-scope a planner tool without updating BOTH allowlists that gate it: the guard policy (`guard/tool-policy.ts` `STEP_ALLOWED_TOOLS`) AND the stage behavior (`stage-behavior.ts` `expectedTools`). Both gates must pass for a tool to be usable at a step; if the guard allows a tool the behavior gate omits, the model is blocked at runtime (a deadlock when no fallback exists). The invariant is enforced by `tool-gating-invariant.test.ts`. Also update tool visibility expectations, status/instructions, and tests.
 
 ### Domain Details
 - `status.ts` is the primary prompt surface for local models; it reads `PlanStateRecord` from the orchestrator and formats step rules, contract summaries, and guidance lines.
