@@ -25,6 +25,7 @@ import {
 	decidePlannerLifecycleNext,
 	type PlannerLifecycleDecision,
 } from "./lifecycle";
+import { buildNextStepHint } from "./next-step-hint";
 import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
@@ -90,7 +91,7 @@ export async function executePlannerWorkflowTool(
 			state: null,
 		};
 		return {
-			text: formatWorkflowToolResult(result, null),
+			text: formatWorkflowToolResult(result),
 			transition,
 			result,
 			lifecycle: null,
@@ -116,7 +117,7 @@ export async function executePlannerWorkflowTool(
 			state,
 		};
 		return {
-			text: formatWorkflowToolResult(result, null),
+			text: formatWorkflowToolResult(result),
 			transition,
 			result,
 			lifecycle: null,
@@ -140,7 +141,7 @@ export async function executePlannerWorkflowTool(
 			state,
 		};
 		return {
-			text: formatWorkflowToolResult(result, null),
+			text: formatWorkflowToolResult(result),
 			transition,
 			result,
 			lifecycle: null,
@@ -165,7 +166,7 @@ export async function executePlannerWorkflowTool(
 	}
 
 	return {
-		text: formatWorkflowToolResult(result, lifecycle),
+		text: formatWorkflowToolResult(result),
 		transition,
 		result,
 		lifecycle,
@@ -672,7 +673,6 @@ function isPlannerStepInStage(
 
 function formatWorkflowToolResult(
 	result: PlannerStateTransitionResult,
-	lifecycle: PlannerLifecycleDecision | null,
 ): string {
 	if (result.status === "blocked") {
 		return [
@@ -688,24 +688,14 @@ function formatWorkflowToolResult(
 			.join("\n");
 	}
 
-	const lines: string[] = [
-		`Planner transition applied: ${result.transition.type}`,
-		`Previous: ${result.previousState.stage}/${result.previousState.step} (${result.previousState.stepStatus})`,
-		`Current: ${result.state.stage}/${result.state.step} (${result.state.stepStatus})`,
-		...(result.state.nextStep ? [`Next step: ${result.state.nextStep}`] : []),
-	];
-
-	if (
-		result.transition.type === "start_step" &&
-		lifecycle &&
-		lifecycle.requiredTool
-	) {
-		lines.push(`Recommended finish tool: ${lifecycle.requiredTool}`);
-	}
-
-	lines.push("Call planner_status before choosing the next planner action.");
-
-	return lines.filter(Boolean).join("\n");
+	// The applied result reflects the step we just moved INTO, so build the
+	// guidance from the post-transition state. This replaces the old generic
+	// "Call planner_status" footer with a compact, actionable hint.
+	return [
+		`Planner transition applied: ${result.transition.type} (previous: ${result.previousState.stage}/${result.previousState.step}).`,
+		"",
+		buildNextStepHint(result.state),
+	].join("\n");
 }
 
 function asObject(value: unknown): Record<string, unknown> {

@@ -1,4 +1,4 @@
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { getPlannerStageStepBehavior } from "../runtime/stage-behavior";
 import type { PlanStoragePaths, ProjectStoragePaths } from "../storage/paths";
 import type { PlanStateRecord } from "../storage/schema";
@@ -15,8 +15,14 @@ export type PlannerBuiltinToolCall =
 
 export interface PlannerBuiltinGuardState extends GitWatcherState {
 	projectPaths: Pick<ProjectStoragePaths, "projectRoot"> | null;
-	planPaths?: Pick<PlanStoragePaths, "planDir" | "requestMd" | "goalMd"> | null;
-	planState: Pick<PlanStateRecord, "stage" | "step" | "worktreePath"> | null;
+	planPaths?: Pick<
+		PlanStoragePaths,
+		"planDir" | "requestMd" | "goalMd" | "questionsMd" | "tasksDir"
+	> | null;
+	planState: Pick<
+		PlanStateRecord,
+		"stage" | "step" | "worktreePath" | "activeTaskId"
+	> | null;
 }
 
 export interface PlannerBuiltinGuardInput {
@@ -48,13 +54,18 @@ export function checkPlannerBuiltinToolAllowed(
 		return blockProjectWrite(input.state, input.tool.toolName);
 	}
 
-	if (isProtectedPlannerArtifact(input.cwd, input.tool.path, input.state)) {
+	const protectedArtifact = matchProtectedPlannerArtifact(
+		input.cwd,
+		input.tool.path,
+		input.state,
+	);
+	if (protectedArtifact) {
 		return {
 			allow: false,
 			reason: [
-				`Built-in Pi ${input.tool.toolName} cannot modify planner-managed intake files directly.`,
-				"Use the exact planner wrapper reported by planner_status.",
-				`Call ${PLANNER_STATUS_TOOL_NAME} before continuing.`,
+				`Built-in Pi ${input.tool.toolName} cannot modify the planner-managed file ${protectedArtifact.label} directly.`,
+				`Use ${protectedArtifact.tool} instead — it fills the artifact from structured arguments and validates the required sections.`,
+				`Call ${PLANNER_STATUS_TOOL_NAME} if you need the current wrapper.`,
 			].join("\n"),
 		};
 	}
@@ -104,17 +115,47 @@ function allowsProjectWrite(
 	return projectAccess === "test_edits" || projectAccess === "production_edits";
 }
 
-function isProtectedPlannerArtifact(
+interface ProtectedArtifact {
+	label: string;
+	tool: string;
+}
+
+/**
+ * Planner artifacts that must only be written through a dedicated wrapper tool.
+ * request.md/goal.md/questions.md and the active task's tdd.md have structured
+ * wrappers; built-in edit/write would bypass their validation. Open-ended,
+ * append-heavy artifacts (plan.md, discovery.md, final_summary.md) intentionally
+ * stay editable so the model can append across the lifecycle.
+ */
+function matchProtectedPlannerArtifact(
 	cwd: string,
 	path: string,
 	state: PlannerBuiltinGuardState,
-): boolean {
-	if (!state.planPaths) return false;
+): ProtectedArtifact | null {
+	if (!state.planPaths) return null;
 	const target = isAbsolute(path) ? resolve(path) : resolve(cwd, path);
-	return (
-		target === resolve(state.planPaths.requestMd) ||
-		target === resolve(state.planPaths.goalMd)
-	);
+	if (target === resolve(state.planPaths.requestMd)) {
+		return { label: "request.md", tool: "the planner intake flow" };
+	}
+	if (target === resolve(state.planPaths.goalMd)) {
+		return { label: "goal.md", tool: "planner_goal_submit" };
+	}
+	if (
+		state.planPaths.questionsMd &&
+		target === resolve(state.planPaths.questionsMd)
+	) {
+		return { label: "questions.md", tool: "planner_questions_submit" };
+	}
+	const activeTaskId = state.planState?.activeTaskId;
+	if (activeTaskId && state.planPaths.tasksDir) {
+		const tddPath = resolve(
+			join(state.planPaths.tasksDir, activeTaskId, "tdd.md"),
+		);
+		if (target === tddPath) {
+			return { label: "tdd.md", tool: "planner_tdd_submit" };
+		}
+	}
+	return null;
 }
 
 function isProjectPath(

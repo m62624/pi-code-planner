@@ -64,6 +64,7 @@ describe("simplified local-model workflow", () => {
 		).toEqual([
 			"planner_status",
 			"planner_git_inspect",
+			"planner_discovery_submit",
 			"planner_contract_scan",
 			"planner_contract_route",
 			"planner_contract_read",

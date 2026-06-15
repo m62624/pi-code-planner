@@ -8,44 +8,34 @@ Present the verified plan result, wait for an explicit user decision, then eithe
 
 1. `present_result`
    - Read `final_summary.md` and present scope, checks, risks, plan branch, worktree path, and output options.
-   - If a verified reusable lesson is still missing from the planner skill library, call `planner_skill_create` before asking for acceptance. Do not create skills for ordinary summaries.
-   - After presenting the result, call `planner_finish_step` immediately to enter `await_user_acceptance`.
+   - If a verified reusable lesson is still missing from the skill library, call `planner_skill_create` before asking for acceptance. Do not create skills for ordinary summaries.
+   - After presenting, call `planner_finish_step` immediately to enter `await_user_acceptance`.
 2. `await_user_acceptance`
-   - Ask the user to accept the result or request changes.
-   - Never decide on behalf of the user.
-   - If the user accepts, ask the user to run `/planner-finish`.
-   - If the user writes what is wrong or requests more work instead of running `/planner-finish`, treat that as a change request.
-   - For a change request, call `planner_finish_step` with target `done/handle_change_request`.
+   - Ask the user to accept the result or request changes. Never decide on their behalf.
+   - If the user accepts, ask them to run `/planner-finish`.
+   - If the user writes what is wrong or requests more work instead of running `/planner-finish`, treat that as a change request: call `planner_finish_step` with target `done/handle_change_request`.
    - `/planner-finish` atomically performs the remaining export, cleanup, and Pi session handoff. Do not try to reproduce that cleanup through model tools.
 3. `handle_change_request`
-	- Record user feedback in durable artifacts.
-	- Append a `## Change Request` section to `decisions.md` with the user's exact requested corrections.
-	- Append a short `## Change Request Replan` note near the start of `plan.md`: the previous implementation is complete, but the user requested follow-up changes. Include `### Completed Work` and `### Remaining Work` subsections. Do not rewrite the old plan wholesale or delete the previous plan history.
-	- Append a `## Post-Implementation Snapshot` section to `discovery.md`: summarize what was implemented, current relevant files/branches, known gaps, and why the user requested another pass. Include `### Completed Work` and `### Remaining Work` subsections.
-	- Treat existing task artifacts as completed history. The follow-up planning pass may create new revision tasks for the remaining work, but must not reopen completed task IDs.
-	- Return to `planning/read_context` in the same plan worktree and branch.
-4. `prepare_output_branch`
-   - Internal `/planner-finish` phase: prepare the output branch in the original repository.
-5. `merge_or_export_result`
-   - Internal `/planner-finish` phase: export the plan branch result.
-6. `cleanup_worktree`
-   - Internal `/planner-finish` phase: remove the temporary worktree and safe-to-delete managed child branches.
-7. `mark_done`
-   - Internal `/planner-finish` phase: clear active plan state and mark the result complete.
-8. `cleanup_plan_files`
-   - Internal `/planner-finish` phase: remove completed plan artifacts only after `mark_done`.
+   - Record user feedback in durable artifacts.
+   - Append a `## Change Request` section to `decisions.md` with the user's exact requested corrections.
+   - Update `plan.md` (via `planner_plan_submit` or edit): add a short `## Change Request Replan` note near the start — the previous implementation is complete, but the user requested follow-up changes — with `### Completed Work` and `### Remaining Work` subsections. Do not rewrite the old plan wholesale or delete prior history.
+   - Update `discovery.md` (via `planner_discovery_submit` or edit): add a `## Post-Implementation Snapshot` summarizing what was implemented, current relevant files/branches, known gaps, and why another pass was requested, with `### Completed Work` and `### Remaining Work` subsections.
+   - Treat existing task artifacts as completed history. The follow-up planning pass may create new revision tasks for remaining work, but must not reopen completed task IDs.
+   - Return to `planning/read_context` in the same plan worktree and branch.
+4. `prepare_output_branch` — internal `/planner-finish` phase: prepare the output branch in the original repository.
+5. `merge_or_export_result` — internal `/planner-finish` phase: export the plan branch result.
+6. `cleanup_worktree` — internal `/planner-finish` phase: remove the temporary worktree and safe-to-delete managed child branches.
+7. `mark_done` — internal `/planner-finish` phase: clear active plan state and mark the result complete.
+8. `cleanup_plan_files` — internal `/planner-finish` phase: remove completed plan artifacts only after `mark_done`.
 
 ## Acceptance Rules
 
-- `/planner-finish` is an explicit user acceptance command. It may safely finalize directly after `present_result` or during `await_user_acceptance` when all runtime gates are clean.
+- `/planner-finish` is an explicit user acceptance command. It may finalize directly after `present_result` or during `await_user_acceptance` when all runtime gates are clean.
 - No production edits are allowed in done.
-- Change requests preserve the worktree and return to planning.
-- Cleanup requires explicit acceptance.
-- During normal work the protected plan branch is never deleted by managed child cleanup.
-- After successful `/planner-finish`, the temporary plan branch is removed because its result is already exported.
+- Change requests preserve the worktree and return to planning. Cleanup requires explicit acceptance.
+- During normal work the protected plan branch is never deleted by managed child cleanup. After successful `/planner-finish`, the temporary plan branch is removed because its result is already exported.
 - The user keeps exactly one output branch in the original repository and decides whether to merge, rebase, or delete it.
-- If the original Pi JSONL session exists, `/planner-finish` returns to it and removes the completed worktree chat.
-- If the original Pi JSONL session is missing, `/planner-finish` warns the user, creates a replacement project-root session, and asks whether to remove the completed worktree chat.
+- If the original Pi JSONL session exists, `/planner-finish` returns to it and removes the completed worktree chat. If it is missing, `/planner-finish` warns the user, creates a replacement project-root session, and asks whether to remove the completed worktree chat.
 - Raw git is forbidden.
 
 ## Evidence Discipline
@@ -59,11 +49,11 @@ Treat done as a user-decision gate, not proof that the implementation is correct
 
 ## Change Request Reload
 
-When returning to `planning/read_context`, reread full `plan.md`, `decisions.md`, user feedback, and `discovery.md`. Treat the previous implementation as current project context, not as a blank project. Preserve completed work, revise the plan only where the change request requires it, then continue toward execution. Existing completed task artifacts remain as audit history. Rebuild tasks only as needed for the requested change. Do not repeat tasks listed under `Completed Work`; create new revision task IDs only for work listed under `Remaining Work`.
+When returning to `planning/read_context`, reread full `plan.md`, `decisions.md`, user feedback, and `discovery.md`. Treat the previous implementation as current project context, not a blank project. Preserve completed work, revise the plan only where the change request requires it, then continue toward execution. Existing completed task artifacts remain audit history. Do not repeat tasks under `Completed Work`; create new revision task IDs only for work under `Remaining Work`.
 
 ## Planner Skill Memory
 
-`planner_skill_create` is allowed in `present_result` only as a final catch-up for a reusable lesson that was already verified during execution or finalize. Skills are loaded in future planner sessions through Pi `resources_discover`; they do not replace the current done-state acceptance flow.
+`planner_skill_create` is allowed in `present_result` only as a final catch-up for a reusable lesson already verified during execution or finalize. Skills are loaded in future planner sessions via Pi `resources_discover`; they do not replace the done-state acceptance flow.
 
 ## auto-compact
 
@@ -71,4 +61,4 @@ Call `planner_status` immediately. Reread `final_summary.md` and the exact persi
 
 ## If You Do Not Know What To Do Next
 
-If you don't know what to do next, call `planner_status`.
+The `planner_finish_step` result names your next step, its goal, and the worktree to work in — follow it. Call `planner_status` only when you need the full step rule or stage instruction, or when you are unsure.

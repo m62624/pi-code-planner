@@ -7,20 +7,16 @@ Turn the user's raw request into an explicit approved goal before reading projec
 ## Strict Step Order
 
 1. `draft_goal`
-   - Read `request.md`.
-   - Draft the `goal.md` content in your own words.
-   - Include the requested outcome, current assumptions, non-goals, and constraints.
+   - Read `request.md` and draft the `goal.md` content in your own words: requested outcome, current assumptions, non-goals, and constraints.
    - Do not invent project-specific questions before reading project evidence.
-   - Call `planner_goal_submit` with the full goal markdown, proposed title, and short planner-list description. The wrapper writes `goal.md`.
-   - Do not use built-in write/edit tools for `goal.md`.
-   - Use `metadata.titleLanguage` from `planner_status` for the title unless the user explicitly requests another language.
-   - The title is user-facing and may contain Unicode. It is not the stable branch-safe `planId`.
+   - Call `planner_goal_submit` with the full goal markdown, proposed title, and short planner-list description. The wrapper writes `goal.md`; built-in write/edit cannot.
+   - Use `metadata.titleLanguage` from `planner_status` for the title unless the user explicitly requests another language. The title is user-facing and may contain Unicode; it is not the stable branch-safe `planId`.
    - Do not inspect project source.
 2. `await_goal_approval`
-   - Show the user the full generated `goal.md` content. The `planner_goal_submit` result includes it for review.
-   - Explain that `plan.md` is intentionally written later, during `planning/draft_plan`, after discovery and evidence-based questions are complete.
+   - Show the user the full generated `goal.md` content (the `planner_goal_submit` result includes it for review).
+   - Explain that `plan.md` is written later, during `planning/draft_plan`, after discovery and evidence-based questions.
    - Ask whether the goal and proposed title are approved or need revision.
-   - If revision is requested, call `planner_goal_submit` with the revised goal markdown and title, then ask again.
+   - If revision is requested, call `planner_goal_submit` again with the revised goal markdown and title, then ask again.
    - Enter discovery only after explicit approval.
 
 ## Restrictions
@@ -56,21 +52,17 @@ Before finishing an intake step, doubt the normalized goal:
 
 If doubt remains, revise `goal.md` or ask one concrete intake question. Do not enter discovery on an inferred goal.
 
+## Diagnostics
+
+- **Underspecified outcomes:** if the request lacks concrete metrics ("make it faster", "fix bugs"), do not guess. Draft `goal.md` with explicit, testable criteria and confirm with the user.
+- **Assumptions vs facts:** list technical assumptions under a dedicated header in `goal.md`; treat any unconfirmed assumption as a risk.
+- **Scope creep:** define Non-Goals clearly so the model does not wander into unrelated code.
+- **Rejected goal:** do not argue. Ask for specific feedback, rewrite, re-submit. Never move to discovery without a signed-off `goal.md`.
+
 ## auto-compact
 
 Call `planner_status` immediately. Read `request.md` and `goal.md`, then resume the exact intake step. Do not begin discovery without explicit approval.
 
-## Intake & Goal Diagnostics
-
-### 1. Goal Ambiguity & Verification
-- **Identify Underspecified Outcomes**: If the user's initial request lacks concrete metrics (e.g., "make it faster" or "fix bugs"), do not guess. Draft `goal.md` with explicit, testable criteria and ask the user for confirmation.
-- **Assumptions vs. Facts**: List all technical assumptions explicitly under a dedicated header in `goal.md`. Treat any unconfirmed assumption as a risk.
-- **Scope Creep Prevention**: Clearly define "Non-Goals" to prevent the model from wandering into unrelated parts of the codebase.
-
-### 2. Failure Diagnostics
-- **If the user rejects the goal**: Do not argue. Ask for specific feedback, rewrite the goal, and re-submit.
-- **If the user is unresponsive**: Keep the goal simple and await explicit approval. Never move to discovery without a signed-off `goal.md`.
-
 ## If You Do Not Know What To Do Next
 
-If you don't know what to do next, call `planner_status`.
+The `planner_finish_step` result names your next step, its goal, and the worktree to work in — follow it. Call `planner_status` only when you need the full step rule or stage instruction, or when you are unsure.

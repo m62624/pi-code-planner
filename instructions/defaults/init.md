@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Initialize planner control before any project discovery or implementation work begins.
+Initialize planner control before any project discovery or implementation begins.
 
-The normal entry point is `planner_create_plan` or `/planner-create`. The extension performs init as an internal atomic bootstrap and should leave the persisted position at `intake/draft_goal`. If `planner_status` exposes an init step, follow the exact step rule and do not skip ahead.
+The normal entry point is `planner_create_plan` or `/planner-create`. The extension runs init as an internal atomic bootstrap and should leave the persisted position at `intake/draft_goal`. If `planner_status` exposes an init step, follow the exact step rule and do not skip ahead.
 
 ## Required Discipline
 
@@ -14,8 +14,7 @@ The normal entry point is `planner_create_plan` or `/planner-create`. The extens
 4. Prepare project storage, settings, instruction files, and plan artifacts.
 5. Resolve the worktree location from effective settings. Do not invent a path.
 6. Create exactly one dedicated worktree for the whole plan.
-   - For a project-local worktree, the extension writes a repository-local exclude rule for the original checkout.
-   - If the plan branch `.gitignore` rule is created or appended, the extension commits it immediately on the plan branch before normal planner work begins.
+   - For a project-local worktree, the extension writes a repository-local exclude rule for the original checkout and commits it on the plan branch before normal work begins.
 7. Enter `intake/draft_goal`.
 
 ## Restrictions
@@ -40,22 +39,16 @@ Treat init as untrusted bootstrap until persisted state proves otherwise.
 - If bootstrap facts conflict, stop and enter recovery instead of guessing the next stage.
 - Do not continue from optimistic assumptions after auto-compact.
 
+## Diagnostics
+
+- **Worktree conflicts:** if worktree creation fails, check for an existing directory of the same name, a dirty repository, or a locked index (`.git/index.lock`).
+- **Workspace resolution:** the cwd must be inside the workspace root. Never initialize a plan in `/tmp` or a system directory.
+- **State inconsistency:** if plan files exist but no active plan is detected, use recovery tools — do not manually recreate files. Consider `planner_git_init` only when git is uninitialized in the project root.
+
 ## auto-compact
 
 An auto-compact during init does not authorize progress. Call `planner_status`, reload the exact persisted init step, and continue only with the wrapper reported by status. Do not inspect source until intake is approved and state explicitly says `discovery/scan_project_structure`.
 
-## Initialization & Bootstrapping Diagnostics
-
-### 1. Environment & Setup Failures
-- **Worktree Conflicts**: If the worktree creation fails, check if a directory with the same name already exists. Ensure that your current git repository is clean and has no locked index files (`.git/index.lock`).
-- **Workspace Resolution**: Verify that the Cwd is within the workspace root. Never initialize a plan in `/tmp` or system directories.
-- **State Inconsistency**: If the plan files exist but the active plan status is not detected, use recovery tools immediately instead of manually recreating files.
-
-### 2. Troubleshooting Steps
-1. Call `planner_status` to see if the project storage paths are correctly resolved.
-2. Check for locked files or missing file permissions.
-3. If git is uninitialized in the project root, verify if you should call `planner_git_init`.
-
 ## If You Do Not Know What To Do Next
 
-If you don't know what to do next, call `planner_status`.
+The `planner_finish_step` result names your next step, its goal, and the worktree to work in — follow it. Call `planner_status` only when you need the full step rule or stage instruction, or when you are unsure.

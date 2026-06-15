@@ -7,57 +7,44 @@ Verify the complete plan branch as one integrated result, write a durable user-f
 ## Strict Step Order
 
 1. `verify_plan_branch`
-	- Inspect planner git state and confirm that all required tasks were merged.
-	- Run project-level checks defined by project instructions and task evidence from the worktree path reported by `planner_status`.
-	- Record failures, residual risks, and any checks that cannot run locally.
+   - Inspect planner git state and confirm all required tasks were merged.
+   - Run project-level checks (from project instructions and task evidence) from the worktree path reported by `planner_status`.
+   - Record failures, residual risks, and any checks that cannot run locally.
 2. `compact_before_doubt`
-	- Request planner-controlled compact after integrated checks and before doubt review.
-	- This deliberately clears live confidence from the previous implementation loop.
-	- After compaction, call `planner_complete_compact`, then `planner_status`, then continue from persisted artifacts only.
+   - Request planner-controlled compact after integrated checks and before doubt review. This deliberately clears live confidence from the previous loop.
+   - After compaction, call `planner_complete_compact`, then `planner_status`, then continue from persisted artifacts only.
 3. `doubt_review`
-	- Before asking for user acceptance, deliberately doubt the completed result.
-	- Reread `goal.md`, `plan.md`, task artifacts, `verify.md`, and the final worktree diff.
-	- Reread `discovery.md` `## Verification Protocol`. Every listed command/check is mandatory evidence for `planner_doubt_review`.
-	- Treat chat memory from before `compact_before_doubt` as untrusted. Reconstruct the result from artifacts, git state, and focused file reads.
-	- Start with a `Possible Errors` list written in `metadata.doubtReviewLanguage`. These are suspicions, not bugs yet.
-	- Assign every possible error to one risk category: `requirement_mismatch`, `missing_test`, `boundary_case`, `integration_break`, `state_machine_error`, `persistence_error`, `recovery_error`, `wrong_file_scope`, `user_flow_regression`, or `cleanup_or_debug_leftover`.
-	- Fill `verificationEvidence` with every command/check from `discovery.md` `## Verification Protocol`. Missing evidence means the result is not verified.
-	- If any required command/check failed, was not run, or is unknown, create a `proven_bug` or `needs_probe` finding that names that command. Do not continue to `write_final_summary`.
-	- For each possible error, prove it, disprove it, or mark it `needs_probe`. Use `planner_doubt_review`; do not hand-write `verify.md`.
-	- A suspected issue may be called `proven_bug` only after a failing test/command, exact code-path proof, or exact spec contradiction.
-	- `needs_probe` findings cannot finish the step. Run the probe or downgrade with proof.
-	- If `proven_bug` findings exist, write them to `decisions.md`, then return to `planning/read_context` for revision tasks. Do not patch ad hoc in finalize.
-	- After returning to `planning/read_context`, continue through `draft_plan`, `split_tasks`, `write_task_files`, execution, and verification again. Do not skip planning because the fix looks small.
-	- If a finding mentions placeholder, stub, TODO-only, hardcoded behavior, superficial implementation, missing tests, or unresolved work, it cannot be closed as `not_a_bug` or `disproven`. It must be `proven_bug` or `needs_probe`.
-	- If a proven, disproven, or probed finding teaches a reusable workflow lesson, call `planner_skill_create` with `sourceKind=doubt_review` before leaving this step.
-	- If no proven bug or probe remains, continue to `write_final_summary`.
+   - Before asking for acceptance, deliberately doubt the completed result. Reread `goal.md`, `plan.md`, task artifacts, `verify.md`, and the final worktree diff.
+   - Reread `discovery.md` `## Verification Protocol`. Every listed command/check is mandatory evidence for `planner_doubt_review`.
+   - Treat chat memory from before `compact_before_doubt` as untrusted. Reconstruct the result from artifacts, git state, and focused file reads.
+   - Start with a `Possible Errors` list in `metadata.doubtReviewLanguage`. These are suspicions, not bugs yet. Assign every possible error to one risk category: `requirement_mismatch`, `missing_test`, `boundary_case`, `integration_break`, `state_machine_error`, `persistence_error`, `recovery_error`, `wrong_file_scope`, `user_flow_regression`, or `cleanup_or_debug_leftover`.
+   - Fill `verificationEvidence` with every command/check from `## Verification Protocol`. Missing evidence means the result is not verified. If any required command failed, was not run, or is unknown, create a `proven_bug` or `needs_probe` finding naming that command, and do not continue to `write_final_summary`.
+   - For each possible error, prove it, disprove it, or mark it `needs_probe`. Use `planner_doubt_review`; do not hand-write `verify.md`. A suspected issue is `proven_bug` only after a failing test/command, exact code-path proof, or exact spec contradiction. `needs_probe` findings cannot finish the step — run the probe or downgrade with proof.
+   - If `proven_bug` findings exist, write them to `decisions.md`, then return to `planning/read_context` for revision tasks. Do not patch ad hoc in finalize. After returning, continue through `draft_plan`, `split_tasks`, `write_task_files`, execution, and verification again. Do not skip planning because the fix looks small.
+   - A finding mentioning placeholder, stub, TODO-only, hardcoded behavior, superficial implementation, missing tests, or unresolved work cannot be closed as `not_a_bug`/`disproven`; it must be `proven_bug` or `needs_probe`.
+   - If a proven, disproven, or probed finding teaches a reusable workflow lesson, call `planner_skill_create` with `sourceKind=doubt_review` before leaving this step.
+   - If no proven bug or probe remains, continue to `write_final_summary`.
 4. `write_final_summary`
-	- Write `final_summary.md`.
-	- Use `metadata.humanLanguage` from `planner_status` unless the user explicitly requested another language.
-	- Include completed scope, changed files, checks, risks, output branch expectations, and unresolved limitations.
-	- If the whole plan produced a reusable verified lesson not already captured, call `planner_skill_create` with `sourceKind=final_summary`.
-5. `compact_finalize`
-	- Request planner-controlled compact preserving summary, verification, branch state, and risks.
-6. `enter_done`
-	- Advance to `done/present_result`.
+   - Write `final_summary.md` through `planner_summary_submit`. Use `metadata.humanLanguage` unless the user explicitly requested another language.
+   - Include completed scope, changed files, checks, risks, output-branch expectations, and unresolved limitations.
+   - If the whole plan produced a reusable verified lesson not already captured, call `planner_skill_create` with `sourceKind=final_summary`.
+5. `compact_finalize` — request planner-controlled compact preserving summary, verification, branch state, and risks.
+6. `enter_done` — advance to `done/present_result`.
 
 ## Restrictions
 
 - Do not introduce new production behavior during finalize.
-- Do not run tests, builds, linters, formatters, or project-specific checks from the original checkout. Use the planner worktree as shell cwd.
-- Do not cleanup the worktree or plan files.
-- Do not export the plan result before explicit user acceptance.
+- Do not run tests, builds, linters, formatters, or project checks from the original checkout. Use the planner worktree as shell cwd.
+- Do not cleanup the worktree or plan files, and do not export the plan result before explicit user acceptance.
 - Do not use raw git.
 - If checks reveal missing implementation, record the issue and return through the controlled planning flow instead of patching ad hoc.
-- During `doubt_review`, assume there may still be bugs even if tests pass. Passing checks are evidence, not acceptance.
-- Do not call a finding a bug from suspicion alone. Suspicions without proof are `needs_probe`, not revision tasks.
-- Do not normalize away placeholders or shallow implementations. If a placeholder/surface-level implementation remains, return to planning with a proven finding or run a probe.
+- During `doubt_review`, assume bugs may remain even if tests pass. Passing checks are evidence, not acceptance. Do not call a finding a bug from suspicion alone (that is `needs_probe`), and do not normalize away placeholders or shallow implementations.
 
 ## Evidence Discipline
 
 Treat finalize as an adversarial audit of the whole result.
 
-- Do not trust task-level green checks until the integrated branch is checked against `discovery.md` `## Verification Protocol`.
+- Do not trust task-level green checks until the integrated branch is checked against `## Verification Protocol`.
 - Do not summarize "all tests passed" unless each required command/check is listed in `verificationEvidence`.
 - If the audit finds missing behavior, placeholder logic, stale contracts, or failed/unknown checks, return to planning through the state machine.
 - Do not patch from finalize because the fix looks small. Controlled revision work must get plan/tasks/TDD again.
@@ -75,12 +62,12 @@ Tests are preferred for runtime behavior. Code-path proof is allowed only when t
 
 ## Verification Evidence Rules
 
-`planner_doubt_review` must include `verificationEvidence` for every command/check in `discovery.md` `## Verification Protocol`.
+`planner_doubt_review` must include `verificationEvidence` for every command/check in `## Verification Protocol`:
 
-- `passed`: allowed only when the command/check was actually run or the exact non-shell check was completed with concrete evidence.
-- `failed`: must be paired with a `proven_bug` or `needs_probe` finding naming that command/check.
+- `passed`: only when the command was actually run, or the exact non-shell check was completed with concrete evidence.
+- `failed`: must be paired with a `proven_bug` or `needs_probe` finding naming that command.
 - `not_run`: must be paired with a `needs_probe` finding unless the user explicitly accepts the missing check later.
-- `unknown`: must be paired with a `needs_probe` finding and usually means discovery did not capture enough verification detail.
+- `unknown`: must be paired with a `needs_probe` finding; usually means discovery did not capture enough verification detail.
 
 Do not summarize checks as "all tests passed" unless the protocol commands are listed individually with evidence.
 
@@ -88,59 +75,38 @@ Do not summarize checks as "all tests passed" unless the protocol commands are l
 
 This step is a verification stage, not a writing exercise. Treat it like TDD for suspected problems:
 
-1. Reconstruct the promise.
-   - Read the approved goal, the current plan, completed task files, final summary if present, and the final diff.
-   - Write down what the result must do, what it explicitly must not do, and which project checks already passed.
-   - Do not trust memory from earlier chat turns. Durable artifacts and the current worktree are the source of truth.
-2. Generate possible errors before deciding.
-	- List concrete possible errors in `metadata.doubtReviewLanguage` under `Possible Errors`.
-	- A possible error must point to a requirement, a code path, a changed file, a missing test, a migration risk, or an integration boundary.
-	- Choose the narrowest risk category before deciding whether the issue is real.
-	- Do not include vague anxiety such as "maybe something is wrong" or style preferences without product impact.
-3. Prove or disprove each possible error.
-   - For behavior, prefer a focused failing test or a focused command that reproduces the issue.
-   - For static correctness, trace the exact code path and name the files/symbols that force the conclusion.
-   - For spec mismatch, quote the exact approved requirement and the exact implemented behavior that contradicts it.
-   - If the evidence is not enough, mark `needs_probe` and run one targeted probe before finishing. Do not convert uncertainty into a bug.
-4. Decide the route.
-   - If any finding is `proven_bug`, record it in `decisions.md` and finish this step with target `planning/read_context`.
-   - Planning must then create revision tasks. Do not patch production files inside finalize.
-   - If all findings are `disproven` or `not_a_bug`, finish this step with target `finalize/write_final_summary`.
-5. Keep the artifact strict.
-   - Use only `planner_doubt_review` to write the final doubt artifact.
-   - Every finding must include `claim`, `specReference`, `codePath`, `verification`, evidence, and `nextAction`.
-   - `needs_probe` is not a terminal state. The runtime will block leaving this step until every probe is resolved.
+1. Reconstruct the promise — read the approved goal, current plan, completed task files, final summary if present, and the final diff. Write what the result must do, must not do, and which checks already passed. Trust artifacts and the current worktree, not chat memory.
+2. Generate possible errors before deciding — list concrete possible errors under `Possible Errors`, each pointing to a requirement, code path, changed file, missing test, migration risk, or integration boundary. Choose the narrowest category. Exclude vague anxiety and style preferences without product impact.
+3. Prove or disprove each — prefer a focused failing test/command for behavior; trace the exact code path for static correctness; quote the exact requirement and contradicting behavior for spec mismatch. If evidence is insufficient, mark `needs_probe` and run one targeted probe before finishing.
+4. Decide the route — any `proven_bug` → record in `decisions.md` and finish with target `planning/read_context` (planning then creates revision tasks; do not patch in finalize). If all findings are `disproven`/`not_a_bug`, finish with target `finalize/write_final_summary`.
+5. Keep the artifact strict — use only `planner_doubt_review`. Every finding includes `claim`, `specReference`, `codePath`, `verification`, evidence, and `nextAction`. The runtime blocks leaving this step until every `needs_probe` is resolved.
 
-Do not reward yourself for finding many bugs. Reward exactness. False positives waste revision cycles; false negatives ship broken work. The correct outcome may be "no proven bugs remain" if every suspicion was checked and dismissed with evidence.
-
-## Planner Skill Memory
-
-Use `planner_skill_create` only for verified lessons that should improve future planner sessions. A skill is not a final summary. It must describe a reusable trigger and workflow, for example a Pi extension stale-ctx pattern, a recovery proof method, or a specific class of state-machine mistake.
-
-In doubt review, skill creation is expected when the audit exposed a reusable bug-finding method, a repeated false assumption, a missing-test pattern, a stale-context/compact hazard, or a planner harness mistake. Do not create skills for ordinary project facts or unverified suspicions.
-
-The skill body should be written in `metadata.skillLanguage`. The wrapper writes YAML frontmatter and stores the skill under the planner extension library. The new skill is loaded through Pi `resources_discover` on future planner session start, resume, or reload.
+Reward exactness, not bug count. False positives waste revision cycles; false negatives ship broken work. "No proven bugs remain" is a correct outcome when every suspicion was checked and dismissed with evidence.
 
 ## Overnight Loop — Autonomous Bug Return
 
-If `doubt_review` produces any `proven_bug` finding, do **not** wait for the user.
+If `doubt_review` produces any `proven_bug` finding, do **not** wait for the user:
 
 1. Write the bugs to `decisions.md`.
-2. Call `planner_doubt_review` to close the step with `nextStep: planning/read_context`.
+2. Call `planner_doubt_review` to close the step with target `planning/read_context`.
 3. Immediately advance: planning → execution → finalize again.
 4. Notify the user only after the next full finalize cycle completes or when you hit a blocker that requires their input.
 
-This loop is your responsibility. An overnight run that pauses to ask "should I go back to planning?" has failed the contract. The state machine already permits the transition; your job is to take it without hesitation.
+The only exceptions are a finding that requires user clarification on genuinely ambiguous requirements, or a `needs_probe` that cannot run locally (e.g., needs production credentials). In those cases, surface the blocker clearly and wait. For everything else: loop. An overnight run that pauses to ask "should I go back to planning?" has failed the contract — the state machine already permits the transition.
 
-The only exceptions are:
-- A finding that requires user clarification on requirements (e.g., spec is genuinely ambiguous — not just code uncertainty).
-- A `needs_probe` finding that cannot be run locally (e.g., needs production credentials the plan does not have).
+## Planner Skill Memory
 
-In those cases, surface the blocker clearly and wait. For everything else: loop.
+Use `planner_skill_create` only for verified lessons that should improve future planner sessions — a reusable trigger and workflow such as a stale-context pattern, a recovery proof method, or a class of state-machine mistake. In doubt review, skill creation is expected when the audit exposed a reusable bug-finding method, a repeated false assumption, a missing-test pattern, or a compact hazard. Do not create skills for ordinary project facts or unverified suspicions. Write the body in `metadata.skillLanguage`; the wrapper writes frontmatter and stores the skill, loaded on future planner sessions via Pi `resources_discover`.
 
 ## Exit Condition
 
 Finalize is complete only when the integrated plan branch is checked, `final_summary.md` exists, final compact finishes, and state enters `done/present_result`.
+
+## Diagnostics
+
+- **Integration regressions:** if final tests fail on the plan branch, check for a merge-conflict regression; rollback the merge, fix in the task branch, and re-merge.
+- **Clean diff:** inspect for temporary debug lines, print statements, or scratch files before finalizing. Run lint/format first.
+- **Branch sync:** verify the plan branch is up to date with the base branch.
 
 ## manual-compact
 
@@ -148,19 +114,8 @@ Preserve `final_summary.md`, project-level verification results, changed-file su
 
 ## auto-compact
 
-Call `planner_status` immediately. Restore the exact finalize step. If the step is `compact_before_doubt`, complete the compact before audit work. If the step is `doubt_review`, reread `goal.md`, `plan.md`, `discovery.md`, task artifacts, `verify.md`, AGENTS.md contracts, and focused source files before deciding. Do not export or cleanup until explicit user acceptance is recorded.
-
-## Finalization & Verification Diagnostics
-
-### 1. Pre-Merge Verification Failures
-- **Integration Test Regressions**: If final tests fail on the plan branch, identify if the issue is a merge conflict regression.
-- **Clean Diff Verification**: Run code inspection to ensure no temporary debug lines, print statements, or scratch files are committed.
-- **Branch Synchronization**: Verify that the plan branch is fully up-to-date with the main base branch.
-
-### 2. Resolution Flow
-1. Run lint and format checks before finalizing.
-2. If integration tests fail, rollback the merge, fix the bug in the task branch, and try merging again.
+Call `planner_status` immediately. Restore the exact finalize step. If it is `compact_before_doubt`, complete the compact before audit work. If it is `doubt_review`, reread `goal.md`, `plan.md`, `discovery.md`, task artifacts, `verify.md`, AGENTS.md contracts, and focused source files before deciding. Do not export or cleanup until explicit user acceptance is recorded.
 
 ## If You Do Not Know What To Do Next
 
-If you don't know what to do next, call `planner_status`.
+The `planner_finish_step` result names your next step, its goal, and the worktree to work in — follow it. Call `planner_status` only when you need the full step rule or stage instruction, or when you are unsure.
