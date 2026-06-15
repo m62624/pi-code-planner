@@ -28,6 +28,7 @@ import type {
 	PlanStateRecord,
 } from "../storage/schema";
 import { updatePlanState } from "../storage/state-store";
+import { ARTIFACT_CANONICAL_SCHEMA, formatArtifactEcho } from "./artifact-echo";
 import { appendPlannerSection } from "./artifact-utils";
 import {
 	checkPlannerOrchestratorToolAllowed,
@@ -722,6 +723,12 @@ async function contractUpsert(input: {
 			existing === null
 				? "Created new AGENTS.md contract file."
 				: "Updated existing AGENTS.md managed block and preserved non-planner content.",
+			"",
+			formatArtifactEcho({
+				canonicalSchema: ARTIFACT_CANONICAL_SCHEMA.planner_contract_upsert,
+				writtenMarkdown: next,
+			}),
+			"",
 			"Commit this change through planner_git_commit when the current step requires a clean worktree.",
 		].join("\n"),
 		{ path, diagnostics: validation.diagnostics },

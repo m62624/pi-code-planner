@@ -2,6 +2,7 @@ import { join } from "node:path";
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
+import { ARTIFACT_CANONICAL_SCHEMA, formatArtifactEcho } from "./artifact-echo";
 import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
@@ -123,6 +124,12 @@ export async function executePlannerRefactorTool(input: {
 				"Planner refactor review written.",
 				`Refactor artifact: ${refactorMd}`,
 				`Decision: ${decision}`,
+				"",
+				formatArtifactEcho({
+					canonicalSchema: ARTIFACT_CANONICAL_SCHEMA.planner_refactor_review,
+					writtenMarkdown: content,
+				}),
+				"",
 				"If project files changed during refactor, commit through planner_git_commit before finishing.",
 				"Then call planner_status before choosing the next planner action.",
 			].join("\n"),

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { MockPlannerFs } from "../test/mock-fs";
+import { ARTIFACT_CANONICAL_SCHEMA } from "./artifact-echo";
 import {
 	buildDiscoveryMarkdown,
-	CANONICAL_SCHEMA,
 	PLANNER_ARTIFACT_TOOL_NAMES,
 	stripVerificationProtocolSection,
 } from "./artifact-tools";
@@ -132,7 +132,7 @@ describe("tdd_submit ↔ tdd-evidence validators round-trip", () => {
 describe("fill-tool echo schema", () => {
 	it("provides a canonical schema for every artifact tool", () => {
 		for (const tool of PLANNER_ARTIFACT_TOOL_NAMES) {
-			expect(CANONICAL_SCHEMA[tool]?.trim().length).toBeGreaterThan(0);
+			expect(ARTIFACT_CANONICAL_SCHEMA[tool]?.trim().length).toBeGreaterThan(0);
 		}
 	});
 });

@@ -2,6 +2,7 @@ import { join } from "node:path";
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
+import { ARTIFACT_CANONICAL_SCHEMA, formatArtifactEcho } from "./artifact-echo";
 import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
@@ -154,15 +155,12 @@ function applied(
 			headline,
 			`Artifact: ${path}`,
 			"",
-			"## Expected shape (canonical schema)",
-			CANONICAL_SCHEMA[toolName],
+			formatArtifactEcho({
+				canonicalSchema: ARTIFACT_CANONICAL_SCHEMA[toolName],
+				writtenMarkdown: written,
+			}),
 			"",
-			"## What you submitted (saved to disk)",
-			"```markdown",
-			written.trimEnd(),
-			"```",
-			"",
-			"Compare the two: the saved artifact should follow the canonical shape above (headings/sections of the same kind — the exact wording of your prose is up to you). If a required section is missing or wrong, call the same tool again to overwrite it; otherwise continue. The next-step hint follows after planner_finish_step.",
+			"The next-step hint follows after planner_finish_step.",
 		].join("\n"),
 		details: { path },
 	};
@@ -202,45 +200,6 @@ export function stripVerificationProtocolSection(body: string): string {
 	}
 	return out.join("\n");
 }
-
-/** Compact reference templates echoed back so the model sees the canonical
- * shape of each artifact next to what it actually wrote. */
-export const CANONICAL_SCHEMA: Record<PlannerArtifactToolName, string> = {
-	planner_plan_submit: [
-		"# Plan: <title>",
-		"## Goal",
-		"## Scope        (in-scope vs out-of-scope)",
-		"## Constraints",
-		"## Risks",
-		"## Checks       (how each task is verified)",
-		"## Tasks        (ordered task sequence)",
-	].join("\n"),
-	planner_discovery_submit: [
-		"# Discovery: <title>",
-		"## Project Overview / boundaries / findings / fundamental rules",
-		"(for change requests: ## Post-Implementation Snapshot / Completed Work / Remaining Work)",
-		"",
-		"NOTE: Do NOT write a `## Verification Protocol` heading in body — pass",
-		"the commands in the verificationProtocol argument; the wrapper renders",
-		"`## Verification Protocol` with one `- <command>` per line. That section",
-		"is the single source doubt_review checks against.",
-	].join("\n"),
-	planner_tdd_submit: [
-		"# tdd.md (per active task; sections added as the lifecycle reaches them)",
-		`## ${TDD_SECTIONS[0].title}`,
-		...TDD_SECTIONS[0].fields.map((f) => `- ${f}: <concrete evidence>`),
-		`## ${TDD_SECTIONS[1].title}`,
-		...TDD_SECTIONS[1].fields.map((f) => `- ${f}: <concrete evidence>`),
-		`## ${TDD_SECTIONS[2].title}`,
-		...TDD_SECTIONS[2].fields.map((f) => `- ${f}: <concrete evidence>`),
-	].join("\n"),
-	planner_summary_submit: [
-		"# Final Summary",
-		"## What changed",
-		"## Verification evidence  (command → result)",
-		"## Follow-ups",
-	].join("\n"),
-};
 
 function blocked(
 	toolName: PlannerArtifactToolName,

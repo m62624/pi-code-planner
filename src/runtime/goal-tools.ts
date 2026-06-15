@@ -5,6 +5,10 @@ import { updatePlanRecord } from "../storage/plan-store";
 import { upsertProjectPlanSummary } from "../storage/project-store";
 import { savePlanState } from "../storage/state-store";
 import {
+	ARTIFACT_CANONICAL_SCHEMA,
+	formatCanonicalSchemaHint,
+} from "./artifact-echo";
+import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
@@ -96,6 +100,10 @@ export async function executePlannerGoalTool(
 				`Planner list description: ${description}`,
 				"",
 				content.trim(),
+				"",
+				formatCanonicalSchemaHint(
+					ARTIFACT_CANONICAL_SCHEMA.planner_goal_submit,
+				),
 				"",
 				"Ask the user to review the goal and explicitly approve it or request revision.",
 				"After the user answers, call planner_goal_decide.",

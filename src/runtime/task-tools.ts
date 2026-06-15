@@ -3,6 +3,7 @@ import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
 import { readPlanRecord, updatePlanRecord } from "../storage/plan-store";
 import { upsertTaskArtifacts } from "../storage/task-store";
+import { ARTIFACT_CANONICAL_SCHEMA, formatArtifactEcho } from "./artifact-echo";
 import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
@@ -89,6 +90,12 @@ export async function executePlannerTaskTool(input: {
 				`Planner task artifacts written: ${result.record.taskId}.`,
 				`Task JSON: ${result.paths.taskJson}`,
 				`Task Markdown: ${result.paths.taskMd}`,
+				"",
+				formatArtifactEcho({
+					canonicalSchema: ARTIFACT_CANONICAL_SCHEMA.planner_task_upsert,
+					writtenMarkdown: await input.fs.readText(result.paths.taskMd),
+				}),
+				"",
 				"TDD lifecycle artifacts were created if missing. Do not create a separate testing task.",
 				"Call planner_status before choosing the next planner action.",
 			].join("\n"),
