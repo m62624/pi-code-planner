@@ -1,3 +1,4 @@
+import { getAllowedPlannerWrapperTools } from "../guard/tool-policy";
 import {
 	PLANNER_STAGE_STEPS,
 	type PlannerStage,
@@ -47,6 +48,12 @@ export function buildNextStepHint(state: PlanStateRecord): string {
 		lines.push(`Exit when: ${rule.exitCondition}`);
 	}
 	lines.push(`Next: ${describeNextMove(state, rule?.nextInstruction)}`);
+	const tools = getAllowedPlannerWrapperTools(state);
+	if (tools.length > 0) {
+		// Name the wrappers permitted at this exact step so the model reaches for
+		// the right planner tool instead of a built-in write/edit.
+		lines.push(`Tools allowed now: ${tools.join(", ")}.`);
+	}
 	lines.push(
 		`If unsure, re-read \`${getPlannerStepStage(state.step)}.md\` or call planner_status.`,
 	);

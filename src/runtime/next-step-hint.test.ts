@@ -20,6 +20,18 @@ describe("buildNextStepHint", () => {
 		expect(hint).toContain("If unsure, re-read `planning.md`");
 	});
 
+	it("names the planner wrappers allowed at the current step", () => {
+		const hint = buildNextStepHint(
+			state({
+				stage: "discovery",
+				step: "scan_project_structure",
+				stepStatus: "running",
+			}),
+		);
+		expect(hint).toContain("Tools allowed now:");
+		expect(hint).toContain("planner_discovery_submit");
+	});
+
 	it("uses the linear nextInstruction when there is a single next position", () => {
 		const hint = buildNextStepHint(
 			state({ stage: "planning", step: "draft_plan", stepStatus: "running" }),
