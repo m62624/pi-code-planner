@@ -11,7 +11,7 @@ At `planning/read_context`, load context in this order:
 1. Call `planner_status`.
 2. Read `discovery.md`, `questions.md`, and `decisions.md`.
 3. Use `planner_contract_route/read` for applicable AGENTS.md chains before extra source reads.
-4. Read specific source files only when the recorded discovery context and local contracts are insufficient.
+4. Read specific source files only when recorded discovery context and local contracts are insufficient.
 
 ## Strict Step Order
 
@@ -19,27 +19,19 @@ At `planning/read_context`, load context in this order:
    - Reconstruct project context from compacted artifacts.
    - If `decisions.md` contains a Change Request, treat this as a follow-up planning pass. Reread the Post-Implementation Snapshot in `discovery.md`, especially `Completed Work` and `Remaining Work`.
 2. `draft_plan`
-	- Write the full implementation strategy to `plan.md`.
-	- Include goal, non-goals, constraints, risks, integration boundaries, required checks, and unresolved decisions.
-	- In a follow-up planning pass, preserve the existing completed plan history. Append or revise only the sections needed for the change request; do not replace `plan.md` wholesale and do not repeat work already listed under `Completed Work`.
-	- For follow-up work, add a clearly labeled revision section with what remains and why the previous implementation was rejected.
+   - Write the full implementation strategy to `plan.md` through `planner_plan_submit` (pass the full content; it saves the file atomically).
+   - Include goal, non-goals, constraints, risks, integration boundaries, required checks, and unresolved decisions.
+   - In a follow-up planning pass, preserve the existing completed plan history. Append or revise only the sections needed for the change request; do not replace `plan.md` wholesale and do not repeat work already listed under `Completed Work`. Add a clearly labeled revision section with what remains and why the previous implementation was rejected.
 3. `split_tasks`
-	- Split the plan into small ordered tasks.
-	- Each task must be independently understandable and small enough for one TDD loop.
-	- In a follow-up planning pass, existing completed task artifacts are history. Create new revision task IDs for new work; do not reuse a completed task ID.
+   - Split the plan into small ordered tasks, each independently understandable and small enough for one TDD loop.
+   - In a follow-up planning pass, existing completed task artifacts are history. Create new revision task IDs for new work; do not reuse a completed task ID.
 4. `write_task_files`
-	- Call `planner_task_upsert` once per behavioral task.
-	- Provide semantic fields only: task id, title, objective, scope, acceptance criteria, and optional Local Contract Context fields.
-	- The wrapper creates `task.json`, `task.md`, and empty TDD lifecycle artifacts. Do not write task JSON manually.
-	- Each `task.md` must state scope, acceptance criteria, expected files or symbols, dependency context, checks, and relevant AGENTS.md chain when known.
-	- In a follow-up planning pass, call `planner_task_upsert` only for new or still-pending revision tasks. Completed task IDs are immutable audit history.
-5. `verify_plan`
-   - Verify that tasks are ordered, bounded, testable, and free of hidden broad work.
-   - Record decisions and remaining risks.
-6. `compact_planning`
-   - Compact the finished plan and task list.
-7. `enter_execution`
-   - Advance to `execution/prepare_task`.
+   - Call `planner_task_upsert` once per behavioral task with semantic fields only: task id, title, objective, scope, acceptance criteria, and optional Local Contract Context fields. The wrapper creates `task.json`, `task.md`, and empty TDD lifecycle artifacts; do not write task JSON manually.
+   - Each `task.md` must state scope, acceptance criteria, expected files or symbols, dependency context, checks, and the relevant AGENTS.md chain when known.
+   - In a follow-up planning pass, call `planner_task_upsert` only for new or still-pending revision tasks. Completed task IDs are immutable audit history.
+5. `verify_plan` — verify tasks are ordered, bounded, testable, and free of hidden broad work. Record decisions and remaining risks.
+6. `compact_planning` — compact the finished plan and task list.
+7. `enter_execution` — advance to `execution/prepare_task`.
 
 ## Task Design Rules
 
@@ -47,20 +39,18 @@ At `planning/read_context`, load context in this order:
 - Prefer dependency order: foundations before composition.
 - Do not batch unrelated functions, files, or refactors into one task.
 - Every task must define how TDD proves the requested behavior.
-- Never create standalone plan tasks named like "write tests", "add mocks", "test the implementation", or "verify the code".
-- Tests, mocks, fixtures, and checks belong inside the individual behavioral task that needs them. Each task runs its own tests-first TDD loop before production edits.
-- A separate testing task is allowed only when test infrastructure itself is the requested product behavior or an explicit shared prerequisite, not merely because implementation needs tests.
+- Never create standalone plan tasks named like "write tests", "add mocks", "test the implementation", or "verify the code". Tests, mocks, fixtures, and checks belong inside the behavioral task that needs them; each task runs its own tests-first TDD loop before production edits.
+- A separate testing task is allowed only when test infrastructure itself is the requested product behavior or an explicit shared prerequisite.
 - If a task reveals additional required work, add or revise a task artifact during planning instead of silently expanding implementation scope.
 - For a change request after a completed pass, use new revision task IDs such as `fix-storage-root-revision` instead of reopening completed task IDs.
 
 ## Restrictions
 
-- Do not edit production files.
-- Do not write tests yet.
+- Do not edit production files or write tests yet.
 - Built-in project write/edit calls remain blocked. Shell remains available, but raw git is forbidden.
 - Do not create task branches.
 - Do not reread the whole project unless recorded discovery context is insufficient.
-- Do not ignore local contracts. If AGENTS.md files exist, task scope should preserve the relevant contract chain or explicitly explain why none applies.
+- Do not ignore local contracts. If AGENTS.md files exist, task scope should preserve the relevant contract chain or explain why none applies.
 - Do not rely on chat memory; write durable facts to artifacts.
 
 ## Exit Condition
@@ -85,56 +75,35 @@ Before finishing planning, doubt the plan shape:
 - Are completed tasks preserved as history during follow-up planning?
 - Does `plan.md` explain remaining work without repeating work already completed?
 
-If doubt remains, revise `plan.md` or task artifacts before entering execution. Do not rely on memory from chat.
+If doubt remains, revise `plan.md` or task artifacts before entering execution. Do not rely on chat memory.
 
-## Fundamental Rules
+## Fundamental Rule: Integration vs New Entity
 
-### Rule 3: Integration vs New Entity
+**Prerequisite:** this applies ONLY when the user did not explicitly ask to modify file X. If the user said "change X", their word is final.
 
-**Prerequisite:** This rule applies ONLY if the user did not explicitly ask to modify file X. If the user said "change X" — their word is final.
+When adding new functionality to an existing project, decide: integrate into existing code, or create a new entity/module/class.
 
-**Core principle:** When adding new functionality to an existing project, you must decide: integrate into existing code or create a new entity/module/class.
+**Integrate into existing code when:** the new functionality is a natural continuation of the file/module's logic; changes are minimal and do not restructure existing code; the file already contains similar mechanisms that fit the same pattern; no refactoring of the existing structure is required.
 
-**Criteria for integrating into existing code (when you may touch existing files):**
+**Create a new entity (do NOT touch existing files, even "related" ones) when:** the existing code is already a complete, logically closed entity; integration would change its public interface; the new functionality has a distinct responsibility; the existing code follows a pattern that does not support internal extension.
 
-- The new functionality is a natural continuation of the existing logic of this file/module
-- Changes are minimal and do not restructure the existing code
-- The existing file already contains similar mechanisms, and the new functionality fits the same pattern
-- Adding new code does not require refactoring or rebuilding the existing structure
+**How to decide:** compare responsibilities. If the new responsibility matches or is a subset of the existing one → integrate. If responsibilities differ or it is a parallel entity → create a new entity. You do not touch existing files when the new functionality is not a natural continuation of their responsibility.
 
-**Criteria for creating a new entity (when you must NOT touch existing files, even if they seem "related"):**
+## Diagnostics
 
-- The existing code is already a complete, logically closed entity (module, class, service)
-- Integration would require changing the public interface of the existing entity
-- The new functionality has a distinct responsibility from the existing one
-- The existing code follows a pattern that does not support internal extension (e.g., a module that must remain unchanged)
-
-**How to decide:**
-1. Look at the existing code. What does it do? What is its responsibility?
-2. Look at the new functionality. What is its responsibility?
-3. If responsibilities match or the new one is a subset of the existing → integrate.
-4. If responsibilities differ or the new one is a parallel entity → create a new entity.
-
-**Deduction:** You do not touch existing files if the new functionality is not a natural continuation of their responsibility. You create a new entity if the existing one is already complete.
+- **Too-large scope:** if a task description contains multiple unrelated behaviors, split it.
+- **Missing dependencies:** order tasks correctly (e.g., schema changes before API handlers).
+- **Incoherent task id:** use lowercase, clean alphanumeric ids.
+- If verification fails during planning, re-evaluate the architecture and confirm files in task scope exist or are planned.
 
 ## manual-compact
 
-Preserve the full plan goal, constraints, ordered task list, task artifact paths, task dependencies, acceptance criteria, open decisions, and `discovery.md`. After compaction, call `planner_status`. Before the first task, reread the full `plan.md`, then read only the selected `task.md` and use focused project search when context is insufficient.
+Preserve the full plan goal, constraints, ordered task list, task artifact paths, dependencies, acceptance criteria, open decisions, and `discovery.md`. After compaction, call `planner_status`. Before the first task, reread the full `plan.md`, then read only the selected `task.md` and use focused project search when needed.
 
 ## auto-compact
 
 Call `planner_status` immediately and restore the exact planning step. Reread `plan.md` if it has already been written. Do not regenerate tasks from chat history and do not begin execution until the persisted plan is verified.
 
-## Planning & Task Diagnostics
-
-### 1. Decomposition Failures
-- **Too Large Scope**: If a task description contains multiple unrelated behaviors, split it into smaller sub-tasks.
-- **Missing Dependencies**: Ensure task dependencies are ordered correctly (e.g., database schema changes must be executed before API handlers).
-- **Incoherent Task ID**: Use lowercase, clean alphanumeric IDs.
-
-### 2. Troubleshooting Planning Errors
-- If verification fails during planning, re-evaluate the architecture. Ensure files listed in the task scope actually exist or are planned to be created.
-
 ## If You Do Not Know What To Do Next
 
-If you don't know what to do next, call `planner_status`.
+The `planner_finish_step` result names your next step, its goal, and the worktree to work in — follow it. Call `planner_status` only when you need the full step rule or stage instruction, or when you are unsure.
