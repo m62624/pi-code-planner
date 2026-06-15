@@ -281,9 +281,12 @@ function shouldPausePlannerTimer(
 	planStatus: PlanStatus,
 ): boolean {
 	if (shouldFinishPlannerTimer(state, planStatus)) return false;
-	if (state.stage === "intake") return true;
+	// Pause only while genuinely waiting on the user. Active work — including
+	// planner-controlled compaction — keeps counting for honest timing.
 	if (state.requiresUserDecision) return true;
-	if (state.requiresCompact) return true;
+	if (state.stage === "intake" && state.step === "await_goal_approval") {
+		return true;
+	}
 	if (
 		state.stage === "discovery" &&
 		state.step === "write_questions" &&
@@ -358,6 +361,7 @@ function buildTimerStatusLine(input: {
 			? pauseReason(input.state)
 			: `${input.state.stage} stage ${formatDuration(currentStageActiveMs(input.state, input.displayActiveMs))}`,
 		`${input.state.stage}/${input.state.step}`,
+		theme.fg("dim", "· /planner-dashboard"),
 	];
 	return parts.join(" ");
 }
@@ -394,6 +398,7 @@ function buildTimerWidgetLines(input: {
 	if (input.settings.showCheckpoints && checkpointTrail) {
 		lines.push(`| ${padRight(`route ${checkpointTrail}`, width - 4)} |`);
 	}
+	lines.push(`| ${padRight("/planner-dashboard for stats", width - 4)} |`);
 	lines.push(`+${"-".repeat(width - 2)}+`);
 	return lines;
 }

@@ -116,10 +116,17 @@ export function getAllowedNextPlannerPositions(
 		return [{ stage: "intake", step: "draft_goal" }];
 	}
 	if (input.stage === "intake" && input.step === "await_goal_approval") {
-		return [
-			{ stage: "intake", step: "draft_goal" },
-			{ stage: "discovery", step: "scan_project_structure" },
-		];
+		// The improve flow already ran discovery before drafting the goal, so
+		// approval continues into planning instead of repeating discovery.
+		return input.creationMethod === "improve"
+			? [
+					{ stage: "intake", step: "draft_goal" },
+					{ stage: "planning", step: "read_context" },
+				]
+			: [
+					{ stage: "intake", step: "draft_goal" },
+					{ stage: "discovery", step: "scan_project_structure" },
+				];
 	}
 	if (input.stage === "discovery" && input.step === "enter_planning") {
 		return input.creationMethod === "improve"
@@ -131,6 +138,14 @@ export function getAllowedNextPlannerPositions(
 	}
 	if (input.stage === "planning" && input.step === "enter_execution") {
 		return [{ stage: "execution", step: "prepare_task" }];
+	}
+	if (input.stage === "execution" && input.step === "run_final_tests") {
+		// Final checks may reveal a fix that needs an editing step. Allow going
+		// back to implement_task to fix + re-verify, not only forward.
+		return [
+			{ stage: "execution", step: "capture_skill" },
+			{ stage: "execution", step: "implement_task" },
+		];
 	}
 	if (input.stage === "execution" && input.step === "select_next_task") {
 		return [

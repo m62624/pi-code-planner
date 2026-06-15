@@ -118,6 +118,21 @@ const SETTING_DESCRIPTORS: SettingDescriptor[] = [
 			"Instruct the model to route/read contracts before leaving declared task scope.",
 	},
 	{
+		path: "workspace.enabled",
+		purpose:
+			"Master switch for the /planner-dashboard workspace window (dashboard + model chat).",
+	},
+	{
+		path: "workspace.autoOpen",
+		purpose:
+			"Open the workspace automatically for planner-worktree sessions (create/resume/improve).",
+	},
+	{
+		path: "workspace.footerReserveRows",
+		purpose:
+			"Terminal rows left for Pi's native footer below the workspace overlay (raise if the footer overlaps).",
+	},
+	{
 		path: "metadata.humanLanguage",
 		purpose: "Default language for user-facing planner text.",
 	},
@@ -181,6 +196,18 @@ export function buildPlannerAboutReport(input: {
 		"- /planner-skills shows the saved inventory even when runtime exposure is disabled or capped.",
 		"- Missing SKILL.md files are ignored by inventory/resource discovery; delete stale index entries through /planner-skills when needed.",
 		"",
+		"## Planner Workspace TUI",
+		"- /planner-dashboard opens the workspace: stage dashboard + the model chat in one window. It also opens automatically for planner-worktree sessions (workspace.autoOpen).",
+		"- Inside the workspace, Tab cycles three focus panes:",
+		"  - input: type or paste, press Enter to send a message to the model.",
+		"  - chat: ↑↓ / PageUp / PageDown scroll; End jumps to the live tail, Home to the top; x toggles expand-all for tool calls.",
+		"  - tasks: ↑↓ select a task and reveal the task list + stage timings; ←→ nudge the ticker.",
+		"- Inherits Pi bindings: app.thinking.toggle (Ctrl+T) hides/shows thinking; app.tools.expand (Ctrl+O) expands/collapses tool output.",
+		"- Esc (or Ctrl+C) closes the workspace and returns to the plain chat.",
+		"- Streaming assistant output is shown live, token by token, as it is generated.",
+		"- Pi's own keys (cursor movement, model/thinking selectors, etc.) are configured in ~/.pi/agent/keybindings.json; run /reload after editing. See SETTINGS.md and the Pi keybindings docs.",
+		"- If Pi's native footer overlaps or leaves a gap below the workspace, tune workspace.footerReserveRows.",
+		"",
 		"## Effective Settings",
 		"Settings merge order: defaults, global settings, then project settings.",
 		"",
@@ -192,7 +219,7 @@ export function buildPlannerAboutReport(input: {
 		"",
 		"## Notes",
 		"- worktree and compact settings are captured when a plan is created.",
-		"- idle, timer, metadata, skills, and contracts settings are read while planner runs.",
+		"- idle, timer, metadata, skills, contracts, and workspace settings are read while planner runs.",
 		"- skills.maxActive = 0 means no planner-side limit.",
 	].join("\n");
 }

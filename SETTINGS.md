@@ -49,6 +49,11 @@ getAgentDir()/extensions/pi-code-planner/settings.json
     },
     "requireAfterTdd": true,
     "requireBeforeEditOutsideChain": true
+  },
+  "workspace": {
+    "enabled": true,
+    "autoOpen": true,
+    "footerReserveRows": 3
   }
 }
 ```
@@ -125,6 +130,48 @@ Planner-generated skills are stored under `getAgentDir()/extensions/pi-code-plan
 | `contracts.levelBudgets.nearest` | `7000` | Summary budget for the nearest applicable domain contract. |
 | `contracts.requireAfterTdd` | `true` | Require `execution/contract_check` after a green implementation. |
 | `contracts.requireBeforeEditOutsideChain` | `true` | Instruct the model to route/read contracts before leaving declared task scope. |
+
+## Workspace (TUI)
+
+`/planner-dashboard` opens the planner workspace: the stage dashboard and the model chat in one window. It also opens automatically for planner-worktree sessions (after `/planner-create`, `/planner-resume`, `/planner-improve`).
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `workspace.enabled` | `true` | Master switch for the workspace window. |
+| `workspace.autoOpen` | `true` | Open the workspace automatically for planner-worktree sessions. |
+| `workspace.footerReserveRows` | `3` | Terminal rows left for Pi's native footer below the workspace overlay. Raise if the footer overlaps; lower if there is a gap. `0`–`20`. |
+
+### Workspace keys
+
+Inside the workspace, `Tab` cycles three focus panes:
+
+| Pane | Keys |
+| --- | --- |
+| input | type or paste, `Enter` to send to the model |
+| chat | `↑`/`↓`, `PageUp`/`PageDown` scroll; `End` jumps back to the live tail, `Home` to the top; `x` toggles expand-all for collapsed tool calls |
+| tasks | `↑`/`↓` select a task and reveal the task list + stage timings; `←`/`→` nudge the ticker |
+
+While scrolled up, the transcript stays anchored — new streamed output appends below without moving your view. Press `End` to jump back to the live tail. History is projected as a sliding window over the session (a chunk of trailing entries); scrolling to the top loads the next older chunk, so very long sessions never project the whole conversation at once.
+
+Pasting text into the input works (bracketed paste is handled; newlines fold to spaces). Pasting **images** is not supported in the workspace window — Pi's image paste targets its built-in editor, which the workspace replaces; close the workspace (`Esc`) to use the plain editor for image input.
+
+The workspace also inherits two Pi bindings (work in any pane): `app.thinking.toggle` (default `Ctrl+T`) shows/hides thinking blocks, and `app.tools.expand` (default `Ctrl+O`) expands/collapses tool output. Rebind them in `~/.pi/agent/keybindings.json`.
+
+The workspace's own keys are configurable in planner settings (Pi's `keybindings.json` only accepts Pi's built-in action ids, not ours). Override any of them under `workspace.keys`; omitted actions keep their defaults:
+
+```json
+{ "workspace": { "keys": { "jumpBottom": ["end", "ctrl+e"], "expand": ["x", "o"] } } }
+```
+
+Actions: `focusNext` (`tab`), `up` (`up`), `down` (`down`), `pageUp` (`pageUp`), `pageDown` (`pageDown`), `jumpBottom` (`end`), `jumpTop` (`home`), `expand` (`x`), `submit` (`enter`), `exit` (`escape`). `Ctrl+C` always exits regardless of overrides.
+
+The line under the stage ribbon is a static context line (active task, branch, or a blocking note), clipped with `…` — it does not scroll, so it never forces a repaint.
+
+`Esc` (or `Ctrl+C`) closes the workspace and returns to the plain chat. Streaming assistant output appears live, token by token.
+
+### Pi keybindings
+
+The workspace keys above are handled by the extension. Pi's own shortcuts (cursor movement, model/thinking selectors, tool expansion, etc.) are configured globally in `~/.pi/agent/keybindings.json` using namespaced ids such as `tui.editor.cursorUp` and `app.tools.expand`. Each id maps to one key or an array of keys; run `/reload` after editing. See the Pi keybindings documentation for the full list.
 
 ## Instruction Append Files
 
