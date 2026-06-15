@@ -63,6 +63,17 @@ export function projectSessionEntries(entries: SessionEntry[]): ChatRow[] {
 	return rows;
 }
 
+/**
+ * Project an in-flight (streaming) assistant message into transcript rows.
+ * Keys are namespaced so they never collide with committed session entries.
+ */
+export function projectLiveAssistant(message: unknown): ChatRow[] {
+	return projectMessage("live", message).map((row) => ({
+		...row,
+		key: `live:${row.key}`,
+	}));
+}
+
 function projectMessage(id: string, message: unknown): ChatRow[] {
 	const role = readRole(message);
 	if (role === "user") {

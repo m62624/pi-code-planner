@@ -20,6 +20,7 @@ import type { PlannerStage } from "../storage/schema";
 import { readActivePlanContext } from "./active-plan";
 import {
 	type ChatRow,
+	projectLiveAssistant,
 	projectSessionEntries,
 	renderTranscript,
 } from "./chat-view";
@@ -52,6 +53,13 @@ const STAGE_THEME_COLOR: Record<PlannerStage, ThemeColor> = {
 	recovery: "error",
 };
 
+/**
+ * Latest in-flight assistant message while the model is streaming. Updated by
+ * message_update events and cleared at message_end, so the workspace can show
+ * token-by-token output before the entry is committed to the session.
+ */
+let liveAssistantMessage: unknown | null = null;
+
 export function registerPlannerDashboard(pi: ExtensionAPI): void {
 	pi.registerCommand("planner-dashboard", {
 		description:
@@ -59,6 +67,14 @@ export function registerPlannerDashboard(pi: ExtensionAPI): void {
 		handler: async (_args, ctx) => {
 			await openPlannerWorkspace(pi, ctx);
 		},
+	});
+
+	// Track streaming assistant output so the workspace renders it live.
+	pi.on("message_update", (event) => {
+		liveAssistantMessage = (event as { message?: unknown }).message ?? null;
+	});
+	pi.on("message_end", () => {
+		liveAssistantMessage = null;
 	});
 }
 
@@ -90,7 +106,13 @@ export async function openPlannerWorkspace(
 	if (options.auto && !workspace.autoOpen) return;
 	const footerReserve = Math.max(0, workspace.footerReserveRows);
 	const load = () => loadDashboardModel(fs, ctx.cwd);
-	const getRows = () => projectSessionEntries(ctx.sessionManager.getBranch());
+	const getRows = () => {
+		const rows = projectSessionEntries(ctx.sessionManager.getBranch());
+		if (liveAssistantMessage) {
+			rows.push(...projectLiveAssistant(liveAssistantMessage));
+		}
+		return rows;
+	};
 	const initial = await load();
 	await ctx.ui.custom<void>(
 		(tui, theme, _keybindings, done) => {
@@ -199,6 +221,7 @@ class PlannerWorkspaceComponent implements Component {
 	private tick = 0;
 	private reloading = false;
 	private version = 0;
+	private lastSignature = "";
 	private lastTranscriptTotal = 0;
 	private lastTranscriptHeight = 1;
 	private cachedWidth = -1;
@@ -233,10 +256,12 @@ class PlannerWorkspaceComponent implements Component {
 	private onTick(): void {
 		this.ui.tickerOffset += 1;
 		this.refreshRows();
-		this.version += 1;
-		this.tui.requestRender();
 		if (this.tick % RELOAD_EVERY_TICKS === 0) void this.reloadModel();
 		this.tick += 1;
+		// Only redraw when something visible actually changed (content, clock
+		// second, marquee step, or focus/input). This keeps the UI calm instead
+		// of repainting every tick.
+		this.renderIfChanged();
 	}
 
 	private refreshRows(): void {
@@ -253,13 +278,40 @@ class PlannerWorkspaceComponent implements Component {
 		try {
 			this.model = await this.load();
 			this.clampSelection();
-			this.version += 1;
-			this.tui.requestRender();
+			this.renderIfChanged();
 		} catch {
 			// Best-effort.
 		} finally {
 			this.reloading = false;
 		}
+	}
+
+	private renderIfChanged(): void {
+		const signature = this.computeSignature();
+		if (signature === this.lastSignature) return;
+		this.scheduleRender(signature);
+	}
+
+	private computeSignature(): string {
+		const last = this.rows[this.rows.length - 1];
+		const rowsSig = `${this.rows.length}:${last?.key ?? ""}:${last?.text.length ?? 0}`;
+		const clock = this.model.available
+			? formatClock(this.model.totalActiveMs)
+			: "x";
+		const modelSig = this.model.available
+			? `${this.model.stage}/${this.model.step}/${this.model.stepStatus}/${this.model.tasksDone}/${this.model.tasksTotal}`
+			: "unavailable";
+		const uiSig = `${this.focus}|${this.input}|${this.cursor}|${this.ui.selectedIndex}|${this.chatScroll}|${this.expandAll}`;
+		// Coarse marquee step (~1 move/sec) so the ticker scrolls without a
+		// per-tick repaint storm.
+		const marquee = Math.floor(this.ui.tickerOffset / 5);
+		return `${clock}#${rowsSig}#${modelSig}#${uiSig}#${marquee}`;
+	}
+
+	private scheduleRender(signature = this.computeSignature()): void {
+		this.lastSignature = signature;
+		this.version += 1;
+		this.tui.requestRender();
 	}
 
 	private clampSelection(): void {
@@ -392,8 +444,7 @@ class PlannerWorkspaceComponent implements Component {
 	}
 
 	private bump(): void {
-		this.version += 1;
-		this.tui.requestRender();
+		this.scheduleRender();
 	}
 
 	render(width: number): string[] {

@@ -49,6 +49,11 @@ getAgentDir()/extensions/pi-code-planner/settings.json
     },
     "requireAfterTdd": true,
     "requireBeforeEditOutsideChain": true
+  },
+  "workspace": {
+    "enabled": true,
+    "autoOpen": true,
+    "footerReserveRows": 3
   }
 }
 ```
@@ -125,6 +130,32 @@ Planner-generated skills are stored under `getAgentDir()/extensions/pi-code-plan
 | `contracts.levelBudgets.nearest` | `7000` | Summary budget for the nearest applicable domain contract. |
 | `contracts.requireAfterTdd` | `true` | Require `execution/contract_check` after a green implementation. |
 | `contracts.requireBeforeEditOutsideChain` | `true` | Instruct the model to route/read contracts before leaving declared task scope. |
+
+## Workspace (TUI)
+
+`/planner-dashboard` opens the planner workspace: the stage dashboard and the model chat in one window. It also opens automatically for planner-worktree sessions (after `/planner-create`, `/planner-resume`, `/planner-improve`).
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `workspace.enabled` | `true` | Master switch for the workspace window. |
+| `workspace.autoOpen` | `true` | Open the workspace automatically for planner-worktree sessions. |
+| `workspace.footerReserveRows` | `3` | Terminal rows left for Pi's native footer below the workspace overlay. Raise if the footer overlaps; lower if there is a gap. `0`–`20`. |
+
+### Workspace keys
+
+Inside the workspace, `Tab` cycles three focus panes:
+
+| Pane | Keys |
+| --- | --- |
+| input | type, `Enter` to send to the model |
+| chat | `↑`/`↓`, `PageUp`/`PageDown` scroll the transcript; `x` toggles expand-all for collapsed tool calls |
+| tasks | `↑`/`↓` select a task and reveal the task list + stage timings; `←`/`→` nudge the ticker |
+
+`Esc` (or `Ctrl+C`) closes the workspace and returns to the plain chat. Streaming assistant output appears live.
+
+### Pi keybindings
+
+The workspace keys above are handled by the extension. Pi's own shortcuts (cursor movement, model/thinking selectors, tool expansion, etc.) are configured globally in `~/.pi/agent/keybindings.json` using namespaced ids such as `tui.editor.cursorUp` and `app.tools.expand`. Each id maps to one key or an array of keys; run `/reload` after editing. See the Pi keybindings documentation for the full list.
 
 ## Instruction Append Files
 

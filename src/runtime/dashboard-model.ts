@@ -27,17 +27,6 @@ export const DASHBOARD_STAGE_SEQUENCE = [
 	"done",
 ] as const satisfies readonly PlannerStage[];
 
-const STAGE_CODE: Record<PlannerStage, string> = {
-	init: "INIT",
-	intake: "GOAL",
-	discovery: "DISC",
-	planning: "PLAN",
-	execution: "EXEC",
-	finalize: "FINL",
-	done: "DONE",
-	recovery: "RECV",
-};
-
 const STAGE_LABEL: Record<PlannerStage, string> = {
 	init: "INIT",
 	intake: "INTAKE",
@@ -530,93 +519,21 @@ export function renderStageRibbon(
 	width: number,
 	palette: DashboardPalette,
 ): string[] {
-	const stages = DASHBOARD_STAGE_SEQUENCE;
-	const count = stages.length;
-	// Allocate proportional segment widths that sum exactly to `width`.
-	const base = Math.floor(width / count);
-	let remainder = width - base * count;
-	const cells: string[] = [];
-	for (let i = 0; i < count; i++) {
-		let segWidth = base;
-		if (remainder > 0) {
-			segWidth += 1;
-			remainder -= 1;
+	const sep = palette.dim(" › ");
+	const parts = DASHBOARD_STAGE_SEQUENCE.map((stage, index) => {
+		const label = STAGE_LABEL[stage];
+		if (index === model.stageIndex && !model.recovery) {
+			// Active stage: bracketed + bold in the stage colour.
+			return palette.bold(palette.stage(stage, `[${label}]`));
 		}
-		cells.push(renderStageCell(model, stages[i], i, segWidth, palette));
-	}
-	return [cells.join("")];
-}
-
-function renderStageCell(
-	model: DashboardModel,
-	stage: PlannerStage,
-	index: number,
-	segWidth: number,
-	palette: DashboardPalette,
-): string {
-	if (segWidth <= 0) return "";
-	const isDone = index < model.stageIndex;
-	const isCurrent = index === model.stageIndex && !model.recovery;
-	const fillRatio = isDone ? 1 : isCurrent ? model.stageRatio : 0;
-	const filledCount = Math.round(segWidth * fillRatio);
-
-	// Reserve a label band with a blank cell on each side so the fill glyphs
-	// never butt up against the letters (keeps the labels readable).
-	const maxLabel = Math.max(0, segWidth - 4);
-	const rawLabel = segWidth >= 8 ? STAGE_LABEL[stage] : STAGE_CODE[stage];
-	const labelText = rawLabel.slice(0, maxLabel);
-	const band = labelText ? ` ${labelText} ` : "";
-	const bandStart = Math.max(0, Math.floor((segWidth - band.length) / 2));
-	const bandEnd = bandStart + band.length;
-
-	let out = "";
-	for (let c = 0; c < segWidth; c++) {
-		if (band && c >= bandStart && c < bandEnd) {
-			const ch = band[c - bandStart];
-			out += paintLabel({ ch, isCurrent, isDone, palette });
-			continue;
+		if (index < model.stageIndex) {
+			// Completed stage: stage colour.
+			return palette.stage(stage, label);
 		}
-		const ch = c < filledCount ? "▰" : "░";
-		out += paintCell({
-			ch,
-			stage,
-			filled: c < filledCount,
-			isCurrent,
-			isDone,
-			palette,
-		});
-	}
-	return out;
-}
-
-function paintLabel(input: {
-	ch: string;
-	isCurrent: boolean;
-	isDone: boolean;
-	palette: DashboardPalette;
-}): string {
-	const { ch, isCurrent, isDone, palette } = input;
-	if (ch === " ") return ch;
-	if (isCurrent) return palette.bold(palette.text(ch));
-	if (isDone) return palette.text(ch);
-	return palette.muted(ch);
-}
-
-function paintCell(input: {
-	ch: string;
-	stage: PlannerStage;
-	filled: boolean;
-	isCurrent: boolean;
-	isDone: boolean;
-	palette: DashboardPalette;
-}): string {
-	const { ch, stage, filled, isCurrent, isDone, palette } = input;
-	if (isCurrent) {
-		const colored = palette.stage(stage, ch);
-		return filled ? palette.bold(colored) : colored;
-	}
-	if (isDone) return palette.stage(stage, ch);
-	return palette.dim(ch);
+		// Pending stage: dimmed.
+		return palette.dim(label);
+	});
+	return [padTo(parts.join(sep), width, palette)];
 }
 
 export function renderTicker(
