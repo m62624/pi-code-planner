@@ -273,23 +273,32 @@ async function deletePlan(
 	const projectRootExists = await input.fs.exists(
 		input.projectPaths.projectRoot,
 	);
+	const warnings: string[] = [];
 	if (state) {
 		if (state.worktreePath && (await input.fs.exists(state.worktreePath))) {
 			if (projectRootExists) {
-				await input.git.worktreeRemove({
+				const warning = await tryWorktreeRemove({
+					git: input.git,
 					repoRoot: input.projectPaths.projectRoot,
 					path: state.worktreePath,
 				});
+				if (warning) warnings.push(warning);
 			} else {
 				await input.fs.removeDir(state.worktreePath);
 			}
 		}
 		if (projectRootExists) {
+			// Tolerate branches that were already removed (e.g. the worktree was
+			// deleted by hand before this command). A hard failure here would abort
+			// the whole deletion and leave the plan — and its stale branches — in
+			// the list. Downgrade to a warning and prune the plan regardless.
 			for (const branch of managedChildBranches(state)) {
-				await input.git.deleteBranch({
+				const warning = await tryDeleteManagedBranch({
+					git: input.git,
 					repoRoot: input.projectPaths.projectRoot,
 					branch,
 				});
+				if (warning) warnings.push(warning);
 			}
 		}
 		if (state.worktreePath) {
@@ -318,12 +327,14 @@ async function deletePlan(
 		plans: project.plans.filter((plan) => plan.planId !== planId),
 	};
 	await saveProjectRecord(input.fs, input.projectPaths, nextProject);
-	return applied(input.commandName, `Planner plan deleted: ${planId}.`, {
+	const text = [`Planner plan deleted: ${planId}.`, ...warnings].join("\n");
+	return applied(input.commandName, text, {
 		project: nextProject,
 		planId,
 		removedPlanDir: planPaths.planDir,
 		projectRootExists,
 		gitCleanupSkipped: !projectRootExists,
+		warnings,
 	});
 }
 
@@ -425,6 +436,51 @@ async function assertPlanSwitchable(input: {
 		};
 	}
 	return { allow: true };
+}
+
+/** Delete a managed branch, tolerating one that is already gone. Returns a
+ * warning string when the branch could not be deleted cleanly (already removed,
+ * or git refused), so the caller can surface it and prune the plan regardless;
+ * returns null on a clean delete. */
+async function tryDeleteManagedBranch(input: {
+	git: GitRunner;
+	repoRoot: string;
+	branch: string;
+}): Promise<string | null> {
+	try {
+		const exists = await input.git.branchExists({
+			repoRoot: input.repoRoot,
+			branch: input.branch,
+		});
+		if (!exists) {
+			return `Branch ${input.branch} was already gone — skipped and pruned from the plan registry.`;
+		}
+		await input.git.deleteBranch({
+			repoRoot: input.repoRoot,
+			branch: input.branch,
+		});
+		return null;
+	} catch (error) {
+		return `Branch ${input.branch} could not be deleted (${errorMessage(error)}); pruned from the plan registry anyway.`;
+	}
+}
+
+/** Remove a worktree, tolerating one that git no longer tracks (e.g. it was
+ * deleted by hand). Returns a warning string on failure, null on success. */
+async function tryWorktreeRemove(input: {
+	git: GitRunner;
+	repoRoot: string;
+	path: string;
+}): Promise<string | null> {
+	try {
+		await input.git.worktreeRemove({
+			repoRoot: input.repoRoot,
+			path: input.path,
+		});
+		return null;
+	} catch (error) {
+		return `Worktree ${input.path} could not be removed via git (${errorMessage(error)}); continuing with deletion.`;
+	}
 }
 
 function managedChildBranches(state: PlanStateRecord): string[] {
