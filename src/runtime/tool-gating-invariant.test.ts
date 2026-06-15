@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	getAllowedPlannerWrapperTools,
+	PLANNER_WRAPPER_TOOLS,
 	type PlannerWrapperTool,
 } from "../guard/tool-policy";
 import {
@@ -106,5 +107,42 @@ describe("planner tool gating invariant", () => {
 				expect([...allowed]).toEqual(["planner_status"]);
 			}
 		}
+	});
+
+	// Reverse direction: a wrapper tool the stage behavior advertises in
+	// expectedTools (so it shows up in status' "Stage Behavior" and the model
+	// reaches for it) MUST be permitted by the guard — otherwise the model is
+	// told to use a tool the guard blocks ("not allowed at stage/step"). The two
+	// always-allowed specials (planner_status, planner_git_inspect) are exempt
+	// because the behavior gate permits them regardless of the guard step list;
+	// non-wrapper workflow tools (finish_step, request/complete_compact,
+	// report_stuck) are gated elsewhere and never appear in the guard set.
+	const WRAPPER_TOOLS = new Set<string>(PLANNER_WRAPPER_TOOLS);
+	const GATE_EXEMPT = new Set<string>([
+		"planner_status",
+		"planner_git_inspect",
+	]);
+	it("every wrapper tool in expectedTools is permitted by the guard", () => {
+		const violations: string[] = [];
+		for (const [stage, stepList] of STEPS) {
+			for (const step of stepList) {
+				const guard = new Set<string>(
+					getAllowedPlannerWrapperTools({
+						stage,
+						step,
+						broken: false,
+						requiresUserDecision: false,
+						requiresCompact: false,
+						debugArtifactsDir: "/tmp/planner-debug",
+					}),
+				);
+				const behavior = getPlannerStageStepBehavior({ stage, step });
+				for (const tool of behavior.expectedTools) {
+					if (!WRAPPER_TOOLS.has(tool) || GATE_EXEMPT.has(tool)) continue;
+					if (!guard.has(tool)) violations.push(`${stage}/${step}: ${tool}`);
+				}
+			}
+		}
+		expect(violations, violations.join("\n")).toEqual([]);
 	});
 });

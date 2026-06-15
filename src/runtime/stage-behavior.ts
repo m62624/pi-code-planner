@@ -96,7 +96,9 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: [],
 		updatedArtifacts: [],
 		requiredGates: [],
-		expectedTools: ["planner_status", "planner_report_stuck"],
+		// planner_report_stuck is execution-only (see stuck-tools.ts); the guard
+		// does not allow it during init, so it must not be advertised here.
+		expectedTools: ["planner_status"],
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
@@ -116,14 +118,10 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: [],
 		updatedArtifacts: ["project.json"],
 		requiredGates: ["git_available"],
-		expectedTools: [
-			"planner_contract_scan",
-			"planner_contract_route",
-			"planner_contract_read",
-			"planner_contract_upsert",
-			"planner_git_commit",
-			"planner_status",
-		],
+		// Storage setup is runtime-driven (guard allows no wrappers here). The
+		// model does contract scanning/upsert later, at discovery; listing those
+		// wrappers here only mis-advertised tools the guard blocks.
+		expectedTools: ["planner_status"],
 		commitPolicy: "required_if_dirty",
 		compactPolicy: "not_allowed",
 	}),
@@ -160,11 +158,8 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["plan.json", "state.json"],
 		updatedArtifacts: ["state.json"],
 		requiredGates: ["plan_record_exists"],
-		expectedTools: [
-			"planner_git_inspect",
-			"planner_contract_route",
-			"planner_contract_read",
-		],
+		// Worktree creation is runtime-driven; guard allows only git_inspect here.
+		expectedTools: ["planner_git_inspect"],
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
