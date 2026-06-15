@@ -190,17 +190,21 @@ export async function openPlannerWorkspace(
 			// Render as a fixed top overlay so the workspace does not live in the
 			// chat scrollback (mouse-wheel no longer drags it off-screen) and the
 			// native footer stays visible in the reserved rows below it.
+			//
+			// overlayOptions() is evaluated once at show time, so these must be
+			// RELATIVE values: the layout is re-resolved against the live terminal
+			// every render, but absolute numbers would pin the overlay to the
+			// startup size and never grow when the terminal is enlarged. "100%"
+			// width/height track the terminal both ways; margin.bottom reserves the
+			// footer rows.
 			overlay: true,
-			overlayOptions: () => {
-				const rows = process.stdout.rows ?? 40;
-				const cols = process.stdout.columns ?? 100;
-				return {
-					width: cols,
-					maxHeight: Math.max(16, rows - footerReserve),
-					anchor: "top-left",
-					row: 0,
-					col: 0,
-				};
+			overlayOptions: {
+				width: "100%",
+				maxHeight: "100%",
+				anchor: "top-left",
+				row: 0,
+				col: 0,
+				margin: { bottom: footerReserve },
 			},
 		},
 	);
