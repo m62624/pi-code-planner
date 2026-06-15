@@ -1,6 +1,6 @@
 {
 	"name": "pi-code-planner",
-	"version": "0.2.1",
+	"version": "0.2.2",
 	"description": "Structured planning, TDD, and Git worktrees for Pi local coding agents",
 	"keywords": [
 		"pi-package",
