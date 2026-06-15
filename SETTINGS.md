@@ -157,6 +157,16 @@ Pasting text into the input works (bracketed paste is handled; newlines fold to 
 
 The workspace also inherits two Pi bindings (work in any pane): `app.thinking.toggle` (default `Ctrl+T`) shows/hides thinking blocks, and `app.tools.expand` (default `Ctrl+O`) expands/collapses tool output. Rebind them in `~/.pi/agent/keybindings.json`.
 
+The workspace's own keys are configurable in planner settings (Pi's `keybindings.json` only accepts Pi's built-in action ids, not ours). Override any of them under `workspace.keys`; omitted actions keep their defaults:
+
+```json
+{ "workspace": { "keys": { "jumpBottom": ["end", "ctrl+e"], "expand": ["x", "o"] } } }
+```
+
+Actions: `focusNext` (`tab`), `up` (`up`), `down` (`down`), `pageUp` (`pageUp`), `pageDown` (`pageDown`), `jumpBottom` (`end`), `jumpTop` (`home`), `expand` (`x`), `submit` (`enter`), `exit` (`escape`). `Ctrl+C` always exits regardless of overrides.
+
+The line under the stage ribbon is a static context line (active task, branch, or a blocking note), clipped with `…` — it does not scroll, so it never forces a repaint.
+
 `Esc` (or `Ctrl+C`) closes the workspace and returns to the plain chat. Streaming assistant output appears live, token by token.
 
 ### Pi keybindings

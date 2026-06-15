@@ -9,6 +9,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import {
 	type Component,
+	type KeyId,
 	matchesKey,
 	type TUI,
 	truncateToWidth,
@@ -29,7 +30,6 @@ import {
 import {
 	applyLiveTiming,
 	buildPlannerDashboardModel,
-	buildTickerContent,
 	type DashboardPalette,
 	type DashboardUiState,
 	dashboardDivider,
@@ -56,6 +56,49 @@ const DEFAULT_FOOTER_RESERVE = 3;
  * chunk so very long sessions never project everything at once.
  */
 const HISTORY_WINDOW = 400;
+/** Minimum gap between streaming-driven redraws (~12 fps). */
+const STREAM_THROTTLE_MS = 80;
+
+type WorkspaceAction =
+	| "focusNext"
+	| "up"
+	| "down"
+	| "pageUp"
+	| "pageDown"
+	| "jumpBottom"
+	| "jumpTop"
+	| "expand"
+	| "submit"
+	| "exit";
+
+/** Built-in workspace keys; overridable via settings workspace.keys. */
+const DEFAULT_WORKSPACE_KEYS: Record<WorkspaceAction, string[]> = {
+	focusNext: ["tab"],
+	up: ["up"],
+	down: ["down"],
+	pageUp: ["pageUp"],
+	pageDown: ["pageDown"],
+	jumpBottom: ["end"],
+	jumpTop: ["home"],
+	expand: ["x"],
+	submit: ["enter"],
+	exit: ["escape"],
+};
+
+function resolveWorkspaceKeys(
+	overrides: Partial<Record<WorkspaceAction, string[]>> | undefined,
+): Record<WorkspaceAction, string[]> {
+	const resolved = { ...DEFAULT_WORKSPACE_KEYS };
+	if (overrides) {
+		for (const action of Object.keys(
+			DEFAULT_WORKSPACE_KEYS,
+		) as WorkspaceAction[]) {
+			const keys = overrides[action];
+			if (keys && keys.length > 0) resolved[action] = keys;
+		}
+	}
+	return resolved;
+}
 
 const STAGE_THEME_COLOR: Record<PlannerStage, ThemeColor> = {
 	init: "syntaxComment",
@@ -134,6 +177,7 @@ export async function openPlannerWorkspace(
 				tui,
 				theme,
 				keybindings,
+				keys: config.keys,
 				initial,
 				footerReserve,
 				load,
@@ -170,6 +214,7 @@ async function loadWorkspaceSettings(
 	autoOpen: boolean;
 	footerReserveRows: number;
 	syncMs: number;
+	keys: Record<WorkspaceAction, string[]>;
 }> {
 	try {
 		const projectPaths = await resolveProjectStoragePaths({
@@ -178,9 +223,13 @@ async function loadWorkspaceSettings(
 			cwd,
 		});
 		const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
+		const workspace = settings.effective.workspace;
 		return {
-			...settings.effective.workspace,
+			enabled: workspace.enabled,
+			autoOpen: workspace.autoOpen,
+			footerReserveRows: workspace.footerReserveRows,
 			syncMs: settings.effective.timer.syncIntervalMinutes * 60_000,
+			keys: resolveWorkspaceKeys(workspace.keys),
 		};
 	} catch {
 		return {
@@ -188,6 +237,7 @@ async function loadWorkspaceSettings(
 			autoOpen: true,
 			footerReserveRows: DEFAULT_FOOTER_RESERVE,
 			syncMs: 600_000,
+			keys: resolveWorkspaceKeys(undefined),
 		};
 	}
 }
@@ -227,6 +277,7 @@ class PlannerWorkspaceComponent implements Component {
 	private readonly onClose: () => void;
 	private readonly footerReserve: number;
 	private readonly keybindings: KeybindingsManager;
+	private readonly keys: Record<WorkspaceAction, string[]>;
 
 	private model: PlannerDashboardModel;
 	private rows: ChatRow[] = [];
@@ -246,7 +297,6 @@ class PlannerWorkspaceComponent implements Component {
 	private readonly ui: DashboardUiState = {
 		selectedIndex: 0,
 		taskScroll: 0,
-		tickerOffset: 0,
 		focus: "tasks",
 	};
 
@@ -255,7 +305,8 @@ class PlannerWorkspaceComponent implements Component {
 	private reloading = false;
 	private version = 0;
 	private lastSignature = "";
-	private tickerOverflow = false;
+	private lastStreamRenderAt = 0;
+	private streamFlushTimer: ReturnType<typeof setTimeout> | null = null;
 	private lastTranscriptTotal = 0;
 	private lastTranscriptHeight = 1;
 	private cachedWidth = -1;
@@ -267,6 +318,7 @@ class PlannerWorkspaceComponent implements Component {
 		tui: TUI;
 		theme: Theme;
 		keybindings: KeybindingsManager;
+		keys: Record<WorkspaceAction, string[]>;
 		initial: PlannerDashboardModel;
 		footerReserve: number;
 		load: () => Promise<PlannerDashboardModel>;
@@ -277,6 +329,7 @@ class PlannerWorkspaceComponent implements Component {
 		this.tui = input.tui;
 		this.palette = buildPalette(input.theme);
 		this.keybindings = input.keybindings;
+		this.keys = input.keys;
 		this.footerReserve = input.footerReserve;
 		this.load = input.load;
 		this.getEntries = input.getEntries;
@@ -286,22 +339,39 @@ class PlannerWorkspaceComponent implements Component {
 		this.refreshRows();
 		this.interval = setInterval(() => this.onTick(), TICK_MS);
 		this.interval.unref?.();
-		// Redraw immediately on each streaming token for smooth output.
-		liveStreamListener = () => {
-			this.refreshRows();
-			this.renderIfChanged();
-		};
+		// Redraw on streaming tokens, throttled so a fast token stream cannot
+		// drive an unbounded repaint rate.
+		liveStreamListener = () => this.onStreamUpdate();
 	}
 
 	private onTick(): void {
-		this.ui.tickerOffset += 1;
 		this.refreshRows();
 		if (this.tick % RELOAD_EVERY_TICKS === 0) void this.reloadModel();
 		this.tick += 1;
-		// Only redraw when something visible actually changed (content, clock
-		// second, marquee step, or focus/input). This keeps the UI calm instead
-		// of repainting every tick.
+		// Redraw only when something visible actually changed (clock second,
+		// content, or focus/input). When nothing changed this is a cheap no-op,
+		// so the workspace is not CPU-bound while idle.
 		this.renderIfChanged();
+	}
+
+	private onStreamUpdate(): void {
+		const now = Date.now();
+		const elapsed = now - this.lastStreamRenderAt;
+		if (elapsed >= STREAM_THROTTLE_MS) {
+			this.lastStreamRenderAt = now;
+			this.refreshRows();
+			this.renderIfChanged();
+			return;
+		}
+		if (!this.streamFlushTimer) {
+			this.streamFlushTimer = setTimeout(() => {
+				this.streamFlushTimer = null;
+				this.lastStreamRenderAt = Date.now();
+				this.refreshRows();
+				this.renderIfChanged();
+			}, STREAM_THROTTLE_MS - elapsed);
+			this.streamFlushTimer.unref?.();
+		}
 	}
 
 	private refreshRows(): void {
@@ -367,10 +437,7 @@ class PlannerWorkspaceComponent implements Component {
 			? `${this.model.stage}/${this.model.step}/${this.model.stepStatus}/${this.model.tasksDone}/${this.model.tasksTotal}`
 			: "unavailable";
 		const uiSig = `${this.focus}|${this.input}|${this.cursor}|${this.ui.selectedIndex}|${this.atBottom}:${this.topLine}|${this.expandAll}|${this.hideThinking}`;
-		// When the ticker overflows, advance it one cell per tick for a smooth
-		// marquee; otherwise it contributes nothing so the UI stays calm.
-		const marquee = this.tickerOverflow ? this.ui.tickerOffset : 0;
-		return `${clock}#${rowsSig}#${modelSig}#${uiSig}#${marquee}`;
+		return `${clock}#${rowsSig}#${modelSig}#${uiSig}`;
 	}
 
 	private scheduleRender(signature = this.computeSignature()): void {
@@ -386,13 +453,18 @@ class PlannerWorkspaceComponent implements Component {
 		}
 	}
 
+	private matchesAction(action: WorkspaceAction, data: string): boolean {
+		return this.keys[action].some((key) => matchesKey(data, key as KeyId));
+	}
+
 	handleInput(data: string): void {
-		if (matchesKey(data, "escape") || matchesKey(data, "ctrl+c")) {
+		// ctrl+c always exits as a safety net, regardless of key overrides.
+		if (this.matchesAction("exit", data) || matchesKey(data, "ctrl+c")) {
 			this.dispose();
 			this.onClose();
 			return;
 		}
-		if (matchesKey(data, "tab")) {
+		if (this.matchesAction("focusNext", data)) {
 			this.cycleFocus();
 			return;
 		}
@@ -429,7 +501,7 @@ class PlannerWorkspaceComponent implements Component {
 	}
 
 	private handleInputFocus(data: string): void {
-		if (matchesKey(data, "enter")) {
+		if (this.matchesAction("submit", data)) {
 			this.submit();
 			return;
 		}
@@ -465,24 +537,24 @@ class PlannerWorkspaceComponent implements Component {
 
 	private handleChatFocus(data: string): void {
 		const page = Math.max(1, this.lastTranscriptHeight - 1);
-		if (matchesKey(data, "up")) {
+		if (this.matchesAction("up", data)) {
 			this.scrollBy(-1);
-		} else if (matchesKey(data, "down")) {
+		} else if (this.matchesAction("down", data)) {
 			this.scrollBy(1);
-		} else if (matchesKey(data, "pageUp")) {
+		} else if (this.matchesAction("pageUp", data)) {
 			this.scrollBy(-page);
-		} else if (matchesKey(data, "pageDown")) {
+		} else if (this.matchesAction("pageDown", data)) {
 			this.scrollBy(page);
-		} else if (matchesKey(data, "end") || data === "G") {
+		} else if (this.matchesAction("jumpBottom", data)) {
 			// Jump back to the live tail (newest output).
 			this.atBottom = true;
 			this.bump();
-		} else if (matchesKey(data, "home") || data === "g") {
+		} else if (this.matchesAction("jumpTop", data)) {
 			this.atBottom = false;
 			this.topLine = 0;
 			if (this.hasMoreHistory) this.growHistory();
 			this.bump();
-		} else if (data === "x" || data === "X") {
+		} else if (this.matchesAction("expand", data)) {
 			this.expandAll = !this.expandAll;
 			this.bump();
 		}
@@ -490,20 +562,14 @@ class PlannerWorkspaceComponent implements Component {
 
 	private handleTasksFocus(data: string): void {
 		const total = this.model.available ? this.model.tasks.length : 0;
-		if (matchesKey(data, "up")) {
+		if (this.matchesAction("up", data)) {
 			this.ui.selectedIndex = Math.max(0, this.ui.selectedIndex - 1);
 			this.bump();
-		} else if (matchesKey(data, "down")) {
+		} else if (this.matchesAction("down", data)) {
 			this.ui.selectedIndex = Math.min(
 				Math.max(0, total - 1),
 				this.ui.selectedIndex + 1,
 			);
-			this.bump();
-		} else if (matchesKey(data, "left")) {
-			this.ui.tickerOffset -= 4;
-			this.bump();
-		} else if (matchesKey(data, "right")) {
-			this.ui.tickerOffset += 4;
 			this.bump();
 		}
 	}
@@ -566,14 +632,7 @@ class PlannerWorkspaceComponent implements Component {
 			: this.rows;
 		const inner = width - 2;
 		const bodyHeight = Math.max(1, height - 2);
-		this.tickerOverflow =
-			model.available && buildTickerContent(model).length > inner;
-		const band = renderDashboardBand(
-			model,
-			inner,
-			this.ui.tickerOffset,
-			this.palette,
-		);
+		const band = renderDashboardBand(model, inner, this.palette);
 
 		const top: string[] = [...band];
 		if (this.focus === "tasks" && model.available) {
@@ -692,6 +751,10 @@ class PlannerWorkspaceComponent implements Component {
 		if (this.interval) {
 			clearInterval(this.interval);
 			this.interval = null;
+		}
+		if (this.streamFlushTimer) {
+			clearTimeout(this.streamFlushTimer);
+			this.streamFlushTimer = null;
 		}
 		liveStreamListener = null;
 	}

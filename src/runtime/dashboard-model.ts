@@ -129,7 +129,6 @@ export interface DashboardPalette {
 export interface DashboardUiState {
 	selectedIndex: number;
 	taskScroll: number;
-	tickerOffset: number;
 	focus: "tasks" | "ribbon";
 }
 
@@ -477,7 +476,7 @@ function renderFullBody(input: BodyInput): string[] {
 	lines.push(blank(inner, palette));
 	// Stage ribbon (progress bar) + ticker.
 	lines.push(...renderStageRibbon(model, inner, palette));
-	lines.push(renderTicker(model, inner, ui.tickerOffset, palette));
+	lines.push(renderContextLine(model, inner, palette));
 	lines.push(divider(inner, palette));
 
 	// Body height available for the two-column area.
@@ -520,7 +519,7 @@ function renderCompactBody(input: BodyInput): string[] {
 	const lines: string[] = [];
 	lines.push(renderHeaderLine(model, inner, palette));
 	lines.push(...renderStageRibbon(model, inner, palette));
-	lines.push(renderTicker(model, inner, ui.tickerOffset, palette));
+	lines.push(renderContextLine(model, inner, palette));
 	lines.push(divider(inner, palette));
 
 	const used = lines.length;
@@ -545,7 +544,6 @@ function renderCompactBody(input: BodyInput): string[] {
 export function renderDashboardBand(
 	model: PlannerDashboardModel,
 	inner: number,
-	tickerOffset: number,
 	palette: DashboardPalette,
 ): string[] {
 	if (!model.available) {
@@ -554,7 +552,7 @@ export function renderDashboardBand(
 	return [
 		renderHeaderLine(model, inner, palette),
 		...renderStageRibbon(model, inner, palette),
-		renderTicker(model, inner, tickerOffset, palette),
+		renderContextLine(model, inner, palette),
 	];
 }
 
@@ -641,40 +639,41 @@ export function renderStageRibbon(
 	return [padTo(position + counter, width, palette)];
 }
 
-/** Full ticker content (no windowing/colour), used for marquee + overflow checks. */
-export function buildTickerContent(model: DashboardModel): string {
-	const segments: string[] = [];
-	if (model.recovery) {
-		segments.push("RECOVERY MODE — resolve before resuming");
-	}
-	segments.push(`${model.stage}/${model.step} (${model.stepStatus})`);
-	if (model.activeTaskId) {
-		const title = taskTitle(model, model.activeTaskId);
-		segments.push(`task ${model.activeTaskId}${title ? `: ${title}` : ""}`);
-	}
-	if (model.currentBranch) segments.push(`branch ${model.currentBranch}`);
-	if (model.note) segments.push(`note: ${model.note}`);
-	segments.push(`route ${model.routeTrail.join(" → ")}`);
-	return `${segments.join("   •   ")}   •   `;
-}
-
-export function renderTicker(
+/**
+ * Static one-line context under the ribbon. Shows only what the header/ribbon
+ * do not already convey — a blocking note, the active task, and the branch —
+ * clipped with an ellipsis. No marquee: a constantly scrolling line forced a
+ * full repaint every tick and burned CPU for little value.
+ */
+export function renderContextLine(
 	model: DashboardModel,
 	width: number,
-	offset: number,
 	palette: DashboardPalette,
 ): string {
-	const full = buildTickerContent(model);
-	const fullWidth = full.length;
-	let windowText: string;
-	if (fullWidth <= width) {
-		windowText = full;
-	} else {
-		const start = ((offset % fullWidth) + fullWidth) % fullWidth;
-		const doubled = full + full;
-		windowText = doubled.slice(start, start + width);
+	const sep = palette.dim("  ·  ");
+	const parts: string[] = [];
+	if (model.recovery)
+		parts.push(palette.error("⚠ recovery — resolve to resume"));
+	else if (model.note) parts.push(palette.warning(`⚠ ${model.note}`));
+	if (model.activeTaskId) {
+		const title = taskTitle(model, model.activeTaskId);
+		parts.push(
+			palette.text(`${model.activeTaskId}${title ? `: ${title}` : ""}`),
+		);
 	}
-	return padTo(palette.muted(windowText), width, palette);
+	if (model.currentBranch) parts.push(palette.dim(model.currentBranch));
+	if (parts.length === 0)
+		parts.push(palette.dim(`${model.stage}/${model.step}`));
+	return padTo(clipEllipsis(parts.join(sep), width, palette), width, palette);
+}
+
+function clipEllipsis(
+	value: string,
+	width: number,
+	palette: DashboardPalette,
+): string {
+	if (palette.measure(value) <= width) return value;
+	return `${palette.clip(value, Math.max(0, width - 1))}…`;
 }
 
 interface ColumnInput {

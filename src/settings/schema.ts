@@ -33,7 +33,25 @@ export interface PlannerWorkspaceSettings {
 	autoOpen: boolean;
 	/** Terminal rows left for Pi's native footer below the workspace. */
 	footerReserveRows: number;
+	/** Optional overrides for the workspace's own keybindings. */
+	keys?: PlannerWorkspaceKeys;
 }
+
+export type PlannerWorkspaceAction =
+	| "focusNext"
+	| "up"
+	| "down"
+	| "pageUp"
+	| "pageDown"
+	| "jumpBottom"
+	| "jumpTop"
+	| "expand"
+	| "submit"
+	| "exit";
+
+export type PlannerWorkspaceKeys = Partial<
+	Record<PlannerWorkspaceAction, string[]>
+>;
 
 export interface PlannerIdleSettings {
 	enabled: boolean;

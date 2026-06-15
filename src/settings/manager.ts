@@ -241,6 +241,47 @@ function normalizeWorkspaceSettings(
 		}
 		result.footerReserveRows = record.footerReserveRows;
 	}
+	if (record.keys !== undefined) {
+		result.keys = normalizeWorkspaceKeys(record.keys, path);
+	}
+	return result;
+}
+
+const WORKSPACE_ACTIONS = [
+	"focusNext",
+	"up",
+	"down",
+	"pageUp",
+	"pageDown",
+	"jumpBottom",
+	"jumpTop",
+	"expand",
+	"submit",
+	"exit",
+] as const;
+
+function normalizeWorkspaceKeys(
+	value: unknown,
+	path: string,
+): NonNullable<PlannerSettingsFile["workspace"]>["keys"] {
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		throw new TypeError(`Planner workspace.keys must be an object: ${path}`);
+	}
+	const record = value as Record<string, unknown>;
+	const result: Record<string, string[]> = {};
+	for (const action of WORKSPACE_ACTIONS) {
+		const keys = record[action];
+		if (keys === undefined) continue;
+		if (
+			!Array.isArray(keys) ||
+			keys.some((k) => typeof k !== "string" || k.trim().length === 0)
+		) {
+			throw new TypeError(
+				`Planner workspace.keys.${action} must be a non-empty string array: ${path}`,
+			);
+		}
+		result[action] = keys.map((k) => (k as string).trim());
+	}
 	return result;
 }
 

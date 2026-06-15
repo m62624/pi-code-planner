@@ -24,8 +24,8 @@ import {
 	type DashboardPalette,
 	type DashboardUiState,
 	liveTotalMs,
+	renderContextLine,
 	renderStageRibbon,
-	renderTicker,
 } from "./dashboard-model";
 
 const identityPalette: DashboardPalette = {
@@ -47,7 +47,6 @@ const identityPalette: DashboardPalette = {
 const defaultUi: DashboardUiState = {
 	selectedIndex: 0,
 	taskScroll: 0,
-	tickerOffset: 0,
 	focus: "tasks",
 };
 
@@ -285,22 +284,30 @@ describe("live timing", () => {
 	});
 });
 
-describe("renderTicker", () => {
-	it("returns a window of the exact width when content overflows", () => {
+describe("renderContextLine", () => {
+	it("shows the active task and branch, clipped with an ellipsis", () => {
 		const model = buildPlannerDashboardModel({
-			context: readyContext({
-				stage: "execution",
-				step: "implement_task",
-				activeTaskId: "task-3",
-				currentBranch: "task/plan-a/task-3",
-			}),
+			context: readyContext(
+				{
+					stage: "execution",
+					step: "implement_task",
+					activeTaskId: "task-3",
+					currentBranch: "task/plan-a/task-3",
+				},
+				{
+					tasks: [
+						{ taskId: "task-3", title: "Add codec fix", status: "active" },
+					],
+				},
+			),
 			now: 1000,
 		}) as DashboardModel;
-		const a = renderTicker(model, 30, 0, identityPalette);
-		const b = renderTicker(model, 30, 5, identityPalette);
-		expect(a.length).toBe(30);
-		expect(b.length).toBe(30);
-		expect(a).not.toBe(b);
+		const wide = renderContextLine(model, 80, identityPalette);
+		expect(wide.length).toBe(80);
+		expect(wide).toContain("task-3: Add codec fix");
+		const narrow = renderContextLine(model, 16, identityPalette);
+		expect(narrow.length).toBe(16);
+		expect(narrow).toContain("…");
 	});
 });
 
