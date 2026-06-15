@@ -471,15 +471,17 @@ export const PLANNER_STEP_RULES = {
 		objective: "Verify the completed task branch.",
 		requiredActions: [
 			"Run final task checks and verify no accidental out-of-scope changes.",
+			"If a check fails and needs a code edit (this step cannot edit project files): call planner_finish_step with target {stage: 'execution', step: 'implement_task'} to fix it, then re-verify. Do NOT use planner_fail_step for this — fail/retry only re-runs the same step.",
 		],
 		allowedNow: [
-			"Run checks, inspect planner diff, and commit final fixes if needed.",
+			"Run checks and inspect the planner diff (no project edits here).",
 		],
 		forbiddenNow: [
 			"Do not merge task to plan while tests fail or project files remain uncommitted.",
 		],
 		exitCondition: "Final checks pass and the worktree is clean.",
-		nextInstruction: "Call planner_finish_step to open capture_skill.",
+		nextInstruction:
+			"On success: planner_finish_step with target execution/capture_skill. On a fix that needs edits: planner_finish_step with target execution/implement_task.",
 	}),
 	capture_skill: stepRule("execution", "capture_skill", {
 		objective:
