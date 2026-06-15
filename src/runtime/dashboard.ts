@@ -421,10 +421,13 @@ class PlannerWorkspaceComponent implements Component {
 			this.bump();
 			return;
 		}
-		if (isPrintable(data)) {
+		const insert = toInsertableText(data);
+		if (insert) {
 			this.input =
-				this.input.slice(0, this.cursor) + data + this.input.slice(this.cursor);
-			this.cursor += data.length;
+				this.input.slice(0, this.cursor) +
+				insert +
+				this.input.slice(this.cursor);
+			this.cursor += insert.length;
 			this.bump();
 		}
 	}
@@ -439,6 +442,16 @@ class PlannerWorkspaceComponent implements Component {
 			this.scrollChat(page);
 		} else if (matchesKey(data, "pageDown")) {
 			this.scrollChat(-page);
+		} else if (matchesKey(data, "end") || data === "G") {
+			// Jump back to the live tail (newest output).
+			this.chatScroll = 0;
+			this.bump();
+		} else if (matchesKey(data, "home") || data === "g") {
+			this.chatScroll = Math.max(
+				0,
+				this.lastTranscriptTotal - this.lastTranscriptHeight,
+			);
+			this.bump();
 		} else if (data === "x" || data === "X") {
 			this.expandAll = !this.expandAll;
 			this.bump();
@@ -567,7 +580,7 @@ class PlannerWorkspaceComponent implements Component {
 			width,
 			height,
 			title: this.title(),
-			clock: this.model.available ? formatClock(this.model.totalActiveMs) : "",
+			clock: model.available ? formatClock(model.totalActiveMs) : "",
 			body,
 		});
 		this.cachedWidth = width;
@@ -617,9 +630,9 @@ class PlannerWorkspaceComponent implements Component {
 			.join(this.palette.dim(" · "));
 		const keys =
 			this.focus === "input"
-				? this.palette.dim("enter send · tab pane · esc exit")
+				? this.palette.dim("enter send · paste ok · tab pane · esc exit")
 				: this.focus === "chat"
-					? this.palette.dim("↑↓ scroll · x expand · tab pane · esc exit")
+					? this.palette.dim("↑↓ scroll · end live · x expand · tab pane")
 					: this.palette.dim("↑↓ task · ←→ ribbon · tab pane · esc exit");
 		return spread(tabs, keys, inner, this.palette);
 	}
@@ -641,13 +654,23 @@ class PlannerWorkspaceComponent implements Component {
 
 const EMPTY_SET: ReadonlySet<string> = new Set<string>();
 
-function isPrintable(data: string): boolean {
-	if (data.length === 0) return false;
-	for (let i = 0; i < data.length; i++) {
-		const code = data.charCodeAt(i);
-		if (code < 32 || code === 127) return false;
-	}
-	return true;
+/**
+ * Convert raw terminal input (a typed key or a pasted block, possibly in
+ * bracketed-paste mode) into insertable single-line text: drop paste markers
+ * and ANSI escapes, fold tabs/newlines to spaces, strip other control bytes.
+ */
+function toInsertableText(data: string): string {
+	const bracket = new RegExp("\\u001B\\[20[01]~", "g");
+	const ansi = new RegExp("\\u001B\\[[0-9;?]*[ -/]*[@-~]", "g");
+	const control = new RegExp(
+		"[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]",
+		"g",
+	);
+	return data
+		.replace(bracket, "")
+		.replace(ansi, "")
+		.replace(/[\r\n\t]/g, " ")
+		.replace(control, "");
 }
 
 function clipPad(

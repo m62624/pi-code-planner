@@ -147,9 +147,11 @@ Inside the workspace, `Tab` cycles three focus panes:
 
 | Pane | Keys |
 | --- | --- |
-| input | type, `Enter` to send to the model |
-| chat | `↑`/`↓`, `PageUp`/`PageDown` scroll the transcript; `x` toggles expand-all for collapsed tool calls |
+| input | type or paste, `Enter` to send to the model |
+| chat | `↑`/`↓`, `PageUp`/`PageDown` scroll; `End` jumps back to the live tail, `Home` to the top; `x` toggles expand-all for collapsed tool calls |
 | tasks | `↑`/`↓` select a task and reveal the task list + stage timings; `←`/`→` nudge the ticker |
+
+Pasting text into the input works (bracketed paste is handled; newlines fold to spaces). Pasting **images** is not supported in the workspace window — Pi's image paste targets its built-in editor, which the workspace replaces; close the workspace (`Esc`) to use the plain editor for image input.
 
 The workspace also inherits two Pi bindings (work in any pane): `app.thinking.toggle` (default `Ctrl+T`) shows/hides thinking blocks, and `app.tools.expand` (default `Ctrl+O`) expands/collapses tool output. Rebind them in `~/.pi/agent/keybindings.json`.
 
