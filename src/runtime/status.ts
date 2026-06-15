@@ -184,7 +184,7 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition: "User explicitly approves the goal or requests a revision.",
 		nextInstruction:
-			"Approve enters discovery/scan_project_structure. Revise returns to intake/draft_goal.",
+			"On approve: normal plans enter discovery/scan_project_structure; creationMethod=improve plans continue to planning/read_context (discovery already ran). Revise returns to intake/draft_goal.",
 	}),
 
 	scan_project_structure: stepRule("discovery", "scan_project_structure", {

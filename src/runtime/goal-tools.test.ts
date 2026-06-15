@@ -133,6 +133,31 @@ describe("planner goal tools", () => {
 		);
 	});
 
+	it("enters planning (not a second discovery) after approval in the improve flow", async () => {
+		const setup = await createGoalSetup({
+			stage: "intake",
+			step: "await_goal_approval",
+			stepStatus: "running",
+			creationMethod: "improve",
+		});
+
+		const result = await executePlannerGoalTool({
+			...setup,
+			toolName: "planner_goal_decide",
+			params: { decision: "approve" },
+		});
+
+		expect(result.status).toBe("applied");
+		expect(result.text).toContain("planning");
+		await expect(
+			readPlanState(setup.fs, setup.planPaths),
+		).resolves.toMatchObject({
+			stage: "planning",
+			step: "read_context",
+			stepStatus: "pending",
+		});
+	});
+
 	it("returns to goal drafting when the user requests a revision", async () => {
 		const setup = await createGoalSetup({
 			stage: "intake",
