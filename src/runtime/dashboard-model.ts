@@ -89,6 +89,15 @@ export interface DashboardModel {
 	timings: DashboardStageTiming[];
 	routeTrail: PlannerStage[];
 	note: string | null;
+	/** Inputs for recomputing live elapsed time without re-reading disk. */
+	live: {
+		base: number;
+		syncedAt: number;
+		running: boolean;
+		syncMs: number;
+		checkpoints: { stage: PlannerStage; activeMs: number }[];
+		timingStage: PlannerStage;
+	};
 }
 
 export interface DashboardUnavailable {
@@ -173,12 +182,24 @@ export function buildPlannerDashboardModel(input: {
 	}));
 	const tasksDone = tasks.filter((task) => task.status === "done").length;
 
-	const totalActiveMs = liveActiveMs(
-		state.timer,
-		input.now,
-		input.syncMs ?? DEFAULT_TIMER_SYNC_MS,
+	const syncMs = input.syncMs ?? DEFAULT_TIMER_SYNC_MS;
+	const timer = state.timer;
+	const clockBase = timer?.activeMs ?? 0;
+	const clockSyncedAt = timer?.lastSyncedAt ?? input.now;
+	const clockRunning = timer
+		? timer.pausedAt === null && timer.finishedAt === null
+		: false;
+	const checkpoints = (timer?.checkpoints ?? []).map((c) => ({
+		stage: c.stage,
+		activeMs: c.activeMs,
+	}));
+	const totalActiveMs = liveActiveMs(timer, input.now, syncMs);
+	const timings = computeStageTimings(
+		checkpoints,
+		state.stage,
+		totalActiveMs,
+		effectiveStage,
 	);
-	const timings = buildStageTimings(state, totalActiveMs, effectiveStage);
 
 	const stuck = !recovery && state.lastStuckAttemptId !== null;
 	const blocked =
@@ -217,6 +238,44 @@ export function buildPlannerDashboardModel(input: {
 		timings,
 		routeTrail,
 		note: state.brokenReason ?? state.blockedReason ?? null,
+		live: {
+			base: clockBase,
+			syncedAt: clockSyncedAt,
+			running: clockRunning,
+			syncMs,
+			checkpoints,
+			timingStage: effectiveStage,
+		},
+	};
+}
+
+/** Live total active ms from a built model, recomputed against `now`. */
+export function liveTotalMs(model: DashboardModel, now: number): number {
+	const { base, syncedAt, running, syncMs } = model.live;
+	if (!running) return base;
+	return base + Math.max(0, Math.min(now - syncedAt, syncMs));
+}
+
+/**
+ * Recompute the clock and stage timings against `now` without touching disk, so
+ * the terminal display ticks in real time while the persisted timer only syncs
+ * occasionally.
+ */
+export function applyLiveTiming(
+	model: PlannerDashboardModel,
+	now: number,
+): PlannerDashboardModel {
+	if (!model.available) return model;
+	const total = liveTotalMs(model, now);
+	return {
+		...model,
+		totalActiveMs: total,
+		timings: computeStageTimings(
+			model.live.checkpoints,
+			model.stage,
+			total,
+			model.live.timingStage,
+		),
 	};
 }
 
@@ -276,12 +335,17 @@ function lastSequencedStage(trail: PlannerStage[]): PlannerStage {
 	return "init";
 }
 
-function buildStageTimings(
-	state: PlanStateRecord,
+interface TimingCheckpoint {
+	stage: PlannerStage;
+	activeMs: number;
+}
+
+function computeStageTimings(
+	checkpoints: TimingCheckpoint[],
+	planStage: PlannerStage,
 	totalActiveMs: number,
 	currentStage: PlannerStage,
 ): DashboardStageTiming[] {
-	const checkpoints = state.timer?.checkpoints ?? [];
 	const perStage = new Map<PlannerStage, number>();
 	for (let i = 0; i < checkpoints.length; i++) {
 		const start = checkpoints[i].activeMs;
@@ -293,16 +357,16 @@ function buildStageTimings(
 		);
 	}
 	if (perStage.size === 0 && totalActiveMs > 0) {
-		perStage.set(state.stage, totalActiveMs);
+		perStage.set(planStage, totalActiveMs);
 	}
 	const order: PlannerStage[] = [...DASHBOARD_STAGE_SEQUENCE];
-	if (state.stage === "recovery") order.push("recovery");
+	if (planStage === "recovery") order.push("recovery");
 	return order
 		.filter((stage) => perStage.has(stage))
 		.map((stage) => ({
 			stage,
 			activeMs: perStage.get(stage) ?? 0,
-			isCurrent: stage === currentStage || stage === state.stage,
+			isCurrent: stage === currentStage || stage === planStage,
 		}));
 }
 
@@ -549,6 +613,7 @@ export function renderStageRibbon(
 	palette: DashboardPalette,
 ): string[] {
 	const sep = palette.dim(" › ");
+	const total = DASHBOARD_STAGE_SEQUENCE.length;
 	const parts = DASHBOARD_STAGE_SEQUENCE.map((stage, index) => {
 		const label = STAGE_LABEL[stage];
 		if (index === model.stageIndex && !model.recovery) {
@@ -562,7 +627,18 @@ export function renderStageRibbon(
 		// Pending stage: dimmed.
 		return palette.dim(label);
 	});
-	return [padTo(parts.join(sep), width, palette)];
+	const full = parts.join(sep);
+	if (palette.measure(full) <= width) {
+		return [padTo(full, width, palette)];
+	}
+	// Too narrow for the whole ribbon: keep the active stage always visible.
+	const activeStage =
+		DASHBOARD_STAGE_SEQUENCE[Math.max(0, model.stageIndex)] ?? "init";
+	const position = model.recovery
+		? palette.error("RECOVERY")
+		: palette.bold(palette.stage(activeStage, `[${STAGE_LABEL[activeStage]}]`));
+	const counter = palette.dim(` ${Math.max(1, model.stageIndex + 1)}/${total}`);
+	return [padTo(position + counter, width, palette)];
 }
 
 /** Full ticker content (no windowing/colour), used for marquee + overflow checks. */
@@ -745,11 +821,49 @@ export function renderDetailColumn(
 	}
 	if (model.note) {
 		lines.push(blank(width, palette));
-		lines.push(
-			padTo(palette.warning(palette.clip(model.note, width)), width, palette),
-		);
+		const remaining = Math.max(1, height - lines.length);
+		const noteLines = wrapWords(model.note, width, remaining);
+		for (const line of noteLines) {
+			lines.push(padTo(palette.warning(line), width, palette));
+		}
 	}
 	return fillColumn(lines, height, width, palette);
+}
+
+/**
+ * Greedy word wrap into at most `maxLines` lines; the last line is ellipsised
+ * when the text does not fit.
+ */
+function wrapWords(text: string, width: number, maxLines: number): string[] {
+	const words = text.replace(/\s+/g, " ").trim().split(" ");
+	const lines: string[] = [];
+	let current = "";
+	for (const word of words) {
+		const candidate = current ? `${current} ${word}` : word;
+		if (candidate.length <= width) {
+			current = candidate;
+			continue;
+		}
+		if (current) lines.push(current);
+		current = word.length > width ? word.slice(0, width) : word;
+		if (lines.length >= maxLines) break;
+	}
+	if (current && lines.length < maxLines) lines.push(current);
+	if (lines.length > maxLines) lines.length = maxLines;
+	const overflow =
+		lines.length === maxLines && joinedLength(lines) < text.length;
+	if (overflow) {
+		const last = lines[maxLines - 1];
+		lines[maxLines - 1] =
+			last.length >= width
+				? `${last.slice(0, Math.max(0, width - 1))}…`
+				: `${last}…`;
+	}
+	return lines;
+}
+
+function joinedLength(lines: string[]): number {
+	return lines.reduce((sum, line) => sum + line.length + 1, 0);
 }
 
 function renderHelpLine(

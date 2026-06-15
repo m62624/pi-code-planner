@@ -151,7 +151,9 @@ Inside the workspace, `Tab` cycles three focus panes:
 | chat | `↑`/`↓`, `PageUp`/`PageDown` scroll the transcript; `x` toggles expand-all for collapsed tool calls |
 | tasks | `↑`/`↓` select a task and reveal the task list + stage timings; `←`/`→` nudge the ticker |
 
-`Esc` (or `Ctrl+C`) closes the workspace and returns to the plain chat. Streaming assistant output appears live.
+The workspace also inherits two Pi bindings (work in any pane): `app.thinking.toggle` (default `Ctrl+T`) shows/hides thinking blocks, and `app.tools.expand` (default `Ctrl+O`) expands/collapses tool output. Rebind them in `~/.pi/agent/keybindings.json`.
+
+`Esc` (or `Ctrl+C`) closes the workspace and returns to the plain chat. Streaming assistant output appears live, token by token.
 
 ### Pi keybindings
 

@@ -2,6 +2,7 @@ import {
 	type ExtensionAPI,
 	type ExtensionContext,
 	getAgentDir,
+	type KeybindingsManager,
 	type Theme,
 	type ThemeColor,
 } from "@earendil-works/pi-coding-agent";
@@ -25,6 +26,7 @@ import {
 	renderTranscript,
 } from "./chat-view";
 import {
+	applyLiveTiming,
 	buildPlannerDashboardModel,
 	buildTickerContent,
 	type DashboardPalette,
@@ -32,14 +34,19 @@ import {
 	dashboardDivider,
 	formatClock,
 	frameWorkspace,
+	liveTotalMs,
 	type PlannerDashboardModel,
 	renderDashboardBand,
 	renderDashboardColumns,
 } from "./dashboard-model";
 
 const TICK_MS = 180;
-/** Reload the model from disk every Nth tick (~1s). */
-const RELOAD_EVERY_TICKS = 6;
+/**
+ * Reload structural model state (tasks, stage) from disk every Nth tick (~3s).
+ * The clock and stage timings tick live in-memory between reloads, so we do not
+ * hit disk every second.
+ */
+const RELOAD_EVERY_TICKS = 16;
 /** Rows left for Pi's native footer below the workspace overlay. */
 const DEFAULT_FOOTER_RESERVE = 3;
 
@@ -60,6 +67,8 @@ const STAGE_THEME_COLOR: Record<PlannerStage, ThemeColor> = {
  * token-by-token output before the entry is committed to the session.
  */
 let liveAssistantMessage: unknown | null = null;
+/** Notifies the open workspace (if any) to redraw on each streaming token. */
+let liveStreamListener: (() => void) | null = null;
 
 export function registerPlannerDashboard(pi: ExtensionAPI): void {
 	pi.registerCommand("planner-dashboard", {
@@ -70,12 +79,15 @@ export function registerPlannerDashboard(pi: ExtensionAPI): void {
 		},
 	});
 
-	// Track streaming assistant output so the workspace renders it live.
+	// Track streaming assistant output and redraw the workspace per token so the
+	// chat fills in smoothly, matching Pi's own streaming feel.
 	pi.on("message_update", (event) => {
 		liveAssistantMessage = (event as { message?: unknown }).message ?? null;
+		liveStreamListener?.();
 	});
 	pi.on("message_end", () => {
 		liveAssistantMessage = null;
+		liveStreamListener?.();
 	});
 }
 
@@ -116,10 +128,11 @@ export async function openPlannerWorkspace(
 	};
 	const initial = await load();
 	await ctx.ui.custom<void>(
-		(tui, theme, _keybindings, done) => {
+		(tui, theme, keybindings, done) => {
 			return new PlannerWorkspaceComponent({
 				tui,
 				theme,
+				keybindings,
 				initial,
 				initialRows: getRows(),
 				footerReserve,
@@ -213,6 +226,7 @@ class PlannerWorkspaceComponent implements Component {
 	private readonly sendUserMessage: (text: string) => void;
 	private readonly onClose: () => void;
 	private readonly footerReserve: number;
+	private readonly keybindings: KeybindingsManager;
 
 	private model: PlannerDashboardModel;
 	private rows: ChatRow[];
@@ -221,6 +235,7 @@ class PlannerWorkspaceComponent implements Component {
 	private focus: WorkspaceFocus = "input";
 	private chatScroll = 0;
 	private expandAll = false;
+	private hideThinking = false;
 	private readonly ui: DashboardUiState = {
 		selectedIndex: 0,
 		taskScroll: 0,
@@ -244,6 +259,7 @@ class PlannerWorkspaceComponent implements Component {
 	constructor(input: {
 		tui: TUI;
 		theme: Theme;
+		keybindings: KeybindingsManager;
 		initial: PlannerDashboardModel;
 		initialRows: ChatRow[];
 		footerReserve: number;
@@ -254,6 +270,7 @@ class PlannerWorkspaceComponent implements Component {
 	}) {
 		this.tui = input.tui;
 		this.palette = buildPalette(input.theme);
+		this.keybindings = input.keybindings;
 		this.footerReserve = input.footerReserve;
 		this.load = input.load;
 		this.getRows = input.getRows;
@@ -263,6 +280,11 @@ class PlannerWorkspaceComponent implements Component {
 		this.rows = input.initialRows;
 		this.interval = setInterval(() => this.onTick(), TICK_MS);
 		this.interval.unref?.();
+		// Redraw immediately on each streaming token for smooth output.
+		liveStreamListener = () => {
+			this.refreshRows();
+			this.renderIfChanged();
+		};
 	}
 
 	private onTick(): void {
@@ -308,12 +330,12 @@ class PlannerWorkspaceComponent implements Component {
 		const last = this.rows[this.rows.length - 1];
 		const rowsSig = `${this.rows.length}:${last?.key ?? ""}:${last?.text.length ?? 0}`;
 		const clock = this.model.available
-			? formatClock(this.model.totalActiveMs)
+			? formatClock(liveTotalMs(this.model, Date.now()))
 			: "x";
 		const modelSig = this.model.available
 			? `${this.model.stage}/${this.model.step}/${this.model.stepStatus}/${this.model.tasksDone}/${this.model.tasksTotal}`
 			: "unavailable";
-		const uiSig = `${this.focus}|${this.input}|${this.cursor}|${this.ui.selectedIndex}|${this.chatScroll}|${this.expandAll}`;
+		const uiSig = `${this.focus}|${this.input}|${this.cursor}|${this.ui.selectedIndex}|${this.chatScroll}|${this.expandAll}|${this.hideThinking}`;
 		// When the ticker overflows, advance it one cell per tick for a smooth
 		// marquee; otherwise it contributes nothing so the UI stays calm.
 		const marquee = this.tickerOverflow ? this.ui.tickerOffset : 0;
@@ -341,6 +363,17 @@ class PlannerWorkspaceComponent implements Component {
 		}
 		if (matchesKey(data, "tab")) {
 			this.cycleFocus();
+			return;
+		}
+		// Inherit Pi's own keybindings for thinking visibility and tool expansion.
+		if (this.keybindings.matches(data, "app.thinking.toggle")) {
+			this.hideThinking = !this.hideThinking;
+			this.bump();
+			return;
+		}
+		if (this.keybindings.matches(data, "app.tools.expand")) {
+			this.expandAll = !this.expandAll;
+			this.bump();
 			return;
 		}
 		if (this.focus === "input") {
@@ -469,12 +502,15 @@ class PlannerWorkspaceComponent implements Component {
 			return this.cachedLines;
 		}
 
-		const model = this.model;
+		// Recompute the clock + stage timings live (no disk read) each draw.
+		const model = applyLiveTiming(this.model, Date.now());
+		const rows = this.hideThinking
+			? this.rows.filter((row) => row.role !== "thinking")
+			: this.rows;
 		const inner = width - 2;
 		const bodyHeight = Math.max(1, height - 2);
-		this.tickerOverflow = model.available
-			? buildTickerContent(model).length > inner
-			: false;
+		this.tickerOverflow =
+			model.available && buildTickerContent(model).length > inner;
 		const band = renderDashboardBand(
 			model,
 			inner,
@@ -512,7 +548,7 @@ class PlannerWorkspaceComponent implements Component {
 			bodyHeight - top.length - bottom.length,
 		);
 		const transcript = renderTranscript(
-			this.rows,
+			rows,
 			{
 				width: inner,
 				height: transcriptHeight,
@@ -599,6 +635,7 @@ class PlannerWorkspaceComponent implements Component {
 			clearInterval(this.interval);
 			this.interval = null;
 		}
+		liveStreamListener = null;
 	}
 }
 

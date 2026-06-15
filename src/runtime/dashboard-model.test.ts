@@ -16,12 +16,14 @@ import type {
 	ActivePlanContextUnavailable,
 } from "./active-plan";
 import {
+	applyLiveTiming,
 	buildPlannerDashboardModel,
 	composeDashboard,
 	DASHBOARD_STAGE_SEQUENCE,
 	type DashboardModel,
 	type DashboardPalette,
 	type DashboardUiState,
+	liveTotalMs,
 	renderStageRibbon,
 	renderTicker,
 } from "./dashboard-model";
@@ -231,6 +233,55 @@ describe("renderStageRibbon", () => {
 		expect(line.length).toBe(70);
 		expect(line).toContain("INIT");
 		expect(line).toContain("DONE");
+	});
+
+	it("falls back to an active-stage indicator when too narrow", () => {
+		const model = buildPlannerDashboardModel({
+			context: readyContext({ stage: "discovery", step: "write_questions" }),
+			now: 1000,
+		}) as DashboardModel;
+		const [line] = renderStageRibbon(model, 20, identityPalette);
+		expect(line.length).toBe(20);
+		expect(line).toContain("[DISCOVERY]");
+		expect(line).toContain("3/7");
+	});
+});
+
+describe("live timing", () => {
+	it("advances the clock without a disk reload while running", () => {
+		const timer = timerWith(
+			[{ stage: "execution", enteredAt: 0, activeMs: 0 }],
+			60_000,
+		);
+		const model = buildPlannerDashboardModel({
+			context: readyContext(
+				{ stage: "execution", step: "implement_task" },
+				{ timer },
+			),
+			now: 60_000,
+			syncMs: 600_000,
+		}) as DashboardModel;
+
+		expect(liveTotalMs(model, 60_000)).toBe(60_000);
+		expect(liveTotalMs(model, 65_000)).toBe(65_000);
+		const later = applyLiveTiming(model, 65_000) as DashboardModel;
+		expect(later.totalActiveMs).toBe(65_000);
+	});
+
+	it("freezes the clock while paused", () => {
+		const timer = timerWith(
+			[{ stage: "intake", enteredAt: 0, activeMs: 0 }],
+			30_000,
+		);
+		timer.pausedAt = 30_000;
+		const model = buildPlannerDashboardModel({
+			context: readyContext(
+				{ stage: "intake", step: "await_goal_approval" },
+				{ timer },
+			),
+			now: 30_000,
+		}) as DashboardModel;
+		expect(liveTotalMs(model, 90_000)).toBe(30_000);
 	});
 });
 
