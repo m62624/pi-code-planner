@@ -243,7 +243,7 @@ Compact boundaries (`compact_discovery`, `compact_planning`, `compact_task`, `co
 
 ### 7. AGENTS.md contracts
 
-The planner treats `AGENTS.md` files as local architecture contracts — model-facing memory routed by topic rather than file path. Before planning, the model calls `planner_contract_route` to fetch only the contracts relevant to the current goal. After each task, `planner_contract_check` determines whether the implementation changed any architectural surface and updates contracts if needed.
+The planner treats `AGENTS.md` files as local architecture contracts — model-facing memory routed by topic rather than file path. Inspired by [DOX](https://github.com/agent0ai/dox). Before planning, the model calls `planner_contract_route` to fetch only the contracts relevant to the current goal. After each task, `planner_contract_check` determines whether the implementation changed any architectural surface and updates contracts if needed.
 
 Contracts are written only through `planner_contract_upsert`. The planner tracks touched files in `state.json` and keeps baselines so `/planner-finish` can offer to remove or restore them.
 
