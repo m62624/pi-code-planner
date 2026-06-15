@@ -26,6 +26,7 @@ import {
 } from "./chat-view";
 import {
 	buildPlannerDashboardModel,
+	buildTickerContent,
 	type DashboardPalette,
 	type DashboardUiState,
 	dashboardDivider,
@@ -93,8 +94,8 @@ export async function openPlannerWorkspace(
 		return;
 	}
 	const fs = createNodeFs();
-	const workspace = await loadWorkspaceSettings(fs, ctx.cwd);
-	if (!workspace.enabled) {
+	const config = await loadWorkspaceSettings(fs, ctx.cwd);
+	if (!config.enabled) {
 		if (!options.auto) {
 			ctx.ui.notify(
 				"The planner workspace is disabled (settings: workspace.enabled).",
@@ -103,9 +104,9 @@ export async function openPlannerWorkspace(
 		}
 		return;
 	}
-	if (options.auto && !workspace.autoOpen) return;
-	const footerReserve = Math.max(0, workspace.footerReserveRows);
-	const load = () => loadDashboardModel(fs, ctx.cwd);
+	if (options.auto && !config.autoOpen) return;
+	const footerReserve = Math.max(0, config.footerReserveRows);
+	const load = () => loadDashboardModel(fs, ctx.cwd, config.syncMs);
 	const getRows = () => {
 		const rows = projectSessionEntries(ctx.sessionManager.getBranch());
 		if (liveAssistantMessage) {
@@ -151,7 +152,12 @@ export async function openPlannerWorkspace(
 async function loadWorkspaceSettings(
 	fs: PlannerFs,
 	cwd: string,
-): Promise<{ enabled: boolean; autoOpen: boolean; footerReserveRows: number }> {
+): Promise<{
+	enabled: boolean;
+	autoOpen: boolean;
+	footerReserveRows: number;
+	syncMs: number;
+}> {
 	try {
 		const projectPaths = await resolveProjectStoragePaths({
 			fs,
@@ -159,12 +165,16 @@ async function loadWorkspaceSettings(
 			cwd,
 		});
 		const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
-		return settings.effective.workspace;
+		return {
+			...settings.effective.workspace,
+			syncMs: settings.effective.timer.syncIntervalMinutes * 60_000,
+		};
 	} catch {
 		return {
 			enabled: true,
 			autoOpen: true,
 			footerReserveRows: DEFAULT_FOOTER_RESERVE,
+			syncMs: 600_000,
 		};
 	}
 }
@@ -172,6 +182,7 @@ async function loadWorkspaceSettings(
 async function loadDashboardModel(
 	fs: PlannerFs,
 	cwd: string,
+	syncMs: number,
 ): Promise<PlannerDashboardModel> {
 	try {
 		const projectPaths: ProjectStoragePaths = await resolveProjectStoragePaths({
@@ -180,7 +191,7 @@ async function loadDashboardModel(
 			cwd,
 		});
 		const context = await readActivePlanContext({ fs, projectPaths });
-		return buildPlannerDashboardModel({ context, now: Date.now() });
+		return buildPlannerDashboardModel({ context, now: Date.now(), syncMs });
 	} catch (error) {
 		return {
 			available: false,
@@ -222,6 +233,7 @@ class PlannerWorkspaceComponent implements Component {
 	private reloading = false;
 	private version = 0;
 	private lastSignature = "";
+	private tickerOverflow = false;
 	private lastTranscriptTotal = 0;
 	private lastTranscriptHeight = 1;
 	private cachedWidth = -1;
@@ -302,9 +314,9 @@ class PlannerWorkspaceComponent implements Component {
 			? `${this.model.stage}/${this.model.step}/${this.model.stepStatus}/${this.model.tasksDone}/${this.model.tasksTotal}`
 			: "unavailable";
 		const uiSig = `${this.focus}|${this.input}|${this.cursor}|${this.ui.selectedIndex}|${this.chatScroll}|${this.expandAll}`;
-		// Coarse marquee step (~1 move/sec) so the ticker scrolls without a
-		// per-tick repaint storm.
-		const marquee = Math.floor(this.ui.tickerOffset / 5);
+		// When the ticker overflows, advance it one cell per tick for a smooth
+		// marquee; otherwise it contributes nothing so the UI stays calm.
+		const marquee = this.tickerOverflow ? this.ui.tickerOffset : 0;
 		return `${clock}#${rowsSig}#${modelSig}#${uiSig}#${marquee}`;
 	}
 
@@ -460,6 +472,9 @@ class PlannerWorkspaceComponent implements Component {
 		const model = this.model;
 		const inner = width - 2;
 		const bodyHeight = Math.max(1, height - 2);
+		this.tickerOverflow = model.available
+			? buildTickerContent(model).length > inner
+			: false;
 		const band = renderDashboardBand(
 			model,
 			inner,

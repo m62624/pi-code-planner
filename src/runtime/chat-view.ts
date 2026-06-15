@@ -293,7 +293,25 @@ function bodyColor(
 // ---------------------------------------------------------------------------
 
 function splitText(text: string): string[] {
-	return text.replace(/\r/g, "").split("\n");
+	return sanitizeText(text).split("\n");
+}
+
+/**
+ * Make arbitrary message/tool text safe to lay out by fixed-width math:
+ * expand tabs (terminals render them 1..8 cols wide but width math counts 1),
+ * strip ANSI escapes and other control chars that would desync the frame.
+ */
+function sanitizeText(text: string): string {
+	// Built from char codes so the source stays ASCII-only.
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control-byte stripping
+	const ansi = /\u001B\[[0-9;?]*[ -/]*[@-~]/g;
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control-byte stripping
+	const control = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+	return text
+		.replace(/\r/g, "")
+		.replace(/\t/g, "  ")
+		.replace(ansi, "")
+		.replace(control, "");
 }
 
 function wrapPlain(text: string, width: number): string[] {

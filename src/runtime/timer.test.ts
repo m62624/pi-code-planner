@@ -87,27 +87,28 @@ describe("planner timer", () => {
 		expect(stillPaused.displayActiveMs).toBe(5 * 60 * 1000);
 	});
 
-	it("keeps intake draft work paused before the goal is approved", () => {
-		const initialized = reconcilePlannerTimer({
-			state: state({
-				stage: "intake",
-				step: "draft_goal",
-			}),
-			planStatus: "active",
-			settings,
-			now: 0,
-		}).state;
+	it("counts active intake drafting and compaction (honest timing)", () => {
+		for (const position of [
+			{ stage: "intake" as const, step: "draft_goal" as const },
+			{ stage: "discovery" as const, step: "compact_discovery" as const },
+		]) {
+			const initialized = reconcilePlannerTimer({
+				state: { ...state(position), requiresCompact: true },
+				planStatus: "active",
+				settings,
+				now: 0,
+			}).state;
 
-		const later = reconcilePlannerTimer({
-			state: initialized,
-			planStatus: "active",
-			settings,
-			now: 5 * 60 * 1000,
-		});
+			const later = reconcilePlannerTimer({
+				state: initialized,
+				planStatus: "active",
+				settings,
+				now: 5 * 60 * 1000,
+			});
 
-		expect(later.status).toBe("paused");
-		expect(later.state.timer?.activeMs).toBe(0);
-		expect(later.displayActiveMs).toBe(0);
+			expect(later.status).toBe("active");
+			expect(later.displayActiveMs).toBeGreaterThan(0);
+		}
 	});
 
 	it("resumes from pause without counting the paused gap", () => {

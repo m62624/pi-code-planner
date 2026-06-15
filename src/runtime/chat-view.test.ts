@@ -159,6 +159,29 @@ describe("renderTranscript", () => {
 		expect(expandedText).toContain("line three");
 	});
 
+	it("expands tabs and strips control bytes so the frame stays aligned", () => {
+		const tabbed: ChatRow[] = [
+			{
+				role: "assistant",
+				text: "\t\tconst x = 1;\u001b[31mred\u001b[0m",
+				collapsible: false,
+				key: "a1",
+			},
+		];
+		const result = renderTranscript(
+			tabbed,
+			baseOptions({ width: 40 }),
+			palette,
+		);
+		const joined = result.lines.join("\n");
+		expect(joined).not.toContain("\t");
+		expect(joined).not.toContain("\u001b");
+		expect(joined).toContain("const x = 1;red");
+		for (const line of result.lines) {
+			expect(line.length).toBe(40);
+		}
+	});
+
 	it("shows an empty-state hint when there are no rows", () => {
 		const result = renderTranscript([], baseOptions(), palette);
 		expect(result.lines.join("\n")).toContain("No conversation yet");

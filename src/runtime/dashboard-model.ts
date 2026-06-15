@@ -124,9 +124,14 @@ export interface DashboardUiState {
 	focus: "tasks" | "ribbon";
 }
 
+/** Default timer sync interval (ms) used to cap live elapsed when unknown. */
+const DEFAULT_TIMER_SYNC_MS = 600_000;
+
 export function buildPlannerDashboardModel(input: {
 	context: ActivePlanContext;
 	now: number;
+	/** Timer sync interval in ms; caps live elapsed since the last disk sync. */
+	syncMs?: number;
 }): PlannerDashboardModel {
 	const { context } = input;
 	if (context.status !== "ready") {
@@ -168,7 +173,11 @@ export function buildPlannerDashboardModel(input: {
 	}));
 	const tasksDone = tasks.filter((task) => task.status === "done").length;
 
-	const totalActiveMs = state.timer?.activeMs ?? 0;
+	const totalActiveMs = liveActiveMs(
+		state.timer,
+		input.now,
+		input.syncMs ?? DEFAULT_TIMER_SYNC_MS,
+	);
 	const timings = buildStageTimings(state, totalActiveMs, effectiveStage);
 
 	const stuck = !recovery && state.lastStuckAttemptId !== null;
@@ -223,6 +232,26 @@ function deriveStatusLabel(input: {
 	if (input.planStatus === "done" || input.stage === "done") return "done";
 	if (input.blocked) return "wait";
 	return "run";
+}
+
+/**
+ * Live total active time: the persisted activeMs plus the time elapsed since the
+ * last disk sync (capped to one sync interval, mirroring the footer timer). The
+ * timer state is only written to disk every few minutes, so reading activeMs
+ * directly would make the dashboard clock appear frozen.
+ */
+function liveActiveMs(
+	timer: PlanStateRecord["timer"],
+	now: number,
+	syncMs: number,
+): number {
+	if (!timer) return 0;
+	if (timer.pausedAt !== null || timer.finishedAt !== null) {
+		return timer.activeMs;
+	}
+	return (
+		timer.activeMs + Math.max(0, Math.min(now - timer.lastSyncedAt, syncMs))
+	);
 }
 
 function buildRouteTrail(state: PlanStateRecord): PlannerStage[] {
@@ -536,12 +565,8 @@ export function renderStageRibbon(
 	return [padTo(parts.join(sep), width, palette)];
 }
 
-export function renderTicker(
-	model: DashboardModel,
-	width: number,
-	offset: number,
-	palette: DashboardPalette,
-): string {
+/** Full ticker content (no windowing/colour), used for marquee + overflow checks. */
+export function buildTickerContent(model: DashboardModel): string {
 	const segments: string[] = [];
 	if (model.recovery) {
 		segments.push("RECOVERY MODE — resolve before resuming");
@@ -554,9 +579,16 @@ export function renderTicker(
 	if (model.currentBranch) segments.push(`branch ${model.currentBranch}`);
 	if (model.note) segments.push(`note: ${model.note}`);
 	segments.push(`route ${model.routeTrail.join(" → ")}`);
+	return `${segments.join("   •   ")}   •   `;
+}
 
-	const gap = "   •   ";
-	const full = segments.join(gap) + gap;
+export function renderTicker(
+	model: DashboardModel,
+	width: number,
+	offset: number,
+	palette: DashboardPalette,
+): string {
+	const full = buildTickerContent(model);
 	const fullWidth = full.length;
 	let windowText: string;
 	if (fullWidth <= width) {

@@ -281,9 +281,12 @@ function shouldPausePlannerTimer(
 	planStatus: PlanStatus,
 ): boolean {
 	if (shouldFinishPlannerTimer(state, planStatus)) return false;
-	if (state.stage === "intake") return true;
+	// Pause only while genuinely waiting on the user. Active work — including
+	// planner-controlled compaction — keeps counting for honest timing.
 	if (state.requiresUserDecision) return true;
-	if (state.requiresCompact) return true;
+	if (state.stage === "intake" && state.step === "await_goal_approval") {
+		return true;
+	}
 	if (
 		state.stage === "discovery" &&
 		state.step === "write_questions" &&
