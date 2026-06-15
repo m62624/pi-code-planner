@@ -265,9 +265,14 @@ function buildBlockedToolReason(input: {
 		`Runtime action: ${input.orchestrator.preflight.decision.action}.`,
 		`Lifecycle action: ${input.orchestrator.lifecycle.action}.`,
 		`Next required action: ${formatNextAction(input.orchestrator.nextAction)}.`,
+		input.orchestrator.lifecycle.modelMessage
+			? `Guidance: ${input.orchestrator.lifecycle.modelMessage}`
+			: "",
 		`Allowed tools: ${input.orchestrator.allowedTools.join(", ") || "(none)"}.`,
 		`Allowed transitions: ${input.orchestrator.allowedTransitions.join(", ") || "(none)"}.`,
-	].join("\n");
+	]
+		.filter(Boolean)
+		.join("\n");
 }
 
 function formatNextAction(action: PlannerOrchestratorNextAction): string {

@@ -248,8 +248,7 @@ function stateMachineDecision(
 							tool: "planner_finish_step",
 							allowedTransitions,
 							reason: `Planner step is running: ${state.stage}/${state.step}.`,
-							modelMessage:
-								"This compact boundary is disabled in state.json. Call planner_finish_step to skip the real Pi compact while preserving the state-machine checkpoint.",
+							modelMessage: `This compact boundary is disabled in settings. Do NOT call planner_request_compact. Call planner_finish_step with target ${formatNextTargets(state)} to skip the Pi compact while preserving the state-machine checkpoint.`,
 						});
 			}
 			const branchingTargets = getBranchingTargets(state);
@@ -274,8 +273,7 @@ function stateMachineDecision(
 				tool: "planner_finish_step",
 				allowedTransitions,
 				reason: `Planner step is running: ${state.stage}/${state.step}.`,
-				modelMessage:
-					"Finish the current step and start the next one in a single call: planner_finish_step. The response contains the next step name and instruction keys. Load those instruction files while waiting for the response, then call planner_status to verify the state.",
+				modelMessage: `Finish the current step and start the next one in a single call: planner_finish_step with target ${formatNextTargets(state)}. The response contains the next step name and instruction keys. Load those instruction files while waiting for the response, then call planner_status to verify the state.`,
 			});
 		}
 		case "completed":
@@ -366,6 +364,25 @@ function baseDecision(
 		reason: preflight.decision.reason ?? "",
 		modelMessage: "Call planner_status and follow the reported gate.",
 	};
+}
+
+function formatNextTargets(state: {
+	stage: PlannerStage;
+	step: PlannerStep;
+	creationMethod?: "create" | "improve";
+}): string {
+	try {
+		const next = getAllowedNextPlannerPositions({
+			stage: state.stage,
+			step: state.step,
+			creationMethod: state.creationMethod,
+		});
+		return next
+			.map((p) => `{stage: '${p.stage}', step: '${p.step}'}`)
+			.join(" or ");
+	} catch {
+		return "";
+	}
 }
 
 function getBranchingTargets(state: {

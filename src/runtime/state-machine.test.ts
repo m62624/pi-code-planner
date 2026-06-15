@@ -159,6 +159,28 @@ describe("planner state machine", () => {
 		);
 	});
 
+	it("advances compact_task linearly to select_next_task", () => {
+		const current = state({
+			stage: "execution",
+			step: "compact_task",
+			stepStatus: "running",
+		});
+		expect(getAllowedNextPlannerPositions(current)).toEqual([
+			{ stage: "execution", step: "select_next_task" },
+		] satisfies PlannerPosition[]);
+		expect(
+			completePlannerStep(current, {
+				next: { stage: "execution", step: "select_next_task" },
+			}),
+		).toMatchObject({ stepStatus: "completed", nextStep: "select_next_task" });
+		// Finishing into the same step must be rejected (the old deadlock symptom).
+		expect(() =>
+			completePlannerStep(current, {
+				next: { stage: "execution", step: "compact_task" },
+			}),
+		).toThrowStateMachine("invalid_next_step");
+	});
+
 	it("requires an explicit allowed branch after select_next_task", () => {
 		const current = state({
 			stage: "execution",

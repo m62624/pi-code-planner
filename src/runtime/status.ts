@@ -519,16 +519,20 @@ export const PLANNER_STEP_RULES = {
 	}),
 	compact_task: stepRule("execution", "compact_task", {
 		objective:
-			"Compact the completed task boundary and verify no hidden connections were missed.",
+			"Close the completed task boundary and verify no hidden connections were missed.",
 		requiredActions: [
-			"Before requesting compact: briefly check — did the task change any component that is called, imported, or depended upon by code outside the task scope? If yes and this was not captured in tdd.md or AGENTS.md, add a note to tdd.md before compacting.",
-			"Request Pi compact preserving task result, checks, artifacts, and next-task context.",
+			"Briefly check — did the task change any component called, imported, or depended upon by code outside the task scope? If yes and it was not captured in tdd.md or AGENTS.md, add a note to tdd.md.",
+			"If task compaction is ENABLED: call planner_request_compact, then planner_complete_compact after the boundary finishes.",
+			"If task compaction is DISABLED (the default): do NOT call planner_request_compact — call planner_finish_step with target {stage: 'execution', step: 'select_next_task'} to skip the Pi compact and keep the checkpoint.",
 		],
-		allowedNow: ["Brief connection check, then compact flow only."],
+		allowedNow: [
+			"Brief connection check, then the compact-or-finish flow only.",
+		],
 		forbiddenNow: ["Do not edit task code while compact is required/pending."],
 		exitCondition:
-			"Compaction finished and resume context points back to planner_status.",
-		nextInstruction: "Complete compact to open select_next_task.",
+			"Compaction finished, or the disabled boundary was skipped via finish_step. Either way state points to select_next_task.",
+		nextInstruction:
+			"Follow planner_status: enabled → request_compact then complete_compact; disabled → planner_finish_step with target execution/select_next_task.",
 	}),
 	select_next_task: stepRule("execution", "select_next_task", {
 		objective: "Select the next task or finish execution.",
