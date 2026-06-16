@@ -230,6 +230,27 @@ async function contractScan(
 	}
 	const { planPaths, state } = orchestrator.preflight.context;
 	const params = asObject(input.params);
+	const force = params.force === true;
+	// Guidance tells the model to "call planner_contract_scan before broad
+	// source reads" during discovery, which a model can end up obeying before
+	// every read. Without this short-circuit, re-running scan after
+	// scanComplete walks the whole worktree again from an empty queue/
+	// alreadyDiscovered set instead of recognizing nothing is left to find —
+	// the same "redo completed work from scratch" shape as the read-cache bug
+	// above, just cheaper per call. force:true still does a full rescan.
+	if (state.contracts.scanComplete && !force) {
+		return applied(
+			input.toolName,
+			formatAlreadyScannedResult(state.contracts.discoveredPaths),
+			{
+				scannedDirectories: [],
+				discoveredPaths: state.contracts.discoveredPaths,
+				complete: true,
+				queueLength: 0,
+				cached: true,
+			},
+		);
+	}
 	const batchSize =
 		positiveIntegerOrUndefined(params.batchSize, "batchSize") ??
 		settings.scanBatchSize;
@@ -355,10 +376,31 @@ async function contractRead(
 		path:
 			optionalString(params.path) ?? state.contracts.pendingRead?.path ?? "",
 	});
-	const cursor =
-		positiveIntegerOrUndefined(params.cursor, "cursor") ??
-		state.contracts.pendingRead?.cursor ??
-		0;
+	const explicitCursor = positiveIntegerOrUndefined(params.cursor, "cursor");
+	const isContinuation = state.contracts.pendingRead?.path === path;
+	// planner_contract_route re-selects the same chain every time it's called,
+	// so a model that re-routes to a target it already fully read (a common
+	// pattern: route -> read -> route again before the next source read) would
+	// otherwise restart this multi-page dump from cursor 0 every time, because
+	// a completed read clears pendingRead. Serve the cached summary instead so
+	// re-routing to an already-read contract is cheap. This is what let a small
+	// local model get stuck looping route+read on the same large contract
+	// indefinitely instead of moving on (see contracts.test.ts).
+	if (explicitCursor === undefined && !isContinuation) {
+		const cached = state.contracts.summaries.find(
+			(summary) => summary.path === path,
+		);
+		if (cached) {
+			return applied(input.toolName, formatCachedSummaryResult(cached), {
+				path,
+				cursor: 0,
+				nextCursor: null,
+				complete: true,
+				cached: true,
+			});
+		}
+	}
+	const cursor = explicitCursor ?? state.contracts.pendingRead?.cursor ?? 0;
 	const reason =
 		optionalString(params.reason) ??
 		state.contracts.pendingRead?.reason ??
@@ -1914,6 +1956,53 @@ function formatIndentedList(
 	return values.length > 0
 		? values.map((value) => `  - ${value}`)
 		: [`  - ${empty}`];
+}
+
+function formatCachedSummaryResult(
+	summary: PlannerContractSummaryRecord,
+): string {
+	return [
+		`Contract file: ${summary.path}`,
+		"Already read in this session — serving the cached summary below instead of re-reading from disk.",
+		"Call again with an explicit cursor (e.g. cursor: 0) only if the file may have changed since.",
+		"",
+		"```markdown",
+		"### Purpose",
+		summary.purpose,
+		"",
+		"### Child Index",
+		...formatList(summary.childIndex),
+		"",
+		"### Stable Contracts",
+		...formatList(summary.stableContracts),
+		"",
+		"### Read First",
+		...formatList(summary.readFirst),
+		"",
+		"### Do Not Touch Unless",
+		...formatList(summary.doNotTouchUnless),
+		"",
+		"### Domain Details",
+		...formatList(summary.domainDetails),
+		"```",
+		...(summary.diagnostics.length
+			? [
+					"",
+					"Diagnostics:",
+					...summary.diagnostics.map((entry) => `- ${entry}`),
+				]
+			: []),
+	].join("\n");
+}
+
+function formatAlreadyScannedResult(
+	discoveredPaths: readonly string[],
+): string {
+	return [
+		"Planner contract scan already complete for this plan — not rescanning.",
+		`Known contract files: ${discoveredPaths.length}`,
+		"Use planner_contract_route before source reads. Pass force: true to rescan the worktree from scratch.",
+	].join("\n");
 }
 
 function formatScanResult(
