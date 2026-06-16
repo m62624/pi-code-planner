@@ -28,6 +28,8 @@ Bundled model-facing instruction domain. These markdown files teach local models
 - Do not mention tools that are not allowed by the matching stage behavior.
 
 ### Domain Details
-- `syncBundledInstructionFiles` copies defaults into extension storage without overwriting append files.
+- **Two-domain split:** `instructions/` (this tree) holds the actual default markdown *content*; `src/instructions/` holds the TypeScript that routes, syncs, and merges that content at runtime. Editing prose goes here; editing routing/merge logic goes in `src/instructions/manager.ts` and `src/instructions/routing.ts`.
+- `syncBundledInstructionFiles` (in `src/instructions/defaults.ts`) copies `defaults/*.md` into extension storage without overwriting append files.
 - Append files are user/project customization points and must remain untouched by default sync.
+- `defaults/AGENTS.md` is the index for the 12 per-stage/step files; each maps 1:1 to an `InstructionKey` in `src/instructions/schema.ts`.
 <!-- pi-code-planner:contracts:end -->

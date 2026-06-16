@@ -23,7 +23,8 @@ Session domain: Pi session file creation, handoff between sessions, and resume c
 - Do not write session files without using `PlannerFs.writeTextAtomic` — non-atomic writes corrupt JSONL.
 
 ### Domain Details
-- `handoff.ts` → `createHandoffSession()` writes a new JSONL session file; `findResumeSessionCandidates()` scans existing sessions to find one with the active plan's tool-visibility entry.
-- **Who calls this domain:** `index.ts` `/planner-resume` command handler → `handoff.ts` to locate or create the session that carries plan state into the new Pi session.
-- **Flow:** `/planner-resume` → `session/handoff.ts` → writes new `.pi/sessions/<id>.jsonl` → Pi loads it as the active session → tool visibility restored from JSONL entries.
+- `handoff.ts` → `createPlannerHandoffSession()` writes a new JSONL session file with a typed header; `selectPlannerResumeSessionFile()` picks the best resume candidate (prefers one with messages) from a list supplied by the caller; `createPiSessionDir()` derives Pi's per-cwd session directory name; `removePlannerHandoffBootstrapFile()` deletes a bootstrap session file once it's no longer needed.
+- `handoff.ts` also owns the prompt text injected into the new session: `buildPlannerHandoffPrompt()` (plan create), `buildPlannerImproveHandoffPrompt()` (discovery-first `/planner-improve` flow), `buildPlannerResumePrompt()` (resume) — these are the first instructions the model sees after the handoff.
+- **Who calls this domain:** `index.ts` `/planner-create`, `/planner-improve`, and `/planner-resume` command handlers → `handoff.ts` to build/locate the session that carries plan state into the new Pi session.
+- **Flow:** command handler → `session/handoff.ts` → writes new `.pi/sessions/<id>.jsonl` → Pi loads it as the active session → handoff prompt tells the model to call `planner_status` first.
 <!-- pi-code-planner:contracts:end -->

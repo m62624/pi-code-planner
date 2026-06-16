@@ -34,6 +34,10 @@ Source domain for the Pi extension implementation. Route to narrower AGENTS.md f
 - Do not use session-bound stale contexts after `ctx.switchSession`; use the replacement context.
 
 ### Domain Details
+- `index.ts` → Pi extension entry point; registers commands, tools, and events, and wires `guard/tool-policy.ts` in front of every tool call before it reaches `runtime/`.
+- `index.tool-visibility.ts` → computes which tools are visible/hidden to the model for the current state (separate from whether a tool call is *allowed*, which `guard/tool-policy.ts` decides); read by `index.ts` when building the tool list for a turn.
+- `constants.ts` → two package-wide constants, `EXTENSION_NAME` and `SCHEMA_VERSION`; bump `SCHEMA_VERSION` only alongside a real persisted-schema migration in `storage/schema.ts`.
+- `public-api.ts` → barrel re-export of the full public surface (types + functions) across every domain — git, guard, instructions, project-local, runtime, session, settings, storage, worktree. Adding an export here without a corresponding domain change is a smell; every new domain export usually needs an entry added here too.
 - Most extension work starts in `src/index.ts`, then moves to a runtime/storage helper once behavior needs tests.
 - Keep model-facing strings explicit: local models need exact next actions, allowed wrappers, and blocked reasons.
 - **Connection map:** `index.ts` → registers tools/commands → calls into `runtime/` executors → which call `storage/` readers/writers → which persist to `state.json`/`plan.json`. Settings flow: `settings/` → loaded by `runtime/orchestrator.ts` → affect gate policies and status formatting.
