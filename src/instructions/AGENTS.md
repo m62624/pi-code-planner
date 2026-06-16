@@ -29,5 +29,6 @@ Instructions domain: stage/step routing to instruction files, syncing defaults t
 - `routing.ts` → `getInstructionRoutingForState()` maps current `{stage, step}` to file paths; called by `runtime/orchestrator.ts` before each AI call.
 - `manager.ts` → `syncInstructionFiles()` writes defaults to disk; `loadInstructionContent()` reads and merges all three layers.
 - `defaults.ts` → inline default markdown strings for every key; changing these changes what models read.
+- `paths.ts` → `createInstructionPaths()` derives `defaultsDir`/`globalAppendDir`/`projectAppendDir` from `storage/paths.ts` `ProjectStoragePaths`; `instructionFilePath()` builds the `<key>.md` filename used by `manager.ts` for every layer.
 - **Who calls this domain:** `runtime/orchestrator.ts` → `routing.ts` → `manager.ts` on every planner tool invocation to build the system prompt context.
 <!-- pi-code-planner:contracts:end -->

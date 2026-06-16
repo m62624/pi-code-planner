@@ -81,6 +81,10 @@ export function checkPlannerBuiltinToolAllowed(
 		};
 	}
 
+	// Cross-domain coupling: whether project writes are allowed at all depends
+	// on runtime/stage-behavior.ts's per-step `projectAccess` policy, not on
+	// anything in this file — changing allowed steps there changes what this
+	// guard permits without any change needed here.
 	const behavior = getPlannerStageStepBehavior(input.state.planState);
 	if (
 		!allowsProjectWrite(behavior.projectAccess) &&

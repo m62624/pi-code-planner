@@ -28,11 +28,70 @@ Runtime domain for planner stages, model-facing status, tool wrappers, timers, r
 - Do not add or re-scope a planner tool without updating BOTH allowlists that gate it: the guard policy (`guard/tool-policy.ts` `STEP_ALLOWED_TOOLS`) AND the stage behavior (`stage-behavior.ts` `expectedTools`). Both gates must pass for a tool to be usable at a step; if the guard allows a tool the behavior gate omits, the model is blocked at runtime (a deadlock when no fallback exists). The two gates are composed only on the normal `allow_stage_machine` path (`orchestrator-gate.ts`); the broken/user-decision/compact states bypass the behavior gate and the guard returns a fixed set, so a step-scoped tool must never leak into those sets. Both halves are enforced by `tool-gating-invariant.test.ts` across the full flag matrix (debug on/off, broken, user-decision, compact). Also update tool visibility expectations, status/instructions, and tests.
 
 ### Domain Details
-- `status.ts` is the primary prompt surface for local models; it reads `PlanStateRecord` from the orchestrator and formats step rules, contract summaries, and guidance lines.
-- `workflow-tools.ts` enforces exit gates: each step's finish is blocked unless required artifacts/sections exist and the worktree is clean.
-- `contracts.ts` implements DOX-like local contract flow: scans AGENTS.md files → routes chains → reads → upserts → validates. Contract state (summaries, chains, touchedFiles) lives in `PlannerContractsState` inside `state.json`.
-- `stage-behavior.ts` defines per-step policy tables (allowed tools, commit policy, compact policy, required gates). These are the source of truth for `orchestrator-gate.ts` checks.
-- `orchestrator.ts` runs preflight (reads storage, loads git reality, checks context) and is called by every planner tool before it executes.
-- `idle-watchdog.ts` reads `state.activeTaskId` and `state.step` → sends follow-up wake-up if no activity for `idle.timeoutMinutes`. Depends on step being `running` and not in a blocked/compact/user-wait state.
 - **Key dependency chain:** tool call → `index.ts` → `guard/tool-policy.ts` → `runtime/<tool>.ts` → `runPlannerOrchestrator` (reads storage + git) → executes → `updatePlanState` (writes storage). Any tool that skips `runPlannerOrchestrator` bypasses all stage/step/gate checks.
+- **Dual-gate invariant:** a tool is only callable at a step if it is in BOTH `guard/tool-policy.ts` `STEP_ALLOWED_TOOLS` AND `stage-behavior.ts` `expectedTools`. `orchestrator-gate.ts` composes the two on the normal `allow_stage_machine` path only; broken/user-decision/compact states bypass the behavior gate, so step-scoped tools must never leak into those fixed sets. Enforced end-to-end by `tool-gating-invariant.test.ts`.
+
+**State machine & gating** — own `PlanStateRecord.stage`/`step`/lifecycle, decide what runs next.
+- `state-machine.ts` → pure transition functions (`startPlannerStep`, `advancePlannerStep`, `completePlannerStep`, `blockPlannerStep`, `failPlannerStep`, `retryPlannerStep`, `enterPlannerRecovery`, `resumePlannerAfterRecovery`, compact transitions) and `PlannerStateMachineError`; the only place that mutates stage/step legality.
+- `state-transition.ts` → `PlannerStateTransition` union + `applyPlannerStateTransition`, the single chokepoint that calls into `state-machine.ts` and then `storage/state-store.ts` `savePlanState`; gated by `preflight.ts` `checkPlannerPreflightToolAllowed`.
+- `stage-behavior.ts` → per-(stage,step) policy tables: `PlannerProjectAccess`, `PlannerBehaviorAction`, `expectedTools`, commit/compact policy. Source of truth consumed by `orchestrator-gate.ts` and `status.ts`.
+- `orchestrator.ts` → `runPlannerOrchestrator`/`checkPlannerOrchestratorToolAllowed`: runs preflight (storage + git reality + instruction routing), then the lifecycle/behavior gates, before any tool body executes. Every `*-tools.ts` file in this domain calls it first.
+- `orchestrator-gate.ts` → `filterPlannerWrapperToolsForLifecycle`/`checkPlannerWrapperToolForLifecycle`: applies `lifecycle.ts` decision + `stage-behavior.ts` behavior to narrow the guard's allowed-tool list down to what's actually usable right now.
+- `lifecycle.ts` → `decidePlannerLifecycleNext`: maps `PlannerRuntimeAction` (from `planner-runtime.ts`) + state machine position to a `PlannerLifecycleAction` (`inspect_recovery`, `ask_user_decision`, `compact_pending`, `start_step`, `finish_step`, …). Drives `status.ts` guidance and `orchestrator-gate.ts` filtering.
+- `planner-runtime.ts` → `evaluatePlannerRuntimeReality`: decides `allow_stage_machine` vs `require_recovery`/`require_user_decision`/`require_compact`/`no_active_plan` from `ActivePlanContextStatus` + `PlannerGitReality`. Feeds `lifecycle.ts`.
+- `preflight.ts` → `runPlannerPreflight`/`checkPlannerPreflightToolAllowed`: assembles `PlannerPreflightResult` (active plan context, git reality, instruction routing, runtime decision) — the single read pass every tool depends on before deciding anything.
+
+**Contracts / DOX** (`contracts.ts`) — implements the AGENTS.md contract flow: scans AGENTS.md/context files → routes chains → reads → upserts → validates (`parsePlannerContractMarkdown`, `formatPlannerContractBlock`, `validateContractReferences`). Contract state (summaries, chains, touchedFiles) lives in `PlannerContractsState` inside `state.json`. `workflow-tools.ts` calls `validateContractCheckCompleted`/`validateDiscoveryContractRouting` from here to gate step completion, and `status.ts` calls `formatPlannerContractsStatus` to surface it to the model.
+
+**Plan & task lifecycle tools** — model-facing tool handlers that read/write `PlanRecord`/`TaskRecord`/`PlanStateRecord`.
+- `plan-tools.ts` → create/improve a plan: syncs bundled instruction defaults, creates the plan branch (`git/branches.ts`), initializes plan files/state (`storage/plan-store.ts`, `storage/schema.ts` `createInitialPlanState`).
+- `task-tools.ts` → `planner_task_upsert`: writes task artifacts via `storage/task-store.ts` `upsertTaskArtifacts`, echoes the canonical schema via `artifact-echo.ts`.
+- `active-plan.ts` → `readActivePlanContext`: resolves the currently active plan/state/project records into one `ActivePlanContext`; read by almost every other file in this domain (preflight, recovery, timer, dashboard, plan-naming-adjacent tools).
+- `accepted-plan.ts` → finalize flow: exports the accepted plan to the output branch (`git/planner-ops.ts`), writes the Pi session handoff dir (`session/handoff.ts`), produces `AcceptedPlanPreview`.
+- `plan-naming.ts` → pure validation/generation helpers for plan titles/descriptions/ids (`validatePlannerPlanTitle`, `validatePlannerPlanDescription`); no I/O.
+- `goal-tools.ts` → goal/discovery submission tools; validates naming via `plan-naming.ts`, advances the state machine, updates `storage/project-store.ts` plan summary.
+
+**Artifacts** — the durable, structured markdown files tools write under the plan/task directories.
+- `artifact-tools.ts` → generic submit handlers for `planner_plan_submit`/`planner_discovery_submit`/`planner_tdd_submit`/`planner_summary_submit`; merges TDD sections via `tdd-form.ts`.
+- `artifact-utils.ts` → `appendPlannerSection`: shared atomic "append a `## Heading` section to a markdown file" helper used by several tool files.
+- `artifact-echo.ts` → `formatArtifactEcho`/`formatCanonicalSchemaHint`: appends a canonical-schema-vs-written-output comparison to every strict tool's result so the model can self-correct formatting.
+
+**Recovery / debug / stuck / doubt / refactor review flows** — non-happy-path tool families, all gated through `orchestrator.ts` like normal tools.
+- `recovery.ts` → `inspectPlannerRecovery`: detects `PlannerRecoveryIssue`s (external commits, dirty worktree, missing managed branch) by comparing `git-state-sync.ts` reality against state.
+- `recovery-manager.ts` → `resumePlannerRecovery`: applies a recovery resume decision, calling back into `state-machine.ts` to land on a valid non-recovery position (the only flow allowed to do so, per Stable Contracts).
+- `recovery-tools.ts` → `planner_recovery_inspect`/`planner_recovery_resume` tool wrappers around the two files above.
+- `debug-tools.ts` → `planner_debug_strategy/probe/result/cleanup`; tracks debug attempts under a per-attempt dir and exposes `assertNoPlannerDebugArtifactsBeforeCommit` (called by `git-tools.ts` before any commit) and `formatDebugStatusLines` (called by `status.ts`).
+- `stuck-tools.ts` → `planner_report_stuck`: snapshots a stuck attempt, can hand off into `debug-tools.ts` `initializePlannerDebugSession`.
+- `doubt-review.ts` → pure schema/validation for the doubt-review verification protocol (`DoubtFindingStatus`, `DoubtProofLevel`, `validateDoubtReviewAgainstVerificationProtocol`); `status.ts` calls `extractVerificationProtocolCommands` from here.
+- `doubt-tools.ts` → `planner_doubt_review` tool wrapper around `doubt-review.ts`.
+- `refactor-review.ts` → pure schema/validation for the structured refactor review form (required sections, `REFACTOR_REVIEW_CATEGORIES`, `RefactorDecision`).
+- `refactor-tools.ts` → `planner_refactor_review` tool wrapper around `refactor-review.ts`.
+
+**TDD** — the structured pre/post-implementation evidence form.
+- `tdd-evidence.ts` → field/section name constants for the pre-implementation proof contract, post-implementation counterexample review, and merge-scope audit; no logic.
+- `tdd-form.ts` → `TDD_SECTIONS` (canonical order) + `mergeTddMarkdown`/`renderTddSection`, used by `artifact-tools.ts` to assemble/merge the TDD artifact.
+
+**Git sync** — keeps `PlanStateRecord` consistent with actual repo state.
+- `git-state-sync.ts` → `inspectPlannerGitReality` (branch/head/dirty/conflicts snapshot) and `runSyncedPlannerGitMutation`/`syncStateAfterPlannerGitMutation`, the only place that pairs a git mutation with a state write so they can't drift.
+- `git-tools.ts` → task/refactor branch create+switch+merge tool wrappers (`git/branches.ts`, `git/planner-ops.ts`); calls `debug-tools.ts` `assertNoPlannerDebugArtifactsBeforeCommit` before any commit-bearing operation.
+
+**Status / UI / dashboard** — everything the model or the human sees.
+- `status.ts` → `getPlannerStepRule`: the primary prompt surface for local models; assembles step rules, contract summaries (`contracts.ts`), debug status (`debug-tools.ts`), verification protocol (`doubt-review.ts`), allowed tools (`orchestrator-gate.ts`), and active skills (`skill-library.ts`) into the guidance the model reads every turn.
+- `dashboard-model.ts` → pure data/rendering layer for the TUI dashboard (stage sequence, palette-free formatting); unit-testable without a terminal.
+- `dashboard.ts` → interactive `Component` that injects a real theme/palette and terminal size into `dashboard-model.ts`; reads `active-plan.ts` for live state.
+- `chat-view.ts` → pure transcript projection (`projectSessionEntries`/`renderTranscript`) for the chat pane, consumed by `dashboard.ts`.
+- `next-step-hint.ts` → labels a state-machine target as forward/backward/fix using `STAGE_ORDER`, read by `status.ts` and user-commands to phrase "what's next" hints.
+- `user-commands.ts` → slash-command handlers (`planner_get_plan_list`, `planner_rename`, …) that read/write `PlanRecord`/`ProjectRecord` directly (outside the orchestrator gate, since these are human-invoked, not model tool calls).
+- `user-command-ui.ts` → `PlannerCommandUi`-driven interactive helpers (`selectPlannerPlanId`) layered on top of `user-commands.ts` for prompts that need a picker/confirm.
+- `about.ts` → builds the `planner_about`/settings-explainer text from `SettingDescriptor`s + `contracts.ts` basenames; pure presentation.
+
+**Timers / watchdog** — background wake-ups outside the tool-call path.
+- `timer.ts` → `PlannerTimerRuntimeState` + reconcile loop; reads `active-plan.ts`, gated by `index.tool-visibility.ts` `isPlanActive`, writes `PlannerTimerState` via `storage/state-store.ts`.
+- `idle-watchdog.ts` → reads `state.activeTaskId`/`state.step` → emits a follow-up wake-up message if no activity for `idle.timeoutMinutes`; only fires for `IDLE_EXECUTION_STEPS` while not in a `USER_WAIT_STEPS`/blocked/compact state.
+
+**Misc**
+- `compact.ts` → builds the system-instructions bundle injected after a context compact (`PLANNER_COMPACT_MARKER`/`PLANNER_SYSTEM_INSTRUCTIONS_HEADER`), pulling section content from `instructions/manager.ts`.
+- `skill-library.ts` → `planner_skill_create`/`planner_skill_update`: persists reusable skill markdown + a JSON index (`storage/json.ts`) keyed by source kind (`stuck`/`debug`/`doubt_review`/…); `status.ts` lists active skills from here.
+- `question-tools.ts` → `planner_questions_submit`/`planner_questions_resolve`, the user-clarification loop; writes state via `storage/state-store.ts`.
+- `workflow-tools.ts` → step-finish exit gates: blocks `finish_step` unless required artifacts/sections exist (via `contracts.ts`, `doubt-review.ts`) and the worktree is clean (`git-state-sync.ts` reality). The last checkpoint before `state-transition.ts` is allowed to advance.
 <!-- pi-code-planner:contracts:end -->

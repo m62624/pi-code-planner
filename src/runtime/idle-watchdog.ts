@@ -75,6 +75,11 @@ export function evaluatePlannerIdleWake(input: {
 	};
 }
 
+// Single source of truth for "is it safe to send an idle wake-up right now".
+// The watchdog only fires while state.step is actively running model work;
+// any blocked/compact/user-decision/done/recovery state must return a reason
+// here instead of being filtered elsewhere, or a wake message could land
+// while the user (not the model) is expected to act next.
 export function explainPlannerIdleGate(
 	state: PlanStateRecord,
 	settings: PlannerIdleSettings,

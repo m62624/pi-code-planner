@@ -73,6 +73,10 @@ export function createNodeFs(): PlannerFs {
 			await writeFile(path, content, "utf8");
 		},
 		async writeTextAtomic(path, content) {
+			// Write-then-rename: a crash or concurrent read mid-write can never
+			// observe a partial file. Every JSON store (state/plan/project/task)
+			// depends on this — swapping in `writeText` here would let a crash
+			// corrupt state.json and break resume.
 			await mkdir(dirname(path), { recursive: true });
 			const tempPath = `${path}.tmp-${process.pid}-${Date.now()}-${randomUUID()}`;
 			await writeFile(tempPath, content, "utf8");

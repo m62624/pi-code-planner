@@ -1,3 +1,7 @@
+// Source of truth for instruction keys. Adding a key here without a matching
+// default string in defaults.ts breaks syncInstructionFiles (writes
+// "undefined" to disk); without a routing.ts case the key is simply never
+// surfaced to the model.
 export const INSTRUCTION_KEYS = [
 	"init",
 	"intake",

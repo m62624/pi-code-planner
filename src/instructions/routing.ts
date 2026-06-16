@@ -33,6 +33,9 @@ export function getInstructionRoutingForState(input: {
 	};
 }
 
+// Every branch here must only reference keys from INSTRUCTION_KEYS
+// (schema.ts) that also have default content in defaults.ts — there is no
+// runtime check tying the three files together.
 export function getInstructionKeysForPlannerStep(input: {
 	stage: PlannerStage;
 	step: PlannerStep;

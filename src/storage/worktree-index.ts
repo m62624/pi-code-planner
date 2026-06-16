@@ -14,6 +14,10 @@ export interface WorktreeProjectIndexRecord {
 	lastRootSessionFile?: string | null;
 }
 
+// Looked up by worktreePath alone (see project-resolver.ts), so the path must
+// be derivable from worktreePath with no other input — a hash of the
+// normalized path is the only stable key available before any project
+// record exists.
 export function createWorktreeProjectIndexPath(input: {
 	agentDir: string;
 	worktreePath: string;

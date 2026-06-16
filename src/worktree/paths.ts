@@ -51,6 +51,10 @@ export function createCustomWorktreeLocation(input: {
 	projectId: string;
 	planId: string;
 }): WorktreeLocation {
+	// A custom root is user-configured and can be shared across multiple
+	// projects (unlike project-local, which is namespaced by the project's
+	// own directory tree). Nesting under projectId keeps plans from different
+	// projects from colliding on the same planId.
 	const root = join(input.root, input.projectId);
 	const pathId = compactIdPart(input.planId, WORKTREE_ID_CHARS);
 	const path = join(root, pathId);

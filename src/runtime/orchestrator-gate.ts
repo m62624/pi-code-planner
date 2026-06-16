@@ -43,6 +43,12 @@ export function checkPlannerWrapperToolForLifecycle(
 		return allowLifecycleTool(input.tool);
 	}
 
+	// The stage-behavior gate (expectedTools) is only composed with the guard
+	// allowlist on the normal allow_stage_machine path. Broken/user-decision/
+	// compact states return here and skip it entirely — those paths fall back
+	// to whatever guard/tool-policy.ts allows directly. A step-scoped tool must
+	// never leak into the broken/user-decision/compact allowed sets, or it
+	// would bypass this gate unintentionally.
 	if (
 		input.preflight.context.status !== "ready" ||
 		!input.behavior ||

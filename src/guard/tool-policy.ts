@@ -4,6 +4,12 @@ import type {
 	PlanStateRecord,
 } from "../storage/schema";
 
+// Half of a dual-gate invariant with src/runtime/stage-behavior.ts's
+// `expectedTools`: a tool must be allowed by BOTH this list (STEP_ALLOWED_TOOLS
+// below) and the stage-behavior gate to be usable at a step. If a tool is
+// added here but omitted from stage-behavior.ts's expectedTools for the same
+// step, the model sees it as available but every call is rejected — a
+// silent deadlock. Covered by runtime/tool-gating-invariant.test.ts.
 export const PLANNER_WRAPPER_TOOLS = [
 	"planner_status",
 	"planner_create_plan",
@@ -422,6 +428,9 @@ function withAlwaysAllowed(
 	);
 }
 
+// Debug tools stay listed in STEP_ALLOWED_TOOLS for execution steps but are
+// hidden unless a debug session is actually open (debugArtifactsDir set), so
+// the model isn't offered debug wrappers it can't yet call.
 function filterDebugToolsForState(
 	tools: readonly PlannerWrapperTool[],
 	state: Pick<PlanStateRecord, "debugArtifactsDir">,

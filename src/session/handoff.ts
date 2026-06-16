@@ -10,6 +10,9 @@ export interface PlannerHandoffSession {
 
 export interface PiSessionHeader {
 	type: "session";
+	// Pi's own session-file format version, not this extension's. Bumping it
+	// only makes sense if Pi itself changes its session header contract —
+	// doing so unilaterally breaks every reader expecting v3 headers.
 	version: 3;
 	id: string;
 	timestamp: string;

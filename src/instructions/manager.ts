@@ -155,6 +155,10 @@ async function ensureGlobalAppendPlaceholder(
 	return "created";
 }
 
+// Project and global append are NOT merged together — project, if present,
+// is used exclusively and global is ignored. A user's global append text
+// silently stops applying once a project-level append file is created for
+// the same key.
 async function readSelectedAppend(
 	fs: PlannerFs,
 	paths: InstructionPaths,

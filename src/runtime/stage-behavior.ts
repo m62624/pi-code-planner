@@ -78,6 +78,12 @@ export interface PlannerStageStepBehavior {
 	requiredArtifacts: readonly PlannerBehaviorArtifact[];
 	updatedArtifacts: readonly PlannerBehaviorArtifact[];
 	requiredGates: readonly PlannerBehaviorGate[];
+	// Dual-gate invariant: a tool is only usable at this step if it is BOTH
+	// listed here AND in guard/tool-policy.ts STEP_ALLOWED_TOOLS for the same
+	// step. If the guard allows a tool this list omits, the model gets stuck
+	// with no usable tool at runtime (orchestrator-gate.ts blocks it and there
+	// is no fallback). Enforced across the full flag matrix by
+	// tool-gating-invariant.test.ts.
 	expectedTools: readonly string[];
 	commitPolicy: "forbidden" | "allowed_if_dirty" | "required_if_dirty";
 	compactPolicy: "not_allowed" | "request_required" | "complete_required";

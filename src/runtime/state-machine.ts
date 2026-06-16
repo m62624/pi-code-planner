@@ -388,6 +388,10 @@ export function enterPlannerRecovery(
 	};
 }
 
+// Recovery is the one flow allowed to jump to an arbitrary non-recovery
+// stage/step instead of advancing through the normal strict sequence — every
+// other transition in this file only moves to the next position the state
+// machine itself computes.
 export function resumePlannerAfterRecovery(
 	state: PlanStateRecord,
 	target: PlannerPosition,

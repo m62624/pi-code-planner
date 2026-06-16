@@ -15,6 +15,9 @@ export function createProjectId(projectRoot: string): string {
 	return `${displayName}-${hash}`;
 }
 
+// Shared by createProjectId (here) and task-store.ts's requiredTaskId, so the
+// allowed character set must stay filesystem-safe on every OS this extension
+// targets — these IDs become directory names.
 export function sanitizeIdPart(value: string): string {
 	return value
 		.trim()
