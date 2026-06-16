@@ -337,6 +337,10 @@ export interface PlannerContractsState {
 	touchedFiles: PlannerContractTouchedFile[];
 }
 
+// Persisted as state.json and read back through state-store.ts's
+// normalizePlanState. Adding a field here is a 4-point change: this type,
+// createInitialPlanState's default below, normalizePlanState's default, and
+// a test — old plans on disk won't have the new field until normalized.
 export interface PlanStateRecord {
 	schemaVersion: typeof SCHEMA_VERSION;
 	creationMethod?: PlanCreationMethod;

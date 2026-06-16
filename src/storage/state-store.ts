@@ -10,6 +10,10 @@ import type {
 } from "./schema";
 import { createDefaultPlannerContractsState } from "./schema";
 
+// Per-stateJson-path queue so concurrent updatePlanState calls (e.g. a tool
+// call racing the idle watchdog) read-modify-write in order instead of
+// clobbering each other's update. In-process only — does not protect against
+// a second OS process touching the same state.json.
 const stateWriteLocks = new Map<string, Promise<void>>();
 
 export async function initializePlanState(
@@ -123,6 +127,12 @@ export async function markPlanBroken(
 	}));
 }
 
+// Backward-compat shim for resuming plans created before a field existed.
+// Adding a field to PlanStateRecord requires updating, together: this
+// function's default, schema.ts's type, createInitialPlanState's default,
+// and tests — skipping any one breaks resume for plans saved before the
+// field was added (readJson returns the raw old object with the field
+// missing).
 function normalizePlanState(state: PlanStateRecord): PlanStateRecord {
 	return {
 		...state,

@@ -97,6 +97,10 @@ export function buildPlannerCompactInstructions(input: {
 		"Create a compact summary for pi-code-planner continuation.",
 		"Keep the summary concise. Preserve durable pointers and decisions instead of replaying the full conversation.",
 		"Preserve planner state, artifact paths, git gate, completed work, open risks, and the exact next required planner action.",
+		// After compaction the model only has this summary, not the original
+		// chat — so it must never treat its own recollection as ground truth.
+		// state.json (read via planner_status) is the only durable source of
+		// truth for what's actually complete.
 		"Do not mark any planner step complete unless state.json already says it is complete.",
 		"After compaction, continuation must call planner_status before choosing any next action.",
 		"",

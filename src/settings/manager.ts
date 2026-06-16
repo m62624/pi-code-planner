@@ -57,6 +57,10 @@ export async function loadEffectivePlannerSettings(input: {
 		projectRaw === null
 			? null
 			: normalizeSettingsFile(projectRaw, paths.projectSettingsJson);
+	// Unlike compact/idle/timer/skills/contracts/workspace below, `worktree` is
+	// taken wholesale from whichever level wins — not merged field-by-field.
+	// A project `worktree` block fully replaces global's, even if it only
+	// needs to override one field.
 	const worktreeSource = project?.worktree
 		? "project"
 		: global.worktree

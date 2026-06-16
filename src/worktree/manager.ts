@@ -52,6 +52,10 @@ export async function createPlanWorktree(
 		input.projectPaths.projectRoot,
 	);
 	await input.git.headCommit({ repoRoot: input.projectPaths.projectRoot });
+	// Gitignore/exclude bookkeeping only applies to project-local worktrees:
+	// they live inside the project's own repo tree, so they'd otherwise show
+	// up as untracked in the user's `git status`. Custom-root worktrees live
+	// outside the repo entirely and need no exclusion.
 	const localExclude = projectLocal
 		? await ensureProjectWorktreesLocallyExcluded(
 				input.fs,
@@ -83,6 +87,9 @@ export async function createPlanWorktree(
 	const gitignore = projectLocal
 		? await ensureProjectWorktreesIgnored(input.fs, input.worktreePath)
 		: null;
+	// Skip the bootstrap commit when the ignore rule was already present
+	// (action === "unchanged") — otherwise every new worktree in the same
+	// project would add an empty no-op commit on top of the previous one.
 	const bootstrapCommit =
 		gitignore && gitignore.action !== "unchanged"
 			? await commitGitignoreBootstrap(input.git, input.worktreePath)

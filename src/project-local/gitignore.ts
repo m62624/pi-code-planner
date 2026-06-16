@@ -34,6 +34,10 @@ async function ensureWorktreesIgnoreRule(
 		return { path, rule: PROJECT_WORKTREES_IGNORE_RULE, action: "created" };
 	}
 
+	// Only ever append; never rewrite or reorder the file. This is a
+	// user-owned file (project .gitignore or .git/info/exclude) and we must
+	// not disturb existing rules/comments/ordering — so if our rule is
+	// already present in any form we recognize, do nothing.
 	const content = await fs.readText(path);
 	if (hasExactWorktreesIgnoreRule(content)) {
 		return { path, rule: PROJECT_WORKTREES_IGNORE_RULE, action: "unchanged" };

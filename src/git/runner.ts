@@ -48,6 +48,9 @@ export interface GitCommitInput {
 	message: string;
 }
 
+// The only git contract callers (worktree/manager.ts, src/runtime/) may
+// depend on — never shell out to `git` directly outside an implementation of
+// this interface, or tests lose the ability to substitute a mock runner.
 export interface GitRunner {
 	init(input: GitRepoInput): Promise<void>;
 	currentBranch(input: GitRepoInput): Promise<string>;

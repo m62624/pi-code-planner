@@ -80,6 +80,10 @@ export const PLANNER_CONTEXT_BASENAMES = [
 	"COPILOT.MD",
 ] as const;
 
+// planner_contract_upsert is only ever allowed to write these basenames.
+// CLAUDE.md/GEMINI.md/etc. (the rest of PLANNER_CONTEXT_BASENAMES) are
+// read-only imports — useful context to read, but never a target the
+// planner mutates, since they belong to other tools' conventions.
 export const PLANNER_WRITABLE_CONTRACT_BASENAMES = [
 	"AGENTS.md",
 	"AGENTS.MD",
