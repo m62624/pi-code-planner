@@ -1,4 +1,5 @@
-import { exec } from "node:child_process";
+import { spawn } from "node:child_process";
+import treeKill from "tree-kill";
 import type { PlannerExecSettings } from "../settings/schema";
 import type { PlannerFs } from "../storage/fs";
 import type { PlanStoragePaths } from "../storage/paths";
@@ -13,6 +14,15 @@ export interface PlannerExecInput {
 		timeoutSeconds?: number;
 		cwd?: string;
 	};
+}
+
+const MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
+
+// Cross-platform shell invocation — matches what child_process.exec uses internally.
+function shellArgs(command: string): [string, string[]] {
+	return process.platform === "win32"
+		? ["cmd", ["/d", "/s", "/c", command]]
+		: ["sh", ["-c", command]];
 }
 
 export async function executePlannerExecTool(input: {
@@ -38,52 +48,103 @@ export async function executePlannerExecTool(input: {
 	await updatePlanState(fs, planPaths, (s) => ({ ...s, execRunning: true }));
 
 	return new Promise((resolve) => {
-		const ac = new AbortController();
-		const timer = setTimeout(() => ac.abort(), timeoutMs);
+		const [shell, args] = shellArgs(params.command);
+		const child = spawn(shell, args, {
+			cwd,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
 
-		exec(
-			params.command,
-			{ cwd, signal: ac.signal, maxBuffer: 10 * 1024 * 1024 },
-			(err, stdout, stderr) => {
-				clearTimeout(timer);
+		let stdout = "";
+		let stderr = "";
+		let totalBytes = 0;
+		let truncated = false;
 
-				updatePlanState(fs, planPaths, (s) => ({
-					...s,
-					execRunning: false,
-				})).catch(() => {});
+		child.stdout.on("data", (chunk: Buffer) => {
+			totalBytes += chunk.length;
+			if (totalBytes <= MAX_OUTPUT_BYTES) {
+				stdout += chunk.toString();
+			} else if (!truncated) {
+				truncated = true;
+			}
+		});
 
-				if (err && ac.signal.aborted) {
-					resolve({
-						text: [
-							cappedNote +
-								`Command timed out after ${timeoutSeconds}s — process killed.`,
-							`Command: ${params.command}`,
-							`If this operation is expected to take longer, retry with a higher timeoutSeconds (max: ${settings.maxTimeoutSeconds}).`,
-						].join("\n"),
-					});
-					return;
-				}
+		child.stderr.on("data", (chunk: Buffer) => {
+			totalBytes += chunk.length;
+			if (totalBytes <= MAX_OUTPUT_BYTES) {
+				stderr += chunk.toString();
+			} else if (!truncated) {
+				truncated = true;
+			}
+		});
 
-				const out = [stdout, stderr].filter(Boolean).join("\n").trim();
-				if (err) {
-					resolve({
-						text: [
-							cappedNote + `Command failed (exit ${err.code ?? "unknown"}).`,
-							`Command: ${params.command}`,
-							out || "(no output)",
-						].join("\n"),
-					});
-					return;
-				}
+		let timedOut = false;
+		const timer = setTimeout(() => {
+			timedOut = true;
+			if (child.pid !== undefined) {
+				// tree-kill sends the signal to the entire process tree,
+				// ensuring no orphan subprocesses remain after timeout.
+				treeKill(child.pid, "SIGTERM");
+			}
+		}, timeoutMs);
 
+		child.on("close", (code) => {
+			clearTimeout(timer);
+
+			updatePlanState(fs, planPaths, (s) => ({
+				...s,
+				execRunning: false,
+			})).catch(() => {});
+
+			const truncatedNote = truncated
+				? `\n[Output truncated — exceeded ${MAX_OUTPUT_BYTES / 1024 / 1024} MB]\n`
+				: "";
+			const out =
+				[stdout, stderr].filter(Boolean).join("\n").trim() + truncatedNote;
+
+			if (timedOut) {
 				resolve({
 					text: [
-						cappedNote + `Command completed successfully.`,
+						cappedNote +
+							`Command timed out after ${timeoutSeconds}s — process tree killed.`,
+						`Command: ${params.command}`,
+						`If this operation is expected to take longer, retry with a higher timeoutSeconds (max: ${settings.maxTimeoutSeconds}).`,
+					].join("\n"),
+				});
+				return;
+			}
+
+			if (code !== 0) {
+				resolve({
+					text: [
+						cappedNote + `Command failed (exit ${code ?? "unknown"}).`,
 						`Command: ${params.command}`,
 						out || "(no output)",
 					].join("\n"),
 				});
-			},
-		);
+				return;
+			}
+
+			resolve({
+				text: [
+					cappedNote + `Command completed successfully.`,
+					`Command: ${params.command}`,
+					out || "(no output)",
+				].join("\n"),
+			});
+		});
+
+		child.on("error", (err) => {
+			clearTimeout(timer);
+			updatePlanState(fs, planPaths, (s) => ({
+				...s,
+				execRunning: false,
+			})).catch(() => {});
+			resolve({
+				text: [
+					cappedNote + `Command failed to start: ${err.message}`,
+					`Command: ${params.command}`,
+				].join("\n"),
+			});
+		});
 	});
 }
