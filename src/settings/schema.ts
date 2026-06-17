@@ -80,6 +80,7 @@ export interface PlannerTimerSettings {
 export interface PlannerExecSettings {
 	defaultTimeoutSeconds: number;
 	maxTimeoutSeconds: number;
+	maxOutputBytes: number;
 }
 
 export interface PlannerSkillsSettings {
@@ -123,6 +124,7 @@ export const DEFAULT_PLANNER_SETTINGS = {
 	exec: {
 		defaultTimeoutSeconds: 240,
 		maxTimeoutSeconds: 1800,
+		maxOutputBytes: 10 * 1024 * 1024,
 	},
 	metadata: {
 		humanLanguage: "English",

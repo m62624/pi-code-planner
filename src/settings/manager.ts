@@ -353,6 +353,15 @@ function normalizeExecSettings(
 						path,
 					),
 				}),
+		...(record.maxOutputBytes === undefined
+			? {}
+			: {
+					maxOutputBytes: positiveInteger(
+						record.maxOutputBytes,
+						"exec.maxOutputBytes",
+						path,
+					),
+				}),
 	};
 }
 

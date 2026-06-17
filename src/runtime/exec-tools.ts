@@ -16,8 +16,6 @@ export interface PlannerExecInput {
 	};
 }
 
-const MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
-
 // Cross-platform shell invocation — matches what child_process.exec uses internally.
 function shellArgs(command: string): [string, string[]] {
 	return process.platform === "win32"
@@ -54,15 +52,17 @@ export async function executePlannerExecTool(input: {
 			stdio: ["ignore", "pipe", "pipe"],
 		});
 
-		let stdout = "";
-		let stderr = "";
+		// Collect raw chunks — concat into a single Buffer at the end so
+		// multi-byte UTF-8 characters split across chunk boundaries decode correctly.
+		const stdoutChunks: Buffer[] = [];
+		const stderrChunks: Buffer[] = [];
 		let totalBytes = 0;
 		let truncated = false;
 
 		child.stdout.on("data", (chunk: Buffer) => {
 			totalBytes += chunk.length;
-			if (totalBytes <= MAX_OUTPUT_BYTES) {
-				stdout += chunk.toString();
+			if (totalBytes <= settings.maxOutputBytes) {
+				stdoutChunks.push(chunk);
 			} else if (!truncated) {
 				truncated = true;
 			}
@@ -70,8 +70,8 @@ export async function executePlannerExecTool(input: {
 
 		child.stderr.on("data", (chunk: Buffer) => {
 			totalBytes += chunk.length;
-			if (totalBytes <= MAX_OUTPUT_BYTES) {
-				stderr += chunk.toString();
+			if (totalBytes <= settings.maxOutputBytes) {
+				stderrChunks.push(chunk);
 			} else if (!truncated) {
 				truncated = true;
 			}
@@ -87,7 +87,7 @@ export async function executePlannerExecTool(input: {
 			}
 		}, timeoutMs);
 
-		child.on("close", (code) => {
+		const finish = (code: number | null) => {
 			clearTimeout(timer);
 
 			updatePlanState(fs, planPaths, (s) => ({
@@ -95,8 +95,10 @@ export async function executePlannerExecTool(input: {
 				execRunning: false,
 			})).catch(() => {});
 
+			const stdout = Buffer.concat(stdoutChunks).toString("utf8");
+			const stderr = Buffer.concat(stderrChunks).toString("utf8");
 			const truncatedNote = truncated
-				? `\n[Output truncated — exceeded ${MAX_OUTPUT_BYTES / 1024 / 1024} MB]\n`
+				? `\n[Output truncated — exceeded ${settings.maxOutputBytes / 1024 / 1024} MB]\n`
 				: "";
 			const out =
 				[stdout, stderr].filter(Boolean).join("\n").trim() + truncatedNote;
@@ -131,7 +133,9 @@ export async function executePlannerExecTool(input: {
 					out || "(no output)",
 				].join("\n"),
 			});
-		});
+		};
+
+		child.on("close", finish);
 
 		child.on("error", (err) => {
 			clearTimeout(timer);
