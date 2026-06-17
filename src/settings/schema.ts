@@ -8,6 +8,7 @@ export interface PlannerSettings {
 	worktree: WorktreeSettings;
 	compact: PlannerCompactBoundaries;
 	idle: PlannerIdleSettings;
+	exec: PlannerExecSettings;
 	metadata: PlannerMetadataSettings;
 	timer: PlannerTimerSettings;
 	skills: PlannerSkillsSettings;
@@ -19,6 +20,7 @@ export interface PlannerSettingsFile {
 	worktree?: WorktreeSettings;
 	compact?: Partial<PlannerCompactBoundaries>;
 	idle?: Partial<PlannerIdleSettings>;
+	exec?: Partial<PlannerExecSettings>;
 	metadata?: Partial<PlannerMetadataSettings>;
 	timer?: Partial<PlannerTimerSettings>;
 	skills?: Partial<PlannerSkillsSettings>;
@@ -75,6 +77,12 @@ export interface PlannerTimerSettings {
 	syncIntervalMinutes: number;
 }
 
+export interface PlannerExecSettings {
+	defaultTimeoutSeconds: number;
+	maxTimeoutSeconds: number;
+	maxOutputBytes: number;
+}
+
 export interface PlannerSkillsSettings {
 	enabled: boolean;
 	maxActive: number;
@@ -112,6 +120,11 @@ export const DEFAULT_PLANNER_SETTINGS = {
 	idle: {
 		enabled: true,
 		timeoutMinutes: 10,
+	},
+	exec: {
+		defaultTimeoutSeconds: 240,
+		maxTimeoutSeconds: 1800,
+		maxOutputBytes: 10 * 1024 * 1024,
 	},
 	metadata: {
 		humanLanguage: "English",

@@ -12,7 +12,7 @@ Present the verified plan result, wait for an explicit user decision, then eithe
    - After presenting, call `planner_finish_step` immediately to enter `await_user_acceptance`.
 2. `await_user_acceptance`
    - Ask the user to accept the result or request changes. Never decide on their behalf.
-   - If the user accepts, ask them to run `/planner-finish`.
+   - If the user accepts, write in your response text (no tool call): "/planner-finish is a Pi slash command — I cannot invoke it as an LLM. Run it yourself in Pi to export the result." Do not use ask_user or any other tool to ask this.
    - If the user writes what is wrong or requests more work instead of running `/planner-finish`, treat that as a change request: call `planner_finish_step` with target `done/handle_change_request`.
    - `/planner-finish` atomically performs the remaining export, cleanup, and Pi session handoff. Do not try to reproduce that cleanup through model tools.
 3. `handle_change_request`

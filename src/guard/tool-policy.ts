@@ -47,6 +47,7 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_git_merge_task_to_plan",
 	"planner_recovery_inspect",
 	"planner_recovery_resume",
+	"planner_exec",
 ] as const;
 
 export type PlannerWrapperTool = (typeof PLANNER_WRAPPER_TOOLS)[number];
@@ -111,6 +112,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_contract_read",
 			"planner_contract_upsert",
 			"planner_git_commit",
+			"planner_exec",
 		],
 		write_questions: [
 			"planner_questions_submit",
@@ -118,6 +120,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_contract_scan",
 			"planner_contract_route",
 			"planner_contract_read",
+			"planner_exec",
 		],
 		compact_discovery: [],
 		enter_planning: [],
@@ -151,6 +154,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_debug_probe",
 			"planner_debug_result",
 			"planner_debug_cleanup",
+			"planner_exec",
 		],
 		write_tests: [
 			"planner_git_inspect",
@@ -163,6 +167,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_debug_probe",
 			"planner_debug_result",
 			"planner_debug_cleanup",
+			"planner_exec",
 		],
 		run_failing_tests: [
 			"planner_git_inspect",
@@ -174,6 +179,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_debug_probe",
 			"planner_debug_result",
 			"planner_debug_cleanup",
+			"planner_exec",
 		],
 		implement_task: [
 			"planner_git_inspect",
@@ -188,6 +194,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_debug_probe",
 			"planner_debug_result",
 			"planner_debug_cleanup",
+			"planner_exec",
 		],
 		contract_check: [
 			"planner_git_inspect",
@@ -200,6 +207,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
+			"planner_exec",
 		],
 		refactor_task: [
 			"planner_git_inspect",
@@ -219,6 +227,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_debug_probe",
 			"planner_debug_result",
 			"planner_debug_cleanup",
+			"planner_exec",
 		],
 		run_final_tests: [
 			"planner_git_inspect",
@@ -231,6 +240,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_debug_probe",
 			"planner_debug_result",
 			"planner_debug_cleanup",
+			"planner_exec",
 		],
 		capture_skill: [
 			"planner_git_inspect",
@@ -383,7 +393,7 @@ export function buildPlannerToolHint(input: {
 }): string {
 	return [
 		`Current planner position: ${input.stage}/${input.step}.`,
-		`Allowed planner wrappers now: ${input.allowedTools.join(", ")}.`,
+		`Extension tools (this planner session only): ${input.allowedTools.join(", ")}.`,
 		"Read the markdown instruction for the current stage before continuing.",
 		"Do not use raw git while a plan is active.",
 	].join("\n");

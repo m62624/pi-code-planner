@@ -156,6 +156,8 @@ function normalizePlanState(state: PlanStateRecord): PlanStateRecord {
 		debugCleanupRequired: state.debugCleanupRequired ?? false,
 		timer: state.timer ?? null,
 		contracts: normalizePlannerContractsState(state.contracts),
+		// Always reset on load — if Pi crashed mid-exec the process is already dead.
+		execRunning: false,
 	};
 }
 

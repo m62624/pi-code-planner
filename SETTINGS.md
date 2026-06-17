@@ -16,6 +16,7 @@ getAgentDir()/extensions/pi-code-planner/settings.json
   "worktree": { "mode": "custom", "root": "/mnt/fast/pi-worktrees" },
   "compact": { "stage": true, "task": false },
   "idle": { "enabled": true, "timeoutMinutes": 10 },
+  "exec": { "defaultTimeoutSeconds": 240, "maxTimeoutSeconds": 1800, "maxOutputBytes": 10485760 },
   "metadata": {
     "humanLanguage": "English",
     "titleLanguage": "English",
@@ -80,6 +81,16 @@ Sends a follow-up when an active plan has had no planner/tool calls for `timeout
 | --- | --- | --- |
 | `idle.enabled` | `true` | Enable the idle watchdog. |
 | `idle.timeoutMinutes` | `10` | Minutes of inactivity before the watchdog fires. |
+
+## Exec (Shell Commands)
+
+`planner_exec` runs a shell command inside the planner worktree and returns stdout + stderr. The idle watchdog is paused for the entire duration of the command.
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `exec.defaultTimeoutSeconds` | `240` | Timeout used when the model does not pass `timeoutSeconds`. The process is killed on expiry. |
+| `exec.maxTimeoutSeconds` | `1800` | Hard ceiling for `timeoutSeconds`. The model cannot exceed this value regardless of what it requests. |
+| `exec.maxOutputBytes` | `10485760` | Maximum bytes collected from stdout+stderr combined. Output beyond this limit is silently dropped and a truncation note is appended to the result. |
 
 ## Timer
 

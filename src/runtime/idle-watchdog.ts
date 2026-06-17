@@ -93,6 +93,8 @@ export function explainPlannerIdleGate(
 	if (state.requiresUserDecision)
 		return "Planner is waiting for a user decision.";
 	if (state.requiresCompact) return "Planner compact gate is pending.";
+	if (state.execRunning)
+		return "planner_exec is running — idle watchdog paused.";
 	if (state.step.startsWith("compact_")) return "Planner is at a compact step.";
 	if (state.stage === "done" || state.stage === "recovery") {
 		return `Planner stage ${state.stage} is not an idle-wake stage.`;
