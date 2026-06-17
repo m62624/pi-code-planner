@@ -92,9 +92,9 @@ The right value depends on your model's inference speed. If the timeout is too s
 | Speed | Recommended |
 | --- | --- |
 | < 5 tok/s | `20` |
-| 5–15 tok/s | `10` |
-| 15–30 tok/s | `5` |
-| > 30 tok/s | `3` |
+| 5–15 tok/s | `15` |
+| 15–30 tok/s | `10` |
+| > 30 tok/s | `6` |
 
 > `timer.syncIntervalMinutes` is separate — it only controls how often the TUI clock saves telemetry, it does not wake the model.
 
