@@ -139,7 +139,7 @@ export function checkPlannerPreflightToolAllowed(input: {
 					`Planner wrapper ${input.tool} is blocked by runtime preflight.`,
 					`Runtime action: ${input.preflight.decision.action}.`,
 					input.preflight.decision.reason,
-					`Allowed planner wrappers: ${allowedTools.join(", ") || "(none)"}.`,
+					`Extension tools (this planner session only): ${allowedTools.join(", ") || "(none)"}.`,
 				]
 					.filter(Boolean)
 					.join("\n"),
@@ -190,7 +190,7 @@ export function formatPlannerPreflightStatus(
 		lines.push(preflight.context.reason);
 	}
 	lines.push(
-		`Allowed planner wrappers: ${preflight.decision.allowedTools.join(", ") || "(none)"}`,
+		`Extension tools (this planner session only): ${preflight.decision.allowedTools.join(", ") || "(none)"}`,
 	);
 	lines.push(
 		`Allowed state transitions: ${getAllowedPlannerStateTransitionTypes(preflight).join(", ") || "(none)"}`,

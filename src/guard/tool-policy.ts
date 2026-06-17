@@ -393,7 +393,7 @@ export function buildPlannerToolHint(input: {
 }): string {
 	return [
 		`Current planner position: ${input.stage}/${input.step}.`,
-		`Allowed planner wrappers now: ${input.allowedTools.join(", ")}.`,
+		`Extension tools (this planner session only): ${input.allowedTools.join(", ")}.`,
 		"Read the markdown instruction for the current stage before continuing.",
 		"Do not use raw git while a plan is active.",
 	].join("\n");
