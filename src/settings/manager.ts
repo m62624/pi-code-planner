@@ -31,6 +31,7 @@ export interface EffectivePlannerSettings {
 	worktreeSource: "project" | "global" | "default";
 	compactSource: "project" | "global" | "default";
 	idleSource: "project" | "global" | "default";
+	execSource: "project" | "global" | "default";
 	metadataSource: "project" | "global" | "default";
 	timerSource: "project" | "global" | "default";
 	skillsSource: "project" | "global" | "default";
@@ -88,6 +89,16 @@ export async function loadEffectivePlannerSettings(input: {
 		...(global.idle ?? {}),
 		...(project?.idle ?? {}),
 	};
+	const execSource = project?.exec
+		? "project"
+		: global.exec
+			? "global"
+			: "default";
+	const exec = {
+		...DEFAULT_PLANNER_SETTINGS.exec,
+		...(global.exec ?? {}),
+		...(project?.exec ?? {}),
+	};
 	const metadataSource = project?.metadata
 		? "project"
 		: global.metadata
@@ -142,6 +153,7 @@ export async function loadEffectivePlannerSettings(input: {
 			worktree,
 			compact,
 			idle,
+			exec,
 			metadata,
 			timer,
 			skills,
@@ -151,6 +163,7 @@ export async function loadEffectivePlannerSettings(input: {
 		worktreeSource,
 		compactSource,
 		idleSource,
+		execSource,
 		metadataSource,
 		timerSource,
 		skillsSource,
@@ -187,6 +200,9 @@ function normalizeSettingsFile(
 		...(record.idle === undefined
 			? {}
 			: { idle: normalizeIdleSettings(record.idle, path) }),
+		...(record.exec === undefined
+			? {}
+			: { exec: normalizeExecSettings(record.exec, path) }),
 		...(record.metadata === undefined
 			? {}
 			: { metadata: normalizeMetadataSettings(record.metadata, path) }),
@@ -307,6 +323,36 @@ function normalizeCompactSettings(
 	return {
 		...(typeof record.stage === "boolean" ? { stage: record.stage } : {}),
 		...(typeof record.task === "boolean" ? { task: record.task } : {}),
+	};
+}
+
+function normalizeExecSettings(
+	value: unknown,
+	path: string,
+): PlannerSettingsFile["exec"] {
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		throw new TypeError(`Planner exec settings must be an object: ${path}`);
+	}
+	const record = value as Record<string, unknown>;
+	return {
+		...(record.defaultTimeoutSeconds === undefined
+			? {}
+			: {
+					defaultTimeoutSeconds: positiveNumber(
+						record.defaultTimeoutSeconds,
+						"exec.defaultTimeoutSeconds",
+						path,
+					),
+				}),
+		...(record.maxTimeoutSeconds === undefined
+			? {}
+			: {
+					maxTimeoutSeconds: positiveNumber(
+						record.maxTimeoutSeconds,
+						"exec.maxTimeoutSeconds",
+						path,
+					),
+				}),
 	};
 }
 

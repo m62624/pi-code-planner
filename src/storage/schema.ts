@@ -370,6 +370,7 @@ export interface PlanStateRecord {
 	debugCleanupRequired: boolean;
 	timer: PlannerTimerState | null;
 	contracts: PlannerContractsState;
+	execRunning: boolean;
 	requiresCompact: boolean;
 	requiresUserDecision: boolean;
 	broken: boolean;
@@ -477,6 +478,7 @@ export function createInitialPlanState(input: {
 		debugCleanupRequired: false,
 		timer: null,
 		contracts: createDefaultPlannerContractsState(),
+		execRunning: false,
 		requiresCompact: false,
 		requiresUserDecision: false,
 		broken: false,

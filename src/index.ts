@@ -81,6 +81,10 @@ import {
 	type PlannerDoubtReviewToolName,
 } from "./runtime/doubt-tools";
 import {
+	executePlannerExecTool,
+	PLANNER_EXEC_TOOL_NAME,
+} from "./runtime/exec-tools";
+import {
 	executePlannerGitTool,
 	PLANNER_GIT_TOOL_NAMES,
 	type PlannerGitToolName,
@@ -2855,6 +2859,71 @@ function registerPlannerTools(
 			},
 		});
 	}
+
+	pi.registerTool({
+		name: PLANNER_EXEC_TOOL_NAME,
+		label: "Planner Exec",
+		description:
+			"Run a shell command in the planner worktree with a configurable timeout. Use this instead of the built-in shell tool during planner sessions so the idle watchdog is paused while the command runs.",
+		promptSnippet:
+			"Use planner_exec to run build, test, lint, or check commands inside the worktree. Prefer this over raw shell access during planner execution steps. Set timeoutSeconds only when the default 4 minutes is not enough (max configured in exec.maxTimeoutSeconds).",
+		parameters: {
+			type: "object",
+			properties: {
+				command: {
+					type: "string",
+					description:
+						"Shell command to run. Executed by the system shell (sh on POSIX, cmd on Windows).",
+				},
+				timeoutSeconds: {
+					type: "number",
+					description:
+						"Optional timeout in seconds. Defaults to exec.defaultTimeoutSeconds (240). Capped at exec.maxTimeoutSeconds (1800). The process is killed on timeout.",
+				},
+				cwd: {
+					type: "string",
+					description:
+						"Optional working directory for the command. Defaults to the planner worktree root.",
+				},
+			},
+			required: ["command"],
+			additionalProperties: false,
+		} as never,
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const fs = createNodeFs();
+			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+			const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
+			await recordPlannerToolActivityForProject({
+				fs,
+				projectPaths,
+				now: Date.now(),
+			});
+			const context = await readActivePlanContext({ fs, projectPaths });
+			if (context.status !== "ready") {
+				return {
+					content: [
+						{ type: "text", text: "planner_exec: no active plan found." },
+					],
+					details: { text: "planner_exec: no active plan found." },
+				};
+			}
+			const result = await executePlannerExecTool({
+				params: params as {
+					command: string;
+					timeoutSeconds?: number;
+					cwd?: string;
+				},
+				fs,
+				planPaths: context.planPaths,
+				settings: settings.effective.exec,
+				worktreePath: ctx.cwd,
+			});
+			return {
+				content: [{ type: "text", text: result.text }],
+				details: result,
+			};
+		},
+	});
 }
 
 function registerPlannerCompactEvents(
