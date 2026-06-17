@@ -25,9 +25,13 @@ export async function executePlannerExecTool(input: {
 	const { params, fs, planPaths, settings, worktreePath } = input;
 
 	const requested = params.timeoutSeconds ?? settings.defaultTimeoutSeconds;
+	const capped = requested > settings.maxTimeoutSeconds;
 	// Cap at max — model cannot exceed the configured ceiling.
 	const timeoutMs = Math.min(requested, settings.maxTimeoutSeconds) * 1000;
 	const timeoutSeconds = timeoutMs / 1000;
+	const cappedNote = capped
+		? `Note: requested ${requested}s was capped to ${timeoutSeconds}s (exec.maxTimeoutSeconds).\n`
+		: "";
 
 	const cwd = params.cwd ?? worktreePath;
 
@@ -51,7 +55,8 @@ export async function executePlannerExecTool(input: {
 				if (err && ac.signal.aborted) {
 					resolve({
 						text: [
-							`Command timed out after ${timeoutSeconds}s — process killed.`,
+							cappedNote +
+								`Command timed out after ${timeoutSeconds}s — process killed.`,
 							`Command: ${params.command}`,
 							`If this operation is expected to take longer, retry with a higher timeoutSeconds (max: ${settings.maxTimeoutSeconds}).`,
 						].join("\n"),
@@ -63,7 +68,7 @@ export async function executePlannerExecTool(input: {
 				if (err) {
 					resolve({
 						text: [
-							`Command failed (exit ${err.code ?? "unknown"}).`,
+							cappedNote + `Command failed (exit ${err.code ?? "unknown"}).`,
 							`Command: ${params.command}`,
 							out || "(no output)",
 						].join("\n"),
@@ -73,7 +78,7 @@ export async function executePlannerExecTool(input: {
 
 				resolve({
 					text: [
-						`Command completed successfully.`,
+						cappedNote + `Command completed successfully.`,
 						`Command: ${params.command}`,
 						out || "(no output)",
 					].join("\n"),
