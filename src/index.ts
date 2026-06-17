@@ -2864,9 +2864,9 @@ function registerPlannerTools(
 		name: PLANNER_EXEC_TOOL_NAME,
 		label: "Planner Exec",
 		description:
-			"Run a shell command in the planner worktree with a configurable timeout. Use this instead of the built-in shell tool during planner sessions so the idle watchdog is paused while the command runs.",
+			"Run a shell command in the planner worktree with a configurable timeout. The idle watchdog is suspended for the entire duration so a long-running command does not trigger a spurious wake-up.",
 		promptSnippet:
-			"Use planner_exec to run build, test, lint, or check commands inside the worktree. Prefer this over raw shell access during planner execution steps. Set timeoutSeconds only when the default 4 minutes is not enough (max configured in exec.maxTimeoutSeconds).",
+			"Use planner_exec for any command that may take more than a few seconds (builds, test suites, installs, codegen). While planner_exec is running the idle watchdog is paused, so you will not receive an idle wake-up mid-execution. Omit timeoutSeconds to use the default (240 s); set it explicitly only when the command is expected to take longer, up to the configured maximum.",
 		parameters: {
 			type: "object",
 			properties: {
