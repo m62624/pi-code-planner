@@ -118,7 +118,7 @@ export async function executePlannerExecTool(input: {
 			if (code !== 0) {
 				resolve({
 					text: [
-						cappedNote + `Command failed (exit ${code ?? "unknown"}).`,
+						`${cappedNote}Command failed (exit ${code ?? "unknown"}).`,
 						`Command: ${params.command}`,
 						out || "(no output)",
 					].join("\n"),
@@ -128,7 +128,7 @@ export async function executePlannerExecTool(input: {
 
 			resolve({
 				text: [
-					cappedNote + `Command completed successfully.`,
+					`${cappedNote}Command completed successfully.`,
 					`Command: ${params.command}`,
 					out || "(no output)",
 				].join("\n"),
@@ -145,7 +145,7 @@ export async function executePlannerExecTool(input: {
 			})).catch(() => {});
 			resolve({
 				text: [
-					cappedNote + `Command failed to start: ${err.message}`,
+					`${cappedNote}Command failed to start: ${err.message}`,
 					`Command: ${params.command}`,
 				].join("\n"),
 			});
