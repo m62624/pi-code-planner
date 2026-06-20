@@ -1264,6 +1264,7 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 		timer: null,
 	};
 	const timerRuntime = createPlannerTimerRuntimeState();
+	installPlannerToolErrorBoundary(pi);
 	registerPlannerCommands(pi);
 	registerPlannerTools(pi, compactRuntime);
 	registerPlannerIdleWatchdog(pi, idleRuntime);
@@ -1275,6 +1276,55 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 	registerPlannerSkillResources(pi);
 	registerInstructionDefaultsSync(pi);
 	registerPlannerToolVisibility(pi);
+}
+
+type RegisterToolFn = ExtensionAPI["registerTool"];
+type PlannerToolDefinition = Parameters<RegisterToolFn>[0];
+
+/**
+ * Wrap pi.registerTool so every planner tool's execute() runs inside a shared
+ * try/catch. Without this, a thrown error (e.g. an invalid/missing argument
+ * from a small local model) escapes the tool boundary and no tool result is
+ * ever returned — the call silently hangs and the model retries the same
+ * broken call forever. Converting the throw into an explicit error result lets
+ * the model see what went wrong and correct itself.
+ *
+ * Recoverable, expected conditions should still be returned as normal results
+ * (see the blocked() pattern in the wrapper tools). This boundary is the
+ * last-resort net for unexpected throws only.
+ */
+export function installPlannerToolErrorBoundary(pi: ExtensionAPI): void {
+	const register = pi.registerTool.bind(pi) as (
+		tool: PlannerToolDefinition,
+	) => void;
+	pi.registerTool = ((tool: PlannerToolDefinition) => {
+		const execute = tool.execute.bind(tool);
+		register({
+			...tool,
+			async execute(toolCallId, params, signal, onUpdate, ctx) {
+				try {
+					return await execute(toolCallId, params, signal, onUpdate, ctx);
+				} catch (error) {
+					const message =
+						error instanceof Error ? error.message : String(error);
+					return {
+						content: [
+							{
+								type: "text",
+								text: [
+									`Tool ${tool.name} failed: ${message}`,
+									"",
+									"This is an internal error, not a normal block. Re-check the arguments you passed against the tool's parameter schema (a required field may be missing or the wrong type), then call the tool again. If unsure which planner step/tool is allowed, call planner_status.",
+								].join("\n"),
+							},
+						],
+						isError: true,
+						details: { error: message, toolName: tool.name },
+					};
+				}
+			},
+		});
+	}) as typeof pi.registerTool;
 }
 
 /**

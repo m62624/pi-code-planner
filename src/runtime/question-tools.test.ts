@@ -161,6 +161,106 @@ describe("planner discovery question tools", () => {
 		expect(duplicate.text).toContain("already submitted");
 	});
 
+	it("blocks instead of throwing when hasOpenQuestions is omitted", async () => {
+		const setup = await createQuestionSetup();
+
+		const result = await executePlannerQuestionTool({
+			...setup,
+			toolName: "planner_questions_submit",
+			params: {
+				content: "# Questions\n\nNo unresolved questions remain.",
+			},
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("hasOpenQuestions");
+		await expect(
+			readPlanState(setup.fs, setup.planPaths),
+		).resolves.toMatchObject({
+			questionsSubmitted: false,
+		});
+	});
+
+	it("blocks instead of throwing when content is omitted", async () => {
+		const setup = await createQuestionSetup();
+
+		const result = await executePlannerQuestionTool({
+			...setup,
+			toolName: "planner_questions_submit",
+			params: { hasOpenQuestions: false },
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("content");
+	});
+
+	it("blocks instead of throwing when resolve answers are omitted", async () => {
+		const setup = await createQuestionSetup({
+			questionsSubmitted: true,
+			questionsResolved: false,
+		});
+
+		const result = await executePlannerQuestionTool({
+			...setup,
+			toolName: "planner_questions_resolve",
+			params: {},
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("answers");
+	});
+
+	it("blocks when the planner context is not ready (no active plan)", async () => {
+		const fs = new MockPlannerFs();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		await ensureProjectRecord(fs, projectPaths);
+
+		const result = await executePlannerQuestionTool({
+			fs,
+			git: new MockGitRunner(),
+			projectPaths,
+			toolName: "planner_questions_submit",
+			params: {
+				content: "# Questions\n\nNo unresolved questions remain.",
+				hasOpenQuestions: false,
+			},
+		});
+
+		expect(result.status).toBe("blocked");
+	});
+
+	it("blocks instead of throwing when params is not an object", async () => {
+		const setup = await createQuestionSetup();
+
+		const result = await executePlannerQuestionTool({
+			...setup,
+			toolName: "planner_questions_submit",
+			params: null,
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("content");
+	});
+
+	it("blocks resolve when questions are already resolved", async () => {
+		const setup = await createQuestionSetup({
+			questionsSubmitted: true,
+			questionsResolved: true,
+		});
+
+		const result = await executePlannerQuestionTool({
+			...setup,
+			toolName: "planner_questions_resolve",
+			params: { answers: "Late answer." },
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("already resolved");
+	});
+
 	it("blocks question submission outside discovery/write_questions", async () => {
 		const setup = await createQuestionSetup({
 			stage: "planning",
