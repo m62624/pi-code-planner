@@ -151,7 +151,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BASE_BRANCH="main"
+          # Target the repo's actual default branch instead of hardcoding "main",
+          # so the sync PR keeps working if the default branch is ever renamed.
+          BASE_BRANCH="${{ github.event.repository.default_branch }}"
           COMPARE_URL="https://github.com/${{ github.repository }}/compare/$BASE_BRANCH...${{ needs.prepare.outputs.rc_branch }}"
           EXISTING_PR=$(gh pr list --head "${{ needs.prepare.outputs.rc_branch }}" --base "$BASE_BRANCH" --json url --jq '.[0].url')
           if [ -z "$EXISTING_PR" ]; then
