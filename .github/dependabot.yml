@@ -1,0 +1,45 @@
+# Dependabot version updates for this repo only.
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# Goal: open automatic bump PRs for npm dependencies, but never for MAJOR
+# version jumps (those tend to be breaking — e.g. a TypeScript or @types/node
+# major — and we'd rather adopt them by hand). Minor + patch updates are
+# collapsed into a single grouped PR per ecosystem to avoid PR noise.
+version: 2
+updates:
+  # --- npm (package.json / package-lock.json at the repo root) --------------
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    # Skip major bumps for every npm dependency; minor/patch still flow through.
+    # For 0.x pins (e.g. @earendil-works/pi-coding-agent 0.79.x) a 0.79 -> 0.80
+    # change is a *minor* bump, so those keep auto-updating; only X.0.0 jumps
+    # (e.g. 0.x -> 1.0.0) are held back for manual review.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    # One PR for all allowed (minor + patch) npm updates instead of one each.
+    groups:
+      npm-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # --- GitHub Actions used by the workflows ---------------------------------
+  # No major ignore here on purpose: actions are pinned to a major tag
+  # (e.g. actions/checkout@v4), whose only meaningful update IS the major bump
+  # (v4 -> v5). Ignoring majors would make this ecosystem never update. These
+  # land grouped and are reviewed by hand before merge anyway.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    groups:
+      github-actions:
+        patterns: ["*"]
