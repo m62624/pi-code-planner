@@ -66,8 +66,22 @@ export async function executePlannerQuestionTool(
 				{ orchestrator },
 			);
 		}
-		const content = requiredString(params, "content");
-		const hasOpenQuestions = requiredBoolean(params, "hasOpenQuestions");
+		const content = optionalString(params, "content");
+		if (content === undefined) {
+			return blocked(
+				input.toolName,
+				"planner_questions_submit needs `content`: the full questions.md markdown (a non-empty string).",
+				{ orchestrator },
+			);
+		}
+		const hasOpenQuestions = optionalBoolean(params, "hasOpenQuestions");
+		if (hasOpenQuestions === undefined) {
+			return blocked(
+				input.toolName,
+				"planner_questions_submit needs `hasOpenQuestions` (boolean): true when the user must answer before discovery continues, false for an explicit no-questions artifact.",
+				{ orchestrator },
+			);
+		}
 		await input.fs.writeTextAtomic(
 			planPaths.questionsMd,
 			`${content.trim()}\n`,
@@ -113,7 +127,14 @@ export async function executePlannerQuestionTool(
 			{ orchestrator },
 		);
 	}
-	const answers = requiredString(params, "answers");
+	const answers = optionalString(params, "answers");
+	if (answers === undefined) {
+		return blocked(
+			input.toolName,
+			"planner_questions_resolve needs `answers`: the user's answers in durable markdown form (a non-empty string).",
+			{ orchestrator },
+		);
+	}
 	await appendText(
 		input.fs,
 		planPaths.decisionsMd,
@@ -149,23 +170,22 @@ async function appendText(
 	);
 }
 
-function requiredString(params: Record<string, unknown>, key: string): string {
-	const value = params[key];
-	if (typeof value !== "string" || value.trim().length === 0) {
-		throw new TypeError(`${key} must be a non-empty string.`);
-	}
-	return value;
-}
-
-function requiredBoolean(
+function optionalString(
 	params: Record<string, unknown>,
 	key: string,
-): boolean {
+): string | undefined {
 	const value = params[key];
-	if (typeof value !== "boolean") {
-		throw new TypeError(`${key} must be boolean.`);
-	}
-	return value;
+	return typeof value === "string" && value.trim().length > 0
+		? value
+		: undefined;
+}
+
+function optionalBoolean(
+	params: Record<string, unknown>,
+	key: string,
+): boolean | undefined {
+	const value = params[key];
+	return typeof value === "boolean" ? value : undefined;
 }
 
 function asObject(value: unknown): Record<string, unknown> {
