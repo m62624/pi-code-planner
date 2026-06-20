@@ -48,12 +48,12 @@
 		"@earendil-works/pi-tui": "*"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.4.15",
-		"@earendil-works/pi-coding-agent": "0.75.4",
-		"@earendil-works/pi-tui": "0.75.4",
-		"@types/node": "^24.0.0",
+		"@biomejs/biome": "^2.5.0",
+		"@earendil-works/pi-coding-agent": "0.79.8",
+		"@earendil-works/pi-tui": "0.79.8",
+		"@types/node": "^26.0.0",
 		"typescript": "^6.0.3",
-		"vitest": "^4.1.6"
+		"vitest": "^4.1.9"
 	},
 	"dependencies": {
 		"tree-kill": "^1.2.2"
