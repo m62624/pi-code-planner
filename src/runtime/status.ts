@@ -507,8 +507,8 @@ export const PLANNER_STEP_RULES = {
 	merge_task_to_plan: stepRule("execution", "merge_task_to_plan", {
 		objective: "Merge the completed task branch into the plan branch.",
 		requiredActions: [
-			"Use planner_git_merge_task_to_plan; extension determines task and plan branches from state.json.",
-			"Before finishing this step, add ## Task Merge Scope Audit to tdd.md with acceptance coverage, changed-file scope, tests run, cleanup, commit message fit, and branch drift check.",
+			"First submit the ## Task Merge Scope Audit via planner_tdd_submit (mergeScopeAudit fields: acceptance coverage, changed-file scope, tests run, cleanup, commit message fit, branch drift check) while the task is still active.",
+			"Then use planner_git_merge_task_to_plan; extension determines task and plan branches from state.json. The merge wrapper blocks until the audit exists.",
 		],
 		allowedNow: ["Use the task-to-plan merge wrapper."],
 		forbiddenNow: [

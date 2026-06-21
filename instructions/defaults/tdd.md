@@ -19,7 +19,7 @@ Use strict tests-first development for every execution task. Production implemen
 4. Begin production edits only during `implement_task`. Before finishing it, submit the `postImplementation` fields: smallest counterexample, boundary value, opposite case, regression risk, scope check, and action. If the counterexample is real, add a test or explicitly record why it is out of scope. If implementing produced a reusable verified lesson, call `planner_skill_create`.
 5. During `contract_check`, call `planner_contract_check`, then `planner_contract_upsert` for every decision (see the watcher rule below). Contract consistency is recorded in AGENTS.md, not in `tdd.md`.
 6. During `run_final_tests`, rerun focused tests and required broader integration checks.
-7. Before finishing `merge_task_to_plan`, submit the `mergeScopeAudit` fields: acceptance-criteria coverage, changed-file scope, commands run, debug cleanup, commit-message fit, and branch-drift check.
+7. During `merge_task_to_plan`, submit the `mergeScopeAudit` fields *before* calling `planner_git_merge_task_to_plan` (the merge clears the active task, so the audit must be written first): acceptance-criteria coverage, changed-file scope, commands run, debug cleanup, commit-message fit, and branch-drift check.
 
 ## tdd.md Sections (written by planner_tdd_submit)
 

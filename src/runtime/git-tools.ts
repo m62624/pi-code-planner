@@ -27,6 +27,7 @@ import {
 	type PlannerOrchestratorResult,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { validateTaskMergeScopeAudit } from "./tdd-evidence";
 
 export const PLANNER_GIT_TOOL_NAMES = [
 	"planner_git_inspect",
@@ -319,6 +320,24 @@ async function mergeTaskTool(
 	ready: ReadyGitContext,
 ): Promise<PlannerGitToolExecutionResult> {
 	const taskId = ready.state.activeTaskId;
+	// The merge wrapper clears the active task, and planner_tdd_submit needs an
+	// active task to record the audit. If we let the merge run without the audit,
+	// the audit becomes unwritable and merge_task_to_plan deadlocks. So require
+	// the audit up front, while the task is still active.
+	if (taskId) {
+		const tddPath = createTaskStoragePaths(
+			ready.orchestrator.preflight.context.planPaths,
+			taskId,
+		).tddMd;
+		const auditMissing = await validateTaskMergeScopeAudit(input.fs, tddPath);
+		if (auditMissing) {
+			return blocked(
+				input.toolName,
+				`Submit the merge scope audit before merging: call planner_tdd_submit with the mergeScopeAudit fields while this task is still active, then merge. ${auditMissing}`,
+				{ taskId, tddPath },
+			);
+		}
+	}
 	return await runStateChangingGitOperation({
 		input,
 		ready,
