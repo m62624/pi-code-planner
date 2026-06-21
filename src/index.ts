@@ -23,6 +23,7 @@ import {
 	registerPlannerToolVisibility,
 	resetPlanActiveCache,
 	setContractGateActive,
+	setRecoveryReportUnlocked,
 	updateToolVisibility,
 } from "./index.tool-visibility";
 import { syncBundledInstructionFiles } from "./instructions/defaults";
@@ -72,6 +73,11 @@ import {
 	type PlannerDebugToolName,
 } from "./runtime/debug-tools";
 import {
+	evaluatePlannerStuck,
+	type PlannerToolStatus,
+	recordPlannerToolEvent,
+} from "./runtime/diagnostics";
+import {
 	DOUBT_FINDING_STATUSES,
 	DOUBT_NEXT_ACTIONS,
 	DOUBT_PROOF_LEVELS,
@@ -118,7 +124,9 @@ import {
 	type PlannerQuestionToolName,
 } from "./runtime/question-tools";
 import {
+	executePlannerRecoveryReportTool,
 	executePlannerRecoveryTool,
+	PLANNER_RECOVERY_REPORT_TOOL_NAME,
 	PLANNER_RECOVERY_TOOL_NAMES,
 	type PlannerRecoveryToolName,
 } from "./runtime/recovery-tools";
@@ -1303,8 +1311,27 @@ export function installPlannerToolErrorBoundary(pi: ExtensionAPI): void {
 			...tool,
 			async execute(toolCallId, params, signal, onUpdate, ctx) {
 				try {
-					return await execute(toolCallId, params, signal, onUpdate, ctx);
+					const result = await execute(
+						toolCallId,
+						params,
+						signal,
+						onUpdate,
+						ctx,
+					);
+					void recordPlannerDiagnosticsEventForProject({
+						pi,
+						ctx,
+						tool: tool.name,
+						status: deriveToolEventStatus(result),
+					});
+					return result;
 				} catch (error) {
+					void recordPlannerDiagnosticsEventForProject({
+						pi,
+						ctx,
+						tool: tool.name,
+						status: "error",
+					});
 					const message =
 						error instanceof Error ? error.message : String(error);
 					return {
@@ -2878,6 +2905,40 @@ function registerPlannerTools(
 		});
 	}
 
+	pi.registerTool({
+		name: PLANNER_RECOVERY_REPORT_TOOL_NAME,
+		label: "Planner Recovery Report",
+		description:
+			"Prepare a sanitized diagnostics report when the planner is detected stuck, for the user to review and optionally file as a GitHub issue. The report contains only planner tool names, applied/blocked status, and a generalized state snapshot with pseudonymized task ids — no arguments, code, paths, titles, or descriptions. It writes a local file and never sends anything itself.",
+		promptSnippet:
+			"Call planner_recovery_report only when the planner is genuinely stuck (repeated blocked transitions, a long stall, or after a recovery call). It unlocks only once stuck-detection fires; otherwise it returns blocked. After it writes the report, relay its instructions to the user and continue with planner_recovery_inspect / planner_recovery_resume to get unstuck.",
+		parameters: {
+			type: "object",
+			properties: {},
+			additionalProperties: false,
+		} as never,
+		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+			const fs = createNodeFs();
+			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+			const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
+			const diag = settings.effective.diagnostics;
+			const result = await executePlannerRecoveryReportTool({
+				fs,
+				git: new NodeGitRunner(),
+				projectPaths,
+				thresholds: {
+					blockedTransitions: diag.blockedTransitions,
+					stuckMs: diag.stuckMinutes * 60_000,
+				},
+				modelId: resolveSessionModelId(ctx),
+			});
+			return {
+				content: [{ type: "text", text: result.text }],
+				details: result,
+			};
+		},
+	});
+
 	for (const toolName of PLANNER_GIT_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
@@ -3127,6 +3188,95 @@ async function recordPlannerToolActivityForProject(input: {
 	} catch {
 		// Activity timestamps must never block the actual planner tool result.
 	}
+}
+
+/** Map a tool result to a diagnostics status without throwing on odd shapes. */
+function deriveToolEventStatus(result: unknown): PlannerToolStatus {
+	if (!result || typeof result !== "object") return "applied";
+	const record = result as { isError?: unknown; details?: unknown };
+	if (record.isError === true) return "error";
+	const details = record.details;
+	if (details && typeof details === "object") {
+		const status = (details as { status?: unknown }).status;
+		if (status === "blocked") return "blocked";
+	}
+	return "applied";
+}
+
+/**
+ * Append one planner tool outcome to the plan diagnostics sidecar. Best-effort
+ * and fully isolated: it must never affect the tool result. Only planner_* tools
+ * are recorded, and only their names/status — never arguments.
+ */
+async function recordPlannerDiagnosticsEventForProject(input: {
+	pi: ExtensionAPI;
+	ctx: ExtensionContext;
+	tool: string;
+	status: PlannerToolStatus;
+}): Promise<void> {
+	if (!input.tool.startsWith("planner_")) return;
+	try {
+		const fs = createNodeFs();
+		const projectPaths = await createRuntimeProjectPaths(input.ctx.cwd);
+		const context = await readActivePlanContext({ fs, projectPaths });
+		if (context.status !== "ready") return;
+		const record = await recordPlannerToolEvent(fs, context.planPaths, {
+			ts: Date.now(),
+			tool: input.tool,
+			status: input.status,
+			stage: context.state.stage,
+			step: context.state.step,
+			task: context.state.activeTaskId,
+		});
+
+		// Re-evaluate stuck-detection and unlock the (otherwise hidden) recovery
+		// report tool the moment the planner looks stuck.
+		const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
+		const diag = settings.effective.diagnostics;
+		const unlocked =
+			diag.enabled &&
+			evaluatePlannerStuck(record, Date.now(), {
+				blockedTransitions: diag.blockedTransitions,
+				stuckMs: diag.stuckMinutes * 60_000,
+			}).stuck;
+		if (setRecoveryReportUnlocked(unlocked)) {
+			updateToolVisibility(input.pi);
+		}
+	} catch {
+		// Diagnostics must never break the actual planner tool result.
+	}
+}
+
+/** Best-effort current model id (provider/modelId) from the session entries. */
+function resolveSessionModelId(ctx: ExtensionContext): string | null {
+	try {
+		const entries = ctx.sessionManager.getEntries() as unknown[];
+		for (let index = entries.length - 1; index >= 0; index -= 1) {
+			const modelId = extractModelId(entries[index]);
+			if (modelId) return modelId;
+		}
+	} catch {
+		// The model id is a convenience field; never block the report on it.
+	}
+	return null;
+}
+
+function extractModelId(entry: unknown): string | null {
+	if (!entry || typeof entry !== "object") return null;
+	const candidates: unknown[] = [
+		entry,
+		(entry as { message?: unknown }).message,
+	];
+	for (const candidate of candidates) {
+		if (!candidate || typeof candidate !== "object") continue;
+		const record = candidate as { provider?: unknown; modelId?: unknown };
+		if (typeof record.modelId === "string" && record.modelId.length > 0) {
+			return typeof record.provider === "string" && record.provider.length > 0
+				? `${record.provider}/${record.modelId}`
+				: record.modelId;
+		}
+	}
+	return null;
 }
 
 async function maybeStartPlannerControlledCompact(input: {

@@ -37,6 +37,7 @@ export interface EffectivePlannerSettings {
 	skillsSource: "project" | "global" | "default";
 	contractsSource: "project" | "global" | "default";
 	workspaceSource: "project" | "global" | "default";
+	diagnosticsSource: "project" | "global" | "default";
 }
 
 export async function loadEffectivePlannerSettings(input: {
@@ -144,6 +145,16 @@ export async function loadEffectivePlannerSettings(input: {
 		...(global.workspace ?? {}),
 		...(project?.workspace ?? {}),
 	};
+	const diagnosticsSource = project?.diagnostics
+		? "project"
+		: global.diagnostics
+			? "global"
+			: "default";
+	const diagnostics = {
+		...DEFAULT_PLANNER_SETTINGS.diagnostics,
+		...(global.diagnostics ?? {}),
+		...(project?.diagnostics ?? {}),
+	};
 
 	return {
 		paths,
@@ -159,6 +170,7 @@ export async function loadEffectivePlannerSettings(input: {
 			skills,
 			contracts,
 			workspace,
+			diagnostics,
 		},
 		worktreeSource,
 		compactSource,
@@ -169,6 +181,7 @@ export async function loadEffectivePlannerSettings(input: {
 		skillsSource,
 		contractsSource,
 		workspaceSource,
+		diagnosticsSource,
 	};
 }
 
