@@ -2,6 +2,15 @@ import type { GitRunner } from "../git/runner";
 import type { PlannerWrapperTool } from "../guard/tool-policy";
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
+import { readActivePlanContext } from "./active-plan";
+import {
+	buildRecoveryReport,
+	evaluatePlannerStuck,
+	RECOVERY_ISSUE_URL,
+	readDiagnosticsRecord,
+	type StuckThresholds,
+	writeRecoveryReport,
+} from "./diagnostics";
 import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
@@ -116,6 +125,93 @@ export async function executePlannerRecoveryTool(
 			};
 		}
 	}
+}
+
+export const PLANNER_RECOVERY_REPORT_TOOL_NAME = "planner_recovery_report";
+
+export interface PlannerRecoveryReportToolInput {
+	fs: PlannerFs;
+	git: GitRunner;
+	projectPaths: ProjectStoragePaths;
+	thresholds: StuckThresholds;
+	modelId: string | null;
+	now?: number;
+}
+
+export interface PlannerRecoveryReportToolResult {
+	status: "applied" | "blocked";
+	toolName: typeof PLANNER_RECOVERY_REPORT_TOOL_NAME;
+	text: string;
+	details: unknown;
+}
+
+/**
+ * Prepare a sanitized diagnostics report when the planner is stuck. Cross-stage
+ * by design (a deadlock can happen in any stage), so it does not go through the
+ * stage policy; instead it gates on the stuck signal itself.
+ */
+export async function executePlannerRecoveryReportTool(
+	input: PlannerRecoveryReportToolInput,
+): Promise<PlannerRecoveryReportToolResult> {
+	const toolName = PLANNER_RECOVERY_REPORT_TOOL_NAME;
+	const context = await readActivePlanContext({
+		fs: input.fs,
+		projectPaths: input.projectPaths,
+	});
+	if (context.status !== "ready") {
+		return {
+			status: "blocked",
+			toolName,
+			text: "planner_recovery_report requires a ready active plan context.",
+			details: { reason: "active plan context is not ready" },
+		};
+	}
+	const planPaths = context.planPaths;
+	const now = input.now ?? Date.now();
+	const diagnostics = await readDiagnosticsRecord(input.fs, planPaths);
+	const evaluation = evaluatePlannerStuck(diagnostics, now, input.thresholds);
+	if (!evaluation.stuck) {
+		return {
+			status: "blocked",
+			toolName,
+			text: "planner_recovery_report unlocks only after the planner is detected stuck (repeated blocked transitions, a long stall, or a recovery call). Keep working the normal lifecycle; call planner_status if unsure.",
+			details: { reason: "not stuck", diagnostics },
+		};
+	}
+
+	const artifacts = buildRecoveryReport({
+		state: context.state,
+		plan: context.plan,
+		diagnostics,
+		evaluation,
+		modelId: input.modelId,
+		now,
+		issueUrl: RECOVERY_ISSUE_URL,
+	});
+	const written = await writeRecoveryReport(
+		input.fs,
+		planPaths,
+		context.activePlanId,
+		artifacts,
+	);
+
+	return {
+		status: "applied",
+		toolName,
+		text: [
+			"Tell the user, in their language, that an abnormal pi-code-planner error occurred and you prepared a diagnostics report — paraphrase, do not invent details:",
+			"",
+			"- What happened: the planner state machine got stuck and could not progress on its own.",
+			`- A sanitized report was written to: ${written.reportPath}`,
+			"- The report contains only generalized state-machine data (planner tool names, statuses, pseudonymized task ids) for machine analysis — not what the project does. No arguments, code, paths, titles, or descriptions are included.",
+			"- Ask the user to review the report and confirm there is nothing sensitive, then, if possible, open an issue so this pattern can be fixed:",
+			`  ${RECOVERY_ISSUE_URL}`,
+			`- A local-only legend (token → real id) sits next to the report at ${written.legendPath}; it is NOT part of the report and should not be attached unless the user verifies the ids are safe.`,
+			"",
+			"Then continue: use planner_recovery_inspect / planner_recovery_resume to get unstuck if appropriate.",
+		].join("\n"),
+		details: { ...written, evaluation, diagnostics },
+	};
 }
 
 function parseResumeTarget(

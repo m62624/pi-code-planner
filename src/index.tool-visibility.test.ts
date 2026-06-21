@@ -11,8 +11,10 @@ import {
 	type RegisteredTool,
 	registerPlannerToolVisibility,
 	setPlanActive,
+	setRecoveryReportUnlocked,
 	updateToolVisibility,
 } from "./index.tool-visibility";
+import { PLANNER_RECOVERY_REPORT_TOOL_NAME } from "./runtime/recovery-tools";
 import type { PlannerFs } from "./storage/fs";
 
 describe("filterPlannerTools", () => {
@@ -281,5 +283,55 @@ describe("updateToolVisibility", () => {
 			id: "planner-tools-test",
 			parentId: null,
 		});
+	});
+});
+
+describe("recovery report tool visibility", () => {
+	const tools: RegisteredTool[] = [
+		{ name: "bash" },
+		{ name: "planner_status" },
+		{ name: PLANNER_RECOVERY_REPORT_TOOL_NAME },
+	];
+
+	function activeToolsAfterUpdate(): string[] {
+		let captured: string[] = [];
+		const mockPi = {
+			getAllTools: () => tools,
+			setActiveTools: (names: string[]) => {
+				captured = names;
+			},
+		} as unknown as ExtensionAPI;
+		updateToolVisibility(mockPi);
+		return captured;
+	}
+
+	beforeEach(() => {
+		setPlanActive(false);
+		setRecoveryReportUnlocked(false);
+	});
+
+	it("hides the report tool when no plan is active", () => {
+		expect(activeToolsAfterUpdate()).toEqual(["bash"]);
+	});
+
+	it("keeps the report tool hidden during an active plan until unlocked", () => {
+		setPlanActive(true);
+		expect(activeToolsAfterUpdate()).toEqual(["bash", "planner_status"]);
+	});
+
+	it("shows the report tool once stuck-detection unlocks it", () => {
+		setPlanActive(true);
+		expect(setRecoveryReportUnlocked(true)).toBe(true);
+		expect(activeToolsAfterUpdate()).toEqual([
+			"bash",
+			"planner_status",
+			PLANNER_RECOVERY_REPORT_TOOL_NAME,
+		]);
+	});
+
+	it("reports no change when the unlocked value is unchanged", () => {
+		expect(setRecoveryReportUnlocked(false)).toBe(false);
+		setRecoveryReportUnlocked(true);
+		expect(setRecoveryReportUnlocked(true)).toBe(false);
 	});
 });

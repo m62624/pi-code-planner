@@ -3,13 +3,36 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { ALL_PLANNER_TOOL_NAMES } from "./guard/tool-policy";
+import { PLANNER_RECOVERY_REPORT_TOOL_NAME } from "./runtime/recovery-tools";
 import type { PlannerFs } from "./storage/fs";
 
 export interface RegisteredTool {
 	name: string;
 }
 
-const plannerNames: Set<string> = new Set(ALL_PLANNER_TOOL_NAMES);
+// The recovery report tool is treated as a planner tool for visibility (hidden
+// when no plan is active) but is also gated dynamically: it stays hidden while a
+// plan runs until stuck-detection unlocks it.
+const plannerNames: Set<string> = new Set([
+	...ALL_PLANNER_TOOL_NAMES,
+	PLANNER_RECOVERY_REPORT_TOOL_NAME,
+]);
+
+let recoveryReportUnlocked = false;
+
+/**
+ * Toggle whether the recovery report tool is visible during an active plan.
+ * Returns true when the value changed, so the caller can refresh visibility.
+ */
+export function setRecoveryReportUnlocked(unlocked: boolean): boolean {
+	if (recoveryReportUnlocked === unlocked) return false;
+	recoveryReportUnlocked = unlocked;
+	return true;
+}
+
+export function isRecoveryReportUnlocked(): boolean {
+	return recoveryReportUnlocked;
+}
 const PLANNER_TOOL_VISIBILITY_CUSTOM_TYPE = "planner-tool-visibility";
 
 interface PlannerToolVisibilityState {
@@ -141,7 +164,12 @@ export function updateToolVisibility(pi: ExtensionAPI): void {
 			.map((t) => t.name)
 			.filter((name) => CONTRACT_GATE_ALLOWED.has(name));
 	} else {
-		toolNames = allTools.map((t) => t.name);
+		toolNames = allTools
+			.map((t) => t.name)
+			.filter(
+				(name) =>
+					name !== PLANNER_RECOVERY_REPORT_TOOL_NAME || recoveryReportUnlocked,
+			);
 	}
 	pi.setActiveTools(toolNames);
 }

@@ -14,6 +14,7 @@ export interface PlannerSettings {
 	skills: PlannerSkillsSettings;
 	contracts: PlannerContractsSettings;
 	workspace: PlannerWorkspaceSettings;
+	diagnostics: PlannerDiagnosticsSettings;
 }
 
 export interface PlannerSettingsFile {
@@ -26,6 +27,16 @@ export interface PlannerSettingsFile {
 	skills?: Partial<PlannerSkillsSettings>;
 	contracts?: PlannerContractsSettingsFile;
 	workspace?: Partial<PlannerWorkspaceSettings>;
+	diagnostics?: Partial<PlannerDiagnosticsSettings>;
+}
+
+export interface PlannerDiagnosticsSettings {
+	/** Master switch for stuck-detection and the recovery report tool. */
+	enabled: boolean;
+	/** Blocked planner transitions in a row that count as stuck. */
+	blockedTransitions: number;
+	/** Minutes since the first blocked transition that count as stuck. */
+	stuckMinutes: number;
 }
 
 export interface PlannerWorkspaceSettings {
@@ -140,6 +151,11 @@ export const DEFAULT_PLANNER_SETTINGS = {
 		showCheckpoints: true,
 		maxCheckpoints: 5,
 		syncIntervalMinutes: 10,
+	},
+	diagnostics: {
+		enabled: true,
+		blockedTransitions: 4,
+		stuckMinutes: 25,
 	},
 	skills: {
 		enabled: true,

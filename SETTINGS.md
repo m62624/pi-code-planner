@@ -55,6 +55,11 @@ getAgentDir()/extensions/pi-code-planner/settings.json
     "enabled": true,
     "autoOpen": true,
     "footerReserveRows": 3
+  },
+  "diagnostics": {
+    "enabled": true,
+    "blockedTransitions": 4,
+    "stuckMinutes": 25
   }
 }
 ```
@@ -183,6 +188,18 @@ The line under the stage ribbon is a static context line (active task, branch, o
 ### Pi keybindings
 
 The workspace keys above are handled by the extension. Pi's own shortcuts (cursor movement, model/thinking selectors, tool expansion, etc.) are configured globally in `~/.pi/agent/keybindings.json` using namespaced ids such as `tui.editor.cursorUp` and `app.tools.expand`. Each id maps to one key or an array of keys; run `/reload` after editing. See the Pi keybindings documentation for the full list.
+
+## Diagnostics (Stuck Detection & Recovery Report)
+
+When the planner state machine gets stuck — a model loops on blocked transitions, stalls for a long time, or has already entered recovery — the extension detects it and unlocks `planner_recovery_report`. That tool writes a **sanitized** diagnostics report to the plan artifacts dir (`plans/<id>/diagnostics/`, outside your repository) for you to review and, if you choose, attach to an issue at <https://github.com/m62624/pi-code-planner/issues>.
+
+The report is generated deterministically by the extension (never written by the model from memory) and contains only planner tool **names**, their applied/blocked status, and a generalized state-machine snapshot. Task ids are pseudonymized (`T1`, `T2` …); a local-only legend mapping tokens back to real ids sits next to the report and is **not** part of it. No tool arguments, file contents, code, paths, titles, or descriptions are ever included — but review before sharing.
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `diagnostics.enabled` | `true` | Enable stuck detection and the recovery report tool. |
+| `diagnostics.blockedTransitions` | `4` | Blocked planner transitions in a row (no progress) that count as stuck. Applied results reset the streak, so legitimately repeated commands never trip it. |
+| `diagnostics.stuckMinutes` | `25` | Minutes since the first blocked transition that count as stuck, even without a long streak. |
 
 ## Instruction Append Files
 
