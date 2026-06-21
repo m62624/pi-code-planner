@@ -262,6 +262,7 @@ describe("planner git tools", () => {
 				},
 			},
 		});
+		await seedMergeScopeAudit(fs, setup.planPaths, "task-1");
 		const git = new MockGitRunner({
 			branch: "task/plan-a/task-1",
 			head: "abc123",
@@ -330,6 +331,7 @@ describe("planner git tools", () => {
 			...plan,
 			tasks: [{ taskId: "task-1", title: "Task one", status: "pending" }],
 		}));
+		await seedMergeScopeAudit(fs, setup.planPaths, "task-1");
 		const git = new MockGitRunner({
 			branch: "task/plan-a/task-1",
 			head: "abc123",
@@ -350,6 +352,41 @@ describe("planner git tools", () => {
 		await expect(readTaskRecord(fs, taskPaths.paths)).resolves.toMatchObject({
 			status: "done",
 		});
+	});
+
+	it("blocks merging a task before the merge scope audit is recorded", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createGitToolSetup(fs, {
+			state: {
+				stage: "execution",
+				step: "merge_task_to_plan",
+				stepStatus: "running",
+				activeTaskId: "task-1",
+				currentBranch: "task/plan-a/task-1",
+				activeBranches: {
+					base: "main",
+					plan: "plan/plan-a",
+					currentTask: "task/plan-a/task-1",
+				},
+				mergeTargets: { taskToPlan: "plan/plan-a", planToOutput: null },
+			},
+		});
+		const git = new MockGitRunner({
+			branch: "task/plan-a/task-1",
+			head: "abc123",
+		});
+
+		const result = await executePlannerGitTool({
+			fs,
+			git,
+			projectPaths: setup.projectPaths,
+			toolName: "planner_git_merge_task_to_plan",
+			params: { message: "merge task-1" },
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("merge scope audit");
+		expect(git.calls.map((call) => call.name)).not.toContain("merge");
 	});
 
 	it("blocks git wrappers outside their policy step", async () => {
@@ -374,6 +411,27 @@ describe("planner git tools", () => {
 		expect(result.text).toContain("blocked");
 	});
 });
+
+async function seedMergeScopeAudit(
+	fs: MockPlannerFs,
+	planPaths: ReturnType<typeof createPlanStoragePaths>,
+	taskId: string,
+): Promise<void> {
+	const tddPath = join(planPaths.tasksDir, taskId, "tdd.md");
+	await fs.writeTextAtomic(
+		tddPath,
+		[
+			"## Task Merge Scope Audit",
+			"- acceptanceCriteriaCovered: All acceptance criteria met.",
+			"- changedFilesMatchScope: Only in-scope files changed.",
+			"- testsRun: vitest run passed.",
+			"- debugRemoved: No debug code left.",
+			"- commitMessageMatchesBehavior: Commit message matches behavior.",
+			"- branchDriftCheck: Branched from plan, no drift.",
+			"",
+		].join("\n"),
+	);
+}
 
 async function createGitToolSetup(
 	fs: MockPlannerFs,

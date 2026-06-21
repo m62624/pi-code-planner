@@ -1,7 +1,8 @@
 import { join } from "node:path";
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
-import type { ProjectStoragePaths } from "../storage/paths";
+import type { PlanStoragePaths, ProjectStoragePaths } from "../storage/paths";
+import { readPlanRecord } from "../storage/plan-store";
 import { ARTIFACT_CANONICAL_SCHEMA, formatArtifactEcho } from "./artifact-echo";
 import {
 	checkPlannerOrchestratorToolAllowed,
@@ -93,12 +94,6 @@ export async function executePlannerArtifactTool(input: {
 				);
 			}
 			case "planner_tdd_submit": {
-				if (!state.activeTaskId) {
-					return blocked(
-						input.toolName,
-						"planner_tdd_submit requires an active task. Prepare exactly one task branch first.",
-					);
-				}
 				const updates = renderTddUpdates(params);
 				if (Object.keys(updates).length === 0) {
 					return blocked(
@@ -106,7 +101,25 @@ export async function executePlannerArtifactTool(input: {
 						`Provide at least one section: ${TDD_SECTIONS.map((s) => s.key).join(", ")}.`,
 					);
 				}
-				const tddPath = join(planPaths.tasksDir, state.activeTaskId, "tdd.md");
+				// Normally the active task owns tdd.md. After planner_git_merge_task_to_plan
+				// the active task is cleared, but the merge_task_to_plan exit gate still
+				// wants the merge scope audit. Fall back to the latest done task for a
+				// mergeScopeAudit-only submit so that state can never become terminal.
+				const isMergeAuditOnly =
+					Object.keys(updates).length === 1 &&
+					updates.mergeScopeAudit !== undefined;
+				const targetTaskId =
+					state.activeTaskId ??
+					(isMergeAuditOnly
+						? await latestDoneTaskId(input.fs, planPaths)
+						: null);
+				if (!targetTaskId) {
+					return blocked(
+						input.toolName,
+						"planner_tdd_submit requires an active task. Prepare exactly one task branch first.",
+					);
+				}
+				const tddPath = join(planPaths.tasksDir, targetTaskId, "tdd.md");
 				const existing = (await input.fs.exists(tddPath))
 					? await input.fs.readText(tddPath)
 					: "";
@@ -140,6 +153,20 @@ function renderTddUpdates(
 		);
 	}
 	return updates;
+}
+
+/** Latest task marked done, used as the audit target after a merge clears the active task. */
+async function latestDoneTaskId(
+	fs: PlannerFs,
+	planPaths: PlanStoragePaths,
+): Promise<string | null> {
+	const plan = await readPlanRecord(fs, planPaths);
+	for (let index = plan.tasks.length - 1; index >= 0; index -= 1) {
+		if (plan.tasks[index]?.status === "done") {
+			return plan.tasks[index].taskId;
+		}
+	}
+	return null;
 }
 
 function applied(
