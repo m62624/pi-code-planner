@@ -1,6 +1,8 @@
 import { join } from "node:path";
+import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
+import { safeReaddir } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
 import { updatePlanState } from "../storage/state-store";
 import { readActivePlanContext } from "./active-plan";
@@ -9,6 +11,8 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { requiredString } from "./params";
+import { asObject } from "./values";
 
 export const PLANNER_STUCK_TOOL_NAMES = ["planner_report_stuck"] as const;
 export type PlannerStuckToolName = (typeof PLANNER_STUCK_TOOL_NAMES)[number];
@@ -293,14 +297,6 @@ async function nextAttemptId(
 	return `attempt-${String(next).padStart(3, "0")}`;
 }
 
-async function safeReaddir(fs: PlannerFs, path: string): Promise<string[]> {
-	try {
-		return await fs.readdir(path);
-	} catch {
-		return [];
-	}
-}
-
 async function readDiffPatch(
 	git: GitRunner,
 	repoRoot: string,
@@ -310,16 +306,6 @@ async function readDiffPatch(
 
 function blocked(toolName: PlannerStuckToolName, text: string) {
 	return { status: "blocked" as const, toolName, text, details: null };
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
 }
 
 function parseStuckReportParams(
@@ -390,14 +376,6 @@ function requiredStuckType(params: Record<string, unknown>): PlannerStuckType {
 		);
 	}
 	return value as PlannerStuckType;
-}
-
-function requiredString(params: Record<string, unknown>, key: string): string {
-	const value = params[key];
-	if (typeof value !== "string" || !value.trim()) {
-		throw new TypeError(`${key} must be a non-empty string.`);
-	}
-	return value.trim();
 }
 
 function requiredBoolean(

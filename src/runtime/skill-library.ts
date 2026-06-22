@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import type { GitRunner } from "../git/runner";
+import { dirname, join } from "node:path";
+import { errorMessage } from "../errors";
+import { isPathInsideOrEqual } from "../path-utils";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerFs } from "../storage/fs";
 import { readJsonIfExists, writeJson } from "../storage/json";
@@ -11,6 +12,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import type { PlannerToolContext } from "./tool-context";
 
 export const PLANNER_SKILL_TOOL_NAMES = [
 	"planner_skill_create",
@@ -62,19 +64,13 @@ export interface PlannerSkillSummary {
 	updatedAt: number;
 }
 
-export interface PlannerSkillCreateInput {
-	fs: PlannerFs;
-	git: GitRunner;
-	projectPaths: ProjectStoragePaths;
+export interface PlannerSkillCreateInput extends PlannerToolContext {
 	params: unknown;
 	now?: number;
 	uuid?: string;
 }
 
-export interface PlannerSkillUpdateInput {
-	fs: PlannerFs;
-	git: GitRunner;
-	projectPaths: ProjectStoragePaths;
+export interface PlannerSkillUpdateInput extends PlannerToolContext {
 	params: unknown;
 	now?: number;
 }
@@ -838,15 +834,4 @@ function blocked(text: string): PlannerSkillCreateResult {
 		text,
 		details: null,
 	};
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
-
-function isPathInsideOrEqual(path: string, root: string): boolean {
-	const resolvedPath = resolve(path);
-	const resolvedRoot = resolve(root);
-	const rel = relative(resolvedRoot, resolvedPath);
-	return rel.length === 0 || (!rel.startsWith("..") && !isAbsolute(rel));
 }

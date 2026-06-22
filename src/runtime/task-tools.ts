@@ -1,3 +1,4 @@
+import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
@@ -8,6 +9,8 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { requiredString } from "./params";
+import { asObject } from "./values";
 
 export const PLANNER_TASK_TOOL_NAMES = ["planner_task_upsert"] as const;
 export type PlannerTaskToolName = (typeof PLANNER_TASK_TOOL_NAMES)[number];
@@ -106,10 +109,6 @@ export async function executePlannerTaskTool(input: {
 	}
 }
 
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
-
 function upsertTaskSummary<T extends { taskId: string }>(
 	tasks: readonly T[],
 	task: T,
@@ -123,20 +122,6 @@ function upsertTaskSummary<T extends { taskId: string }>(
 
 function blocked(toolName: PlannerTaskToolName, text: string) {
 	return { status: "blocked" as const, toolName, text, details: null };
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
-}
-
-function requiredString(params: Record<string, unknown>, key: string): string {
-	const value = params[key];
-	if (typeof value !== "string" || !value.trim()) {
-		throw new TypeError(`${key} must be a non-empty string.`);
-	}
-	return value.trim();
 }
 
 function stringArray(value: unknown, key: string): string[] {

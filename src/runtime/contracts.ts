@@ -8,6 +8,7 @@ import {
 	relative,
 	resolve,
 } from "node:path";
+import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerContractsSettings } from "../settings/schema";
@@ -34,6 +35,9 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { requiredString } from "./params";
+import type { PlannerToolResult } from "./tool-result";
+import { asObject } from "./values";
 
 export const PLANNER_CONTRACT_TOOL_NAMES = [
 	"planner_contract_scan",
@@ -152,12 +156,8 @@ export interface PlannerContractsManifest {
 	touchedFiles: PlannerContractTouchedFile[];
 }
 
-export interface PlannerContractToolResult {
-	status: "applied" | "blocked";
-	toolName: PlannerContractToolName;
-	text: string;
-	details: unknown;
-}
+export type PlannerContractToolResult =
+	PlannerToolResult<PlannerContractToolName>;
 
 export async function executePlannerContractTool(input: {
 	fs: PlannerFs;
@@ -2089,20 +2089,6 @@ function requireWorktreePath(state: PlanStateRecord): string {
 	return state.worktreePath;
 }
 
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
-}
-
-function requiredString(params: Record<string, unknown>, key: string): string {
-	const value = params[key];
-	if (typeof value !== "string" || value.trim().length === 0) {
-		throw new TypeError(`${key} must be a non-empty string.`);
-	}
-	return value.trim();
-}
-
 function optionalString(value: unknown): string | null {
 	return typeof value === "string" && value.trim().length > 0
 		? value.trim()
@@ -2166,10 +2152,6 @@ function enumValue<const T extends readonly string[]>(
 		return value as T[number];
 	}
 	throw new TypeError(`${key} must be one of: ${values.join(", ")}.`);
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }
 
 function applied(

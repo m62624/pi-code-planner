@@ -5,13 +5,9 @@ import {
 	mergeRefactorToTask,
 	mergeTaskToPlan,
 } from "../git/planner-ops";
-import type { GitRunner } from "../git/runner";
 import type { PlannerWrapperTool } from "../guard/tool-policy";
 import type { PlannerFs } from "../storage/fs";
-import {
-	createTaskStoragePaths,
-	type ProjectStoragePaths,
-} from "../storage/paths";
+import { createTaskStoragePaths } from "../storage/paths";
 import { updatePlanRecord } from "../storage/plan-store";
 import type { PlanStateRecord } from "../storage/schema";
 import { savePlanState } from "../storage/state-store";
@@ -28,6 +24,9 @@ import {
 	runPlannerOrchestrator,
 } from "./orchestrator";
 import { validateTaskMergeScopeAudit } from "./tdd-evidence";
+import type { PlannerToolExecutionInput } from "./tool-context";
+import type { PlannerToolResult } from "./tool-result";
+import { asObject } from "./values";
 
 export const PLANNER_GIT_TOOL_NAMES = [
 	"planner_git_inspect",
@@ -42,20 +41,11 @@ export const PLANNER_GIT_TOOL_NAMES = [
 
 export type PlannerGitToolName = (typeof PLANNER_GIT_TOOL_NAMES)[number];
 
-export interface PlannerGitToolExecutionInput {
-	fs: PlannerFs;
-	git: GitRunner;
-	projectPaths: ProjectStoragePaths;
-	toolName: PlannerGitToolName;
-	params: unknown;
-}
+export type PlannerGitToolExecutionInput =
+	PlannerToolExecutionInput<PlannerGitToolName>;
 
-export interface PlannerGitToolExecutionResult {
-	status: "applied" | "blocked";
-	toolName: PlannerGitToolName;
-	text: string;
-	details: unknown;
-}
+export type PlannerGitToolExecutionResult =
+	PlannerToolResult<PlannerGitToolName>;
 
 interface ReadyGitContext {
 	status: "ready";
@@ -450,12 +440,6 @@ function optionalMessage(params: unknown, fallback: string): string {
 	return typeof value === "string" && value.trim().length > 0
 		? value
 		: fallback;
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object"
-		? (value as Record<string, unknown>)
-		: {};
 }
 
 function applied(

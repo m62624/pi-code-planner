@@ -1,3 +1,4 @@
+import { DEFAULT_LANGUAGE } from "../constants";
 import type { PlannerCompactBoundaries } from "../storage/schema";
 
 export type WorktreeSettings =
@@ -138,12 +139,12 @@ export const DEFAULT_PLANNER_SETTINGS = {
 		maxOutputBytes: 10 * 1024 * 1024,
 	},
 	metadata: {
-		humanLanguage: "English",
-		titleLanguage: "English",
-		descriptionLanguage: "English",
-		commitLanguage: "English",
-		doubtReviewLanguage: "English",
-		skillLanguage: "English",
+		humanLanguage: DEFAULT_LANGUAGE,
+		titleLanguage: DEFAULT_LANGUAGE,
+		descriptionLanguage: DEFAULT_LANGUAGE,
+		commitLanguage: DEFAULT_LANGUAGE,
+		doubtReviewLanguage: DEFAULT_LANGUAGE,
+		skillLanguage: DEFAULT_LANGUAGE,
 	},
 	timer: {
 		enabled: true,

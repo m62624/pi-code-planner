@@ -1,4 +1,3 @@
-import { isAbsolute, relative, resolve } from "node:path";
 import {
 	type ExtensionAPI,
 	type ExtensionCommandContext,
@@ -7,6 +6,8 @@ import {
 	isToolCallEventType,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { DEFAULT_LANGUAGE, MS_PER_MINUTE } from "./constants";
+import { errorMessage } from "./errors";
 import { NodeGitRunner } from "./git/node-runner";
 import { PLANNER_STATUS_TOOL_NAME } from "./guard/git-watcher";
 import {
@@ -28,6 +29,7 @@ import {
 } from "./index.tool-visibility";
 import { syncBundledInstructionFiles } from "./instructions/defaults";
 import { createInstructionPaths } from "./instructions/paths";
+import { isPathInsideOrEqual } from "./path-utils";
 import { buildPlannerAboutReport } from "./runtime/about";
 import {
 	buildAcceptedPlanCompletionPrompt,
@@ -190,6 +192,7 @@ import {
 } from "./session/handoff";
 import { loadEffectivePlannerSettings } from "./settings/manager";
 import { createNodeFs } from "./storage/fs";
+import type { ProjectStoragePaths } from "./storage/paths";
 import { createPlanStoragePaths } from "./storage/paths";
 import { resolveProjectStoragePaths } from "./storage/project-resolver";
 import {
@@ -205,6 +208,11 @@ import {
 } from "./storage/worktree-index";
 
 export * from "./public-api";
+
+// NodeGitRunner is stateless (every method delegates to module-level git
+// command helpers), so a single shared instance serves all tool handlers
+// instead of allocating one per call.
+const gitRunner = new NodeGitRunner();
 
 const EMPTY_TOOL_PARAMETERS = {
 	type: "object",
@@ -1392,12 +1400,7 @@ function registerPlannerWorkspaceAutoOpen(pi: ExtensionAPI): void {
 		try {
 			const sessionId = ctx.sessionManager.getSessionId();
 			if (openedSessions.has(sessionId)) return;
-			const fs = createNodeFs();
-			const projectPaths = await resolveProjectStoragePaths({
-				fs,
-				agentDir: getAgentDir(),
-				cwd: ctx.cwd,
-			});
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 			const context = await readActivePlanContext({ fs, projectPaths });
 			if (context.status !== "ready") return;
 			const worktreePath = context.state.worktreePath;
@@ -1685,13 +1688,9 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				}
 				const normalizedRequest = request.trim();
 
-				const fs = createNodeFs();
-				const agentDir = getAgentDir();
-				const projectPaths = await resolveProjectStoragePaths({
-					fs,
-					agentDir,
-					cwd: ctx.cwd,
-				});
+				const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
+					ctx.cwd,
+				);
 				const project = await ensureProjectRecord(fs, projectPaths);
 				let planId: string;
 				try {
@@ -1705,7 +1704,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				}
 				const result = await executePlannerPlanTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName: "planner_create_plan",
 					params: {
@@ -1720,26 +1719,12 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				}
 				markPlannerToolVisibilityActive();
 
-				const details = result.details as {
-					state?: { worktreePath?: string | null };
-					plan?: { planId?: string };
-					settings?: {
-						effective?: {
-							metadata?: {
-								titleLanguage?: string;
-								descriptionLanguage?: string;
-							};
-						};
-					};
-				};
-				const worktreePath = details.state?.worktreePath;
-				const createdPlanId = details.plan?.planId ?? planId;
-				const descriptionLanguage =
-					details.settings?.effective?.metadata?.descriptionLanguage ??
-					"English";
-				const titleLanguage =
-					details.settings?.effective?.metadata?.titleLanguage ??
-					descriptionLanguage;
+				const {
+					worktreePath,
+					createdPlanId,
+					descriptionLanguage,
+					titleLanguage,
+				} = readPlannerCreateOutcome(result.details, planId);
 				if (!worktreePath) {
 					ctx.ui.notify(
 						"Planner plan was created without worktreePath.",
@@ -1823,13 +1808,9 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					return;
 				}
 
-				const fs = createNodeFs();
-				const agentDir = getAgentDir();
-				const projectPaths = await resolveProjectStoragePaths({
-					fs,
-					agentDir,
-					cwd: ctx.cwd,
-				});
+				const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
+					ctx.cwd,
+				);
 				const request = buildPlannerImproveRequest({
 					request: parsed.request,
 					compatibilityMode: parsed.compatibilityMode,
@@ -1847,7 +1828,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				}
 				const result = await executePlannerPlanTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName: "planner_create_plan",
 					params: {
@@ -1870,26 +1851,12 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				}
 				markPlannerToolVisibilityActive();
 
-				const details = result.details as {
-					state?: { worktreePath?: string | null };
-					plan?: { planId?: string };
-					settings?: {
-						effective?: {
-							metadata?: {
-								titleLanguage?: string;
-								descriptionLanguage?: string;
-							};
-						};
-					};
-				};
-				const worktreePath = details.state?.worktreePath;
-				const createdPlanId = details.plan?.planId ?? planId;
-				const descriptionLanguage =
-					details.settings?.effective?.metadata?.descriptionLanguage ??
-					"English";
-				const titleLanguage =
-					details.settings?.effective?.metadata?.titleLanguage ??
-					descriptionLanguage;
+				const {
+					worktreePath,
+					createdPlanId,
+					descriptionLanguage,
+					titleLanguage,
+				} = readPlannerCreateOutcome(result.details, planId);
 				if (!worktreePath) {
 					ctx.ui.notify(
 						"Planner plan was created without worktreePath.",
@@ -1961,13 +1928,9 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			"Return from the active planner worktree session to the original project chat without finishing or deleting the plan.",
 		handler: async (_args, ctx) => {
 			await ctx.waitForIdle();
-			const fs = createNodeFs();
-			const agentDir = getAgentDir();
-			const projectPaths = await resolveProjectStoragePaths({
-				fs,
-				agentDir,
-				cwd: ctx.cwd,
-			});
+			const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
+				ctx.cwd,
+			);
 			try {
 				const project = await readProjectRecordIfExists(fs, projectPaths);
 				if (!project?.activePlanId) {
@@ -2044,8 +2007,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 		description:
 			"Rename a planner plan title without changing its stable plan id.",
 		handler: async (args, ctx) => {
-			const fs = createNodeFs();
-			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 			const parsed = await resolveRenameCommandArgs({
 				args,
 				ctx,
@@ -2055,7 +2017,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			if (!parsed) return;
 			const result = await executePlannerUserCommand({
 				fs,
-				git: new NodeGitRunner(),
+				git: gitRunner,
 				projectPaths,
 				commandName: "planner_rename",
 				params: {
@@ -2071,13 +2033,9 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 		description: "Resume a planner plan in the current project.",
 		handler: async (args, ctx) => {
 			await ctx.waitForIdle();
-			const fs = createNodeFs();
-			const agentDir = getAgentDir();
-			const projectPaths = await resolveProjectStoragePaths({
-				fs,
-				agentDir,
-				cwd: ctx.cwd,
-			});
+			const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
+				ctx.cwd,
+			);
 			const planId =
 				parseSinglePlanIdArg(args) ??
 				(await selectPlannerPlanId({
@@ -2092,7 +2050,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			}
 			const result = await executePlannerUserCommand({
 				fs,
-				git: new NodeGitRunner(),
+				git: gitRunner,
 				projectPaths,
 				commandName: "planner_resume",
 				params: { planId },
@@ -2164,13 +2122,9 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 		description: "Delete a planner plan after confirmation.",
 		handler: async (args, ctx) => {
 			await ctx.waitForIdle();
-			const fs = createNodeFs();
-			const agentDir = getAgentDir();
-			const projectPaths = await resolveProjectStoragePaths({
-				fs,
-				agentDir,
-				cwd: ctx.cwd,
-			});
+			const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
+				ctx.cwd,
+			);
 			const parsed = await resolveDeleteCommandArgs({
 				args,
 				ctx,
@@ -2199,7 +2153,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					withSession: async (replacementCtx) => {
 						const result = await executePlannerUserCommand({
 							fs,
-							git: new NodeGitRunner(),
+							git: gitRunner,
 							projectPaths,
 							commandName: "planner_delete",
 							params: {
@@ -2215,7 +2169,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 
 			const result = await executePlannerUserCommand({
 				fs,
-				git: new NodeGitRunner(),
+				git: gitRunner,
 				projectPaths,
 				commandName: "planner_delete",
 				params: {
@@ -2233,14 +2187,10 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			"Finish the completed planner result, keep one output branch, clean temporary planner state, and return to the original project session.",
 		handler: async (_args, ctx) => {
 			await ctx.waitForIdle();
-			const fs = createNodeFs();
-			const agentDir = getAgentDir();
-			const projectPaths = await resolveProjectStoragePaths({
-				fs,
-				agentDir,
-				cwd: ctx.cwd,
-			});
-			const git = new NodeGitRunner();
+			const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
+				ctx.cwd,
+			);
+			const git = gitRunner;
 			let fallbackSession: Awaited<
 				ReturnType<typeof createPlannerHandoffSession>
 			> | null = null;
@@ -2404,16 +2354,11 @@ function registerPlannerTools(
 			"Use planner_status when a planner action is blocked or when you are unsure which planner step/tool is allowed.",
 		parameters: EMPTY_TOOL_PARAMETERS as never,
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-			const fs = createNodeFs();
-			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-			await recordPlannerToolActivityForProject({
-				fs,
-				projectPaths,
-				now: Date.now(),
-			});
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
 			const orchestration = await runPlannerOrchestrator({
 				fs,
-				git: new NodeGitRunner(),
+				git: gitRunner,
 				projectPaths,
 			});
 
@@ -2433,12 +2378,7 @@ function registerPlannerTools(
 			"Use planner_about when the user asks what pi-code-planner is doing, what a planner setting means, or why a planner behavior is enabled. This tool is read-only.",
 		parameters: EMPTY_TOOL_PARAMETERS as never,
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-			const fs = createNodeFs();
-			const projectPaths = await resolveProjectStoragePaths({
-				fs,
-				agentDir: getAgentDir(),
-				cwd: ctx.cwd,
-			});
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 			const settings = await loadEffectivePlannerSettings({
 				fs,
 				projectPaths,
@@ -2461,35 +2401,27 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_PLAN_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: planToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: planToolDescription(toolName),
 			promptSnippet:
 				"Use planner_create_plan before project reads when the user asks to start a planner-controlled task.",
 			parameters: CREATE_PLAN_TOOL_PARAMETERS as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 				const result = await executePlannerPlanTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
 				});
 
 				if (result.status === "applied") {
-					await recordPlannerToolActivityForProject({
-						fs,
-						projectPaths,
-						now: Date.now(),
-					});
+					await recordPlannerToolActivityForProject({ fs, projectPaths });
 					activatePlannerToolVisibility(pi);
 				}
 
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2497,30 +2429,22 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_GOAL_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: goalToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: goalToolDescription(toolName),
 			promptSnippet:
 				"Use planner goal tools during intake only. Draft goal.md before source reads and enter discovery only after explicit user approval.",
 			parameters: goalToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerGoalTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
 				});
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2528,30 +2452,22 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_QUESTION_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: questionToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: questionToolDescription(toolName),
 			promptSnippet:
 				"Use planner question tools during discovery/write_questions. Save evidence-based questions, show open questions to the user verbatim, wait for answers, then resolve them before continuing.",
 			parameters: questionToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerQuestionTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
 				});
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2559,30 +2475,22 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_TASK_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: taskToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: taskToolDescription(toolName),
 			promptSnippet:
 				"Use planner_task_upsert during planning/write_task_files. Pass semantic task fields only; the wrapper writes task.json, task.md, and empty TDD lifecycle artifacts.",
 			parameters: TASK_UPSERT_TOOL_PARAMETERS as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerTaskTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
 				});
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2590,22 +2498,17 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_CONTRACT_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: contractToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: contractToolDescription(toolName),
 			promptSnippet:
 				"Use planner contract tools for AGENTS.md local contracts. Scan/route/read before broad source reads; check/update contracts after each green TDD task before refactor.",
 			parameters: contractToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerContractTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
@@ -2622,10 +2525,7 @@ function registerPlannerTools(
 						updateToolVisibility(pi);
 					}
 				}
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2633,20 +2533,16 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_STUCK_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: stuckToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: stuckToolDescription(toolName),
 			promptSnippet:
 				"Use planner_report_stuck only when an execution attempt is actually stuck. Save evidence, diff, and next debug plan before planner-controlled compact.",
 			parameters: STUCK_REPORT_TOOL_PARAMETERS as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const fs = createNodeFs();
-				const git = new NodeGitRunner();
+				const git = gitRunner;
 				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerStuckTool({
 					fs,
 					git,
@@ -2661,10 +2557,7 @@ function registerPlannerTools(
 						projectPaths,
 					});
 				}
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2672,30 +2565,22 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_REFACTOR_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: refactorToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: refactorToolDescription(toolName),
 			promptSnippet:
 				"Use planner_refactor_review during execution/refactor_task after inspecting the task diff. Pass semantic review fields; the wrapper writes refactor.md.",
 			parameters: REFACTOR_REVIEW_TOOL_PARAMETERS as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerRefactorTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
 				});
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2703,30 +2588,22 @@ function registerPlannerTools(
 	for (const toolName of DOUBT_REVIEW_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: doubtToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: doubtToolDescription(toolName),
 			promptSnippet:
 				"Use planner_doubt_review during finalize/doubt_review. List possible errors first, then prove or dismiss each one before calling anything a real bug.",
 			parameters: doubtToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerDoubtTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
 				});
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2734,29 +2611,21 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_ARTIFACT_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: artifactToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: artifactToolDescription(toolName),
 			promptSnippet: artifactToolPromptSnippet(toolName),
 			parameters: artifactToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerArtifactTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
 				});
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2770,22 +2639,14 @@ function registerPlannerTools(
 			"Use planner_artifact_read to re-read any planner artifact (request, goal, discovery, plan, questions, decisions, verify, final_summary, task, tdd, refactor). They live outside the worktree, so the built-in read tool cannot reach them and security extensions that restrict the worktree will block it. Never guess a worktree path for these files.",
 		parameters: ARTIFACT_READ_TOOL_PARAMETERS as never,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const fs = createNodeFs();
-			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-			await recordPlannerToolActivityForProject({
-				fs,
-				projectPaths,
-				now: Date.now(),
-			});
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
 			const result = await executePlannerArtifactReadTool({
 				fs,
 				projectPaths,
 				params,
 			});
-			return {
-				content: [{ type: "text", text: result.text }],
-				details: result,
-			};
+			return plannerToolResponse(result);
 		},
 	});
 
@@ -2798,23 +2659,15 @@ function registerPlannerTools(
 			"Use planner_skill_create only after a reusable lesson is proven by stuck/debug/refactor/doubt/final evidence. The wrapper writes YAML frontmatter and stores the skill for future planner sessions. At capture_skill step you MUST decide: create, update an existing skill, or explicitly record in decisions.md why no skill is needed.",
 		parameters: SKILL_CREATE_TOOL_PARAMETERS as never,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const fs = createNodeFs();
-			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-			await recordPlannerToolActivityForProject({
-				fs,
-				projectPaths,
-				now: Date.now(),
-			});
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
 			const result = await executePlannerSkillTool({
 				fs,
-				git: new NodeGitRunner(),
+				git: gitRunner,
 				projectPaths,
 				params,
 			});
-			return {
-				content: [{ type: "text", text: result.text }],
-				details: result,
-			};
+			return plannerToolResponse(result);
 		},
 	});
 
@@ -2827,53 +2680,37 @@ function registerPlannerTools(
 			"Use planner_skill_update when an existing skill is outdated or wrong. Provide the exact name from the skill index. If no existing skill matches by meaning, use planner_skill_create instead. After updating, run the skill probe if applicable and call planner_git_discard_changes if it dirtied the worktree.",
 		parameters: SKILL_UPDATE_TOOL_PARAMETERS as never,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const fs = createNodeFs();
-			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-			await recordPlannerToolActivityForProject({
-				fs,
-				projectPaths,
-				now: Date.now(),
-			});
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
 			const result = await executePlannerSkillUpdateTool({
 				fs,
-				git: new NodeGitRunner(),
+				git: gitRunner,
 				projectPaths,
 				params,
 			});
-			return {
-				content: [{ type: "text", text: result.text }],
-				details: result,
-			};
+			return plannerToolResponse(result);
 		},
 	});
 
 	for (const toolName of PLANNER_DEBUG_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: debugToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: debugToolDescription(toolName),
 			promptSnippet:
 				"Use planner debug tools only after planner_report_stuck. Record strategy, one focused probe, and result before patching. Use cleanup before planner_git_commit.",
 			parameters: debugToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerDebugTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
 				});
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2881,20 +2718,16 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_WORKFLOW_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: workflowToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: workflowToolDescription(toolName),
 			promptSnippet:
 				"Use planner_status first, then call only the workflow transition listed as allowed for the current stage/step.",
 			parameters: workflowToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const fs = createNodeFs();
-				const git = new NodeGitRunner();
+				const git = gitRunner;
 				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerWorkflowTool({
 					fs,
 					git,
@@ -2928,31 +2761,23 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_RECOVERY_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: recoveryToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: recoveryToolDescription(toolName),
 			promptSnippet:
 				"Use planner_recovery_inspect when planner_status reports recovery or user-decision gating. Use planner_recovery_resume only after inspection shows no blocking git or worktree issues. Recovery tools never reset or delete git state.",
 			parameters: recoveryToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerRecoveryTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
 				});
 
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2970,55 +2795,43 @@ function registerPlannerTools(
 			additionalProperties: false,
 		} as never,
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-			const fs = createNodeFs();
-			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 			const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
 			const diag = settings.effective.diagnostics;
 			const result = await executePlannerRecoveryReportTool({
 				fs,
-				git: new NodeGitRunner(),
+				git: gitRunner,
 				projectPaths,
 				thresholds: {
 					blockedTransitions: diag.blockedTransitions,
-					stuckMs: diag.stuckMinutes * 60_000,
+					stuckMs: diag.stuckMinutes * MS_PER_MINUTE,
 				},
 				modelId: resolveSessionModelId(ctx),
 			});
-			return {
-				content: [{ type: "text", text: result.text }],
-				details: result,
-			};
+			return plannerToolResponse(result);
 		},
 	});
 
 	for (const toolName of PLANNER_GIT_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: gitToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: gitToolDescription(toolName),
 			promptSnippet:
 				"Use planner git tools instead of raw git while a planner plan is active. Call planner_status first and only use allowed git wrappers.",
 			parameters: gitToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerGitTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
 				});
 
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -3053,14 +2866,9 @@ function registerPlannerTools(
 			additionalProperties: false,
 		} as never,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const fs = createNodeFs();
-			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 			const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
-			await recordPlannerToolActivityForProject({
-				fs,
-				projectPaths,
-				now: Date.now(),
-			});
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
 			const context = await readActivePlanContext({ fs, projectPaths });
 			if (context.status !== "ready") {
 				return {
@@ -3081,10 +2889,7 @@ function registerPlannerTools(
 				settings: settings.effective.exec,
 				worktreePath: ctx.cwd,
 			});
-			return {
-				content: [{ type: "text", text: result.text }],
-				details: result,
-			};
+			return plannerToolResponse(result);
 		},
 	});
 }
@@ -3097,7 +2902,7 @@ function registerPlannerCompactEvents(
 		consumePlannerControlledCompact(compactRuntime);
 
 		const fs = createNodeFs();
-		let projectPaths: Awaited<ReturnType<typeof resolveProjectStoragePaths>>;
+		let projectPaths: ProjectStoragePaths;
 		try {
 			projectPaths = await resolveProjectStoragePaths({
 				fs,
@@ -3110,7 +2915,7 @@ function registerPlannerCompactEvents(
 
 		const preflight = await runPlannerPreflight({
 			fs,
-			git: new NodeGitRunner(),
+			git: gitRunner,
 			projectPaths,
 		});
 		if (preflight.context.status !== "ready") {
@@ -3211,11 +3016,7 @@ async function recordPlannerToolActivityForCwd(cwd: string): Promise<void> {
 	try {
 		const fs = createNodeFs();
 		const projectPaths = await createRuntimeProjectPaths(cwd);
-		await recordPlannerToolActivityForProject({
-			fs,
-			projectPaths,
-			now: Date.now(),
-		});
+		await recordPlannerToolActivityForProject({ fs, projectPaths });
 	} catch {
 		// Activity timestamps are advisory; planner state remains authoritative.
 	}
@@ -3223,8 +3024,8 @@ async function recordPlannerToolActivityForCwd(cwd: string): Promise<void> {
 
 async function recordPlannerToolActivityForProject(input: {
 	fs: ReturnType<typeof createNodeFs>;
-	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
-	now: number;
+	projectPaths: ProjectStoragePaths;
+	now?: number;
 }): Promise<void> {
 	try {
 		const context = await readActivePlanContext({
@@ -3235,7 +3036,7 @@ async function recordPlannerToolActivityForProject(input: {
 			return;
 		}
 		await updatePlanState(input.fs, context.planPaths, (state) =>
-			markPlannerToolActivity(state, input.now),
+			markPlannerToolActivity(state, input.now ?? Date.now()),
 		);
 	} catch {
 		// Activity timestamps must never block the actual planner tool result.
@@ -3289,7 +3090,7 @@ async function recordPlannerDiagnosticsEventForProject(input: {
 			diag.enabled &&
 			evaluatePlannerStuck(record, Date.now(), {
 				blockedTransitions: diag.blockedTransitions,
-				stuckMs: diag.stuckMinutes * 60_000,
+				stuckMs: diag.stuckMinutes * MS_PER_MINUTE,
 			}).stuck;
 		if (setRecoveryReportUnlocked(unlocked)) {
 			updateToolVisibility(input.pi);
@@ -3335,7 +3136,7 @@ async function maybeStartPlannerControlledCompact(input: {
 	ctx: ExtensionContext;
 	fs: ReturnType<typeof createNodeFs>;
 	git: NodeGitRunner;
-	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
+	projectPaths: ProjectStoragePaths;
 	compactRuntime: PlannerCompactRuntimeState;
 	toolName: PlannerWorkflowToolName;
 	transitionStatus: "applied" | "blocked";
@@ -3382,7 +3183,7 @@ async function maybeStartPlannerControlledCompact(input: {
 async function maybeStartPlannerStuckCompact(input: {
 	ctx: ExtensionContext;
 	fs: ReturnType<typeof createNodeFs>;
-	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
+	projectPaths: ProjectStoragePaths;
 }): Promise<void> {
 	const instructions = await buildPlannerStuckCompactInstructions({
 		fs: input.fs,
@@ -3437,26 +3238,29 @@ function registerPlannerBuiltinToolGuard(pi: ExtensionAPI): void {
 	});
 }
 
-function planToolLabel(toolName: PlannerPlanToolName): string {
-	switch (toolName) {
-		case "planner_create_plan":
-			return "Planner Create Plan";
-	}
+// Words that should render uppercase rather than title-cased in tool labels.
+const TOOL_LABEL_ACRONYMS: Record<string, string> = { tdd: "TDD" };
+
+/**
+ * Derive a tool's display label from its name: `planner_create_plan` ->
+ * `Planner Create Plan`. Replaces a dozen per-tool switch functions that all
+ * encoded this same title-casing, with an acronym override for words like TDD.
+ */
+function plannerToolLabel(toolName: string): string {
+	return toolName
+		.split("_")
+		.map(
+			(word) =>
+				TOOL_LABEL_ACRONYMS[word] ??
+				word.charAt(0).toUpperCase() + word.slice(1),
+		)
+		.join(" ");
 }
 
 function planToolDescription(toolName: PlannerPlanToolName): string {
 	switch (toolName) {
 		case "planner_create_plan":
 			return "Create project storage, plan files, and the plan branch/worktree. Starts intake so the model can draft goal.md before discovery.";
-	}
-}
-
-function goalToolLabel(toolName: PlannerGoalToolName): string {
-	switch (toolName) {
-		case "planner_goal_submit":
-			return "Planner Goal Submit";
-		case "planner_goal_decide":
-			return "Planner Goal Decide";
 	}
 }
 
@@ -3478,15 +3282,6 @@ function goalToolParameters(toolName: PlannerGoalToolName) {
 	}
 }
 
-function questionToolLabel(toolName: PlannerQuestionToolName): string {
-	switch (toolName) {
-		case "planner_questions_submit":
-			return "Planner Questions Submit";
-		case "planner_questions_resolve":
-			return "Planner Questions Resolve";
-	}
-}
-
 function questionToolDescription(toolName: PlannerQuestionToolName): string {
 	switch (toolName) {
 		case "planner_questions_submit":
@@ -3505,34 +3300,10 @@ function questionToolParameters(toolName: PlannerQuestionToolName) {
 	}
 }
 
-function taskToolLabel(toolName: PlannerTaskToolName): string {
-	switch (toolName) {
-		case "planner_task_upsert":
-			return "Planner Task Upsert";
-	}
-}
-
 function taskToolDescription(toolName: PlannerTaskToolName): string {
 	switch (toolName) {
 		case "planner_task_upsert":
 			return "Create or replace one behavioral task from semantic fields. The wrapper writes task.json, task.md, and empty TDD lifecycle artifacts.";
-	}
-}
-
-function contractToolLabel(toolName: PlannerContractToolName): string {
-	switch (toolName) {
-		case "planner_contract_scan":
-			return "Planner Contract Scan";
-		case "planner_contract_route":
-			return "Planner Contract Route";
-		case "planner_contract_read":
-			return "Planner Contract Read";
-		case "planner_contract_check":
-			return "Planner Contract Check";
-		case "planner_contract_upsert":
-			return "Planner Contract Upsert";
-		case "planner_contract_decide":
-			return "Planner Contract Decide";
 	}
 }
 
@@ -3570,13 +3341,6 @@ function contractToolParameters(toolName: PlannerContractToolName) {
 	}
 }
 
-function stuckToolLabel(toolName: PlannerStuckToolName): string {
-	switch (toolName) {
-		case "planner_report_stuck":
-			return "Planner Report Stuck";
-	}
-}
-
 function stuckToolDescription(toolName: PlannerStuckToolName): string {
 	switch (toolName) {
 		case "planner_report_stuck":
@@ -3584,24 +3348,10 @@ function stuckToolDescription(toolName: PlannerStuckToolName): string {
 	}
 }
 
-function refactorToolLabel(toolName: PlannerRefactorToolName): string {
-	switch (toolName) {
-		case "planner_refactor_review":
-			return "Planner Refactor Review";
-	}
-}
-
 function refactorToolDescription(toolName: PlannerRefactorToolName): string {
 	switch (toolName) {
 		case "planner_refactor_review":
 			return "Write the structured refactor.md review from semantic fields during execution/refactor_task.";
-	}
-}
-
-function doubtToolLabel(toolName: PlannerDoubtReviewToolName): string {
-	switch (toolName) {
-		case "planner_doubt_review":
-			return "Planner Doubt Review";
 	}
 }
 
@@ -3616,19 +3366,6 @@ function doubtToolParameters(toolName: PlannerDoubtReviewToolName) {
 	switch (toolName) {
 		case "planner_doubt_review":
 			return DOUBT_REVIEW_TOOL_PARAMETERS;
-	}
-}
-
-function artifactToolLabel(toolName: PlannerArtifactToolName): string {
-	switch (toolName) {
-		case "planner_plan_submit":
-			return "Planner Plan Submit";
-		case "planner_discovery_submit":
-			return "Planner Discovery Submit";
-		case "planner_tdd_submit":
-			return "Planner TDD Submit";
-		case "planner_summary_submit":
-			return "Planner Summary Submit";
 	}
 }
 
@@ -3671,19 +3408,6 @@ function artifactToolParameters(toolName: PlannerArtifactToolName) {
 	}
 }
 
-function debugToolLabel(toolName: PlannerDebugToolName): string {
-	switch (toolName) {
-		case "planner_debug_strategy":
-			return "Planner Debug Strategy";
-		case "planner_debug_probe":
-			return "Planner Debug Probe";
-		case "planner_debug_result":
-			return "Planner Debug Result";
-		case "planner_debug_cleanup":
-			return "Planner Debug Cleanup";
-	}
-}
-
 function debugToolDescription(toolName: PlannerDebugToolName): string {
 	switch (toolName) {
 		case "planner_debug_strategy":
@@ -3707,27 +3431,6 @@ function debugToolParameters(toolName: PlannerDebugToolName) {
 			return DEBUG_RESULT_TOOL_PARAMETERS;
 		case "planner_debug_cleanup":
 			return DEBUG_CLEANUP_TOOL_PARAMETERS;
-	}
-}
-
-function gitToolLabel(toolName: PlannerGitToolName): string {
-	switch (toolName) {
-		case "planner_git_inspect":
-			return "Planner Git Inspect";
-		case "planner_git_init":
-			return "Planner Git Init";
-		case "planner_git_commit":
-			return "Planner Git Commit";
-		case "planner_git_discard_changes":
-			return "Planner Git Discard Changes";
-		case "planner_git_create_task_branch":
-			return "Planner Git Create Task Branch";
-		case "planner_git_create_refactor_branch":
-			return "Planner Git Create Refactor Branch";
-		case "planner_git_merge_refactor_to_task":
-			return "Planner Git Merge Refactor To Task";
-		case "planner_git_merge_task_to_plan":
-			return "Planner Git Merge Task To Plan";
 	}
 }
 
@@ -3770,15 +3473,6 @@ function gitToolParameters(toolName: PlannerGitToolName) {
 	}
 }
 
-function recoveryToolLabel(toolName: PlannerRecoveryToolName): string {
-	switch (toolName) {
-		case "planner_recovery_inspect":
-			return "Planner Recovery Inspect";
-		case "planner_recovery_resume":
-			return "Planner Recovery Resume";
-	}
-}
-
 function recoveryToolDescription(toolName: PlannerRecoveryToolName): string {
 	switch (toolName) {
 		case "planner_recovery_inspect":
@@ -3794,31 +3488,6 @@ function recoveryToolParameters(toolName: PlannerRecoveryToolName) {
 			return EMPTY_TOOL_PARAMETERS;
 		case "planner_recovery_resume":
 			return RESUME_RECOVERY_TOOL_PARAMETERS;
-	}
-}
-
-function workflowToolLabel(toolName: PlannerWorkflowToolName): string {
-	switch (toolName) {
-		case "planner_start_step":
-			return "Planner Start Step";
-		case "planner_finish_step":
-			return "Planner Finish Step";
-		case "planner_advance_step":
-			return "Planner Advance Step";
-		case "planner_fail_step":
-			return "Planner Fail Step";
-		case "planner_block_step":
-			return "Planner Block Step";
-		case "planner_retry_step":
-			return "Planner Retry Step";
-		case "planner_request_compact":
-			return "Planner Request Compact";
-		case "planner_complete_compact":
-			return "Planner Complete Compact";
-		case "planner_enter_recovery":
-			return "Planner Enter Recovery";
-		case "planner_resume_after_recovery":
-			return "Planner Resume After Recovery";
 	}
 }
 
@@ -3868,13 +3537,71 @@ function workflowToolParameters(toolName: PlannerWorkflowToolName) {
 	}
 }
 
-async function createRuntimeProjectPaths(cwd: string) {
+/**
+ * Resolve the per-invocation runtime context: a fresh node fs handle, the
+ * agent dir, and the project storage paths for `cwd`. Command and tool
+ * handlers need all three together, so returning them as a unit avoids the
+ * repeated three-line `createNodeFs()` / `getAgentDir()` /
+ * `resolveProjectStoragePaths(...)` preamble (and the bug of creating two fs
+ * handles when only paths were wanted).
+ */
+async function resolveRuntimeContext(cwd: string) {
 	const fs = createNodeFs();
-	return await resolveProjectStoragePaths({
+	const agentDir = getAgentDir();
+	const projectPaths = await resolveProjectStoragePaths({
 		fs,
-		agentDir: getAgentDir(),
+		agentDir,
 		cwd,
 	});
+	return { fs, agentDir, projectPaths };
+}
+
+/**
+ * Paths-only view of {@link resolveRuntimeContext} for callers that do not
+ * need the fs handle.
+ */
+async function createRuntimeProjectPaths(cwd: string) {
+	return (await resolveRuntimeContext(cwd)).projectPaths;
+}
+
+/**
+ * Wrap a planner tool-execution result in the Pi tool-response envelope. Nearly
+ * every wrapper tool returns the result's `text` as the single content block
+ * and the whole result as `details`; this hoists that repeated literal.
+ */
+function plannerToolResponse<T extends { text: string }>(result: T) {
+	return {
+		content: [{ type: "text" as const, text: result.text }],
+		details: result,
+	};
+}
+
+interface PlannerCreatePlanToolDetails {
+	state?: { worktreePath?: string | null };
+	plan?: { planId?: string };
+	settings?: {
+		effective?: {
+			metadata?: { titleLanguage?: string; descriptionLanguage?: string };
+		};
+	};
+}
+
+/**
+ * Extract the worktree path, resolved plan id, and content languages from a
+ * planner_create_plan result. The /planner-create and /planner-improve
+ * handoffs read the same fields out of the same loosely-typed `details`
+ * payload. `fallbackPlanId` is used when the result omits the plan id.
+ */
+function readPlannerCreateOutcome(details: unknown, fallbackPlanId: string) {
+	const typed = details as PlannerCreatePlanToolDetails;
+	const metadata = typed.settings?.effective?.metadata;
+	const descriptionLanguage = metadata?.descriptionLanguage ?? DEFAULT_LANGUAGE;
+	return {
+		worktreePath: typed.state?.worktreePath ?? null,
+		createdPlanId: typed.plan?.planId ?? fallbackPlanId,
+		descriptionLanguage,
+		titleLanguage: metadata?.titleLanguage ?? descriptionLanguage,
+	};
 }
 
 async function readPlannerBuiltinGuardState(
@@ -3973,10 +3700,6 @@ function buildPlannerSkillDetailsMarkdown(skill: PlannerSkillSummary): string {
 	].join("\n");
 }
 
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
-
 function parseSinglePlanIdArg(args: string): string | null {
 	const trimmed = args.trim();
 	return trimmed.length > 0 && !/\s/.test(trimmed) ? trimmed : null;
@@ -4035,7 +3758,7 @@ async function resolveRenameCommandArgs(input: {
 	args: string;
 	ctx: ExtensionCommandContext;
 	fs: ReturnType<typeof createNodeFs>;
-	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
+	projectPaths: ProjectStoragePaths;
 }): Promise<{ planId?: string; title: string } | null> {
 	const parsed = parsePlannerRenameCommandArgs(input.args);
 	if (!parsed) {
@@ -4070,7 +3793,7 @@ async function resolveDeleteCommandArgs(input: {
 	args: string;
 	ctx: ExtensionCommandContext;
 	fs: ReturnType<typeof createNodeFs>;
-	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
+	projectPaths: ProjectStoragePaths;
 }): Promise<{ planId: string; deleteActive: boolean } | null> {
 	const direct = parsePlannerDeleteCommandArgs(input.args);
 	if (direct) {
@@ -4214,13 +3937,6 @@ function buildPlannerExitPrompt(input: {
 		"Use /planner-resume to return to the planner worktree session.",
 		"Use /planner-finish only after the plan is complete and ready for export/cleanup.",
 	].join("\n");
-}
-
-function isPathInsideOrEqual(path: string, root: string): boolean {
-	const resolvedPath = resolve(path);
-	const resolvedRoot = resolve(root);
-	const rel = relative(resolvedRoot, resolvedPath);
-	return rel.length === 0 || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
 async function safeNotify(

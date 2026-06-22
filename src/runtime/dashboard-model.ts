@@ -1,3 +1,5 @@
+export { formatDuration } from "./time-format";
+
 import {
 	PLANNER_STAGE_STEPS,
 	type PlannerStage,
@@ -8,6 +10,7 @@ import {
 	type TaskStatus,
 } from "../storage/schema";
 import type { ActivePlanContext } from "./active-plan";
+import { formatDuration } from "./time-format";
 
 /**
  * Pure data + rendering layer for the planner dashboard TUI.
@@ -1041,14 +1044,4 @@ export function formatClock(ms: number): string {
 	return [hours, minutes, seconds]
 		.map((value) => value.toString().padStart(2, "0"))
 		.join(":");
-}
-
-export function formatDuration(ms: number): string {
-	const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-	const hours = Math.floor(totalSeconds / 3600);
-	const minutes = Math.floor((totalSeconds % 3600) / 60);
-	const seconds = totalSeconds % 60;
-	if (hours > 0) return `${hours}h${minutes.toString().padStart(2, "0")}m`;
-	if (minutes > 0) return `${minutes}m${seconds.toString().padStart(2, "0")}s`;
-	return `${seconds}s`;
 }

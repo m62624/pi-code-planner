@@ -3,6 +3,7 @@ import {
 	type ExtensionContext,
 	getAgentDir,
 } from "@earendil-works/pi-coding-agent";
+import { MS_PER_MINUTE } from "../constants";
 import { isPlanActive } from "../index.tool-visibility";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerTimerSettings } from "../settings/schema";
@@ -15,6 +16,7 @@ import type {
 } from "../storage/schema";
 import { updatePlanState } from "../storage/state-store";
 import { readActivePlanContext } from "./active-plan";
+import { formatDuration } from "./time-format";
 
 export interface PlannerTimerRuntimeState {
 	latestContext: ExtensionContext | null;
@@ -431,16 +433,6 @@ function currentStageActiveMs(
 	return Math.max(0, displayActive - (checkpoint?.activeMs ?? 0));
 }
 
-function formatDuration(ms: number): string {
-	const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-	const hours = Math.floor(totalSeconds / 3600);
-	const minutes = Math.floor((totalSeconds % 3600) / 60);
-	const seconds = totalSeconds % 60;
-	if (hours > 0) return `${hours}h${minutes.toString().padStart(2, "0")}m`;
-	if (minutes > 0) return `${minutes}m${seconds.toString().padStart(2, "0")}s`;
-	return `${seconds}s`;
-}
-
 function formatClock(ms: number): string {
 	const totalSeconds = Math.max(0, Math.floor(ms / 1000));
 	if (totalSeconds < 60) {
@@ -463,7 +455,7 @@ function padLeft(value: string, width: number): string {
 }
 
 function syncIntervalMs(settings: PlannerTimerSettings): number {
-	return settings.syncIntervalMinutes * 60_000;
+	return settings.syncIntervalMinutes * MS_PER_MINUTE;
 }
 
 function setPlannerStatus(

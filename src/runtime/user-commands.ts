@@ -1,3 +1,4 @@
+import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
 import { createPiSessionDir } from "../session/handoff";
 import type { PlannerFs } from "../storage/fs";
@@ -19,6 +20,8 @@ import type {
 } from "../storage/schema";
 import { readPlanStateIfExists } from "../storage/state-store";
 import { createWorktreeProjectIndexPath } from "../storage/worktree-index";
+import type { PlannerToolContext } from "./tool-context";
+import { asObject } from "./values";
 
 export type PlannerUserCommandName =
 	| "planner_get_plan_list"
@@ -26,10 +29,7 @@ export type PlannerUserCommandName =
 	| "planner_resume"
 	| "planner_delete";
 
-export interface PlannerUserCommandInput {
-	fs: PlannerFs;
-	git: GitRunner;
-	projectPaths: ProjectStoragePaths;
+export interface PlannerUserCommandInput extends PlannerToolContext {
 	commandName: PlannerUserCommandName;
 	params: unknown;
 }
@@ -519,12 +519,6 @@ function booleanParam(
 	return typeof params[key] === "boolean" ? params[key] : null;
 }
 
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object"
-		? (value as Record<string, unknown>)
-		: {};
-}
-
 function applied(
 	commandName: PlannerUserCommandName,
 	text: string,
@@ -549,8 +543,4 @@ function noProjectPlans(
 		"No planner plans in this project. Create one with /planner-create first.",
 		{ project: null },
 	);
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }

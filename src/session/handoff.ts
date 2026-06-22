@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
+import { DEFAULT_LANGUAGE } from "../constants";
 import type { PlannerFs } from "../storage/fs";
 
 export interface PlannerHandoffSession {
@@ -88,7 +89,7 @@ export function buildPlannerHandoffPrompt(input: {
 	titleLanguage?: string;
 	descriptionLanguage?: string;
 }): string {
-	const descriptionLanguage = input.descriptionLanguage ?? "English";
+	const descriptionLanguage = input.descriptionLanguage ?? DEFAULT_LANGUAGE;
 	const titleLanguage = input.titleLanguage ?? descriptionLanguage;
 	return [
 		`Planner plan ${input.planId} was created and this session is now in the planner worktree.`,
@@ -115,7 +116,7 @@ export function buildPlannerImproveHandoffPrompt(input: {
 	descriptionLanguage?: string;
 	compatibilityMode?: "additive" | "breaking";
 }): string {
-	const descriptionLanguage = input.descriptionLanguage ?? "English";
+	const descriptionLanguage = input.descriptionLanguage ?? DEFAULT_LANGUAGE;
 	const titleLanguage = input.titleLanguage ?? descriptionLanguage;
 	const compatibilityMode = input.compatibilityMode ?? "additive";
 	return [

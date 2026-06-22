@@ -1,6 +1,4 @@
-import type { GitRunner } from "../git/runner";
-import type { PlannerFs } from "../storage/fs";
-import type { PlanStoragePaths, ProjectStoragePaths } from "../storage/paths";
+import type { PlanStoragePaths } from "../storage/paths";
 import type { PlanStateRecord } from "../storage/schema";
 import { savePlanState } from "../storage/state-store";
 import {
@@ -9,11 +7,9 @@ import {
 	type PlannerRecoveryIssue,
 } from "./recovery";
 import { isPlannerStepInStage, type PlannerPosition } from "./state-machine";
+import type { PlannerToolContext } from "./tool-context";
 
-export interface PlannerRecoveryResumeInput {
-	fs: PlannerFs;
-	git: GitRunner;
-	projectPaths: ProjectStoragePaths;
+export interface PlannerRecoveryResumeInput extends PlannerToolContext {
 	planPaths: PlanStoragePaths;
 	state: PlanStateRecord;
 	target: PlannerPosition;

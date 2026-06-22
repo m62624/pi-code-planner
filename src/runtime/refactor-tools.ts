@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
@@ -7,6 +8,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { requiredString } from "./params";
 import {
 	formatRefactorReviewMarkdown,
 	REFACTOR_REVIEW_CATEGORIES,
@@ -18,6 +20,7 @@ import {
 	validateRefactorCategoryReviews,
 	validateRefactorReviewMarkdown,
 } from "./refactor-review";
+import { asObject } from "./values";
 
 export const PLANNER_REFACTOR_TOOL_NAMES = ["planner_refactor_review"] as const;
 export type PlannerRefactorToolName =
@@ -147,20 +150,6 @@ function blocked(
 	return { status: "blocked", toolName, text, details: null };
 }
 
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
-}
-
-function requiredString(params: Record<string, unknown>, key: string): string {
-	const value = params[key];
-	if (typeof value !== "string" || value.trim().length === 0) {
-		throw new TypeError(`${key} must be a non-empty string.`);
-	}
-	return value.trim();
-}
-
 function optionalString(
 	params: Record<string, unknown>,
 	key: string,
@@ -220,8 +209,4 @@ function requiredCategoryStatus(
 		);
 	}
 	return value as RefactorReviewCategoryStatus;
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }

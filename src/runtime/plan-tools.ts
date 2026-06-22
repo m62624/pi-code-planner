@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { SCHEMA_VERSION } from "../constants";
+import { errorMessage } from "../errors";
 import { planBranchName } from "../git/branches";
 import type { GitRunner } from "../git/runner";
 import { syncBundledInstructionFiles } from "../instructions/defaults";
 import { createInstructionPaths } from "../instructions/paths";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { WorktreeSettings } from "../settings/schema";
-import type { PlannerFs } from "../storage/fs";
 import {
 	createPlanStoragePaths,
 	type ProjectStoragePaths,
@@ -38,25 +38,19 @@ import {
 	resolvePlannerPlanId,
 	validatePlannerPlanTitle,
 } from "./plan-naming";
+import type { PlannerToolExecutionInput } from "./tool-context";
+import type { PlannerToolResult } from "./tool-result";
+import { asObject } from "./values";
 
 export const PLANNER_PLAN_TOOL_NAMES = ["planner_create_plan"] as const;
 
 export type PlannerPlanToolName = (typeof PLANNER_PLAN_TOOL_NAMES)[number];
 
-export interface PlannerPlanToolExecutionInput {
-	fs: PlannerFs;
-	git: GitRunner;
-	projectPaths: ProjectStoragePaths;
-	toolName: PlannerPlanToolName;
-	params: unknown;
-}
+export type PlannerPlanToolExecutionInput =
+	PlannerToolExecutionInput<PlannerPlanToolName>;
 
-export interface PlannerPlanToolExecutionResult {
-	status: "applied" | "blocked";
-	toolName: PlannerPlanToolName;
-	text: string;
-	details: unknown;
-}
+export type PlannerPlanToolExecutionResult =
+	PlannerToolResult<PlannerPlanToolName>;
 
 export async function executePlannerPlanTool(
 	input: PlannerPlanToolExecutionInput,
@@ -249,12 +243,6 @@ function optionalString(
 		: null;
 }
 
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object"
-		? (value as Record<string, unknown>)
-		: {};
-}
-
 function applied(
 	toolName: PlannerPlanToolName,
 	text: string,
@@ -269,8 +257,4 @@ function blocked(
 	details: unknown,
 ): PlannerPlanToolExecutionResult {
 	return { status: "blocked", toolName, text, details };
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }

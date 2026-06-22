@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { GitRunner } from "../git/runner";
 import type { PlannerWrapperTool } from "../guard/tool-policy";
 import type { PlannerFs } from "../storage/fs";
+import { safeReaddir } from "../storage/fs";
 import type { PlanStoragePaths, ProjectStoragePaths } from "../storage/paths";
 import type { PlanStateRecord } from "../storage/schema";
 import { updatePlanState } from "../storage/state-store";
@@ -10,6 +11,9 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { requiredString } from "./params";
+import type { PlannerToolResult } from "./tool-result";
+import { asObject } from "./values";
 
 export const PLANNER_DEBUG_TOOL_NAMES = [
 	"planner_debug_strategy",
@@ -49,12 +53,8 @@ export const DEBUG_RESULT_NEXT_ACTIONS = [
 ] as const;
 export type DebugResultNextAction = (typeof DEBUG_RESULT_NEXT_ACTIONS)[number];
 
-export interface PlannerDebugToolExecutionResult {
-	status: "applied" | "blocked";
-	toolName: PlannerDebugToolName;
-	text: string;
-	details: unknown;
-}
+export type PlannerDebugToolExecutionResult =
+	PlannerToolResult<PlannerDebugToolName>;
 
 export async function initializePlannerDebugSession(input: {
 	fs: PlannerFs;
@@ -495,20 +495,6 @@ function blocked(
 	return { status: "blocked", toolName, text, details: null };
 }
 
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
-}
-
-function requiredString(params: Record<string, unknown>, key: string): string {
-	const value = params[key];
-	if (typeof value !== "string" || value.trim().length === 0) {
-		throw new TypeError(`${key} must be a non-empty string.`);
-	}
-	return value.trim();
-}
-
 function optionalString(
 	params: Record<string, unknown>,
 	key: string,
@@ -564,14 +550,6 @@ function requiredEnum<T extends readonly string[]>(
 
 function formatList(values: string[]): string {
 	return values.map((value) => `- ${value}`).join("\n");
-}
-
-async function safeReaddir(fs: PlannerFs, path: string): Promise<string[]> {
-	try {
-		return await fs.readdir(path);
-	} catch {
-		return [];
-	}
 }
 
 function safePathPart(value: string): string {

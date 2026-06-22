@@ -1,7 +1,5 @@
-import type { GitRunner } from "../git/runner";
 import type { PlannerWrapperTool } from "../guard/tool-policy";
 import type { PlannerFs } from "../storage/fs";
-import type { ProjectStoragePaths } from "../storage/paths";
 import {
 	decidePlannerLifecycleNext,
 	type PlannerLifecycleDecision,
@@ -24,6 +22,7 @@ import {
 	type PlannerStateTransitionType,
 } from "./state-transition";
 import { buildPlannerStatusText } from "./status";
+import type { PlannerToolContext } from "./tool-context";
 import type { PlannerWorkflowToolName } from "./workflow-tools";
 
 export type PlannerManagedToolName =
@@ -47,11 +46,7 @@ export type PlannerOrchestratorNextAction =
 			message: string;
 	  };
 
-export interface PlannerOrchestratorInput {
-	fs: PlannerFs;
-	git: GitRunner;
-	projectPaths: ProjectStoragePaths;
-}
+export type PlannerOrchestratorInput = PlannerToolContext;
 
 export interface PlannerOrchestratorResult {
 	preflight: PlannerPreflightResult;
