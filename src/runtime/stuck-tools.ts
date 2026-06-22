@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
+import { safeReaddir } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
 import { updatePlanState } from "../storage/state-store";
 import { readActivePlanContext } from "./active-plan";
@@ -293,14 +294,6 @@ async function nextAttemptId(
 			return Number.isFinite(value) ? Math.max(max, value) : max;
 		}, 0) + 1;
 	return `attempt-${String(next).padStart(3, "0")}`;
-}
-
-async function safeReaddir(fs: PlannerFs, path: string): Promise<string[]> {
-	try {
-		return await fs.readdir(path);
-	} catch {
-		return [];
-	}
 }
 
 async function readDiffPatch(

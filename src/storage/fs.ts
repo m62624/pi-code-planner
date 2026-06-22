@@ -88,3 +88,19 @@ export function createNodeFs(): PlannerFs {
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 	return error instanceof Error && "code" in error;
 }
+
+/**
+ * List a directory, returning an empty array if it cannot be read (missing,
+ * not a directory, permission denied). Lets callers treat "no entries" and
+ * "no such directory" uniformly when scanning optional locations.
+ */
+export async function safeReaddir(
+	fs: PlannerFs,
+	path: string,
+): Promise<string[]> {
+	try {
+		return await fs.readdir(path);
+	} catch {
+		return [];
+	}
+}

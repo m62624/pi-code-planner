@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { GitRunner } from "../git/runner";
 import type { PlannerWrapperTool } from "../guard/tool-policy";
 import type { PlannerFs } from "../storage/fs";
+import { safeReaddir } from "../storage/fs";
 import type { PlanStoragePaths, ProjectStoragePaths } from "../storage/paths";
 import type { PlanStateRecord } from "../storage/schema";
 import { updatePlanState } from "../storage/state-store";
@@ -556,14 +557,6 @@ function requiredEnum<T extends readonly string[]>(
 
 function formatList(values: string[]): string {
 	return values.map((value) => `- ${value}`).join("\n");
-}
-
-async function safeReaddir(fs: PlannerFs, path: string): Promise<string[]> {
-	try {
-		return await fs.readdir(path);
-	} catch {
-		return [];
-	}
 }
 
 function safePathPart(value: string): string {

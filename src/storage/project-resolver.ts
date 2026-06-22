@@ -1,6 +1,7 @@
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { EXTENSION_NAME } from "../constants";
 import type { PlannerFs } from "./fs";
+import { safeReaddir } from "./fs";
 import { createProjectStoragePaths, type ProjectStoragePaths } from "./paths";
 import { readProjectRecordIfExists } from "./project-store";
 import { readWorktreeProjectIndexIfExists } from "./worktree-index";
@@ -116,12 +117,4 @@ function isInsideProjectLocalWorktree(input: {
 	);
 	const rel = relative(worktreeRoot, resolve(input.cwd));
 	return rel.length > 0 && !rel.startsWith("..") && !isAbsolute(rel);
-}
-
-async function safeReaddir(fs: PlannerFs, dir: string): Promise<string[]> {
-	try {
-		return await fs.readdir(dir);
-	} catch {
-		return [];
-	}
 }
