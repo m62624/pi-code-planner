@@ -192,6 +192,7 @@ import {
 } from "./session/handoff";
 import { loadEffectivePlannerSettings } from "./settings/manager";
 import { createNodeFs } from "./storage/fs";
+import type { ProjectStoragePaths } from "./storage/paths";
 import { createPlanStoragePaths } from "./storage/paths";
 import { resolveProjectStoragePaths } from "./storage/project-resolver";
 import {
@@ -2996,7 +2997,7 @@ function registerPlannerCompactEvents(
 		consumePlannerControlledCompact(compactRuntime);
 
 		const fs = createNodeFs();
-		let projectPaths: Awaited<ReturnType<typeof resolveProjectStoragePaths>>;
+		let projectPaths: ProjectStoragePaths;
 		try {
 			projectPaths = await resolveProjectStoragePaths({
 				fs,
@@ -3122,7 +3123,7 @@ async function recordPlannerToolActivityForCwd(cwd: string): Promise<void> {
 
 async function recordPlannerToolActivityForProject(input: {
 	fs: ReturnType<typeof createNodeFs>;
-	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
+	projectPaths: ProjectStoragePaths;
 	now: number;
 }): Promise<void> {
 	try {
@@ -3234,7 +3235,7 @@ async function maybeStartPlannerControlledCompact(input: {
 	ctx: ExtensionContext;
 	fs: ReturnType<typeof createNodeFs>;
 	git: NodeGitRunner;
-	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
+	projectPaths: ProjectStoragePaths;
 	compactRuntime: PlannerCompactRuntimeState;
 	toolName: PlannerWorkflowToolName;
 	transitionStatus: "applied" | "blocked";
@@ -3281,7 +3282,7 @@ async function maybeStartPlannerControlledCompact(input: {
 async function maybeStartPlannerStuckCompact(input: {
 	ctx: ExtensionContext;
 	fs: ReturnType<typeof createNodeFs>;
-	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
+	projectPaths: ProjectStoragePaths;
 }): Promise<void> {
 	const instructions = await buildPlannerStuckCompactInstructions({
 		fs: input.fs,
@@ -3960,7 +3961,7 @@ async function resolveRenameCommandArgs(input: {
 	args: string;
 	ctx: ExtensionCommandContext;
 	fs: ReturnType<typeof createNodeFs>;
-	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
+	projectPaths: ProjectStoragePaths;
 }): Promise<{ planId?: string; title: string } | null> {
 	const parsed = parsePlannerRenameCommandArgs(input.args);
 	if (!parsed) {
@@ -3995,7 +3996,7 @@ async function resolveDeleteCommandArgs(input: {
 	args: string;
 	ctx: ExtensionCommandContext;
 	fs: ReturnType<typeof createNodeFs>;
-	projectPaths: Awaited<ReturnType<typeof createRuntimeProjectPaths>>;
+	projectPaths: ProjectStoragePaths;
 }): Promise<{ planId: string; deleteActive: boolean } | null> {
 	const direct = parsePlannerDeleteCommandArgs(input.args);
 	if (direct) {
