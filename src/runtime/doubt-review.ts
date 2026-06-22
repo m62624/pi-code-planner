@@ -65,6 +65,21 @@ const DISPROVEN_PROOF_LEVELS = new Set<DoubtProofLevel>([
 	"disproven_by_code",
 ]);
 
+/**
+ * Stack-, language- and tool-agnostic cheat-sheet of every valid finding shape.
+ * Appended to every doubt-review rejection so that a model (even a small local
+ * one) can see the complete grammar at once and converge in a single retry,
+ * instead of fixing one field, breaking another, and bouncing between
+ * incremental errors. References no concrete command, framework or ecosystem.
+ */
+export const DOUBT_FINDING_SHAPE_HINT = [
+	"Valid finding shapes (status -> required proofLevel -> required nextAction):",
+	`  - proven_bug   -> ${[...PROVEN_PROOF_LEVELS].join(" | ")} -> create_revision_task`,
+	`  - disproven    -> ${[...DISPROVEN_PROOF_LEVELS].join(" | ")} -> no_action`,
+	"  - needs_probe  -> insufficient_evidence -> run_probe",
+	"  - not_a_bug    -> (any proofLevel) -> no_action (must include evidence)",
+].join("\n");
+
 const BLOCKING_DOUBT_PATTERNS = [
 	/\bplaceholder\b/i,
 	/\bstub\b/i,
@@ -107,6 +122,7 @@ export interface DoubtVerificationEvidence {
 export interface DoubtReviewValidation {
 	valid: boolean;
 	reason: string | null;
+	errors: string[];
 	provenBugCount: number;
 	needsProbeCount: number;
 }
@@ -181,38 +197,36 @@ export function formatDoubtReviewMarkdown(review: DoubtReview): string {
 export function validateDoubtReview(
 	review: DoubtReview,
 ): DoubtReviewValidation {
+	const errors: string[] = [];
 	let provenBugCount = 0;
 	let needsProbeCount = 0;
 	const ids = new Set<string>();
 	for (const entry of review.verificationEvidence) {
 		if (!entry.command.trim()) {
-			return invalid("verificationEvidence.command must be non-empty.");
+			errors.push("verificationEvidence.command must be non-empty.");
 		}
 		if (!DOUBT_VERIFICATION_STATUSES.includes(entry.status)) {
-			return invalid(
+			errors.push(
 				`Invalid verificationEvidence status: ${entry.status}. Expected one of: ${DOUBT_VERIFICATION_STATUSES.join(", ")}.`,
 			);
 		}
 		if (!entry.evidence.trim()) {
-			return invalid("verificationEvidence.evidence must be non-empty.");
+			errors.push("verificationEvidence.evidence must be non-empty.");
 		}
 	}
 	for (const finding of review.possibleErrors) {
 		if (ids.has(finding.id)) {
-			return invalid(`Duplicate finding id: ${finding.id}.`);
+			errors.push(`Duplicate finding id: ${finding.id}.`);
+			continue;
 		}
 		ids.add(finding.id);
-		const statusValidation = validateFindingStatus(finding);
-		if (!statusValidation.valid) return statusValidation;
+		// Collect every violation for this finding (not just the first) so the
+		// caller can report all of them at once.
+		errors.push(...collectFindingStatusErrors(finding));
 		if (finding.status === "proven_bug") provenBugCount += 1;
 		if (finding.status === "needs_probe") needsProbeCount += 1;
 	}
-	return {
-		valid: true,
-		reason: null,
-		provenBugCount,
-		needsProbeCount,
-	};
+	return finalizeValidation(errors, provenBugCount, needsProbeCount);
 }
 
 export function validateDoubtReviewMarkdown(
@@ -280,7 +294,7 @@ export function validateDoubtReviewMarkdown(
 				`Invalid doubt nextAction: ${nextAction}. Expected one of: ${DOUBT_NEXT_ACTIONS.join(", ")}.`,
 			);
 		}
-		const validation = validateFindingStatus({
+		const findingErrors = collectFindingStatusErrors({
 			id: block.split("\n")[0]?.trim() ?? "(unknown)",
 			riskCategory: riskCategory as DoubtRiskCategory,
 			status: status as DoubtFindingStatus,
@@ -293,11 +307,11 @@ export function validateDoubtReviewMarkdown(
 			counterEvidence: [],
 			nextAction: nextAction as DoubtNextAction,
 		});
-		if (!validation.valid) return validation;
+		if (findingErrors.length > 0) return invalid(findingErrors.join("\n"));
 		if (status === "proven_bug") provenBugCount += 1;
 		if (status === "needs_probe") needsProbeCount += 1;
 	}
-	return { valid: true, reason: null, provenBugCount, needsProbeCount };
+	return finalizeValidation([], provenBugCount, needsProbeCount);
 }
 
 function validateMarkdownVerificationEvidence(
@@ -342,16 +356,25 @@ function validateMarkdownVerificationEvidence(
 			return invalid("Verification evidence entry is missing evidence.");
 		}
 	}
-	return { valid: true, reason: null, provenBugCount: 0, needsProbeCount: 0 };
+	return finalizeValidation([], 0, 0);
 }
 
-export function validateDoubtReviewAgainstVerificationProtocol(
+/**
+ * Returns every verification-protocol violation at once (missing evidence and
+ * unpassed commands), so the caller can surface them together. The guidance is
+ * deliberately stack-/tool-agnostic: a command that cannot pass locally is
+ * resolved either as a proven_bug (real failure) or a needs_probe (cannot run
+ * or verify here — e.g. the tool is not installed), never by guessing fields.
+ */
+export function collectVerificationProtocolErrors(
 	review: DoubtReview,
 	discoveryMd: string,
-): string | null {
+): string[] {
 	const protocol = extractVerificationProtocol(discoveryMd);
 	if (protocol.length === 0) {
-		return "discovery.md must include ## Verification Protocol before planner_doubt_review can prove the result.";
+		return [
+			"discovery.md must include ## Verification Protocol before planner_doubt_review can prove the result.",
+		];
 	}
 	const requiredCommands = protocol
 		.map(extractProtocolCommand)
@@ -371,29 +394,46 @@ export function validateDoubtReviewAgainstVerificationProtocol(
 			failed.push(command);
 		}
 	}
+	const errors: string[] = [];
 	if (missing.length > 0) {
-		return (
+		errors.push(
 			`planner_doubt_review is missing verificationEvidence for ${missing.length} required protocol command(s):\n` +
-			missing.map((c) => `  - ${c}`).join("\n") +
-			"\nAdd all of them to verificationEvidence in one call."
+				missing.map((c) => `  - ${c}`).join("\n") +
+				"\nAdd all of them to verificationEvidence in one call.",
 		);
 	}
 	if (failed.length > 0) {
-		return (
+		errors.push(
 			`Required protocol command(s) did not pass:\n` +
-			failed.map((c) => `  - ${c}`).join("\n") +
-			"\nMark a finding proven_bug or needs_probe for each failing command before completing doubt_review."
+				failed.map((c) => `  - ${c}`).join("\n") +
+				"\nFor each, add one finding to possibleErrors that names the command (in claim/verification/evidence) and covers it:" +
+				"\n  - real failure you reproduced -> status proven_bug, proofLevel reproduced_command, nextAction create_revision_task" +
+				"\n  - cannot run or verify it here (tool missing / not applicable locally) -> status needs_probe, proofLevel insufficient_evidence, nextAction run_probe",
 		);
 	}
-	return null;
+	return errors;
 }
 
-function validateFindingStatus(finding: DoubtFinding): DoubtReviewValidation {
+/**
+ * Back-compatible single-message wrapper around
+ * {@link collectVerificationProtocolErrors}; returns null when the review
+ * satisfies the verification protocol.
+ */
+export function validateDoubtReviewAgainstVerificationProtocol(
+	review: DoubtReview,
+	discoveryMd: string,
+): string | null {
+	const errors = collectVerificationProtocolErrors(review, discoveryMd);
+	return errors.length > 0 ? errors.join("\n\n") : null;
+}
+
+function collectFindingStatusErrors(finding: DoubtFinding): string[] {
+	const errors: string[] = [];
 	if (
 		finding.status === "proven_bug" &&
 		!PROVEN_PROOF_LEVELS.has(finding.proofLevel)
 	) {
-		return invalid(
+		errors.push(
 			`Finding ${finding.id} is marked proven_bug but proofLevel ${finding.proofLevel} is not proof. Reproduce it with a test/command or prove the exact code/spec contradiction first.`,
 		);
 	}
@@ -401,7 +441,7 @@ function validateFindingStatus(finding: DoubtFinding): DoubtReviewValidation {
 		finding.status === "proven_bug" &&
 		finding.nextAction !== "create_revision_task"
 	) {
-		return invalid(
+		errors.push(
 			`Finding ${finding.id} is proven_bug and must use nextAction create_revision_task.`,
 		);
 	}
@@ -409,31 +449,27 @@ function validateFindingStatus(finding: DoubtFinding): DoubtReviewValidation {
 		finding.status === "disproven" &&
 		!DISPROVEN_PROOF_LEVELS.has(finding.proofLevel)
 	) {
-		return invalid(
+		errors.push(
 			`Finding ${finding.id} is disproven but proofLevel must be disproven_by_test or disproven_by_code.`,
 		);
 	}
 	if (finding.status === "disproven" && finding.nextAction !== "no_action") {
-		return invalid(
-			`Finding ${finding.id} is disproven and must use no_action.`,
-		);
+		errors.push(`Finding ${finding.id} is disproven and must use no_action.`);
 	}
 	if (
 		finding.status === "needs_probe" &&
 		(finding.proofLevel !== "insufficient_evidence" ||
 			finding.nextAction !== "run_probe")
 	) {
-		return invalid(
+		errors.push(
 			`Finding ${finding.id} needs_probe must use proofLevel insufficient_evidence and nextAction run_probe.`,
 		);
 	}
 	if (finding.status === "not_a_bug" && finding.nextAction !== "no_action") {
-		return invalid(
-			`Finding ${finding.id} is not_a_bug and must use no_action.`,
-		);
+		errors.push(`Finding ${finding.id} is not_a_bug and must use no_action.`);
 	}
 	if (finding.status === "not_a_bug" && finding.evidence.length === 0) {
-		return invalid(
+		errors.push(
 			`Finding ${finding.id} must include evidence explaining why it is not a bug.`,
 		);
 	}
@@ -442,11 +478,11 @@ function validateFindingStatus(finding: DoubtFinding): DoubtReviewValidation {
 		finding.status !== "needs_probe" &&
 		mentionsBlockingDoubt(finding)
 	) {
-		return invalid(
+		errors.push(
 			`Finding ${finding.id} mentions placeholder/stub/superficial/missing or unresolved work. It must be proven_bug or needs_probe; do not close it as ${finding.status}.`,
 		);
 	}
-	return { valid: true, reason: null, provenBugCount: 0, needsProbeCount: 0 };
+	return errors;
 }
 
 function mentionsBlockingDoubt(finding: DoubtFinding): boolean {
@@ -583,7 +619,27 @@ function fieldValue(block: string, field: string): string {
 }
 
 function invalid(reason: string): DoubtReviewValidation {
-	return { valid: false, reason, provenBugCount: 0, needsProbeCount: 0 };
+	return {
+		valid: false,
+		reason,
+		errors: [reason],
+		provenBugCount: 0,
+		needsProbeCount: 0,
+	};
+}
+
+function finalizeValidation(
+	errors: string[],
+	provenBugCount: number,
+	needsProbeCount: number,
+): DoubtReviewValidation {
+	return {
+		valid: errors.length === 0,
+		reason: errors.length > 0 ? errors.join("\n") : null,
+		errors,
+		provenBugCount,
+		needsProbeCount,
+	};
 }
 
 function formatList(values: readonly string[]): string {

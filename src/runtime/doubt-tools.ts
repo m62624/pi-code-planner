@@ -4,6 +4,8 @@ import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
 import { ARTIFACT_CANONICAL_SCHEMA, formatArtifactEcho } from "./artifact-echo";
 import {
+	collectVerificationProtocolErrors,
+	DOUBT_FINDING_SHAPE_HINT,
 	DOUBT_FINDING_STATUSES,
 	DOUBT_NEXT_ACTIONS,
 	DOUBT_PROOF_LEVELS,
@@ -13,7 +15,6 @@ import {
 	type PlannerDoubtReviewToolName,
 	parseDoubtReviewParams,
 	validateDoubtReview,
-	validateDoubtReviewAgainstVerificationProtocol,
 } from "./doubt-review";
 import {
 	checkPlannerOrchestratorToolAllowed,
@@ -76,16 +77,17 @@ export async function executePlannerDoubtTool(input: {
 
 	try {
 		const review = parseDoubtReviewParams(input.params);
+		// Gather field-level and protocol-level violations together so the model
+		// sees the full set in one rejection and can fix them in a single retry,
+		// instead of bouncing between one incremental error at a time.
 		const validation = validateDoubtReview(review);
-		if (!validation.valid) {
-			throw new TypeError(validation.reason ?? "Doubt Review is invalid.");
-		}
-		const protocolValidation = validateDoubtReviewAgainstVerificationProtocol(
+		const protocolErrors = collectVerificationProtocolErrors(
 			review,
 			await input.fs.readText(planPaths.discoveryMd),
 		);
-		if (protocolValidation) {
-			throw new TypeError(protocolValidation);
+		const allErrors = [...validation.errors, ...protocolErrors];
+		if (allErrors.length > 0) {
+			throw new TypeError(formatDoubtReviewRejection(allErrors));
 		}
 		const content = formatDoubtReviewMarkdown(review);
 		await input.fs.writeTextAtomic(planPaths.verifyMd, content);
@@ -117,8 +119,31 @@ export async function executePlannerDoubtTool(input: {
 			},
 		};
 	} catch (error) {
-		return blocked(input.toolName, errorMessage(error));
+		return blocked(input.toolName, appendDoubtHint(errorMessage(error)));
 	}
+}
+
+/**
+ * Render one or many validation reasons as a single rejection body. A single
+ * reason is returned verbatim; multiple reasons are numbered so the model can
+ * address every one of them in the next call.
+ */
+function formatDoubtReviewRejection(errors: string[]): string {
+	if (errors.length <= 1) {
+		return errors[0] ?? "Doubt Review is invalid.";
+	}
+	return [
+		"planner_doubt_review was rejected for the following reason(s):",
+		...errors.map((reason, index) => `${index + 1}. ${reason}`),
+	].join("\n\n");
+}
+
+/**
+ * Append the stack-agnostic finding-shape cheat-sheet to every rejection so a
+ * model always sees the complete grammar and can converge without guessing.
+ */
+function appendDoubtHint(message: string): string {
+	return `${message}\n\n${DOUBT_FINDING_SHAPE_HINT}`;
 }
 
 function blocked(
