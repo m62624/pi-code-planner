@@ -1719,26 +1719,12 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				}
 				markPlannerToolVisibilityActive();
 
-				const details = result.details as {
-					state?: { worktreePath?: string | null };
-					plan?: { planId?: string };
-					settings?: {
-						effective?: {
-							metadata?: {
-								titleLanguage?: string;
-								descriptionLanguage?: string;
-							};
-						};
-					};
-				};
-				const worktreePath = details.state?.worktreePath;
-				const createdPlanId = details.plan?.planId ?? planId;
-				const descriptionLanguage =
-					details.settings?.effective?.metadata?.descriptionLanguage ??
-					DEFAULT_LANGUAGE;
-				const titleLanguage =
-					details.settings?.effective?.metadata?.titleLanguage ??
-					descriptionLanguage;
+				const {
+					worktreePath,
+					createdPlanId,
+					descriptionLanguage,
+					titleLanguage,
+				} = readPlannerCreateOutcome(result.details, planId);
 				if (!worktreePath) {
 					ctx.ui.notify(
 						"Planner plan was created without worktreePath.",
@@ -1865,26 +1851,12 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				}
 				markPlannerToolVisibilityActive();
 
-				const details = result.details as {
-					state?: { worktreePath?: string | null };
-					plan?: { planId?: string };
-					settings?: {
-						effective?: {
-							metadata?: {
-								titleLanguage?: string;
-								descriptionLanguage?: string;
-							};
-						};
-					};
-				};
-				const worktreePath = details.state?.worktreePath;
-				const createdPlanId = details.plan?.planId ?? planId;
-				const descriptionLanguage =
-					details.settings?.effective?.metadata?.descriptionLanguage ??
-					DEFAULT_LANGUAGE;
-				const titleLanguage =
-					details.settings?.effective?.metadata?.titleLanguage ??
-					descriptionLanguage;
+				const {
+					worktreePath,
+					createdPlanId,
+					descriptionLanguage,
+					titleLanguage,
+				} = readPlannerCreateOutcome(result.details, planId);
 				if (!worktreePath) {
 					ctx.ui.notify(
 						"Planner plan was created without worktreePath.",
@@ -3809,6 +3781,34 @@ function plannerToolResponse<T extends { text: string }>(result: T) {
 	return {
 		content: [{ type: "text" as const, text: result.text }],
 		details: result,
+	};
+}
+
+interface PlannerCreatePlanToolDetails {
+	state?: { worktreePath?: string | null };
+	plan?: { planId?: string };
+	settings?: {
+		effective?: {
+			metadata?: { titleLanguage?: string; descriptionLanguage?: string };
+		};
+	};
+}
+
+/**
+ * Extract the worktree path, resolved plan id, and content languages from a
+ * planner_create_plan result. The /planner-create and /planner-improve
+ * handoffs read the same fields out of the same loosely-typed `details`
+ * payload. `fallbackPlanId` is used when the result omits the plan id.
+ */
+function readPlannerCreateOutcome(details: unknown, fallbackPlanId: string) {
+	const typed = details as PlannerCreatePlanToolDetails;
+	const metadata = typed.settings?.effective?.metadata;
+	const descriptionLanguage = metadata?.descriptionLanguage ?? DEFAULT_LANGUAGE;
+	return {
+		worktreePath: typed.state?.worktreePath ?? null,
+		createdPlanId: typed.plan?.planId ?? fallbackPlanId,
+		descriptionLanguage,
+		titleLanguage: metadata?.titleLanguage ?? descriptionLanguage,
 	};
 }
 
