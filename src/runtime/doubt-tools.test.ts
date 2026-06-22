@@ -267,6 +267,90 @@ describe("planner doubt review tool", () => {
 		expect(result.text).toContain("Required protocol command(s) did not pass");
 	});
 
+	it("reports field-level and protocol-level violations together in one rejection", async () => {
+		const setup = await createDoubtSetup();
+
+		const result = await executePlannerDoubtTool({
+			...setup,
+			toolName: "planner_doubt_review",
+			params: {
+				summary: "Multiple problems exist in this review at once.",
+				verificationEvidence: [
+					{
+						command: "npm test",
+						status: "passed",
+						evidence: "Unit tests passed.",
+					},
+					{
+						command: "npm run build",
+						status: "failed",
+						evidence: "TypeScript failed.",
+					},
+				],
+				possibleErrors: [
+					{
+						// Wrong tuple: disproven must use a disproven_* proofLevel.
+						id: "wrong-tuple-finding",
+						riskCategory: "user_flow_regression",
+						status: "disproven",
+						proofLevel: "insufficient_evidence",
+						claim: "Resume routing might be broken.",
+						specReference: "goal.md",
+						codePath: "src/runtime/status.ts",
+						verification: "Inspected routing table.",
+						evidence: ["Routing table still has the expected entry."],
+						counterEvidence: [],
+						nextAction: "no_action",
+					},
+				],
+			},
+		});
+
+		expect(result.status).toBe("blocked");
+		// Both independent problems surface in the same response.
+		expect(result.text).toContain(
+			"disproven but proofLevel must be disproven_by_test",
+		);
+		expect(result.text).toContain("Required protocol command(s) did not pass");
+		// The stack-agnostic finding-shape cheat-sheet is always appended.
+		expect(result.text).toContain("Valid finding shapes");
+		expect(result.text).toContain(
+			"needs_probe  -> insufficient_evidence -> run_probe",
+		);
+	});
+
+	it("appends the finding-shape cheat-sheet to parse-level rejections too", async () => {
+		const setup = await createDoubtSetup();
+
+		const result = await executePlannerDoubtTool({
+			...setup,
+			toolName: "planner_doubt_review",
+			params: {
+				summary: "Invalid risk category should still teach the grammar.",
+				verificationEvidence: passedVerificationEvidence(),
+				possibleErrors: [
+					{
+						id: "bad-category",
+						riskCategory: "not_a_real_category",
+						status: "needs_probe",
+						proofLevel: "insufficient_evidence",
+						claim: "Something might be wrong.",
+						specReference: "goal.md",
+						codePath: "src/index.ts",
+						verification: "No probe yet.",
+						evidence: ["Only a suspicion."],
+						counterEvidence: [],
+						nextAction: "run_probe",
+					},
+				],
+			},
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("riskCategory");
+		expect(result.text).toContain("Valid finding shapes");
+	});
+
 	it("allows failed verification commands only when a finding covers them", async () => {
 		const setup = await createDoubtSetup();
 
