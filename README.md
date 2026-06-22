@@ -14,15 +14,19 @@ An experimental [Pi](https://github.com/badlogic/pi-mono) extension for local co
 
 ## Install
 
+Released versions, published to npm:
+
 ```bash
 pi install npm:pi-code-planner
 ```
 
-Or from source:
+Developer version — the latest `main`, including changes not yet released to npm:
 
 ```bash
 pi install git:github.com/m62624/pi-code-planner
 ```
+
+Both channels can have bugs; the difference is only what they track — npm follows tagged releases, GitHub follows `main`. Pick npm for released versions and GitHub to try the newest changes.
 
 Open Pi inside a Git project and run `/planner-create`.
 
