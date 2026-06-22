@@ -1394,12 +1394,7 @@ function registerPlannerWorkspaceAutoOpen(pi: ExtensionAPI): void {
 		try {
 			const sessionId = ctx.sessionManager.getSessionId();
 			if (openedSessions.has(sessionId)) return;
-			const fs = createNodeFs();
-			const projectPaths = await resolveProjectStoragePaths({
-				fs,
-				agentDir: getAgentDir(),
-				cwd: ctx.cwd,
-			});
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 			const context = await readActivePlanContext({ fs, projectPaths });
 			if (context.status !== "ready") return;
 			const worktreePath = context.state.worktreePath;
@@ -1687,13 +1682,9 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				}
 				const normalizedRequest = request.trim();
 
-				const fs = createNodeFs();
-				const agentDir = getAgentDir();
-				const projectPaths = await resolveProjectStoragePaths({
-					fs,
-					agentDir,
-					cwd: ctx.cwd,
-				});
+				const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
+					ctx.cwd,
+				);
 				const project = await ensureProjectRecord(fs, projectPaths);
 				let planId: string;
 				try {
@@ -1825,13 +1816,9 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					return;
 				}
 
-				const fs = createNodeFs();
-				const agentDir = getAgentDir();
-				const projectPaths = await resolveProjectStoragePaths({
-					fs,
-					agentDir,
-					cwd: ctx.cwd,
-				});
+				const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
+					ctx.cwd,
+				);
 				const request = buildPlannerImproveRequest({
 					request: parsed.request,
 					compatibilityMode: parsed.compatibilityMode,
@@ -1963,13 +1950,9 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			"Return from the active planner worktree session to the original project chat without finishing or deleting the plan.",
 		handler: async (_args, ctx) => {
 			await ctx.waitForIdle();
-			const fs = createNodeFs();
-			const agentDir = getAgentDir();
-			const projectPaths = await resolveProjectStoragePaths({
-				fs,
-				agentDir,
-				cwd: ctx.cwd,
-			});
+			const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
+				ctx.cwd,
+			);
 			try {
 				const project = await readProjectRecordIfExists(fs, projectPaths);
 				if (!project?.activePlanId) {
@@ -2046,8 +2029,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 		description:
 			"Rename a planner plan title without changing its stable plan id.",
 		handler: async (args, ctx) => {
-			const fs = createNodeFs();
-			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 			const parsed = await resolveRenameCommandArgs({
 				args,
 				ctx,
@@ -2073,13 +2055,9 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 		description: "Resume a planner plan in the current project.",
 		handler: async (args, ctx) => {
 			await ctx.waitForIdle();
-			const fs = createNodeFs();
-			const agentDir = getAgentDir();
-			const projectPaths = await resolveProjectStoragePaths({
-				fs,
-				agentDir,
-				cwd: ctx.cwd,
-			});
+			const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
+				ctx.cwd,
+			);
 			const planId =
 				parseSinglePlanIdArg(args) ??
 				(await selectPlannerPlanId({
@@ -2166,13 +2144,9 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 		description: "Delete a planner plan after confirmation.",
 		handler: async (args, ctx) => {
 			await ctx.waitForIdle();
-			const fs = createNodeFs();
-			const agentDir = getAgentDir();
-			const projectPaths = await resolveProjectStoragePaths({
-				fs,
-				agentDir,
-				cwd: ctx.cwd,
-			});
+			const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
+				ctx.cwd,
+			);
 			const parsed = await resolveDeleteCommandArgs({
 				args,
 				ctx,
@@ -2235,13 +2209,9 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			"Finish the completed planner result, keep one output branch, clean temporary planner state, and return to the original project session.",
 		handler: async (_args, ctx) => {
 			await ctx.waitForIdle();
-			const fs = createNodeFs();
-			const agentDir = getAgentDir();
-			const projectPaths = await resolveProjectStoragePaths({
-				fs,
-				agentDir,
-				cwd: ctx.cwd,
-			});
+			const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
+				ctx.cwd,
+			);
 			const git = new NodeGitRunner();
 			let fallbackSession: Awaited<
 				ReturnType<typeof createPlannerHandoffSession>
@@ -2406,8 +2376,7 @@ function registerPlannerTools(
 			"Use planner_status when a planner action is blocked or when you are unsure which planner step/tool is allowed.",
 		parameters: EMPTY_TOOL_PARAMETERS as never,
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-			const fs = createNodeFs();
-			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 			await recordPlannerToolActivityForProject({
 				fs,
 				projectPaths,
@@ -2435,12 +2404,7 @@ function registerPlannerTools(
 			"Use planner_about when the user asks what pi-code-planner is doing, what a planner setting means, or why a planner behavior is enabled. This tool is read-only.",
 		parameters: EMPTY_TOOL_PARAMETERS as never,
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-			const fs = createNodeFs();
-			const projectPaths = await resolveProjectStoragePaths({
-				fs,
-				agentDir: getAgentDir(),
-				cwd: ctx.cwd,
-			});
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 			const settings = await loadEffectivePlannerSettings({
 				fs,
 				projectPaths,
@@ -2469,8 +2433,7 @@ function registerPlannerTools(
 				"Use planner_create_plan before project reads when the user asks to start a planner-controlled task.",
 			parameters: CREATE_PLAN_TOOL_PARAMETERS as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 				const result = await executePlannerPlanTool({
 					fs,
 					git: new NodeGitRunner(),
@@ -2505,8 +2468,7 @@ function registerPlannerTools(
 				"Use planner goal tools during intake only. Draft goal.md before source reads and enter discovery only after explicit user approval.",
 			parameters: goalToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 				await recordPlannerToolActivityForProject({
 					fs,
 					projectPaths,
@@ -2536,8 +2498,7 @@ function registerPlannerTools(
 				"Use planner question tools during discovery/write_questions. Save evidence-based questions, show open questions to the user verbatim, wait for answers, then resolve them before continuing.",
 			parameters: questionToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 				await recordPlannerToolActivityForProject({
 					fs,
 					projectPaths,
@@ -2567,8 +2528,7 @@ function registerPlannerTools(
 				"Use planner_task_upsert during planning/write_task_files. Pass semantic task fields only; the wrapper writes task.json, task.md, and empty TDD lifecycle artifacts.",
 			parameters: TASK_UPSERT_TOOL_PARAMETERS as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 				await recordPlannerToolActivityForProject({
 					fs,
 					projectPaths,
@@ -2598,8 +2558,7 @@ function registerPlannerTools(
 				"Use planner contract tools for AGENTS.md local contracts. Scan/route/read before broad source reads; check/update contracts after each green TDD task before refactor.",
 			parameters: contractToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 				await recordPlannerToolActivityForProject({
 					fs,
 					projectPaths,
@@ -2680,8 +2639,7 @@ function registerPlannerTools(
 				"Use planner_refactor_review during execution/refactor_task after inspecting the task diff. Pass semantic review fields; the wrapper writes refactor.md.",
 			parameters: REFACTOR_REVIEW_TOOL_PARAMETERS as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 				await recordPlannerToolActivityForProject({
 					fs,
 					projectPaths,
@@ -2711,8 +2669,7 @@ function registerPlannerTools(
 				"Use planner_doubt_review during finalize/doubt_review. List possible errors first, then prove or dismiss each one before calling anything a real bug.",
 			parameters: doubtToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 				await recordPlannerToolActivityForProject({
 					fs,
 					projectPaths,
@@ -2741,8 +2698,7 @@ function registerPlannerTools(
 			promptSnippet: artifactToolPromptSnippet(toolName),
 			parameters: artifactToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 				await recordPlannerToolActivityForProject({
 					fs,
 					projectPaths,
@@ -2772,8 +2728,7 @@ function registerPlannerTools(
 			"Use planner_artifact_read to re-read any planner artifact (request, goal, discovery, plan, questions, decisions, verify, final_summary, task, tdd, refactor). They live outside the worktree, so the built-in read tool cannot reach them and security extensions that restrict the worktree will block it. Never guess a worktree path for these files.",
 		parameters: ARTIFACT_READ_TOOL_PARAMETERS as never,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const fs = createNodeFs();
-			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 			await recordPlannerToolActivityForProject({
 				fs,
 				projectPaths,
@@ -2800,8 +2755,7 @@ function registerPlannerTools(
 			"Use planner_skill_create only after a reusable lesson is proven by stuck/debug/refactor/doubt/final evidence. The wrapper writes YAML frontmatter and stores the skill for future planner sessions. At capture_skill step you MUST decide: create, update an existing skill, or explicitly record in decisions.md why no skill is needed.",
 		parameters: SKILL_CREATE_TOOL_PARAMETERS as never,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const fs = createNodeFs();
-			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 			await recordPlannerToolActivityForProject({
 				fs,
 				projectPaths,
@@ -2829,8 +2783,7 @@ function registerPlannerTools(
 			"Use planner_skill_update when an existing skill is outdated or wrong. Provide the exact name from the skill index. If no existing skill matches by meaning, use planner_skill_create instead. After updating, run the skill probe if applicable and call planner_git_discard_changes if it dirtied the worktree.",
 		parameters: SKILL_UPDATE_TOOL_PARAMETERS as never,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const fs = createNodeFs();
-			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 			await recordPlannerToolActivityForProject({
 				fs,
 				projectPaths,
@@ -2858,8 +2811,7 @@ function registerPlannerTools(
 				"Use planner debug tools only after planner_report_stuck. Record strategy, one focused probe, and result before patching. Use cleanup before planner_git_commit.",
 			parameters: debugToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 				await recordPlannerToolActivityForProject({
 					fs,
 					projectPaths,
@@ -2936,8 +2888,7 @@ function registerPlannerTools(
 				"Use planner_recovery_inspect when planner_status reports recovery or user-decision gating. Use planner_recovery_resume only after inspection shows no blocking git or worktree issues. Recovery tools never reset or delete git state.",
 			parameters: recoveryToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 				await recordPlannerToolActivityForProject({
 					fs,
 					projectPaths,
@@ -2972,8 +2923,7 @@ function registerPlannerTools(
 			additionalProperties: false,
 		} as never,
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-			const fs = createNodeFs();
-			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 			const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
 			const diag = settings.effective.diagnostics;
 			const result = await executePlannerRecoveryReportTool({
@@ -3002,8 +2952,7 @@ function registerPlannerTools(
 				"Use planner git tools instead of raw git while a planner plan is active. Call planner_status first and only use allowed git wrappers.",
 			parameters: gitToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const fs = createNodeFs();
-				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 				await recordPlannerToolActivityForProject({
 					fs,
 					projectPaths,
@@ -3055,8 +3004,7 @@ function registerPlannerTools(
 			additionalProperties: false,
 		} as never,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const fs = createNodeFs();
-			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 			const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
 			await recordPlannerToolActivityForProject({
 				fs,
@@ -3870,13 +3818,31 @@ function workflowToolParameters(toolName: PlannerWorkflowToolName) {
 	}
 }
 
-async function createRuntimeProjectPaths(cwd: string) {
+/**
+ * Resolve the per-invocation runtime context: a fresh node fs handle, the
+ * agent dir, and the project storage paths for `cwd`. Command and tool
+ * handlers need all three together, so returning them as a unit avoids the
+ * repeated three-line `createNodeFs()` / `getAgentDir()` /
+ * `resolveProjectStoragePaths(...)` preamble (and the bug of creating two fs
+ * handles when only paths were wanted).
+ */
+async function resolveRuntimeContext(cwd: string) {
 	const fs = createNodeFs();
-	return await resolveProjectStoragePaths({
+	const agentDir = getAgentDir();
+	const projectPaths = await resolveProjectStoragePaths({
 		fs,
-		agentDir: getAgentDir(),
+		agentDir,
 		cwd,
 	});
+	return { fs, agentDir, projectPaths };
+}
+
+/**
+ * Paths-only view of {@link resolveRuntimeContext} for callers that do not
+ * need the fs handle.
+ */
+async function createRuntimeProjectPaths(cwd: string) {
+	return (await resolveRuntimeContext(cwd)).projectPaths;
 }
 
 async function readPlannerBuiltinGuardState(
