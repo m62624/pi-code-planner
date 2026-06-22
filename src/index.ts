@@ -2451,10 +2451,7 @@ function registerPlannerTools(
 					activatePlannerToolVisibility(pi);
 				}
 
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2481,10 +2478,7 @@ function registerPlannerTools(
 					toolName,
 					params,
 				});
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2511,10 +2505,7 @@ function registerPlannerTools(
 					toolName,
 					params,
 				});
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2541,10 +2532,7 @@ function registerPlannerTools(
 					toolName,
 					params,
 				});
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2583,10 +2571,7 @@ function registerPlannerTools(
 						updateToolVisibility(pi);
 					}
 				}
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2622,10 +2607,7 @@ function registerPlannerTools(
 						projectPaths,
 					});
 				}
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2652,10 +2634,7 @@ function registerPlannerTools(
 					toolName,
 					params,
 				});
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2682,10 +2661,7 @@ function registerPlannerTools(
 					toolName,
 					params,
 				});
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2711,10 +2687,7 @@ function registerPlannerTools(
 					toolName,
 					params,
 				});
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2739,10 +2712,7 @@ function registerPlannerTools(
 				projectPaths,
 				params,
 			});
-			return {
-				content: [{ type: "text", text: result.text }],
-				details: result,
-			};
+			return plannerToolResponse(result);
 		},
 	});
 
@@ -2767,10 +2737,7 @@ function registerPlannerTools(
 				projectPaths,
 				params,
 			});
-			return {
-				content: [{ type: "text", text: result.text }],
-				details: result,
-			};
+			return plannerToolResponse(result);
 		},
 	});
 
@@ -2795,10 +2762,7 @@ function registerPlannerTools(
 				projectPaths,
 				params,
 			});
-			return {
-				content: [{ type: "text", text: result.text }],
-				details: result,
-			};
+			return plannerToolResponse(result);
 		},
 	});
 
@@ -2824,10 +2788,7 @@ function registerPlannerTools(
 					toolName,
 					params,
 				});
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2902,10 +2863,7 @@ function registerPlannerTools(
 					params,
 				});
 
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -2936,10 +2894,7 @@ function registerPlannerTools(
 				},
 				modelId: resolveSessionModelId(ctx),
 			});
-			return {
-				content: [{ type: "text", text: result.text }],
-				details: result,
-			};
+			return plannerToolResponse(result);
 		},
 	});
 
@@ -2966,10 +2921,7 @@ function registerPlannerTools(
 					params,
 				});
 
-				return {
-					content: [{ type: "text", text: result.text }],
-					details: result,
-				};
+				return plannerToolResponse(result);
 			},
 		});
 	}
@@ -3031,10 +2983,7 @@ function registerPlannerTools(
 				settings: settings.effective.exec,
 				worktreePath: ctx.cwd,
 			});
-			return {
-				content: [{ type: "text", text: result.text }],
-				details: result,
-			};
+			return plannerToolResponse(result);
 		},
 	});
 }
@@ -3843,6 +3792,18 @@ async function resolveRuntimeContext(cwd: string) {
  */
 async function createRuntimeProjectPaths(cwd: string) {
 	return (await resolveRuntimeContext(cwd)).projectPaths;
+}
+
+/**
+ * Wrap a planner tool-execution result in the Pi tool-response envelope. Nearly
+ * every wrapper tool returns the result's `text` as the single content block
+ * and the whole result as `details`; this hoists that repeated literal.
+ */
+function plannerToolResponse<T extends { text: string }>(result: T) {
+	return {
+		content: [{ type: "text" as const, text: result.text }],
+		details: result,
+	};
 }
 
 async function readPlannerBuiltinGuardState(
