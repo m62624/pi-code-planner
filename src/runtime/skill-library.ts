@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerFs } from "../storage/fs";
@@ -838,10 +839,6 @@ function blocked(text: string): PlannerSkillCreateResult {
 		text,
 		details: null,
 	};
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }
 
 function isPathInsideOrEqual(path: string, root: string): boolean {

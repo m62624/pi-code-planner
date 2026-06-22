@@ -1,3 +1,4 @@
+import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
@@ -104,10 +105,6 @@ export async function executePlannerTaskTool(input: {
 	} catch (error) {
 		return blocked(input.toolName, errorMessage(error));
 	}
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }
 
 function upsertTaskSummary<T extends { taskId: string }>(

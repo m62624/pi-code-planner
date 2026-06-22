@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerFs } from "../storage/fs";
@@ -738,8 +739,4 @@ function stringOrUndefined(value: unknown): string | undefined {
 
 function booleanOrUndefined(value: unknown): boolean | undefined {
 	return typeof value === "boolean" ? value : undefined;
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }

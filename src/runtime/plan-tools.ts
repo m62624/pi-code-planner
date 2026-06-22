@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { SCHEMA_VERSION } from "../constants";
+import { errorMessage } from "../errors";
 import { planBranchName } from "../git/branches";
 import type { GitRunner } from "../git/runner";
 import { syncBundledInstructionFiles } from "../instructions/defaults";
@@ -269,8 +270,4 @@ function blocked(
 	details: unknown,
 ): PlannerPlanToolExecutionResult {
 	return { status: "blocked", toolName, text, details };
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }

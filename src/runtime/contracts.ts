@@ -8,6 +8,7 @@ import {
 	relative,
 	resolve,
 } from "node:path";
+import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerContractsSettings } from "../settings/schema";
@@ -2166,10 +2167,6 @@ function enumValue<const T extends readonly string[]>(
 		return value as T[number];
 	}
 	throw new TypeError(`${key} must be one of: ${values.join(", ")}.`);
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }
 
 function applied(

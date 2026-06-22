@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
 import {
@@ -268,10 +269,6 @@ function requiredStringArray(
 		}
 		return entry.trim();
 	});
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }
 
 export const PLANNER_ARTIFACT_READ_TOOL_NAME = "planner_artifact_read";

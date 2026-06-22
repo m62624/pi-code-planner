@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
@@ -310,10 +311,6 @@ async function readDiffPatch(
 
 function blocked(toolName: PlannerStuckToolName, text: string) {
 	return { status: "blocked" as const, toolName, text, details: null };
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }
 
 function asObject(value: unknown): Record<string, unknown> {

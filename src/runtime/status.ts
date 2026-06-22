@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { errorMessage } from "../errors";
 import { getInstructionContent } from "../instructions/manager";
 import { createInstructionPaths } from "../instructions/paths";
 import type {
@@ -1208,8 +1209,4 @@ function formatBullets(values: readonly string[]): string[] {
 
 function formatNumbered(values: readonly string[]): string[] {
 	return values.map((value, index) => `${index + 1}. ${value}`);
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }

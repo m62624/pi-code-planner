@@ -1,3 +1,4 @@
+import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
 import { createPiSessionDir } from "../session/handoff";
 import type { PlannerFs } from "../storage/fs";
@@ -549,8 +550,4 @@ function noProjectPlans(
 		"No planner plans in this project. Create one with /planner-create first.",
 		{ project: null },
 	);
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }

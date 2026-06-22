@@ -1,3 +1,4 @@
+import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
@@ -125,8 +126,4 @@ function blocked(
 	text: string,
 ): PlannerDoubtToolExecutionResult {
 	return { status: "blocked", toolName, text, details: null };
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }

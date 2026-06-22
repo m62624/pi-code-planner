@@ -7,6 +7,7 @@ import {
 	isToolCallEventType,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { errorMessage } from "./errors";
 import { NodeGitRunner } from "./git/node-runner";
 import { PLANNER_STATUS_TOOL_NAME } from "./guard/git-watcher";
 import {
@@ -3971,10 +3972,6 @@ function buildPlannerSkillDetailsMarkdown(skill: PlannerSkillSummary): string {
 		"",
 		"Use `/planner-skills` again to delete this skill if it is too narrow, stale, or noisy.",
 	].join("\n");
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }
 
 function parseSinglePlanIdArg(args: string): string | null {
