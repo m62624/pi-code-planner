@@ -2355,11 +2355,7 @@ function registerPlannerTools(
 		parameters: EMPTY_TOOL_PARAMETERS as never,
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
 			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
-			await recordPlannerToolActivityForProject({
-				fs,
-				projectPaths,
-				now: Date.now(),
-			});
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
 			const orchestration = await runPlannerOrchestrator({
 				fs,
 				git: gitRunner,
@@ -2421,11 +2417,7 @@ function registerPlannerTools(
 				});
 
 				if (result.status === "applied") {
-					await recordPlannerToolActivityForProject({
-						fs,
-						projectPaths,
-						now: Date.now(),
-					});
+					await recordPlannerToolActivityForProject({ fs, projectPaths });
 					activatePlannerToolVisibility(pi);
 				}
 
@@ -2444,11 +2436,7 @@ function registerPlannerTools(
 			parameters: goalToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerGoalTool({
 					fs,
 					git: gitRunner,
@@ -2471,11 +2459,7 @@ function registerPlannerTools(
 			parameters: questionToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerQuestionTool({
 					fs,
 					git: gitRunner,
@@ -2498,11 +2482,7 @@ function registerPlannerTools(
 			parameters: TASK_UPSERT_TOOL_PARAMETERS as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerTaskTool({
 					fs,
 					git: gitRunner,
@@ -2525,11 +2505,7 @@ function registerPlannerTools(
 			parameters: contractToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerContractTool({
 					fs,
 					git: gitRunner,
@@ -2566,11 +2542,7 @@ function registerPlannerTools(
 				const fs = createNodeFs();
 				const git = gitRunner;
 				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerStuckTool({
 					fs,
 					git,
@@ -2600,11 +2572,7 @@ function registerPlannerTools(
 			parameters: REFACTOR_REVIEW_TOOL_PARAMETERS as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerRefactorTool({
 					fs,
 					git: gitRunner,
@@ -2627,11 +2595,7 @@ function registerPlannerTools(
 			parameters: doubtToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerDoubtTool({
 					fs,
 					git: gitRunner,
@@ -2653,11 +2617,7 @@ function registerPlannerTools(
 			parameters: artifactToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerArtifactTool({
 					fs,
 					git: gitRunner,
@@ -2680,11 +2640,7 @@ function registerPlannerTools(
 		parameters: ARTIFACT_READ_TOOL_PARAMETERS as never,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
-			await recordPlannerToolActivityForProject({
-				fs,
-				projectPaths,
-				now: Date.now(),
-			});
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
 			const result = await executePlannerArtifactReadTool({
 				fs,
 				projectPaths,
@@ -2704,11 +2660,7 @@ function registerPlannerTools(
 		parameters: SKILL_CREATE_TOOL_PARAMETERS as never,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
-			await recordPlannerToolActivityForProject({
-				fs,
-				projectPaths,
-				now: Date.now(),
-			});
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
 			const result = await executePlannerSkillTool({
 				fs,
 				git: gitRunner,
@@ -2729,11 +2681,7 @@ function registerPlannerTools(
 		parameters: SKILL_UPDATE_TOOL_PARAMETERS as never,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
-			await recordPlannerToolActivityForProject({
-				fs,
-				projectPaths,
-				now: Date.now(),
-			});
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
 			const result = await executePlannerSkillUpdateTool({
 				fs,
 				git: gitRunner,
@@ -2754,11 +2702,7 @@ function registerPlannerTools(
 			parameters: debugToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerDebugTool({
 					fs,
 					git: gitRunner,
@@ -2783,11 +2727,7 @@ function registerPlannerTools(
 				const fs = createNodeFs();
 				const git = gitRunner;
 				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerWorkflowTool({
 					fs,
 					git,
@@ -2828,11 +2768,7 @@ function registerPlannerTools(
 			parameters: recoveryToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerRecoveryTool({
 					fs,
 					git: gitRunner,
@@ -2886,11 +2822,7 @@ function registerPlannerTools(
 			parameters: gitToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
-				await recordPlannerToolActivityForProject({
-					fs,
-					projectPaths,
-					now: Date.now(),
-				});
+				await recordPlannerToolActivityForProject({ fs, projectPaths });
 				const result = await executePlannerGitTool({
 					fs,
 					git: gitRunner,
@@ -2936,11 +2868,7 @@ function registerPlannerTools(
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 			const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
-			await recordPlannerToolActivityForProject({
-				fs,
-				projectPaths,
-				now: Date.now(),
-			});
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
 			const context = await readActivePlanContext({ fs, projectPaths });
 			if (context.status !== "ready") {
 				return {
@@ -3088,11 +3016,7 @@ async function recordPlannerToolActivityForCwd(cwd: string): Promise<void> {
 	try {
 		const fs = createNodeFs();
 		const projectPaths = await createRuntimeProjectPaths(cwd);
-		await recordPlannerToolActivityForProject({
-			fs,
-			projectPaths,
-			now: Date.now(),
-		});
+		await recordPlannerToolActivityForProject({ fs, projectPaths });
 	} catch {
 		// Activity timestamps are advisory; planner state remains authoritative.
 	}
@@ -3101,7 +3025,7 @@ async function recordPlannerToolActivityForCwd(cwd: string): Promise<void> {
 async function recordPlannerToolActivityForProject(input: {
 	fs: ReturnType<typeof createNodeFs>;
 	projectPaths: ProjectStoragePaths;
-	now: number;
+	now?: number;
 }): Promise<void> {
 	try {
 		const context = await readActivePlanContext({
@@ -3112,7 +3036,7 @@ async function recordPlannerToolActivityForProject(input: {
 			return;
 		}
 		await updatePlanState(input.fs, context.planPaths, (state) =>
-			markPlannerToolActivity(state, input.now),
+			markPlannerToolActivity(state, input.now ?? Date.now()),
 		);
 	} catch {
 		// Activity timestamps must never block the actual planner tool result.
