@@ -5,7 +5,7 @@ import {
 	createTaskStoragePaths,
 	type ProjectStoragePaths,
 } from "../storage/paths";
-import { initializePlanFiles } from "../storage/plan-store";
+import { initializePlanFiles, updatePlanRecord } from "../storage/plan-store";
 import {
 	setActivePlan,
 	upsertProjectPlanSummary,
@@ -61,6 +61,19 @@ async function seedPlan(): Promise<{
 	return { fs, projectPaths };
 }
 
+/** Register a task id in the plan record so task-level reads can validate it. */
+async function addTask(
+	fs: MockPlannerFs,
+	projectPaths: ProjectStoragePaths,
+	taskId: string,
+): Promise<void> {
+	const planPaths = createPlanStoragePaths(projectPaths, PLAN_ID);
+	await updatePlanRecord(fs, planPaths, (record) => ({
+		...record,
+		tasks: [...record.tasks, { taskId, title: taskId, status: "todo" }],
+	}));
+}
+
 describe("planner_artifact_read", () => {
 	it("reads a plan-level artifact from the extension dir, not the worktree", async () => {
 		const { fs, projectPaths } = await seedPlan();
@@ -114,6 +127,7 @@ describe("planner_artifact_read", () => {
 
 	it("resolves a task-level artifact from the active task", async () => {
 		const { fs, projectPaths } = await seedPlan();
+		await addTask(fs, projectPaths, "task-1");
 		const planPaths = createPlanStoragePaths(projectPaths, PLAN_ID);
 		const taskPaths = createTaskStoragePaths(planPaths, "task-1");
 		await fs.writeTextAtomic(taskPaths.tddMd, "# TDD for task-1\n");
@@ -136,6 +150,7 @@ describe("planner_artifact_read", () => {
 
 	it("honors an explicit taskId for task-level artifacts", async () => {
 		const { fs, projectPaths } = await seedPlan();
+		await addTask(fs, projectPaths, "task-2");
 		const planPaths = createPlanStoragePaths(projectPaths, PLAN_ID);
 		const taskPaths = createTaskStoragePaths(planPaths, "task-2");
 		await fs.writeTextAtomic(taskPaths.taskMd, "# Task two\n");
@@ -151,6 +166,22 @@ describe("planner_artifact_read", () => {
 		expect(result.details?.taskId).toBe("task-2");
 	});
 
+	it("blocks a non-existent taskId and lists the known task ids", async () => {
+		const { fs, projectPaths } = await seedPlan();
+		await addTask(fs, projectPaths, "task-1");
+
+		const result = await executePlannerArtifactReadTool({
+			fs,
+			projectPaths,
+			params: { artifact: "tdd", taskId: "task-99" },
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toMatch(/does not exist/);
+		// Transparency: the model is told which task ids it can pick.
+		expect(result.text).toContain("task-1");
+	});
+
 	it("blocks a task-level artifact when no task is selectable", async () => {
 		const { fs, projectPaths } = await seedPlan();
 
@@ -161,10 +192,11 @@ describe("planner_artifact_read", () => {
 		});
 
 		expect(result.status).toBe("blocked");
-		expect(result.text).toMatch(/needs a task/);
+		expect(result.text).toMatch(/task-scoped/);
+		expect(result.text).toMatch(/No tasks have been created yet/);
 	});
 
-	it("blocks an unknown artifact name", async () => {
+	it("blocks an unknown artifact name and lists the valid choices", async () => {
 		const { fs, projectPaths } = await seedPlan();
 
 		const result = await executePlannerArtifactReadTool({
@@ -174,7 +206,12 @@ describe("planner_artifact_read", () => {
 		});
 
 		expect(result.status).toBe("blocked");
-		expect(result.text).toContain("artifact");
+		// Every valid artifact name is offered so a local model can self-correct.
+		for (const name of PLANNER_READABLE_ARTIFACTS) {
+			expect(result.text).toContain(name);
+		}
+		// And the worktree-vs-extension boundary is spelled out.
+		expect(result.text).toMatch(/extension storage dir/);
 	});
 
 	it("blocks when there is no ready active plan context", async () => {

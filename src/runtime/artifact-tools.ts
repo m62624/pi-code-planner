@@ -276,6 +276,14 @@ function errorMessage(error: unknown): string {
 
 export const PLANNER_ARTIFACT_READ_TOOL_NAME = "planner_artifact_read";
 
+/**
+ * Transparency note for local models: this tool ONLY reads planner-managed
+ * artifacts stored under the extension dir (getAgentDir/extensions/...). Project
+ * source files in the worktree are read with the built-in read tool as usual.
+ */
+const ARTIFACT_READ_SCOPE_HINT =
+	"planner_artifact_read reads ONLY planner artifacts in the extension storage dir (outside the worktree). For project source files in the worktree, use the normal read tool instead.";
+
 /** Plan-level artifacts that live in the plan dir under the extension dir. */
 const PLAN_LEVEL_ARTIFACTS = [
 	"request",
@@ -333,7 +341,13 @@ export async function executePlannerArtifactReadTool(input: {
 	const artifact = stringOrNull(params.artifact);
 	if (!artifact || !isReadableArtifact(artifact)) {
 		return readBlocked(
-			`planner_artifact_read requires an "artifact" parameter, one of: ${PLANNER_READABLE_ARTIFACTS.join(", ")}.`,
+			[
+				artifact
+					? `"${artifact}" is not a planner artifact this tool can read.`
+					: 'planner_artifact_read needs an "artifact" parameter.',
+				`Choose one of: ${PLANNER_READABLE_ARTIFACTS.join(", ")}.`,
+				ARTIFACT_READ_SCOPE_HINT,
+			].join("\n"),
 			{ artifact: artifact ?? null, path: null, taskId: null, exists: false },
 		);
 	}
@@ -349,11 +363,13 @@ export async function executePlannerArtifactReadTool(input: {
 		);
 	}
 
+	const knownTaskIds = context.plan.tasks.map((task) => task.taskId);
 	const resolved = resolveArtifactPath({
 		artifact,
 		planPaths: context.planPaths,
 		activeTaskId: context.state.activeTaskId,
 		requestedTaskId: stringOrNull(params.taskId),
+		knownTaskIds,
 	});
 	if (!resolved.ok) {
 		return readBlocked(resolved.error, {
@@ -369,7 +385,7 @@ export async function executePlannerArtifactReadTool(input: {
 	const body = raw.trim();
 	const header = `Artifact: ${resolved.path}`;
 	const text = !exists
-		? `${header}\n\n(${artifact} has not been written yet — the file does not exist.)`
+		? `${header}\n\n(${artifact} has not been written yet — the file does not exist. This is expected if the lifecycle has not reached the step that produces it; if you actually need a different file, pick another artifact: ${PLANNER_READABLE_ARTIFACTS.join(", ")}.)`
 		: body.length === 0
 			? `${header}\n\n(${artifact} exists but is empty.)`
 			: `${header}\n\n${raw.trimEnd()}`;
@@ -387,6 +403,7 @@ function resolveArtifactPath(input: {
 	planPaths: PlanStoragePaths;
 	activeTaskId: string | null;
 	requestedTaskId: string | null;
+	knownTaskIds: readonly string[];
 }):
 	| { ok: true; path: string; taskId: string | null }
 	| { ok: false; error: string; taskId: string | null } {
@@ -415,12 +432,26 @@ function resolveArtifactPath(input: {
 		case "task":
 		case "tdd":
 		case "refactor": {
+			const knownList =
+				input.knownTaskIds.length > 0
+					? `Known task ids: ${input.knownTaskIds.join(", ")}.`
+					: "No tasks have been created yet.";
 			const taskId = input.requestedTaskId ?? input.activeTaskId;
 			if (!taskId) {
 				return {
 					ok: false,
-					error: `planner_artifact_read of "${input.artifact}" needs a task: pass a "taskId" or select an active task first.`,
+					error: `planner_artifact_read of "${input.artifact}" is task-scoped: pass a "taskId" or select an active task first. ${knownList}`,
 					taskId: null,
+				};
+			}
+			if (
+				input.requestedTaskId &&
+				!input.knownTaskIds.includes(input.requestedTaskId)
+			) {
+				return {
+					ok: false,
+					error: `Task "${input.requestedTaskId}" does not exist in this plan. ${knownList}`,
+					taskId: input.requestedTaskId,
 				};
 			}
 			const taskPaths = createTaskStoragePaths(planPaths, taskId);
