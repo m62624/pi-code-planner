@@ -5,8 +5,7 @@ import {
 	getInstructionRoutingForState,
 	type InstructionRouting,
 } from "../instructions/routing";
-import type { PlannerFs } from "../storage/fs";
-import type { PlanStoragePaths, ProjectStoragePaths } from "../storage/paths";
+import type { PlanStoragePaths } from "../storage/paths";
 import { type ActivePlanContext, readActivePlanContext } from "./active-plan";
 import {
 	inspectPlannerGitReality,
@@ -17,12 +16,9 @@ import {
 	type PlannerRuntimeDecision,
 } from "./planner-runtime";
 import { getAllowedPlannerStateTransitionTypes } from "./state-transition";
+import type { PlannerToolContext } from "./tool-context";
 
-export interface PlannerPreflightInput {
-	fs: PlannerFs;
-	git: GitRunner;
-	projectPaths: ProjectStoragePaths;
-}
+export type PlannerPreflightInput = PlannerToolContext;
 
 export interface PlannerPreflightResult {
 	context: ActivePlanContext;

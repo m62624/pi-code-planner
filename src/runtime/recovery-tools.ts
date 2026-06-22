@@ -1,7 +1,4 @@
-import type { GitRunner } from "../git/runner";
 import type { PlannerWrapperTool } from "../guard/tool-policy";
-import type { PlannerFs } from "../storage/fs";
-import type { ProjectStoragePaths } from "../storage/paths";
 import { readActivePlanContext } from "./active-plan";
 import {
 	buildRecoveryReport,
@@ -24,6 +21,10 @@ import {
 	type PlannerRecoveryResumeResult,
 	resumePlannerRecovery,
 } from "./recovery-manager";
+import type {
+	PlannerToolContext,
+	PlannerToolExecutionInput,
+} from "./tool-context";
 import { asObject } from "./values";
 
 export const PLANNER_RECOVERY_TOOL_NAMES = [
@@ -34,13 +35,8 @@ export const PLANNER_RECOVERY_TOOL_NAMES = [
 export type PlannerRecoveryToolName =
 	(typeof PLANNER_RECOVERY_TOOL_NAMES)[number];
 
-export interface PlannerRecoveryToolExecutionInput {
-	fs: PlannerFs;
-	git: GitRunner;
-	projectPaths: ProjectStoragePaths;
-	toolName: PlannerRecoveryToolName;
-	params: unknown;
-}
+export type PlannerRecoveryToolExecutionInput =
+	PlannerToolExecutionInput<PlannerRecoveryToolName>;
 
 export interface PlannerRecoveryToolExecutionResult {
 	status: "applied" | "blocked";
@@ -130,10 +126,7 @@ export async function executePlannerRecoveryTool(
 
 export const PLANNER_RECOVERY_REPORT_TOOL_NAME = "planner_recovery_report";
 
-export interface PlannerRecoveryReportToolInput {
-	fs: PlannerFs;
-	git: GitRunner;
-	projectPaths: ProjectStoragePaths;
+export interface PlannerRecoveryReportToolInput extends PlannerToolContext {
 	thresholds: StuckThresholds;
 	modelId: string | null;
 	now?: number;

@@ -7,7 +7,6 @@ import { syncBundledInstructionFiles } from "../instructions/defaults";
 import { createInstructionPaths } from "../instructions/paths";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { WorktreeSettings } from "../settings/schema";
-import type { PlannerFs } from "../storage/fs";
 import {
 	createPlanStoragePaths,
 	type ProjectStoragePaths,
@@ -39,6 +38,7 @@ import {
 	resolvePlannerPlanId,
 	validatePlannerPlanTitle,
 } from "./plan-naming";
+import type { PlannerToolExecutionInput } from "./tool-context";
 import type { PlannerToolResult } from "./tool-result";
 import { asObject } from "./values";
 
@@ -46,13 +46,8 @@ export const PLANNER_PLAN_TOOL_NAMES = ["planner_create_plan"] as const;
 
 export type PlannerPlanToolName = (typeof PLANNER_PLAN_TOOL_NAMES)[number];
 
-export interface PlannerPlanToolExecutionInput {
-	fs: PlannerFs;
-	git: GitRunner;
-	projectPaths: ProjectStoragePaths;
-	toolName: PlannerPlanToolName;
-	params: unknown;
-}
+export type PlannerPlanToolExecutionInput =
+	PlannerToolExecutionInput<PlannerPlanToolName>;
 
 export type PlannerPlanToolExecutionResult =
 	PlannerToolResult<PlannerPlanToolName>;

@@ -1,7 +1,5 @@
-import type { GitRunner } from "../git/runner";
 import type { PlannerWrapperTool } from "../guard/tool-policy";
 import type { PlannerFs } from "../storage/fs";
-import type { ProjectStoragePaths } from "../storage/paths";
 import { savePlanState } from "../storage/state-store";
 import {
 	ARTIFACT_CANONICAL_SCHEMA,
@@ -11,6 +9,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import type { PlannerToolExecutionInput } from "./tool-context";
 import type { PlannerToolResult } from "./tool-result";
 import { asObject } from "./values";
 
@@ -22,13 +21,8 @@ export const PLANNER_QUESTION_TOOL_NAMES = [
 export type PlannerQuestionToolName =
 	(typeof PLANNER_QUESTION_TOOL_NAMES)[number];
 
-export interface PlannerQuestionToolExecutionInput {
-	fs: PlannerFs;
-	git: GitRunner;
-	projectPaths: ProjectStoragePaths;
-	toolName: PlannerQuestionToolName;
-	params: unknown;
-}
+export type PlannerQuestionToolExecutionInput =
+	PlannerToolExecutionInput<PlannerQuestionToolName>;
 
 export type PlannerQuestionToolExecutionResult =
 	PlannerToolResult<PlannerQuestionToolName>;

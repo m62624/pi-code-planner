@@ -1,6 +1,4 @@
-import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
-import type { ProjectStoragePaths } from "../storage/paths";
 import { updatePlanRecord } from "../storage/plan-store";
 import { upsertProjectPlanSummary } from "../storage/project-store";
 import { savePlanState } from "../storage/state-store";
@@ -21,6 +19,7 @@ import {
 	completePlannerStep,
 	startPlannerStep,
 } from "./state-machine";
+import type { PlannerToolExecutionInput } from "./tool-context";
 import type { PlannerToolResult } from "./tool-result";
 import { asObject } from "./values";
 
@@ -31,13 +30,8 @@ export const PLANNER_GOAL_TOOL_NAMES = [
 
 export type PlannerGoalToolName = (typeof PLANNER_GOAL_TOOL_NAMES)[number];
 
-export interface PlannerGoalToolExecutionInput {
-	fs: PlannerFs;
-	git: GitRunner;
-	projectPaths: ProjectStoragePaths;
-	toolName: PlannerGoalToolName;
-	params: unknown;
-}
+export type PlannerGoalToolExecutionInput =
+	PlannerToolExecutionInput<PlannerGoalToolName>;
 
 export type PlannerGoalToolExecutionResult =
 	PlannerToolResult<PlannerGoalToolName>;

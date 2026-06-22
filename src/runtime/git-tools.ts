@@ -5,13 +5,9 @@ import {
 	mergeRefactorToTask,
 	mergeTaskToPlan,
 } from "../git/planner-ops";
-import type { GitRunner } from "../git/runner";
 import type { PlannerWrapperTool } from "../guard/tool-policy";
 import type { PlannerFs } from "../storage/fs";
-import {
-	createTaskStoragePaths,
-	type ProjectStoragePaths,
-} from "../storage/paths";
+import { createTaskStoragePaths } from "../storage/paths";
 import { updatePlanRecord } from "../storage/plan-store";
 import type { PlanStateRecord } from "../storage/schema";
 import { savePlanState } from "../storage/state-store";
@@ -28,6 +24,7 @@ import {
 	runPlannerOrchestrator,
 } from "./orchestrator";
 import { validateTaskMergeScopeAudit } from "./tdd-evidence";
+import type { PlannerToolExecutionInput } from "./tool-context";
 import type { PlannerToolResult } from "./tool-result";
 import { asObject } from "./values";
 
@@ -44,13 +41,8 @@ export const PLANNER_GIT_TOOL_NAMES = [
 
 export type PlannerGitToolName = (typeof PLANNER_GIT_TOOL_NAMES)[number];
 
-export interface PlannerGitToolExecutionInput {
-	fs: PlannerFs;
-	git: GitRunner;
-	projectPaths: ProjectStoragePaths;
-	toolName: PlannerGitToolName;
-	params: unknown;
-}
+export type PlannerGitToolExecutionInput =
+	PlannerToolExecutionInput<PlannerGitToolName>;
 
 export type PlannerGitToolExecutionResult =
 	PlannerToolResult<PlannerGitToolName>;

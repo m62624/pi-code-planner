@@ -20,6 +20,7 @@ import type {
 } from "../storage/schema";
 import { readPlanStateIfExists } from "../storage/state-store";
 import { createWorktreeProjectIndexPath } from "../storage/worktree-index";
+import type { PlannerToolContext } from "./tool-context";
 import { asObject } from "./values";
 
 export type PlannerUserCommandName =
@@ -28,10 +29,7 @@ export type PlannerUserCommandName =
 	| "planner_resume"
 	| "planner_delete";
 
-export interface PlannerUserCommandInput {
-	fs: PlannerFs;
-	git: GitRunner;
-	projectPaths: ProjectStoragePaths;
+export interface PlannerUserCommandInput extends PlannerToolContext {
 	commandName: PlannerUserCommandName;
 	params: unknown;
 }

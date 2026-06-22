@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { errorMessage } from "../errors";
-import type { GitRunner } from "../git/runner";
 import { isPathInsideOrEqual } from "../path-utils";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerFs } from "../storage/fs";
@@ -13,6 +12,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import type { PlannerToolContext } from "./tool-context";
 
 export const PLANNER_SKILL_TOOL_NAMES = [
 	"planner_skill_create",
@@ -64,19 +64,13 @@ export interface PlannerSkillSummary {
 	updatedAt: number;
 }
 
-export interface PlannerSkillCreateInput {
-	fs: PlannerFs;
-	git: GitRunner;
-	projectPaths: ProjectStoragePaths;
+export interface PlannerSkillCreateInput extends PlannerToolContext {
 	params: unknown;
 	now?: number;
 	uuid?: string;
 }
 
-export interface PlannerSkillUpdateInput {
-	fs: PlannerFs;
-	git: GitRunner;
-	projectPaths: ProjectStoragePaths;
+export interface PlannerSkillUpdateInput extends PlannerToolContext {
 	params: unknown;
 	now?: number;
 }
