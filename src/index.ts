@@ -7,6 +7,7 @@ import {
 	isToolCallEventType,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { DEFAULT_LANGUAGE, MS_PER_MINUTE } from "./constants";
 import { errorMessage } from "./errors";
 import { NodeGitRunner } from "./git/node-runner";
 import { PLANNER_STATUS_TOOL_NAME } from "./guard/git-watcher";
@@ -1737,7 +1738,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				const createdPlanId = details.plan?.planId ?? planId;
 				const descriptionLanguage =
 					details.settings?.effective?.metadata?.descriptionLanguage ??
-					"English";
+					DEFAULT_LANGUAGE;
 				const titleLanguage =
 					details.settings?.effective?.metadata?.titleLanguage ??
 					descriptionLanguage;
@@ -1887,7 +1888,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				const createdPlanId = details.plan?.planId ?? planId;
 				const descriptionLanguage =
 					details.settings?.effective?.metadata?.descriptionLanguage ??
-					"English";
+					DEFAULT_LANGUAGE;
 				const titleLanguage =
 					details.settings?.effective?.metadata?.titleLanguage ??
 					descriptionLanguage;
@@ -2981,7 +2982,7 @@ function registerPlannerTools(
 				projectPaths,
 				thresholds: {
 					blockedTransitions: diag.blockedTransitions,
-					stuckMs: diag.stuckMinutes * 60_000,
+					stuckMs: diag.stuckMinutes * MS_PER_MINUTE,
 				},
 				modelId: resolveSessionModelId(ctx),
 			});
@@ -3290,7 +3291,7 @@ async function recordPlannerDiagnosticsEventForProject(input: {
 			diag.enabled &&
 			evaluatePlannerStuck(record, Date.now(), {
 				blockedTransitions: diag.blockedTransitions,
-				stuckMs: diag.stuckMinutes * 60_000,
+				stuckMs: diag.stuckMinutes * MS_PER_MINUTE,
 			}).stuck;
 		if (setRecoveryReportUnlocked(unlocked)) {
 			updateToolVisibility(input.pi);

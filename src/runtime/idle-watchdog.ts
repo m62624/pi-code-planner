@@ -1,3 +1,4 @@
+import { MS_PER_MINUTE } from "../constants";
 import type { PlannerIdleSettings } from "../settings/schema";
 import type { PlanStateRecord } from "../storage/schema";
 import { PLANNER_SYSTEM_INSTRUCTIONS_HEADER } from "./compact";
@@ -70,7 +71,7 @@ export function evaluatePlannerIdleWake(input: {
 		message: buildPlannerIdleWakeMessage({
 			state: input.state,
 			timeoutMinutes: input.settings.timeoutMinutes,
-			idleMinutes: Math.floor(idleMs / 60_000),
+			idleMinutes: Math.floor(idleMs / MS_PER_MINUTE),
 		}),
 	};
 }

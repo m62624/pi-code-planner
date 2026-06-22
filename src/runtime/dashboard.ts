@@ -15,6 +15,7 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
+import { MS_PER_MINUTE } from "../constants";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import { createNodeFs, type PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
@@ -232,7 +233,7 @@ async function loadWorkspaceSettings(
 			enabled: workspace.enabled,
 			autoOpen: workspace.autoOpen,
 			footerReserveRows: workspace.footerReserveRows,
-			syncMs: settings.effective.timer.syncIntervalMinutes * 60_000,
+			syncMs: settings.effective.timer.syncIntervalMinutes * MS_PER_MINUTE,
 			keys: resolveWorkspaceKeys(workspace.keys),
 		};
 	} catch {

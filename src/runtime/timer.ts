@@ -3,6 +3,7 @@ import {
 	type ExtensionContext,
 	getAgentDir,
 } from "@earendil-works/pi-coding-agent";
+import { MS_PER_MINUTE } from "../constants";
 import { isPlanActive } from "../index.tool-visibility";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerTimerSettings } from "../settings/schema";
@@ -463,7 +464,7 @@ function padLeft(value: string, width: number): string {
 }
 
 function syncIntervalMs(settings: PlannerTimerSettings): number {
-	return settings.syncIntervalMinutes * 60_000;
+	return settings.syncIntervalMinutes * MS_PER_MINUTE;
 }
 
 function setPlannerStatus(

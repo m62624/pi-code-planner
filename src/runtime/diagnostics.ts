@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { MS_PER_MINUTE } from "../constants";
 import type { PlannerFs } from "../storage/fs";
 import type { PlanStoragePaths } from "../storage/paths";
 import type { PlanRecord, PlanStateRecord } from "../storage/schema";
@@ -221,7 +222,7 @@ export function evaluatePlannerStuck(
 		record.firstBlockedAt !== null &&
 		now - record.firstBlockedAt >= thresholds.stuckMs
 	) {
-		const minutes = Math.round((now - record.firstBlockedAt) / 60_000);
+		const minutes = Math.round((now - record.firstBlockedAt) / MS_PER_MINUTE);
 		reasons.push(
 			`stuck for ~${minutes} min since the first blocked transition`,
 		);
@@ -354,7 +355,9 @@ export function buildRecoveryReport(
 
 	const minutesStuck =
 		input.diagnostics.firstBlockedAt !== null
-			? Math.round((input.now - input.diagnostics.firstBlockedAt) / 60_000)
+			? Math.round(
+					(input.now - input.diagnostics.firstBlockedAt) / MS_PER_MINUTE,
+				)
 			: 0;
 
 	const taskStatusLine = (input.plan?.tasks ?? [])
