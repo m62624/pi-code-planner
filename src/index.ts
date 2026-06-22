@@ -209,6 +209,11 @@ import {
 
 export * from "./public-api";
 
+// NodeGitRunner is stateless (every method delegates to module-level git
+// command helpers), so a single shared instance serves all tool handlers
+// instead of allocating one per call.
+const gitRunner = new NodeGitRunner();
+
 const EMPTY_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {},
@@ -1699,7 +1704,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				}
 				const result = await executePlannerPlanTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName: "planner_create_plan",
 					params: {
@@ -1837,7 +1842,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				}
 				const result = await executePlannerPlanTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName: "planner_create_plan",
 					params: {
@@ -2040,7 +2045,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			if (!parsed) return;
 			const result = await executePlannerUserCommand({
 				fs,
-				git: new NodeGitRunner(),
+				git: gitRunner,
 				projectPaths,
 				commandName: "planner_rename",
 				params: {
@@ -2073,7 +2078,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			}
 			const result = await executePlannerUserCommand({
 				fs,
-				git: new NodeGitRunner(),
+				git: gitRunner,
 				projectPaths,
 				commandName: "planner_resume",
 				params: { planId },
@@ -2176,7 +2181,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					withSession: async (replacementCtx) => {
 						const result = await executePlannerUserCommand({
 							fs,
-							git: new NodeGitRunner(),
+							git: gitRunner,
 							projectPaths,
 							commandName: "planner_delete",
 							params: {
@@ -2192,7 +2197,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 
 			const result = await executePlannerUserCommand({
 				fs,
-				git: new NodeGitRunner(),
+				git: gitRunner,
 				projectPaths,
 				commandName: "planner_delete",
 				params: {
@@ -2213,7 +2218,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
 				ctx.cwd,
 			);
-			const git = new NodeGitRunner();
+			const git = gitRunner;
 			let fallbackSession: Awaited<
 				ReturnType<typeof createPlannerHandoffSession>
 			> | null = null;
@@ -2385,7 +2390,7 @@ function registerPlannerTools(
 			});
 			const orchestration = await runPlannerOrchestrator({
 				fs,
-				git: new NodeGitRunner(),
+				git: gitRunner,
 				projectPaths,
 			});
 
@@ -2437,7 +2442,7 @@ function registerPlannerTools(
 				const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 				const result = await executePlannerPlanTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
@@ -2474,7 +2479,7 @@ function registerPlannerTools(
 				});
 				const result = await executePlannerGoalTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
@@ -2501,7 +2506,7 @@ function registerPlannerTools(
 				});
 				const result = await executePlannerQuestionTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
@@ -2528,7 +2533,7 @@ function registerPlannerTools(
 				});
 				const result = await executePlannerTaskTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
@@ -2555,7 +2560,7 @@ function registerPlannerTools(
 				});
 				const result = await executePlannerContractTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
@@ -2587,7 +2592,7 @@ function registerPlannerTools(
 			parameters: STUCK_REPORT_TOOL_PARAMETERS as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const fs = createNodeFs();
-				const git = new NodeGitRunner();
+				const git = gitRunner;
 				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
 				await recordPlannerToolActivityForProject({
 					fs,
@@ -2630,7 +2635,7 @@ function registerPlannerTools(
 				});
 				const result = await executePlannerRefactorTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
@@ -2657,7 +2662,7 @@ function registerPlannerTools(
 				});
 				const result = await executePlannerDoubtTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
@@ -2683,7 +2688,7 @@ function registerPlannerTools(
 				});
 				const result = await executePlannerArtifactTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
@@ -2734,7 +2739,7 @@ function registerPlannerTools(
 			});
 			const result = await executePlannerSkillTool({
 				fs,
-				git: new NodeGitRunner(),
+				git: gitRunner,
 				projectPaths,
 				params,
 			});
@@ -2759,7 +2764,7 @@ function registerPlannerTools(
 			});
 			const result = await executePlannerSkillUpdateTool({
 				fs,
-				git: new NodeGitRunner(),
+				git: gitRunner,
 				projectPaths,
 				params,
 			});
@@ -2784,7 +2789,7 @@ function registerPlannerTools(
 				});
 				const result = await executePlannerDebugTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
@@ -2804,7 +2809,7 @@ function registerPlannerTools(
 			parameters: workflowToolParameters(toolName) as never,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const fs = createNodeFs();
-				const git = new NodeGitRunner();
+				const git = gitRunner;
 				const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
 				await recordPlannerToolActivityForProject({
 					fs,
@@ -2858,7 +2863,7 @@ function registerPlannerTools(
 				});
 				const result = await executePlannerRecoveryTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
@@ -2887,7 +2892,7 @@ function registerPlannerTools(
 			const diag = settings.effective.diagnostics;
 			const result = await executePlannerRecoveryReportTool({
 				fs,
-				git: new NodeGitRunner(),
+				git: gitRunner,
 				projectPaths,
 				thresholds: {
 					blockedTransitions: diag.blockedTransitions,
@@ -2916,7 +2921,7 @@ function registerPlannerTools(
 				});
 				const result = await executePlannerGitTool({
 					fs,
-					git: new NodeGitRunner(),
+					git: gitRunner,
 					projectPaths,
 					toolName,
 					params,
@@ -3010,7 +3015,7 @@ function registerPlannerCompactEvents(
 
 		const preflight = await runPlannerPreflight({
 			fs,
-			git: new NodeGitRunner(),
+			git: gitRunner,
 			projectPaths,
 		});
 		if (preflight.context.status !== "ready") {
