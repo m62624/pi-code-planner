@@ -20,6 +20,7 @@ import type {
 } from "../storage/schema";
 import { readPlanStateIfExists } from "../storage/state-store";
 import { createWorktreeProjectIndexPath } from "../storage/worktree-index";
+import { asObject } from "./values";
 
 export type PlannerUserCommandName =
 	| "planner_get_plan_list"
@@ -518,12 +519,6 @@ function booleanParam(
 	key: string,
 ): boolean | null {
 	return typeof params[key] === "boolean" ? params[key] : null;
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object"
-		? (value as Record<string, unknown>)
-		: {};
 }
 
 function applied(

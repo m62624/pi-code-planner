@@ -35,6 +35,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { asObject } from "./values";
 
 export const PLANNER_CONTRACT_TOOL_NAMES = [
 	"planner_contract_scan",
@@ -2088,12 +2089,6 @@ function requireWorktreePath(state: PlanStateRecord): string {
 		throw new Error("Planner contract tools require state.worktreePath.");
 	}
 	return state.worktreePath;
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
 }
 
 function requiredString(params: Record<string, unknown>, key: string): string {

@@ -10,6 +10,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { asObject } from "./values";
 
 export const PLANNER_STUCK_TOOL_NAMES = ["planner_report_stuck"] as const;
 export type PlannerStuckToolName = (typeof PLANNER_STUCK_TOOL_NAMES)[number];
@@ -311,12 +312,6 @@ async function readDiffPatch(
 
 function blocked(toolName: PlannerStuckToolName, text: string) {
 	return { status: "blocked" as const, toolName, text, details: null };
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
 }
 
 function parseStuckReportParams(

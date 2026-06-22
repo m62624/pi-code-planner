@@ -28,6 +28,7 @@ import {
 	runPlannerOrchestrator,
 } from "./orchestrator";
 import { validateTaskMergeScopeAudit } from "./tdd-evidence";
+import { asObject } from "./values";
 
 export const PLANNER_GIT_TOOL_NAMES = [
 	"planner_git_inspect",
@@ -450,12 +451,6 @@ function optionalMessage(params: unknown, fallback: string): string {
 	return typeof value === "string" && value.trim().length > 0
 		? value
 		: fallback;
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object"
-		? (value as Record<string, unknown>)
-		: {};
 }
 
 function applied(

@@ -24,6 +24,7 @@ import {
 	type PlannerRecoveryResumeResult,
 	resumePlannerRecovery,
 } from "./recovery-manager";
+import { asObject } from "./values";
 
 export const PLANNER_RECOVERY_TOOL_NAMES = [
 	"planner_recovery_inspect",
@@ -221,12 +222,6 @@ function parseResumeTarget(
 	const stage = stringParam(object, "targetStage");
 	const step = stringParam(object, "targetStep");
 	return stage && step ? { stage: stage as never, step: step as never } : null;
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object"
-		? (value as Record<string, unknown>)
-		: {};
 }
 
 function stringParam(

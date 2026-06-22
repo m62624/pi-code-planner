@@ -42,6 +42,7 @@ import {
 	validatePreImplementationProofContract,
 	validateTaskMergeScopeAudit,
 } from "./tdd-evidence";
+import { asObject } from "./values";
 
 export const PLANNER_WORKFLOW_TOOL_NAMES = [
 	"planner_start_step",
@@ -723,12 +724,6 @@ function formatWorkflowToolResult(
 		"",
 		buildNextStepHint(result.state),
 	].join("\n");
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object"
-		? (value as Record<string, unknown>)
-		: {};
 }
 
 function stringOrUndefined(value: unknown): string | undefined {

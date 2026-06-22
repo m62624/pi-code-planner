@@ -10,6 +10,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { asObject } from "./values";
 
 export const PLANNER_DEBUG_TOOL_NAMES = [
 	"planner_debug_strategy",
@@ -493,12 +494,6 @@ function blocked(
 	text: string,
 ): PlannerDebugToolExecutionResult {
 	return { status: "blocked", toolName, text, details: null };
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
 }
 
 function requiredString(params: Record<string, unknown>, key: string): string {

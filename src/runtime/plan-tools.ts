@@ -39,6 +39,7 @@ import {
 	resolvePlannerPlanId,
 	validatePlannerPlanTitle,
 } from "./plan-naming";
+import { asObject } from "./values";
 
 export const PLANNER_PLAN_TOOL_NAMES = ["planner_create_plan"] as const;
 
@@ -248,12 +249,6 @@ function optionalString(
 	return typeof value === "string" && value.trim().length > 0
 		? value.trim()
 		: null;
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object"
-		? (value as Record<string, unknown>)
-		: {};
 }
 
 function applied(

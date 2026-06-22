@@ -20,6 +20,7 @@ import {
 	TDD_SECTIONS,
 	type TddSectionKey,
 } from "./tdd-form";
+import { asObject } from "./values";
 
 export const PLANNER_ARTIFACT_TOOL_NAMES = [
 	"planner_plan_submit",
@@ -239,12 +240,6 @@ function blocked(
 	text: string,
 ): PlannerArtifactToolExecutionResult {
 	return { status: "blocked", toolName, text, details: null };
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
 }
 
 function requiredString(params: Record<string, unknown>, key: string): string {

@@ -11,6 +11,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { asObject } from "./values";
 
 export const PLANNER_QUESTION_TOOL_NAMES = [
 	"planner_questions_submit",
@@ -186,12 +187,6 @@ function optionalBoolean(
 ): boolean | undefined {
 	const value = params[key];
 	return typeof value === "boolean" ? value : undefined;
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object"
-		? (value as Record<string, unknown>)
-		: {};
 }
 
 function applied(

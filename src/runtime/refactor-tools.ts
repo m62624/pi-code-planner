@@ -19,6 +19,7 @@ import {
 	validateRefactorCategoryReviews,
 	validateRefactorReviewMarkdown,
 } from "./refactor-review";
+import { asObject } from "./values";
 
 export const PLANNER_REFACTOR_TOOL_NAMES = ["planner_refactor_review"] as const;
 export type PlannerRefactorToolName =
@@ -146,12 +147,6 @@ function blocked(
 	text: string,
 ): PlannerRefactorToolExecutionResult {
 	return { status: "blocked", toolName, text, details: null };
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
 }
 
 function requiredString(params: Record<string, unknown>, key: string): string {

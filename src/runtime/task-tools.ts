@@ -9,6 +9,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { asObject } from "./values";
 
 export const PLANNER_TASK_TOOL_NAMES = ["planner_task_upsert"] as const;
 export type PlannerTaskToolName = (typeof PLANNER_TASK_TOOL_NAMES)[number];
@@ -120,12 +121,6 @@ function upsertTaskSummary<T extends { taskId: string }>(
 
 function blocked(toolName: PlannerTaskToolName, text: string) {
 	return { status: "blocked" as const, toolName, text, details: null };
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
 }
 
 function requiredString(params: Record<string, unknown>, key: string): string {

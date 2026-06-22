@@ -1,3 +1,4 @@
+import { asObject } from "./values";
 export const DOUBT_REVIEW_TOOL_NAMES = ["planner_doubt_review"] as const;
 export type PlannerDoubtReviewToolName =
 	(typeof DOUBT_REVIEW_TOOL_NAMES)[number];
@@ -588,12 +589,6 @@ function formatList(values: readonly string[]): string {
 	return values.length
 		? values.map((value) => `- ${value}`).join("\n")
 		: "- (none)";
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
 }
 
 function arrayOfObjects(

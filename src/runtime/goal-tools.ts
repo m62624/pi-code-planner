@@ -21,6 +21,7 @@ import {
 	completePlannerStep,
 	startPlannerStep,
 } from "./state-machine";
+import { asObject } from "./values";
 
 export const PLANNER_GOAL_TOOL_NAMES = [
 	"planner_goal_submit",
@@ -187,12 +188,6 @@ function optionalString(
 	return typeof value === "string" && value.trim().length > 0
 		? value.trim()
 		: null;
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object"
-		? (value as Record<string, unknown>)
-		: {};
 }
 
 function applied(
