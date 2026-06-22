@@ -8,6 +8,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { requiredString } from "./params";
 import {
 	formatRefactorReviewMarkdown,
 	REFACTOR_REVIEW_CATEGORIES,
@@ -147,14 +148,6 @@ function blocked(
 	text: string,
 ): PlannerRefactorToolExecutionResult {
 	return { status: "blocked", toolName, text, details: null };
-}
-
-function requiredString(params: Record<string, unknown>, key: string): string {
-	const value = params[key];
-	if (typeof value !== "string" || value.trim().length === 0) {
-		throw new TypeError(`${key} must be a non-empty string.`);
-	}
-	return value.trim();
 }
 
 function optionalString(

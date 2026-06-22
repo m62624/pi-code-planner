@@ -9,6 +9,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { requiredString } from "./params";
 import { asObject } from "./values";
 
 export const PLANNER_TASK_TOOL_NAMES = ["planner_task_upsert"] as const;
@@ -121,14 +122,6 @@ function upsertTaskSummary<T extends { taskId: string }>(
 
 function blocked(toolName: PlannerTaskToolName, text: string) {
 	return { status: "blocked" as const, toolName, text, details: null };
-}
-
-function requiredString(params: Record<string, unknown>, key: string): string {
-	const value = params[key];
-	if (typeof value !== "string" || !value.trim()) {
-		throw new TypeError(`${key} must be a non-empty string.`);
-	}
-	return value.trim();
 }
 
 function stringArray(value: unknown, key: string): string[] {

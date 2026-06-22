@@ -11,6 +11,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { requiredString } from "./params";
 import { asObject } from "./values";
 
 export const PLANNER_STUCK_TOOL_NAMES = ["planner_report_stuck"] as const;
@@ -375,14 +376,6 @@ function requiredStuckType(params: Record<string, unknown>): PlannerStuckType {
 		);
 	}
 	return value as PlannerStuckType;
-}
-
-function requiredString(params: Record<string, unknown>, key: string): string {
-	const value = params[key];
-	if (typeof value !== "string" || !value.trim()) {
-		throw new TypeError(`${key} must be a non-empty string.`);
-	}
-	return value.trim();
 }
 
 function requiredBoolean(

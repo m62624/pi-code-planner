@@ -35,6 +35,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { requiredString } from "./params";
 import type { PlannerToolResult } from "./tool-result";
 import { asObject } from "./values";
 
@@ -2086,14 +2087,6 @@ function requireWorktreePath(state: PlanStateRecord): string {
 		throw new Error("Planner contract tools require state.worktreePath.");
 	}
 	return state.worktreePath;
-}
-
-function requiredString(params: Record<string, unknown>, key: string): string {
-	const value = params[key];
-	if (typeof value !== "string" || value.trim().length === 0) {
-		throw new TypeError(`${key} must be a non-empty string.`);
-	}
-	return value.trim();
 }
 
 function optionalString(value: unknown): string | null {

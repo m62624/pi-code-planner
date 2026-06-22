@@ -1,3 +1,4 @@
+import { requiredString } from "./params";
 import { asObject } from "./values";
 export const DOUBT_REVIEW_TOOL_NAMES = ["planner_doubt_review"] as const;
 export type PlannerDoubtReviewToolName =
@@ -611,14 +612,6 @@ function requiredId(params: Record<string, unknown>, key: string): string {
 		throw new TypeError(`${key} must be lowercase kebab-case.`);
 	}
 	return value;
-}
-
-function requiredString(params: Record<string, unknown>, key: string): string {
-	const value = params[key];
-	if (typeof value !== "string" || !value.trim()) {
-		throw new TypeError(`${key} must be a non-empty string.`);
-	}
-	return value.trim();
 }
 
 function requiredStringArray(value: unknown, key: string): string[] {
