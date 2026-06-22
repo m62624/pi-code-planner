@@ -1,4 +1,3 @@
-import { isAbsolute, relative, resolve } from "node:path";
 import {
 	type ExtensionAPI,
 	type ExtensionCommandContext,
@@ -30,6 +29,7 @@ import {
 } from "./index.tool-visibility";
 import { syncBundledInstructionFiles } from "./instructions/defaults";
 import { createInstructionPaths } from "./instructions/paths";
+import { isPathInsideOrEqual } from "./path-utils";
 import { buildPlannerAboutReport } from "./runtime/about";
 import {
 	buildAcceptedPlanCompletionPrompt,
@@ -4212,13 +4212,6 @@ function buildPlannerExitPrompt(input: {
 		"Use /planner-resume to return to the planner worktree session.",
 		"Use /planner-finish only after the plan is complete and ready for export/cleanup.",
 	].join("\n");
-}
-
-function isPathInsideOrEqual(path: string, root: string): boolean {
-	const resolvedPath = resolve(path);
-	const resolvedRoot = resolve(root);
-	const rel = relative(resolvedRoot, resolvedPath);
-	return rel.length === 0 || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
 async function safeNotify(

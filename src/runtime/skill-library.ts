@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
+import { isPathInsideOrEqual } from "../path-utils";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerFs } from "../storage/fs";
 import { readJsonIfExists, writeJson } from "../storage/json";
@@ -839,11 +840,4 @@ function blocked(text: string): PlannerSkillCreateResult {
 		text,
 		details: null,
 	};
-}
-
-function isPathInsideOrEqual(path: string, root: string): boolean {
-	const resolvedPath = resolve(path);
-	const resolvedRoot = resolve(root);
-	const rel = relative(resolvedRoot, resolvedPath);
-	return rel.length === 0 || (!rel.startsWith("..") && !isAbsolute(rel));
 }
