@@ -28,6 +28,7 @@ import {
 	runPlannerOrchestrator,
 } from "./orchestrator";
 import { validateTaskMergeScopeAudit } from "./tdd-evidence";
+import type { PlannerToolResult } from "./tool-result";
 import { asObject } from "./values";
 
 export const PLANNER_GIT_TOOL_NAMES = [
@@ -51,12 +52,8 @@ export interface PlannerGitToolExecutionInput {
 	params: unknown;
 }
 
-export interface PlannerGitToolExecutionResult {
-	status: "applied" | "blocked";
-	toolName: PlannerGitToolName;
-	text: string;
-	details: unknown;
-}
+export type PlannerGitToolExecutionResult =
+	PlannerToolResult<PlannerGitToolName>;
 
 interface ReadyGitContext {
 	status: "ready";

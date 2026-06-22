@@ -21,6 +21,7 @@ import {
 	completePlannerStep,
 	startPlannerStep,
 } from "./state-machine";
+import type { PlannerToolResult } from "./tool-result";
 import { asObject } from "./values";
 
 export const PLANNER_GOAL_TOOL_NAMES = [
@@ -38,12 +39,8 @@ export interface PlannerGoalToolExecutionInput {
 	params: unknown;
 }
 
-export interface PlannerGoalToolExecutionResult {
-	status: "applied" | "blocked";
-	toolName: PlannerGoalToolName;
-	text: string;
-	details: unknown;
-}
+export type PlannerGoalToolExecutionResult =
+	PlannerToolResult<PlannerGoalToolName>;
 
 export async function executePlannerGoalTool(
 	input: PlannerGoalToolExecutionInput,

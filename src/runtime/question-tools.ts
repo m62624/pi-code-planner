@@ -11,6 +11,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import type { PlannerToolResult } from "./tool-result";
 import { asObject } from "./values";
 
 export const PLANNER_QUESTION_TOOL_NAMES = [
@@ -29,12 +30,8 @@ export interface PlannerQuestionToolExecutionInput {
 	params: unknown;
 }
 
-export interface PlannerQuestionToolExecutionResult {
-	status: "applied" | "blocked";
-	toolName: PlannerQuestionToolName;
-	text: string;
-	details: unknown;
-}
+export type PlannerQuestionToolExecutionResult =
+	PlannerToolResult<PlannerQuestionToolName>;
 
 export async function executePlannerQuestionTool(
 	input: PlannerQuestionToolExecutionInput,

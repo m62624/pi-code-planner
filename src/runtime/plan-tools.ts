@@ -39,6 +39,7 @@ import {
 	resolvePlannerPlanId,
 	validatePlannerPlanTitle,
 } from "./plan-naming";
+import type { PlannerToolResult } from "./tool-result";
 import { asObject } from "./values";
 
 export const PLANNER_PLAN_TOOL_NAMES = ["planner_create_plan"] as const;
@@ -53,12 +54,8 @@ export interface PlannerPlanToolExecutionInput {
 	params: unknown;
 }
 
-export interface PlannerPlanToolExecutionResult {
-	status: "applied" | "blocked";
-	toolName: PlannerPlanToolName;
-	text: string;
-	details: unknown;
-}
+export type PlannerPlanToolExecutionResult =
+	PlannerToolResult<PlannerPlanToolName>;
 
 export async function executePlannerPlanTool(
 	input: PlannerPlanToolExecutionInput,

@@ -10,6 +10,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import type { PlannerToolResult } from "./tool-result";
 import { asObject } from "./values";
 
 export const PLANNER_DEBUG_TOOL_NAMES = [
@@ -50,12 +51,8 @@ export const DEBUG_RESULT_NEXT_ACTIONS = [
 ] as const;
 export type DebugResultNextAction = (typeof DEBUG_RESULT_NEXT_ACTIONS)[number];
 
-export interface PlannerDebugToolExecutionResult {
-	status: "applied" | "blocked";
-	toolName: PlannerDebugToolName;
-	text: string;
-	details: unknown;
-}
+export type PlannerDebugToolExecutionResult =
+	PlannerToolResult<PlannerDebugToolName>;
 
 export async function initializePlannerDebugSession(input: {
 	fs: PlannerFs;

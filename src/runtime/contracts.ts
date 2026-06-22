@@ -35,6 +35,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import type { PlannerToolResult } from "./tool-result";
 import { asObject } from "./values";
 
 export const PLANNER_CONTRACT_TOOL_NAMES = [
@@ -154,12 +155,8 @@ export interface PlannerContractsManifest {
 	touchedFiles: PlannerContractTouchedFile[];
 }
 
-export interface PlannerContractToolResult {
-	status: "applied" | "blocked";
-	toolName: PlannerContractToolName;
-	text: string;
-	details: unknown;
-}
+export type PlannerContractToolResult =
+	PlannerToolResult<PlannerContractToolName>;
 
 export async function executePlannerContractTool(input: {
 	fs: PlannerFs;
