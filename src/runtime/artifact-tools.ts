@@ -1,8 +1,13 @@
 import { join } from "node:path";
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
-import type { PlanStoragePaths, ProjectStoragePaths } from "../storage/paths";
+import {
+	createTaskStoragePaths,
+	type PlanStoragePaths,
+	type ProjectStoragePaths,
+} from "../storage/paths";
 import { readPlanRecord } from "../storage/plan-store";
+import { readActivePlanContext } from "./active-plan";
 import { ARTIFACT_CANONICAL_SCHEMA, formatArtifactEcho } from "./artifact-echo";
 import {
 	checkPlannerOrchestratorToolAllowed,
@@ -267,4 +272,187 @@ function requiredStringArray(
 
 function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
+}
+
+export const PLANNER_ARTIFACT_READ_TOOL_NAME = "planner_artifact_read";
+
+/** Plan-level artifacts that live in the plan dir under the extension dir. */
+const PLAN_LEVEL_ARTIFACTS = [
+	"request",
+	"goal",
+	"discovery",
+	"plan",
+	"questions",
+	"decisions",
+	"verify",
+	"final_summary",
+] as const;
+
+/** Task-scoped artifacts read from the active (or named) task's directory. */
+const TASK_LEVEL_ARTIFACTS = ["task", "tdd", "refactor"] as const;
+
+export const PLANNER_READABLE_ARTIFACTS = [
+	...PLAN_LEVEL_ARTIFACTS,
+	...TASK_LEVEL_ARTIFACTS,
+] as const;
+
+export type PlannerReadableArtifact =
+	(typeof PLANNER_READABLE_ARTIFACTS)[number];
+
+export interface PlannerArtifactReadToolResult {
+	status: "applied" | "blocked";
+	toolName: typeof PLANNER_ARTIFACT_READ_TOOL_NAME;
+	text: string;
+	details: {
+		artifact: string | null;
+		path: string | null;
+		taskId: string | null;
+		exists: boolean;
+	} | null;
+}
+
+/**
+ * Read a planner-managed markdown artifact from the extension storage dir
+ * (getAgentDir/extensions/pi-code-planner/plans/...), NOT from the worktree.
+ *
+ * Built-in read/bash cannot reach these files reliably: they live outside the
+ * project worktree, so security/approval extensions that restrict tool calls to
+ * the worktree block them, and a model that guesses a worktree-relative path
+ * hits ENOENT. This wrapper is the single sanctioned way for the model to
+ * re-read request/goal/discovery/plan/questions/decisions/verify/final_summary
+ * and the active task's task/tdd/refactor markdown. Cross-stage by design — a
+ * re-read is always safe — so it bypasses the stage policy like planner_status.
+ */
+export async function executePlannerArtifactReadTool(input: {
+	fs: PlannerFs;
+	projectPaths: ProjectStoragePaths;
+	params: unknown;
+}): Promise<PlannerArtifactReadToolResult> {
+	const toolName = PLANNER_ARTIFACT_READ_TOOL_NAME;
+	const params = asObject(input.params);
+	const artifact = stringOrNull(params.artifact);
+	if (!artifact || !isReadableArtifact(artifact)) {
+		return readBlocked(
+			`planner_artifact_read requires an "artifact" parameter, one of: ${PLANNER_READABLE_ARTIFACTS.join(", ")}.`,
+			{ artifact: artifact ?? null, path: null, taskId: null, exists: false },
+		);
+	}
+
+	const context = await readActivePlanContext({
+		fs: input.fs,
+		projectPaths: input.projectPaths,
+	});
+	if (context.status !== "ready") {
+		return readBlocked(
+			`planner_artifact_read requires a ready active plan context (${context.reason}).`,
+			{ artifact, path: null, taskId: null, exists: false },
+		);
+	}
+
+	const resolved = resolveArtifactPath({
+		artifact,
+		planPaths: context.planPaths,
+		activeTaskId: context.state.activeTaskId,
+		requestedTaskId: stringOrNull(params.taskId),
+	});
+	if (!resolved.ok) {
+		return readBlocked(resolved.error, {
+			artifact,
+			path: null,
+			taskId: resolved.taskId,
+			exists: false,
+		});
+	}
+
+	const exists = await input.fs.exists(resolved.path);
+	const raw = exists ? await input.fs.readText(resolved.path) : "";
+	const body = raw.trim();
+	const header = `Artifact: ${resolved.path}`;
+	const text = !exists
+		? `${header}\n\n(${artifact} has not been written yet — the file does not exist.)`
+		: body.length === 0
+			? `${header}\n\n(${artifact} exists but is empty.)`
+			: `${header}\n\n${raw.trimEnd()}`;
+
+	return {
+		status: "applied",
+		toolName,
+		text,
+		details: { artifact, path: resolved.path, taskId: resolved.taskId, exists },
+	};
+}
+
+function resolveArtifactPath(input: {
+	artifact: PlannerReadableArtifact;
+	planPaths: PlanStoragePaths;
+	activeTaskId: string | null;
+	requestedTaskId: string | null;
+}):
+	| { ok: true; path: string; taskId: string | null }
+	| { ok: false; error: string; taskId: string | null } {
+	const { planPaths } = input;
+	switch (input.artifact) {
+		case "request":
+			return { ok: true, path: planPaths.requestMd, taskId: null };
+		case "goal":
+			return { ok: true, path: planPaths.goalMd, taskId: null };
+		case "discovery":
+			return { ok: true, path: planPaths.discoveryMd, taskId: null };
+		case "plan":
+			return { ok: true, path: planPaths.planMd, taskId: null };
+		case "questions":
+			return { ok: true, path: planPaths.questionsMd, taskId: null };
+		case "decisions":
+			return { ok: true, path: planPaths.decisionsMd, taskId: null };
+		case "verify":
+			return { ok: true, path: planPaths.verifyMd, taskId: null };
+		case "final_summary":
+			return {
+				ok: true,
+				path: join(planPaths.planDir, "final_summary.md"),
+				taskId: null,
+			};
+		case "task":
+		case "tdd":
+		case "refactor": {
+			const taskId = input.requestedTaskId ?? input.activeTaskId;
+			if (!taskId) {
+				return {
+					ok: false,
+					error: `planner_artifact_read of "${input.artifact}" needs a task: pass a "taskId" or select an active task first.`,
+					taskId: null,
+				};
+			}
+			const taskPaths = createTaskStoragePaths(planPaths, taskId);
+			const path =
+				input.artifact === "task"
+					? taskPaths.taskMd
+					: input.artifact === "tdd"
+						? taskPaths.tddMd
+						: taskPaths.refactorMd;
+			return { ok: true, path, taskId };
+		}
+	}
+}
+
+function isReadableArtifact(value: string): value is PlannerReadableArtifact {
+	return (PLANNER_READABLE_ARTIFACTS as readonly string[]).includes(value);
+}
+
+function stringOrNull(value: unknown): string | null {
+	return typeof value === "string" && value.trim().length > 0
+		? value.trim()
+		: null;
+}
+
+function readBlocked(
+	text: string,
+	details: NonNullable<PlannerArtifactReadToolResult["details"]>,
+): PlannerArtifactReadToolResult {
+	return {
+		status: "blocked",
+		toolName: PLANNER_ARTIFACT_READ_TOOL_NAME,
+		text,
+		details,
+	};
 }

@@ -49,7 +49,7 @@ Treat done as a user-decision gate, not proof that the implementation is correct
 
 ## Change Request Reload
 
-When returning to `planning/read_context`, reread full `plan.md`, `decisions.md`, user feedback, and `discovery.md`. Treat the previous implementation as current project context, not a blank project. Preserve completed work, revise the plan only where the change request requires it, then continue toward execution. Existing completed task artifacts remain audit history. Do not repeat tasks under `Completed Work`; create new revision task IDs only for work under `Remaining Work`.
+When returning to `planning/read_context`, reread full `plan.md`, `decisions.md`, user feedback, and `discovery.md` via `planner_artifact_read`. Treat the previous implementation as current project context, not a blank project. Preserve completed work, revise the plan only where the change request requires it, then continue toward execution. Existing completed task artifacts remain audit history. Do not repeat tasks under `Completed Work`; create new revision task IDs only for work under `Remaining Work`.
 
 ## Planner Skill Memory
 

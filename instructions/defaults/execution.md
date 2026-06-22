@@ -6,10 +6,10 @@ Execute exactly one active task at a time through tests-first development, imple
 
 ## Context Reload Policy
 
-- At `prepare_task`, call `planner_status`, reread the full `plan.md`, read answered `questions.md` and `decisions.md`, read the selected `task.md`, then inspect `discovery.md` and use focused project search only if needed.
+- At `prepare_task`, call `planner_status`, reread the full `plan.md`, read answered `questions.md` and `decisions.md`, read the selected `task.md`, then inspect `discovery.md` — all via `planner_artifact_read`, not the built-in read tool — and use focused project search only if needed.
 - If `task.md` lists a Local Contract Context, call `planner_contract_route/read` before source reads. AGENTS.md files are repository-owned routing memory; higher levels route, nearest levels explain.
-- During one task, reread `task.md`, `tdd.md`, `refactor.md`, and focused source files only when the current action needs details not already recorded.
-- After `compact_task`, do not carry live reasoning into the next task. Call `planner_status`, reread the full `plan.md`, inspect task status, then load the next `task.md`.
+- During one task, reread `task.md`, `tdd.md`, `refactor.md` (via `planner_artifact_read`), and focused source files only when the current action needs details not already recorded.
+- After `compact_task`, do not carry live reasoning into the next task. Call `planner_status`, reread the full `plan.md` via `planner_artifact_read`, inspect task status, then load the next `task.md`.
 - After recovery or auto-compact, call `planner_status` before any edit or check.
 
 ## Strict Task Lifecycle
@@ -91,11 +91,11 @@ If a task allows more than one interpretation of mechanism or integration approa
 
 ## manual-compact
 
-Preserve the plan id, active task id, exact branch, current step, task artifact paths, TDD evidence, refactor findings, final checks, open risks, and exact next action. After compaction, call `planner_status`. For `compact_task`, reload full `plan.md` before choosing the next task.
+Preserve the plan id, active task id, exact branch, current step, task artifact paths, TDD evidence, refactor findings, final checks, open risks, and exact next action. After compaction, call `planner_status`. For `compact_task`, reload full `plan.md` via `planner_artifact_read` before choosing the next task.
 
 ## auto-compact
 
-Call `planner_status` immediately. Do not continue editing from chat memory. Restore the exact task from persisted state, inspect the git gate, then reread the artifacts required by the current step. Read source files only when the exact action needs details not present in the artifacts. If scope may have changed, reread full `plan.md`.
+Call `planner_status` immediately. Do not continue editing from chat memory. Restore the exact task from persisted state, inspect the git gate, then reread the artifacts required by the current step via `planner_artifact_read`. Read source files only when the exact action needs details not present in the artifacts. If scope may have changed, reread full `plan.md` via `planner_artifact_read`.
 
 ## If You Do Not Know What To Do Next
 

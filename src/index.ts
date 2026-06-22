@@ -36,8 +36,11 @@ import {
 } from "./runtime/accepted-plan";
 import { readActivePlanContext } from "./runtime/active-plan";
 import {
+	executePlannerArtifactReadTool,
 	executePlannerArtifactTool,
+	PLANNER_ARTIFACT_READ_TOOL_NAME,
 	PLANNER_ARTIFACT_TOOL_NAMES,
+	PLANNER_READABLE_ARTIFACTS,
 	type PlannerArtifactToolName,
 } from "./runtime/artifact-tools";
 import {
@@ -725,6 +728,27 @@ const SUMMARY_SUBMIT_TOOL_PARAMETERS = {
 		},
 	},
 	required: ["content"],
+	additionalProperties: false,
+} as const;
+
+const ARTIFACT_READ_TOOL_PARAMETERS = {
+	type: "object",
+	description:
+		"Read a planner-managed markdown artifact from the extension storage dir (outside the worktree). Use this instead of the built-in read tool for planner artifacts.",
+	properties: {
+		artifact: {
+			type: "string",
+			enum: [...PLANNER_READABLE_ARTIFACTS],
+			description:
+				"Which planner artifact to read: request, goal, discovery, plan, questions, decisions, verify, final_summary (plan-level), or task, tdd, refactor (task-level; uses the active task unless taskId is given).",
+		},
+		taskId: {
+			type: "string",
+			description:
+				"Optional task id for task-level artifacts (task/tdd/refactor). Defaults to the active task.",
+		},
+	},
+	required: ["artifact"],
 	additionalProperties: false,
 } as const;
 
@@ -2736,6 +2760,34 @@ function registerPlannerTools(
 			},
 		});
 	}
+
+	pi.registerTool({
+		name: PLANNER_ARTIFACT_READ_TOOL_NAME,
+		label: "Planner Artifact Read",
+		description:
+			"Read a planner-managed markdown artifact (request/goal/discovery/plan/questions/decisions/verify/final_summary, or a task's task/tdd/refactor) from the extension storage dir. Built-in read cannot reach these files.",
+		promptSnippet:
+			"Use planner_artifact_read to re-read any planner artifact (request, goal, discovery, plan, questions, decisions, verify, final_summary, task, tdd, refactor). They live outside the worktree, so the built-in read tool cannot reach them and security extensions that restrict the worktree will block it. Never guess a worktree path for these files.",
+		parameters: ARTIFACT_READ_TOOL_PARAMETERS as never,
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const fs = createNodeFs();
+			const projectPaths = await createRuntimeProjectPaths(ctx.cwd);
+			await recordPlannerToolActivityForProject({
+				fs,
+				projectPaths,
+				now: Date.now(),
+			});
+			const result = await executePlannerArtifactReadTool({
+				fs,
+				projectPaths,
+				params,
+			});
+			return {
+				content: [{ type: "text", text: result.text }],
+				details: result,
+			};
+		},
+	});
 
 	pi.registerTool({
 		name: "planner_skill_create",

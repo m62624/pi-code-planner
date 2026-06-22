@@ -127,7 +127,7 @@ function stateMachineDecision(
 			requiredTransition: null,
 			reason: "Draft the normalized user goal before discovery.",
 			modelMessage:
-				"Read request.md, draft goal.md content in your own words, then call planner_goal_submit. Do not edit goal.md directly; the wrapper writes it. Do not inspect project source. Evidence-based clarification questions belong after discovery.",
+				'Read request.md via planner_artifact_read (artifact: "request"), not the built-in read tool — it lives outside the worktree. Draft goal.md content in your own words, then call planner_goal_submit. Do not edit goal.md directly; the wrapper writes it. Do not inspect project source. Evidence-based clarification questions belong after discovery.',
 		};
 	}
 	if (
