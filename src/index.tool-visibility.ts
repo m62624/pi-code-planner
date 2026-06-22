@@ -50,6 +50,7 @@ let contractGateActive: boolean = false;
 
 const CONTRACT_GATE_ALLOWED: ReadonlySet<string> = new Set([
 	"planner_status",
+	"planner_artifact_read",
 	"planner_contract_scan",
 	"planner_contract_route",
 	"planner_contract_read",

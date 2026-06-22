@@ -97,7 +97,7 @@ export function buildPlannerHandoffPrompt(input: {
 		`Planner-list description language: ${descriptionLanguage}`,
 		"",
 		"Call planner_status now.",
-		"Read request.md, draft the requested goal content in your own words, then call planner_goal_submit.",
+		'Read request.md with planner_artifact_read (artifact: "request"), NOT the built-in read tool or shell — request.md lives in the extension storage dir outside this worktree, so a worktree path will not find it. Then draft the requested goal content in your own words and call planner_goal_submit.',
 		"Do not edit goal.md directly with built-in write/edit tools; planner_goal_submit writes goal.md.",
 		`When calling planner_goal_submit, generate the title in ${titleLanguage} and the short planner-list description in ${descriptionLanguage}.`,
 		"Show the full goal draft to the user and wait for explicit approval.",

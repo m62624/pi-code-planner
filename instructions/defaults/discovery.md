@@ -7,7 +7,7 @@ Become familiar with the project before planning. Keep this stage cheap for a lo
 ## Strict Step Order
 
 1. `scan_project_structure`
-   - Read `goal.md` for normal `/planner-create` plans.
+   - Read `goal.md` with `planner_artifact_read` (`artifact: "goal"`) for normal `/planner-create` plans, not the built-in read tool.
    - If `planner_status` reports `creationMethod: improve`, this is a discovery-first plan: do not treat empty `goal.md` as a blocker and do not read `request.md` as the source goal. Use repository evidence to discover a bounded self-improvement goal, then return to `intake/draft_goal` after discovery.
 
    **AGENTS.md First Gate — before reading any project file or running any shell command:**
@@ -108,7 +108,7 @@ Preserve the approved goal, `discovery.md`, relevant paths, commands, open quest
 
 ## auto-compact
 
-Call `planner_status` immediately. Read `discovery.md` and continue the persisted step. Read additional source files only when the current context is insufficient.
+Call `planner_status` immediately. Read `discovery.md` via `planner_artifact_read` and continue the persisted step. Read additional source files only when the current context is insufficient.
 
 ## If You Do Not Know What To Do Next
 

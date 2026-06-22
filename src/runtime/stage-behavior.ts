@@ -717,6 +717,11 @@ export function checkPlannerStageBehaviorWrapperTool(input: {
 		return allowBehaviorTool(input.tool);
 	}
 
+	// Read-only re-read of a planner artifact; safe in every stage/step.
+	if (input.tool === "planner_artifact_read") {
+		return allowBehaviorTool(input.tool);
+	}
+
 	if (input.tool === "planner_git_inspect") {
 		return allowBehaviorTool(input.tool);
 	}

@@ -56,6 +56,7 @@ While a planner plan is active, the persisted worktree path reported by `planner
 - Do not run `git` through shell, and do not use aliases, scripts, or indirect commands to bypass the wrappers.
 - Built-in project write/edit calls are enabled only for the exact execution steps reported by `planner_status` (`write_tests`, `implement_task`, `refactor_task`). The planner does not infer file roles from names.
 - Built-in write/edit cannot modify planner-managed structured artifacts (`goal.md`, `questions.md`, the active task's `tdd.md`); use their submit wrappers instead.
+- Do not read planner artifacts (`request.md`, `goal.md`, `discovery.md`, `plan.md`, `questions.md`, `decisions.md`, `verify.md`, `final_summary.md`, and a task's `task.md`/`tdd.md`/`refactor.md`) with the built-in read tool or shell. They live in the extension storage dir outside the worktree, so a worktree-relative path 404s and security/approval extensions that fence the worktree will block the read. Always use `planner_artifact_read` (pass `artifact:` and, for task files, `taskId:` or rely on the active task). Never guess a path for these files.
 - Never edit the original checkout while a planner worktree is active. All project changes belong in the persisted worktree path.
 - Do not reset, force checkout, abort, delete, or discard changes without explicit user approval through the recovery flow.
 

@@ -7,7 +7,7 @@ Turn the user's raw request into an explicit approved goal before reading projec
 ## Strict Step Order
 
 1. `draft_goal`
-   - Read `request.md` and draft the `goal.md` content in your own words: requested outcome, current assumptions, non-goals, and constraints.
+   - Read `request.md` with `planner_artifact_read` (`artifact: "request"`), not the built-in read tool — it lives outside the worktree. Then draft the `goal.md` content in your own words: requested outcome, current assumptions, non-goals, and constraints.
    - Do not invent project-specific questions before reading project evidence.
    - Call `planner_goal_submit` with the full goal markdown, proposed title, and short planner-list description. The wrapper writes `goal.md`; built-in write/edit cannot.
    - Use `metadata.titleLanguage` from `planner_status` for the title unless the user explicitly requests another language. The title is user-facing and may contain Unicode; it is not the stable branch-safe `planId`.
@@ -61,7 +61,7 @@ If doubt remains, revise `goal.md` or ask one concrete intake question. Do not e
 
 ## auto-compact
 
-Call `planner_status` immediately. Read `request.md` and `goal.md`, then resume the exact intake step. Do not begin discovery without explicit approval.
+Call `planner_status` immediately. Read `request.md` and `goal.md` via `planner_artifact_read`, then resume the exact intake step. Do not begin discovery without explicit approval.
 
 ## If You Do Not Know What To Do Next
 

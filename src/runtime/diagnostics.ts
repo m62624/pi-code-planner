@@ -53,6 +53,13 @@ const RECOVERY_TOOLS = new Set([
 	"planner_recovery_report",
 ]);
 
+// Read-only tools that inspect planner state without advancing it. They must be
+// NEUTRAL for stuck detection: an `applied` read should not reset the blocked
+// streak (otherwise a model looping "read, read, read" while it cannot progress
+// would mask the stall) and a read can never itself be the stuck signal. They
+// neither grow nor reset the streak — only real work tools move the counter.
+const NEUTRAL_TOOLS = new Set(["planner_status", "planner_artifact_read"]);
+
 export function createDiagnosticsRecord(): PlannerDiagnosticsRecord {
 	return {
 		schemaVersion: DIAGNOSTICS_SCHEMA_VERSION,
@@ -126,8 +133,11 @@ async function writeDiagnosticsRecord(
  * logic can be tested without the filesystem.
  *
  * Counter semantics (the false-positive-resistant heuristic):
- * - `applied` results RESET the blocked streak — legitimately repeated commands
- *   (e.g. several contract reads) are applied, so they never accumulate.
+ * - NEUTRAL read-only tools (planner_status, planner_artifact_read) leave the
+ *   streak untouched — they neither prove progress nor cause a stall, so a model
+ *   that loops on reads cannot mask a stall by resetting the streak.
+ * - `applied` work results RESET the blocked streak — legitimately repeated
+ *   commands (e.g. several contract reads) are applied, so they never accumulate.
  * - `blocked`/`error` results GROW the streak — a model that alternates many
  *   commands but makes no progress trips the threshold regardless of the
  *   specific pattern.
@@ -142,6 +152,10 @@ export function applyToolEvent(
 	const recoveryCalls = RECOVERY_TOOLS.has(event.tool)
 		? record.recoveryCalls + 1
 		: record.recoveryCalls;
+
+	if (NEUTRAL_TOOLS.has(event.tool)) {
+		return { ...record, toolTimeline, recoveryCalls };
+	}
 
 	if (event.status === "applied") {
 		return {

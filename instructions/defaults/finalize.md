@@ -14,8 +14,8 @@ Verify the complete plan branch as one integrated result, write a durable user-f
    - Request planner-controlled compact after integrated checks and before doubt review. This deliberately clears live confidence from the previous loop.
    - After compaction, call `planner_complete_compact`, then `planner_status`, then continue from persisted artifacts only.
 3. `doubt_review`
-   - Before asking for acceptance, deliberately doubt the completed result. Reread `goal.md`, `plan.md`, task artifacts, `verify.md`, and the final worktree diff.
-   - Reread `discovery.md` `## Verification Protocol`. Every listed command/check is mandatory evidence for `planner_doubt_review`.
+   - Before asking for acceptance, deliberately doubt the completed result. Reread `goal.md`, `plan.md`, task artifacts, and `verify.md` via `planner_artifact_read` (not the built-in read tool), plus the final worktree diff.
+   - Reread `discovery.md` `## Verification Protocol` via `planner_artifact_read`. Every listed command/check is mandatory evidence for `planner_doubt_review`.
    - Treat chat memory from before `compact_before_doubt` as untrusted. Reconstruct the result from artifacts, git state, and focused file reads.
    - Start with a `Possible Errors` list in `metadata.doubtReviewLanguage`. These are suspicions, not bugs yet. Assign every possible error to one risk category: `requirement_mismatch`, `missing_test`, `boundary_case`, `integration_break`, `state_machine_error`, `persistence_error`, `recovery_error`, `wrong_file_scope`, `user_flow_regression`, or `cleanup_or_debug_leftover`.
    - Fill `verificationEvidence` with every command/check from `## Verification Protocol`. Missing evidence means the result is not verified. If any required command failed, was not run, or is unknown, create a `proven_bug` or `needs_probe` finding naming that command, and do not continue to `write_final_summary`.
@@ -114,7 +114,7 @@ Preserve `final_summary.md`, project-level verification results, changed-file su
 
 ## auto-compact
 
-Call `planner_status` immediately. Restore the exact finalize step. If it is `compact_before_doubt`, complete the compact before audit work. If it is `doubt_review`, reread `goal.md`, `plan.md`, `discovery.md`, task artifacts, `verify.md`, AGENTS.md contracts, and focused source files before deciding. Do not export or cleanup until explicit user acceptance is recorded.
+Call `planner_status` immediately. Restore the exact finalize step. If it is `compact_before_doubt`, complete the compact before audit work. If it is `doubt_review`, reread `goal.md`, `plan.md`, `discovery.md`, task artifacts, and `verify.md` via `planner_artifact_read`, plus AGENTS.md contracts and focused source files before deciding. Do not export or cleanup until explicit user acceptance is recorded.
 
 ## If You Do Not Know What To Do Next
 

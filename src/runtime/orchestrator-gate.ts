@@ -39,7 +39,12 @@ export function filterPlannerWrapperToolsForLifecycle(input: {
 export function checkPlannerWrapperToolForLifecycle(
 	input: PlannerWrapperLifecycleGateInput,
 ): PlannerWrapperLifecycleGateDecision {
-	if (input.tool === "planner_status") {
+	// planner_status and planner_artifact_read are read-only and must work in any
+	// state, including before the next step is started (stepStatus !== running).
+	if (
+		input.tool === "planner_status" ||
+		input.tool === "planner_artifact_read"
+	) {
 		return allowLifecycleTool(input.tool);
 	}
 

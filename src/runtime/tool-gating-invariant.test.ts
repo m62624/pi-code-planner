@@ -93,7 +93,9 @@ describe("planner tool gating invariant", () => {
 		});
 	}
 
-	it("guard set is exactly [planner_status] at a compact boundary", () => {
+	it("guard set is exactly the always-allowed read tools at a compact boundary", () => {
+		// Only the read-only cross-stage tools survive a compact boundary: state
+		// inspection (planner_status) and artifact re-reads (planner_artifact_read).
 		for (const [stage, stepList] of STEPS) {
 			for (const step of stepList) {
 				const allowed = getAllowedPlannerWrapperTools({
@@ -104,7 +106,10 @@ describe("planner tool gating invariant", () => {
 					requiresCompact: true,
 					debugArtifactsDir: "/tmp/planner-debug",
 				});
-				expect([...allowed]).toEqual(["planner_status"]);
+				expect([...allowed]).toEqual([
+					"planner_status",
+					"planner_artifact_read",
+				]);
 			}
 		}
 	});

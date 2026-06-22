@@ -12,6 +12,7 @@ import type {
 // silent deadlock. Covered by runtime/tool-gating-invariant.test.ts.
 export const PLANNER_WRAPPER_TOOLS = [
 	"planner_status",
+	"planner_artifact_read",
 	"planner_create_plan",
 	"planner_goal_submit",
 	"planner_goal_decide",
@@ -85,8 +86,13 @@ export interface PlannerToolPolicyDecision {
 	hint: string;
 }
 
+// planner_status and planner_artifact_read are read-only and cross-stage: the
+// model must be able to inspect planner state and re-read planner artifacts in
+// every stage, including broken/recovery/compact. A re-read can never advance
+// or corrupt the state machine, so both bypass the step allowlist.
 const ALWAYS_ALLOWED_TOOLS = [
 	"planner_status",
+	"planner_artifact_read",
 ] as const satisfies readonly PlannerWrapperTool[];
 
 const STEP_ALLOWED_TOOLS = {

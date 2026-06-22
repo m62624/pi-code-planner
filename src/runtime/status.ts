@@ -155,7 +155,7 @@ export const PLANNER_STEP_RULES = {
 	draft_goal: stepRule("intake", "draft_goal", {
 		objective: "Rewrite the raw user request as a precise reviewable goal.",
 		requiredActions: [
-			"Read request.md for normal /planner-create plans. For creationMethod=improve, use discovery.md findings as the source goal instead.",
+			'Read request.md with planner_artifact_read (artifact: "request") for normal /planner-create plans — not the built-in read tool, since it lives outside the worktree. For creationMethod=improve, use discovery.md findings as the source goal instead.',
 			"Draft goal.md content in your own words with outcome, assumptions, non-goals, and constraints.",
 			"Propose a short user-facing title in metadata.titleLanguage unless the user explicitly requested another language.",
 			"Propose a very short planner-list description in the metadata.descriptionLanguage reported by planner_status.",
@@ -972,6 +972,7 @@ export async function buildPlannerStatusText(
 		...formatInstructionBundle(instructionBundle),
 		"",
 		"## Planner Artifacts",
+		"Read these with planner_artifact_read (artifact: request|goal|discovery|plan|questions|decisions|verify|final_summary|task|tdd|refactor), NOT the built-in read tool — they live outside the worktree and worktree-fencing security extensions will block raw reads. The paths below are for reference only.",
 		...formatPlannerArtifactLinks(preflight),
 		"",
 		"## Discovery Context Rule",

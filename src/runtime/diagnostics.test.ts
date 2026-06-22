@@ -98,6 +98,28 @@ describe("applyToolEvent counter logic", () => {
 		expect(record.consecutiveBlocked).toBe(0);
 	});
 
+	it("treats read-only tools as neutral: a read loop does NOT reset the streak", () => {
+		let record = createDiagnosticsRecord();
+		record = applyToolEvent(record, event({ ts: 10, status: "blocked" }));
+		record = applyToolEvent(record, event({ ts: 20, status: "blocked" }));
+		// A model that keeps re-reading artifacts while stuck must not be able to
+		// wipe the streak — planner_artifact_read/planner_status are neutral.
+		for (const tool of [
+			"planner_artifact_read",
+			"planner_status",
+			"planner_artifact_read",
+		]) {
+			record = applyToolEvent(
+				record,
+				event({ ts: 30, tool, status: "applied" }),
+			);
+		}
+		expect(record.consecutiveBlocked).toBe(2);
+		expect(record.firstBlockedAt).toBe(10);
+		// Neutral tools still land on the timeline for the report.
+		expect(record.toolTimeline.at(-1)?.tool).toBe("planner_artifact_read");
+	});
+
 	it("counts recovery wrapper calls", () => {
 		let record = createDiagnosticsRecord();
 		record = applyToolEvent(

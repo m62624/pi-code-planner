@@ -144,7 +144,7 @@ export async function executePlannerGoalTool(
 		input.toolName,
 		decision === "approve"
 			? approveMessage
-			: "Planner goal needs revision. Read request.md, apply the user's feedback, and call planner_goal_submit with the revised goal.md.",
+			: 'Planner goal needs revision. Read request.md via planner_artifact_read (artifact: "request"), apply the user\'s feedback, and call planner_goal_submit with the revised goal.md.',
 		{ decision, feedback, state: resumed },
 	);
 }

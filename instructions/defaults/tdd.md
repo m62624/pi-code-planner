@@ -8,7 +8,7 @@ Use strict tests-first development for every execution task. Production implemen
 
 ## Required Sequence
 
-1. During `write_tdd_plan`, read answered `questions.md`, `decisions.md`, `task.md`, existing tests, and project test conventions. Call `planner_tdd_submit` with the `preImplementation` fields: the missing-behavior signal, intended production path, success signal, and files that must stay out of scope. Also note behavior under test, arguments/returns/errors/integration points, edge cases, fixtures/mocks, and focused test commands.
+1. During `write_tdd_plan`, read answered `questions.md`, `decisions.md`, and `task.md` via `planner_artifact_read` (not the built-in read tool), plus existing tests and project test conventions. Call `planner_tdd_submit` with the `preImplementation` fields: the missing-behavior signal, intended production path, success signal, and files that must stay out of scope. Also note behavior under test, arguments/returns/errors/integration points, edge cases, fixtures/mocks, and focused test commands.
 2. During `write_tests`, write tests and required harness wiring only. Re-submit `tdd.md` with changed files, intent, and expected signal. If project files changed, commit through `planner_git_commit`.
 3. During `run_failing_tests`, execute focused checks and record the exact failing signal via `planner_tdd_submit`.
    - **Test Signal Doubt — mandatory before advancing to `implement_task`:**

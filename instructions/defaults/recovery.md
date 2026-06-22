@@ -33,8 +33,8 @@ After recovery resume:
 
 1. Call `planner_status`.
 2. Read the exact stage instruction bundle.
-3. Reread full `plan.md` when scope, task ordering, branch history, or user feedback may have changed.
-4. Reload the active `task.md`, `tdd.md`, summaries, and focused source files only when needed after resuming execution.
+3. Reread full `plan.md` via `planner_artifact_read` when scope, task ordering, branch history, or user feedback may have changed.
+4. Reload the active `task.md`, `tdd.md`, summaries (via `planner_artifact_read`), and focused source files only when needed after resuming execution.
 5. Continue only after the git recovery gate is clear.
 
 ## Evidence Discipline

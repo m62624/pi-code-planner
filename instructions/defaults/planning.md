@@ -9,7 +9,7 @@ Turn verified discovery context into one executable plan and an ordered set of a
 At `planning/read_context`, load context in this order:
 
 1. Call `planner_status`.
-2. Read `discovery.md`, `questions.md`, and `decisions.md`.
+2. Read `discovery.md`, `questions.md`, and `decisions.md` via `planner_artifact_read` (one call per `artifact`), not the built-in read tool.
 3. Use `planner_contract_route/read` for applicable AGENTS.md chains before extra source reads.
 4. Read specific source files only when recorded discovery context and local contracts are insufficient.
 
@@ -98,11 +98,11 @@ When adding new functionality to an existing project, decide: integrate into exi
 
 ## manual-compact
 
-Preserve the full plan goal, constraints, ordered task list, task artifact paths, dependencies, acceptance criteria, open decisions, and `discovery.md`. After compaction, call `planner_status`. Before the first task, reread the full `plan.md`, then read only the selected `task.md` and use focused project search when needed.
+Preserve the full plan goal, constraints, ordered task list, task artifact paths, dependencies, acceptance criteria, open decisions, and `discovery.md`. After compaction, call `planner_status`. Before the first task, reread the full `plan.md` via `planner_artifact_read`, then read only the selected `task.md` (`planner_artifact_read` `artifact: "task"`) and use focused project search when needed.
 
 ## auto-compact
 
-Call `planner_status` immediately and restore the exact planning step. Reread `plan.md` if it has already been written. Do not regenerate tasks from chat history and do not begin execution until the persisted plan is verified.
+Call `planner_status` immediately and restore the exact planning step. Reread `plan.md` via `planner_artifact_read` if it has already been written. Do not regenerate tasks from chat history and do not begin execution until the persisted plan is verified.
 
 ## If You Do Not Know What To Do Next
 
