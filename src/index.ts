@@ -2405,7 +2405,7 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_PLAN_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: planToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: planToolDescription(toolName),
 			promptSnippet:
 				"Use planner_create_plan before project reads when the user asks to start a planner-controlled task.",
@@ -2437,7 +2437,7 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_GOAL_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: goalToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: goalToolDescription(toolName),
 			promptSnippet:
 				"Use planner goal tools during intake only. Draft goal.md before source reads and enter discovery only after explicit user approval.",
@@ -2464,7 +2464,7 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_QUESTION_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: questionToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: questionToolDescription(toolName),
 			promptSnippet:
 				"Use planner question tools during discovery/write_questions. Save evidence-based questions, show open questions to the user verbatim, wait for answers, then resolve them before continuing.",
@@ -2491,7 +2491,7 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_TASK_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: taskToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: taskToolDescription(toolName),
 			promptSnippet:
 				"Use planner_task_upsert during planning/write_task_files. Pass semantic task fields only; the wrapper writes task.json, task.md, and empty TDD lifecycle artifacts.",
@@ -2518,7 +2518,7 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_CONTRACT_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: contractToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: contractToolDescription(toolName),
 			promptSnippet:
 				"Use planner contract tools for AGENTS.md local contracts. Scan/route/read before broad source reads; check/update contracts after each green TDD task before refactor.",
@@ -2557,7 +2557,7 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_STUCK_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: stuckToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: stuckToolDescription(toolName),
 			promptSnippet:
 				"Use planner_report_stuck only when an execution attempt is actually stuck. Save evidence, diff, and next debug plan before planner-controlled compact.",
@@ -2593,7 +2593,7 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_REFACTOR_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: refactorToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: refactorToolDescription(toolName),
 			promptSnippet:
 				"Use planner_refactor_review during execution/refactor_task after inspecting the task diff. Pass semantic review fields; the wrapper writes refactor.md.",
@@ -2620,7 +2620,7 @@ function registerPlannerTools(
 	for (const toolName of DOUBT_REVIEW_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: doubtToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: doubtToolDescription(toolName),
 			promptSnippet:
 				"Use planner_doubt_review during finalize/doubt_review. List possible errors first, then prove or dismiss each one before calling anything a real bug.",
@@ -2647,7 +2647,7 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_ARTIFACT_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: artifactToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: artifactToolDescription(toolName),
 			promptSnippet: artifactToolPromptSnippet(toolName),
 			parameters: artifactToolParameters(toolName) as never,
@@ -2747,7 +2747,7 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_DEBUG_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: debugToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: debugToolDescription(toolName),
 			promptSnippet:
 				"Use planner debug tools only after planner_report_stuck. Record strategy, one focused probe, and result before patching. Use cleanup before planner_git_commit.",
@@ -2774,7 +2774,7 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_WORKFLOW_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: workflowToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: workflowToolDescription(toolName),
 			promptSnippet:
 				"Use planner_status first, then call only the workflow transition listed as allowed for the current stage/step.",
@@ -2821,7 +2821,7 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_RECOVERY_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: recoveryToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: recoveryToolDescription(toolName),
 			promptSnippet:
 				"Use planner_recovery_inspect when planner_status reports recovery or user-decision gating. Use planner_recovery_resume only after inspection shows no blocking git or worktree issues. Recovery tools never reset or delete git state.",
@@ -2879,7 +2879,7 @@ function registerPlannerTools(
 	for (const toolName of PLANNER_GIT_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
-			label: gitToolLabel(toolName),
+			label: plannerToolLabel(toolName),
 			description: gitToolDescription(toolName),
 			promptSnippet:
 				"Use planner git tools instead of raw git while a planner plan is active. Call planner_status first and only use allowed git wrappers.",
@@ -3314,26 +3314,29 @@ function registerPlannerBuiltinToolGuard(pi: ExtensionAPI): void {
 	});
 }
 
-function planToolLabel(toolName: PlannerPlanToolName): string {
-	switch (toolName) {
-		case "planner_create_plan":
-			return "Planner Create Plan";
-	}
+// Words that should render uppercase rather than title-cased in tool labels.
+const TOOL_LABEL_ACRONYMS: Record<string, string> = { tdd: "TDD" };
+
+/**
+ * Derive a tool's display label from its name: `planner_create_plan` ->
+ * `Planner Create Plan`. Replaces a dozen per-tool switch functions that all
+ * encoded this same title-casing, with an acronym override for words like TDD.
+ */
+function plannerToolLabel(toolName: string): string {
+	return toolName
+		.split("_")
+		.map(
+			(word) =>
+				TOOL_LABEL_ACRONYMS[word] ??
+				word.charAt(0).toUpperCase() + word.slice(1),
+		)
+		.join(" ");
 }
 
 function planToolDescription(toolName: PlannerPlanToolName): string {
 	switch (toolName) {
 		case "planner_create_plan":
 			return "Create project storage, plan files, and the plan branch/worktree. Starts intake so the model can draft goal.md before discovery.";
-	}
-}
-
-function goalToolLabel(toolName: PlannerGoalToolName): string {
-	switch (toolName) {
-		case "planner_goal_submit":
-			return "Planner Goal Submit";
-		case "planner_goal_decide":
-			return "Planner Goal Decide";
 	}
 }
 
@@ -3355,15 +3358,6 @@ function goalToolParameters(toolName: PlannerGoalToolName) {
 	}
 }
 
-function questionToolLabel(toolName: PlannerQuestionToolName): string {
-	switch (toolName) {
-		case "planner_questions_submit":
-			return "Planner Questions Submit";
-		case "planner_questions_resolve":
-			return "Planner Questions Resolve";
-	}
-}
-
 function questionToolDescription(toolName: PlannerQuestionToolName): string {
 	switch (toolName) {
 		case "planner_questions_submit":
@@ -3382,34 +3376,10 @@ function questionToolParameters(toolName: PlannerQuestionToolName) {
 	}
 }
 
-function taskToolLabel(toolName: PlannerTaskToolName): string {
-	switch (toolName) {
-		case "planner_task_upsert":
-			return "Planner Task Upsert";
-	}
-}
-
 function taskToolDescription(toolName: PlannerTaskToolName): string {
 	switch (toolName) {
 		case "planner_task_upsert":
 			return "Create or replace one behavioral task from semantic fields. The wrapper writes task.json, task.md, and empty TDD lifecycle artifacts.";
-	}
-}
-
-function contractToolLabel(toolName: PlannerContractToolName): string {
-	switch (toolName) {
-		case "planner_contract_scan":
-			return "Planner Contract Scan";
-		case "planner_contract_route":
-			return "Planner Contract Route";
-		case "planner_contract_read":
-			return "Planner Contract Read";
-		case "planner_contract_check":
-			return "Planner Contract Check";
-		case "planner_contract_upsert":
-			return "Planner Contract Upsert";
-		case "planner_contract_decide":
-			return "Planner Contract Decide";
 	}
 }
 
@@ -3447,13 +3417,6 @@ function contractToolParameters(toolName: PlannerContractToolName) {
 	}
 }
 
-function stuckToolLabel(toolName: PlannerStuckToolName): string {
-	switch (toolName) {
-		case "planner_report_stuck":
-			return "Planner Report Stuck";
-	}
-}
-
 function stuckToolDescription(toolName: PlannerStuckToolName): string {
 	switch (toolName) {
 		case "planner_report_stuck":
@@ -3461,24 +3424,10 @@ function stuckToolDescription(toolName: PlannerStuckToolName): string {
 	}
 }
 
-function refactorToolLabel(toolName: PlannerRefactorToolName): string {
-	switch (toolName) {
-		case "planner_refactor_review":
-			return "Planner Refactor Review";
-	}
-}
-
 function refactorToolDescription(toolName: PlannerRefactorToolName): string {
 	switch (toolName) {
 		case "planner_refactor_review":
 			return "Write the structured refactor.md review from semantic fields during execution/refactor_task.";
-	}
-}
-
-function doubtToolLabel(toolName: PlannerDoubtReviewToolName): string {
-	switch (toolName) {
-		case "planner_doubt_review":
-			return "Planner Doubt Review";
 	}
 }
 
@@ -3493,19 +3442,6 @@ function doubtToolParameters(toolName: PlannerDoubtReviewToolName) {
 	switch (toolName) {
 		case "planner_doubt_review":
 			return DOUBT_REVIEW_TOOL_PARAMETERS;
-	}
-}
-
-function artifactToolLabel(toolName: PlannerArtifactToolName): string {
-	switch (toolName) {
-		case "planner_plan_submit":
-			return "Planner Plan Submit";
-		case "planner_discovery_submit":
-			return "Planner Discovery Submit";
-		case "planner_tdd_submit":
-			return "Planner TDD Submit";
-		case "planner_summary_submit":
-			return "Planner Summary Submit";
 	}
 }
 
@@ -3548,19 +3484,6 @@ function artifactToolParameters(toolName: PlannerArtifactToolName) {
 	}
 }
 
-function debugToolLabel(toolName: PlannerDebugToolName): string {
-	switch (toolName) {
-		case "planner_debug_strategy":
-			return "Planner Debug Strategy";
-		case "planner_debug_probe":
-			return "Planner Debug Probe";
-		case "planner_debug_result":
-			return "Planner Debug Result";
-		case "planner_debug_cleanup":
-			return "Planner Debug Cleanup";
-	}
-}
-
 function debugToolDescription(toolName: PlannerDebugToolName): string {
 	switch (toolName) {
 		case "planner_debug_strategy":
@@ -3584,27 +3507,6 @@ function debugToolParameters(toolName: PlannerDebugToolName) {
 			return DEBUG_RESULT_TOOL_PARAMETERS;
 		case "planner_debug_cleanup":
 			return DEBUG_CLEANUP_TOOL_PARAMETERS;
-	}
-}
-
-function gitToolLabel(toolName: PlannerGitToolName): string {
-	switch (toolName) {
-		case "planner_git_inspect":
-			return "Planner Git Inspect";
-		case "planner_git_init":
-			return "Planner Git Init";
-		case "planner_git_commit":
-			return "Planner Git Commit";
-		case "planner_git_discard_changes":
-			return "Planner Git Discard Changes";
-		case "planner_git_create_task_branch":
-			return "Planner Git Create Task Branch";
-		case "planner_git_create_refactor_branch":
-			return "Planner Git Create Refactor Branch";
-		case "planner_git_merge_refactor_to_task":
-			return "Planner Git Merge Refactor To Task";
-		case "planner_git_merge_task_to_plan":
-			return "Planner Git Merge Task To Plan";
 	}
 }
 
@@ -3647,15 +3549,6 @@ function gitToolParameters(toolName: PlannerGitToolName) {
 	}
 }
 
-function recoveryToolLabel(toolName: PlannerRecoveryToolName): string {
-	switch (toolName) {
-		case "planner_recovery_inspect":
-			return "Planner Recovery Inspect";
-		case "planner_recovery_resume":
-			return "Planner Recovery Resume";
-	}
-}
-
 function recoveryToolDescription(toolName: PlannerRecoveryToolName): string {
 	switch (toolName) {
 		case "planner_recovery_inspect":
@@ -3671,31 +3564,6 @@ function recoveryToolParameters(toolName: PlannerRecoveryToolName) {
 			return EMPTY_TOOL_PARAMETERS;
 		case "planner_recovery_resume":
 			return RESUME_RECOVERY_TOOL_PARAMETERS;
-	}
-}
-
-function workflowToolLabel(toolName: PlannerWorkflowToolName): string {
-	switch (toolName) {
-		case "planner_start_step":
-			return "Planner Start Step";
-		case "planner_finish_step":
-			return "Planner Finish Step";
-		case "planner_advance_step":
-			return "Planner Advance Step";
-		case "planner_fail_step":
-			return "Planner Fail Step";
-		case "planner_block_step":
-			return "Planner Block Step";
-		case "planner_retry_step":
-			return "Planner Retry Step";
-		case "planner_request_compact":
-			return "Planner Request Compact";
-		case "planner_complete_compact":
-			return "Planner Complete Compact";
-		case "planner_enter_recovery":
-			return "Planner Enter Recovery";
-		case "planner_resume_after_recovery":
-			return "Planner Resume After Recovery";
 	}
 }
 
