@@ -10,6 +10,8 @@ import {
 	exportPlanToOutputBranch,
 	mergeRefactorToTask,
 	mergeTaskToPlan,
+	PlanExportConflictError,
+	parseUnmergedFiles,
 } from "./planner-ops";
 import type {
 	GitBranchInput,
@@ -26,6 +28,8 @@ import type {
 
 class MockGitRunner implements GitRunner {
 	readonly calls: Array<{ name: string; input: unknown }> = [];
+	mergeError: Error | null = null;
+	statusPorcelainResult = "";
 
 	async init(input: GitRepoInput): Promise<void> {
 		this.calls.push({ name: "init", input });
@@ -40,7 +44,7 @@ class MockGitRunner implements GitRunner {
 	}
 	async statusPorcelain(input: GitRepoInput): Promise<string> {
 		this.calls.push({ name: "statusPorcelain", input });
-		return "";
+		return this.statusPorcelainResult;
 	}
 	async diffStat(input: GitRepoInput): Promise<string> {
 		this.calls.push({ name: "diffStat", input });
@@ -75,6 +79,12 @@ class MockGitRunner implements GitRunner {
 	}
 	async merge(input: GitMergeInput): Promise<void> {
 		this.calls.push({ name: "merge", input });
+		if (this.mergeError) {
+			throw this.mergeError;
+		}
+	}
+	async mergeAbort(input: GitRepoInput): Promise<void> {
+		this.calls.push({ name: "mergeAbort", input });
 	}
 	async worktreeAdd(input: GitWorktreeAddInput): Promise<void> {
 		this.calls.push({ name: "worktreeAdd", input });
@@ -219,6 +229,70 @@ describe("planner git operations", () => {
 					message: "export plan",
 				},
 			},
+		]);
+	});
+
+	it("rolls back and reports conflicts when the export merge fails", async () => {
+		const git = new MockGitRunner();
+		const mergeError = Object.assign(new Error("git merge failed"), {
+			stderr:
+				"Auto-merging .gitignore\nCONFLICT (content): Merge conflict in .gitignore\nAutomatic merge failed; fix conflicts and then commit the result.",
+		});
+		git.mergeError = mergeError;
+		git.statusPorcelainResult = "UU .gitignore\nA  AGENTS.md\n";
+
+		const error = await exportPlanToOutputBranch({
+			git,
+			state: baseState(),
+			projectRoot: "/repo/app",
+			planId: "plan-a",
+			message: "export plan",
+		}).catch((thrown: unknown) => thrown);
+
+		expect(error).toBeInstanceOf(PlanExportConflictError);
+		const conflict = error as PlanExportConflictError;
+		expect(conflict.details.conflictFiles).toEqual([".gitignore"]);
+		expect(conflict.details.outputBranch).toBe("output/plan-a");
+		expect(conflict.details.baseBranch).toBe("main");
+		expect(conflict.message).toContain(".gitignore");
+		expect(conflict.message).toContain("Merge conflict in .gitignore");
+
+		const callNames = git.calls.map((call) => call.name);
+		// Rollback happened in order after the failed merge: abort, return to
+		// base, delete the freshly created output branch.
+		expect(callNames).toEqual([
+			"createBranch",
+			"switchBranch",
+			"merge",
+			"statusPorcelain",
+			"mergeAbort",
+			"switchBranch",
+			"deleteBranch",
+		]);
+		expect(git.calls.at(-2)).toEqual({
+			name: "switchBranch",
+			input: { repoRoot: "/repo/app", branch: "main" },
+		});
+		expect(git.calls.at(-1)).toEqual({
+			name: "deleteBranch",
+			input: { repoRoot: "/repo/app", branch: "output/plan-a", force: true },
+		});
+	});
+
+	it("parses unmerged files from porcelain status", () => {
+		const porcelain = [
+			"UU .gitignore",
+			"A  AGENTS.md",
+			"AA both-added.txt",
+			"DD both-deleted.txt",
+			"M  staged.ts",
+			" M dirty.ts",
+			"?? untracked.ts",
+		].join("\n");
+		expect(parseUnmergedFiles(porcelain)).toEqual([
+			".gitignore",
+			"both-added.txt",
+			"both-deleted.txt",
 		]);
 	});
 

@@ -76,6 +76,7 @@ export interface GitRunner {
 	stageAll(input: GitRepoInput): Promise<void>;
 	commit(input: GitCommitInput): Promise<void>;
 	merge(input: GitMergeInput): Promise<void>;
+	mergeAbort(input: GitRepoInput): Promise<void>;
 	worktreeAdd(input: GitWorktreeAddInput): Promise<void>;
 	worktreeRemove(input: GitWorktreeRemoveInput): Promise<void>;
 	discardWorktreeChanges(input: GitRepoInput): Promise<void>;

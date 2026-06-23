@@ -127,6 +127,10 @@ export class NodeGitRunner implements GitRunner {
 		await runGitCommand(buildGitMergeArgs(input));
 	}
 
+	async mergeAbort(input: GitRepoInput): Promise<void> {
+		await runGitCommand(buildGitMergeAbortArgs(input));
+	}
+
 	async worktreeAdd(input: GitWorktreeAddInput): Promise<void> {
 		await runGitCommand(buildGitWorktreeAddArgs(input));
 	}
@@ -269,6 +273,10 @@ export function buildGitMergeArgs(input: GitMergeInput): string[] {
 		...(input.message ? ["-m", input.message] : []),
 		input.sourceBranch,
 	];
+}
+
+export function buildGitMergeAbortArgs(input: GitRepoInput): string[] {
+	return ["-C", input.repoRoot, "merge", "--abort"];
 }
 
 export function buildGitWorktreeAddArgs(input: GitWorktreeAddInput): string[] {
