@@ -361,10 +361,15 @@ function validateMarkdownVerificationEvidence(
 
 /**
  * Returns every verification-protocol violation at once (missing evidence and
- * unpassed commands), so the caller can surface them together. The guidance is
- * deliberately stack-/tool-agnostic: a command that cannot pass locally is
- * resolved either as a proven_bug (real failure) or a needs_probe (cannot run
- * or verify here — e.g. the tool is not installed), never by guessing fields.
+ * unsatisfied commands), so the caller can surface them together. The guidance
+ * is deliberately stack-/tool-agnostic and keyed off the reported status:
+ *  - a command that FAILED when run is a real local failure -> proven_bug or
+ *    needs_probe only;
+ *  - a command that could NOT be run here (not_run/unknown — e.g. the tool is
+ *    not installed) can also be closed terminally as not_a_bug with evidence
+ *    (it is handled elsewhere, e.g. CI). This terminal resolution is what stops
+ *    the step from deadlocking on a check the environment cannot physically run
+ *    — needs_probe alone cannot resolve it, since it would block the exit.
  */
 export function collectVerificationProtocolErrors(
 	review: DoubtReview,
@@ -381,17 +386,24 @@ export function collectVerificationProtocolErrors(
 		.filter((command): command is string => Boolean(command));
 	const missing: string[] = [];
 	const failed: string[] = [];
+	const unverifiable: string[] = [];
 	for (const command of requiredCommands) {
 		const evidence = review.verificationEvidence.find((entry) =>
 			commandsMatch(entry.command, command),
 		);
 		if (!evidence) {
 			missing.push(command);
-		} else if (
-			evidence.status !== "passed" &&
-			!findingCoversCommand(review, command)
-		) {
-			failed.push(command);
+			continue;
+		}
+		if (evidence.status === "passed") {
+			continue;
+		}
+		// "failed" = ran and failed locally (real failure). Anything else
+		// ("not_run"/"unknown") = could not be run here, so a terminal not_a_bug
+		// (with evidence) is also an acceptable resolution.
+		const ranAndFailed = evidence.status === "failed";
+		if (!findingCoversCommand(review, command, !ranAndFailed)) {
+			(ranAndFailed ? failed : unverifiable).push(command);
 		}
 	}
 	const errors: string[] = [];
@@ -408,7 +420,16 @@ export function collectVerificationProtocolErrors(
 				failed.map((c) => `  - ${c}`).join("\n") +
 				"\nFor each, add one finding to possibleErrors that names the command (in claim/verification/evidence) and covers it:" +
 				"\n  - real failure you reproduced -> status proven_bug, proofLevel reproduced_command, nextAction create_revision_task" +
-				"\n  - cannot run or verify it here (tool missing / not applicable locally) -> status needs_probe, proofLevel insufficient_evidence, nextAction run_probe",
+				"\n  - needs more proof before you can call it a bug -> status needs_probe, proofLevel insufficient_evidence, nextAction run_probe",
+		);
+	}
+	if (unverifiable.length > 0) {
+		errors.push(
+			`Required protocol command(s) could not be run here (status not_run/unknown):\n` +
+				unverifiable.map((c) => `  - ${c}`).join("\n") +
+				"\nFor each, add one finding to possibleErrors that names the command (in claim/verification/evidence) and resolves it:" +
+				"\n  - cannot run locally but you confirmed it is handled elsewhere (e.g. it runs in CI) -> status not_a_bug, nextAction no_action, with evidence of where it is covered" +
+				"\n  - you still need to run or investigate it -> status needs_probe, proofLevel insufficient_evidence, nextAction run_probe",
 		);
 	}
 	return errors;
@@ -591,10 +612,18 @@ function normalizeCommand(value: string): string {
 	return value.replace(/`/g, "").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-function findingCoversCommand(review: DoubtReview, command: string): boolean {
+function findingCoversCommand(
+	review: DoubtReview,
+	command: string,
+	allowNotABug: boolean,
+): boolean {
 	const needle = normalizeCommand(command);
 	return review.possibleErrors.some((finding) => {
-		if (finding.status !== "proven_bug" && finding.status !== "needs_probe") {
+		const covers =
+			finding.status === "proven_bug" ||
+			finding.status === "needs_probe" ||
+			(allowNotABug && finding.status === "not_a_bug");
+		if (!covers) {
 			return false;
 		}
 		const text = normalizeCommand(
