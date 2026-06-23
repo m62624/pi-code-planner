@@ -7,8 +7,12 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { DEFAULT_LANGUAGE, MS_PER_MINUTE } from "./constants";
-import { errorMessage } from "./errors";
+import { errorMessage, gitErrorMessage } from "./errors";
 import { NodeGitRunner } from "./git/node-runner";
+import {
+	buildPlanExportConflictPrompt,
+	PlanExportConflictError,
+} from "./git/planner-ops";
 import { PLANNER_STATUS_TOOL_NAME } from "./guard/git-watcher";
 import {
 	checkPlannerBuiltinToolAllowed,
@@ -2335,7 +2339,23 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 						fallbackSession.sessionFile,
 					);
 				}
-				ctx.ui.notify(`Planner finish failed: ${errorMessage(error)}`, "error");
+				if (error instanceof PlanExportConflictError) {
+					// The repository was already rolled back inside the export step,
+					// and the plan/worktree/state are untouched. Surface the conflict
+					// to the user and hand the model a message so it can summarize the
+					// failure, explain it cannot resolve the conflict itself, and ask
+					// the user to reconcile the files and re-run /planner-finish.
+					ctx.ui.notify(`Planner finish failed: ${error.message}`, "error");
+					pi.sendUserMessage(
+						buildPlanExportConflictPrompt(error),
+						FOLLOW_UP_MESSAGE_OPTIONS as never,
+					);
+					return;
+				}
+				ctx.ui.notify(
+					`Planner finish failed: ${gitErrorMessage(error)}`,
+					"error",
+				);
 			}
 		},
 	});

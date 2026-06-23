@@ -10,6 +10,7 @@ import {
 	buildGitHeadCommitArgs,
 	buildGitInitArgs,
 	buildGitListProjectFilesArgs,
+	buildGitMergeAbortArgs,
 	buildGitMergeArgs,
 	buildGitPathArgs,
 	buildGitStageAllArgs,
@@ -129,6 +130,12 @@ describe("node git runner command args", () => {
 				squash: true,
 			}),
 		).toEqual(["-C", "/repo/app", "merge", "--squash", "plan/a"]);
+		expect(buildGitMergeAbortArgs({ repoRoot: "/repo/app" })).toEqual([
+			"-C",
+			"/repo/app",
+			"merge",
+			"--abort",
+		]);
 	});
 
 	it("builds worktree add args for creating a new branch from base ref", () => {

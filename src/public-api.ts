@@ -25,14 +25,20 @@ export {
 	GitCommandError,
 	NodeGitRunner,
 } from "./git/node-runner";
-export type { PlannerGitOperationResult } from "./git/planner-ops";
+export type {
+	PlanExportConflictDetails,
+	PlannerGitOperationResult,
+} from "./git/planner-ops";
 export {
+	buildPlanExportConflictPrompt,
 	createAndSwitchRefactorBranch,
 	createAndSwitchTaskBranch,
 	deleteManagedBranch,
 	exportPlanToOutputBranch,
 	mergeRefactorToTask,
 	mergeTaskToPlan,
+	PlanExportConflictError,
+	parseUnmergedFiles,
 } from "./git/planner-ops";
 export type {
 	GitBranchInput,
