@@ -392,6 +392,98 @@ describe("planner doubt review tool", () => {
 		expect(result.status).toBe("applied");
 		expect(result.text).toContain("Proven bugs: 1");
 	});
+
+	it("lets a not_run protocol command be closed terminally as not_a_bug", async () => {
+		const setup = await createDoubtSetup();
+
+		// The command cannot run in this environment, so it can never be a
+		// proven_bug (un-reproducible) and a needs_probe would block the exit
+		// forever. A not_a_bug finding with evidence is the terminal resolution.
+		const result = await executePlannerDoubtTool({
+			...setup,
+			toolName: "planner_doubt_review",
+			params: {
+				summary: "Build cannot run locally; it is covered in CI.",
+				verificationEvidence: [
+					{
+						command: "npm test",
+						status: "passed",
+						evidence: "Unit tests passed.",
+					},
+					{
+						command: "npm run build",
+						status: "not_run",
+						evidence: "Toolchain not installed locally.",
+					},
+				],
+				possibleErrors: [
+					{
+						id: "build-not-runnable-here",
+						riskCategory: "integration_break",
+						status: "not_a_bug",
+						proofLevel: "insufficient_evidence",
+						claim: "npm run build cannot be run in this environment.",
+						specReference: "discovery.md Verification Protocol",
+						codePath: "package.json",
+						verification:
+							"Confirmed the CI workflow runs npm run build on every push.",
+						evidence: [
+							"npm run build executes in .github/workflows/ci.yml build job.",
+						],
+						counterEvidence: [],
+						nextAction: "no_action",
+					},
+				],
+			},
+		});
+
+		expect(result.status).toBe("applied");
+		expect(result.text).toContain("Needs probe: 0");
+	});
+
+	it("still rejects a failed command closed as not_a_bug", async () => {
+		const setup = await createDoubtSetup();
+
+		// A command that actually failed when run is a real local failure and may
+		// never be waved away as not_a_bug — only proven_bug/needs_probe cover it.
+		const result = await executePlannerDoubtTool({
+			...setup,
+			toolName: "planner_doubt_review",
+			params: {
+				summary: "Build failed but the finding tries to dismiss it.",
+				verificationEvidence: [
+					{
+						command: "npm test",
+						status: "passed",
+						evidence: "Unit tests passed.",
+					},
+					{
+						command: "npm run build",
+						status: "failed",
+						evidence: "TypeScript failed.",
+					},
+				],
+				possibleErrors: [
+					{
+						id: "build-failure-dismissed",
+						riskCategory: "integration_break",
+						status: "not_a_bug",
+						proofLevel: "insufficient_evidence",
+						claim: "npm run build failure is not important.",
+						specReference: "discovery.md Verification Protocol",
+						codePath: "src/runtime/contracts.ts",
+						verification: "Looked at the error and decided to ignore it.",
+						evidence: ["The failure seems unrelated."],
+						counterEvidence: [],
+						nextAction: "no_action",
+					},
+				],
+			},
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("Required protocol command(s) did not pass");
+	});
 });
 
 function passedVerificationEvidence() {
