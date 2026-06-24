@@ -39,6 +39,7 @@ export type PlanningStep =
 	| "split_tasks"
 	| "write_task_files"
 	| "verify_plan"
+	| "consistency_check"
 	| "compact_planning"
 	| "enter_execution";
 
@@ -115,6 +116,7 @@ export const PLANNER_STAGE_STEPS = {
 		"split_tasks",
 		"write_task_files",
 		"verify_plan",
+		"consistency_check",
 		"compact_planning",
 		"enter_execution",
 	],

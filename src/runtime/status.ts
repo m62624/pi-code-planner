@@ -321,6 +321,21 @@ export const PLANNER_STEP_RULES = {
 		allowedNow: ["Read/write planner artifacts."],
 		forbiddenNow: ["Do not start execution while plan gaps remain."],
 		exitCondition: "Plan is executable without hidden broad tasks.",
+		nextInstruction: "Call planner_finish_step to open consistency_check.",
+	}),
+	consistency_check: stepRule("planning", "consistency_check", {
+		objective:
+			"Mechanically check the plan's interacting constraints with elenchus before execution.",
+		requiredActions: [
+			"Decide if the plan hinges on a web of interacting conditions (exactly-one-owner, mutually-exclusive states, gate/branch coverage, dependency ordering, access rules). If so, model the facts and first principles as a .vrf program and call planner_elenchus_check, then iterate until the verdict is CONSISTENT.",
+			"If the plan has no such constraint web (linear/CRUD work), call planner_elenchus_check with resolution=not_applicable and a one-line reason. This is the escape: it never traps the flow.",
+		],
+		allowedNow: [
+			"Use planner_elenchus_check (run a check or record not_applicable). Re-read planner artifacts and contract chains.",
+		],
+		forbiddenNow: ["Do not edit code or tasks. Do not start execution yet."],
+		exitCondition:
+			"elenchus reports CONSISTENT for the modeled constraints, or the step is recorded not_applicable with a reason.",
 		nextInstruction: "Call planner_finish_step to open compact_planning.",
 	}),
 	compact_planning: stepRule("planning", "compact_planning", {

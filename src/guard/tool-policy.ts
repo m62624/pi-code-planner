@@ -25,6 +25,7 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_task_upsert",
 	"planner_refactor_review",
 	"planner_doubt_review",
+	"planner_elenchus_check",
 	"planner_skill_create",
 	"planner_skill_update",
 	"planner_contract_scan",
@@ -117,6 +118,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_contract_route",
 			"planner_contract_read",
 			"planner_contract_upsert",
+			"planner_elenchus_check",
 			"planner_git_commit",
 			"planner_exec",
 		],
@@ -145,6 +147,11 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_contract_read",
 		],
 		verify_plan: [],
+		consistency_check: [
+			"planner_elenchus_check",
+			"planner_contract_route",
+			"planner_contract_read",
+		],
 		compact_planning: [],
 		enter_execution: [],
 	},
@@ -271,6 +278,7 @@ const STEP_ALLOWED_TOOLS = {
 		doubt_review: [
 			"planner_git_inspect",
 			"planner_doubt_review",
+			"planner_elenchus_check",
 			"planner_skill_create",
 			"planner_skill_update",
 			"planner_contract_route",
@@ -313,6 +321,7 @@ const STEP_ALLOWED_TOOLS = {
 		repair_or_resume: [
 			"planner_recovery_inspect",
 			"planner_recovery_resume",
+			"planner_elenchus_check",
 			"planner_git_inspect",
 		],
 	},

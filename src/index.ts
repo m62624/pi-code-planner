@@ -96,6 +96,10 @@ import {
 	type PlannerDoubtReviewToolName,
 } from "./runtime/doubt-tools";
 import {
+	executePlannerElenchusTool,
+	PLANNER_ELENCHUS_TOOL_NAME,
+} from "./runtime/elenchus-tools";
+import {
 	executePlannerExecTool,
 	PLANNER_EXEC_TOOL_NAME,
 } from "./runtime/exec-tools";
@@ -2627,6 +2631,59 @@ function registerPlannerTools(
 			},
 		});
 	}
+
+	pi.registerTool({
+		name: PLANNER_ELENCHUS_TOOL_NAME,
+		label: "Planner Elenchus Check",
+		description:
+			"Mechanically check a web of interacting plan constraints for logical consistency with the bundled elenchus engine (a three-valued SAT checker). Write facts and first principles in elenchus's tiny DSL (see the pi-planner-elenchus skill); the engine answers CONSISTENT / WARNING / UNDERDETERMINED / CONFLICT and shows why. Reach for it on exactly-one-owner, mutually-exclusive states, gate/branch coverage, access matrices, and dependency ordering — not on linear/CRUD work. Sources and verdicts are stored under the plan's elenchus/ dir.",
+		promptSnippet:
+			"Use planner_elenchus_check when correctness hinges on interacting conditions that are easy to get subtly wrong. Iterate until the verdict is CONSISTENT. If the work has no such constraint web, call it with resolution=not_applicable and a one-line reason — that escape never traps the flow. It is available at planning/consistency_check, the discovery scan, finalize/doubt_review, and recovery/repair_or_resume.",
+		parameters: {
+			type: "object",
+			properties: {
+				name: {
+					type: "string",
+					description:
+						"Short artifact name for this check (slugified). Used for the stored <name>.vrf source and <name>.result.json verdict.",
+				},
+				resolution: {
+					type: "string",
+					enum: ["checked", "not_applicable"],
+					description:
+						'"checked" runs the engine on `program`. "not_applicable" records the escape with `reason` and does not run the engine.',
+				},
+				program: {
+					type: "string",
+					description:
+						"The .vrf program (facts + first principles) to check. Required when resolution=checked. May IMPORT sibling .vrf files stored under the plan's elenchus/ dir.",
+				},
+				format: {
+					type: "string",
+					enum: ["json", "human"],
+					description: "Verdict format. Defaults to json.",
+				},
+				reason: {
+					type: "string",
+					description:
+						"One-line reason the plan has no interacting-constraint web. Required when resolution=not_applicable.",
+				},
+			},
+			required: ["name", "resolution"],
+			additionalProperties: false,
+		} as never,
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
+			const result = await executePlannerElenchusTool({
+				fs,
+				git: gitRunner,
+				projectPaths,
+				params,
+			});
+			return plannerToolResponse(result);
+		},
+	});
 
 	for (const toolName of PLANNER_ARTIFACT_TOOL_NAMES) {
 		pi.registerTool({
