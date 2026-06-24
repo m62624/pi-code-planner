@@ -3062,11 +3062,73 @@ function registerPlannerTools(
 	});
 }
 
+const PLANNER_COMPACT_STATUS_KEY = "planner-compact";
+const PLANNER_COMPACT_FRAMES = [
+	"⠋",
+	"⠙",
+	"⠹",
+	"⠸",
+	"⠼",
+	"⠴",
+	"⠦",
+	"⠧",
+	"⠇",
+	"⠏",
+];
+const PLANNER_COMPACT_FRAME_MS = 150;
+// Safety cap so a missing completion event can never leave the indicator
+// spinning forever.
+const PLANNER_COMPACT_MAX_MS = 120_000;
+
 function registerPlannerCompactEvents(
 	pi: ExtensionAPI,
 	compactRuntime: PlannerCompactRuntimeState,
 ): void {
+	// Animated footer indicator while context is compacting, so a long
+	// compaction never looks frozen. The footer renders below the planner
+	// workspace overlay too (reserved rows), so it is visible in both the plain
+	// chat and the custom workspace.
+	let compactTimer: ReturnType<typeof setInterval> | null = null;
+	const stopCompactIndicator = (ctx: ExtensionContext) => {
+		if (compactTimer) {
+			clearInterval(compactTimer);
+			compactTimer = null;
+		}
+		try {
+			ctx.ui.setStatus(PLANNER_COMPACT_STATUS_KEY, undefined);
+		} catch {
+			// Stale ctx after a session switch: nothing to clear.
+		}
+	};
+
+	pi.on("session_before_compact", async (_event, ctx) => {
+		if (compactTimer) clearInterval(compactTimer);
+		let frame = 0;
+		const renderFrame = () => {
+			try {
+				const glyph =
+					PLANNER_COMPACT_FRAMES[frame % PLANNER_COMPACT_FRAMES.length];
+				frame += 1;
+				ctx.ui.setStatus(
+					PLANNER_COMPACT_STATUS_KEY,
+					ctx.ui.theme.fg("dim", `${glyph} Compacting context…`),
+				);
+			} catch {
+				// Never let the animation throw out of the interval.
+			}
+		};
+		renderFrame();
+		compactTimer = setInterval(renderFrame, PLANNER_COMPACT_FRAME_MS);
+		compactTimer.unref?.();
+		const safety = setTimeout(
+			() => stopCompactIndicator(ctx),
+			PLANNER_COMPACT_MAX_MS,
+		);
+		safety.unref?.();
+	});
+
 	pi.on("session_compact", async (_event, ctx) => {
+		stopCompactIndicator(ctx);
 		consumePlannerControlledCompact(compactRuntime);
 
 		const fs = createNodeFs();
