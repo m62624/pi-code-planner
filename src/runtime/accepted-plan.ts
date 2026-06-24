@@ -2,7 +2,6 @@ import { outputBranchName } from "../git/branches";
 import { exportPlanToOutputBranch } from "../git/planner-ops";
 import type { GitRunner } from "../git/runner";
 import { createPiSessionDir } from "../session/handoff";
-import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerFs } from "../storage/fs";
 import {
 	createPlanStoragePaths,
@@ -116,10 +115,6 @@ export async function finalizeAcceptedPlan(input: {
 }): Promise<FinalizedAcceptedPlan> {
 	const preview = await inspectAcceptedPlan(input);
 	const planPaths = createPlanStoragePaths(input.projectPaths, preview.planId);
-	const settings = await loadEffectivePlannerSettings({
-		fs: input.fs,
-		projectPaths: input.projectPaths,
-	});
 	const message =
 		input.message ??
 		(await buildAcceptedPlanCommitMessage({
@@ -127,7 +122,6 @@ export async function finalizeAcceptedPlan(input: {
 			planPaths,
 			planId: preview.planId,
 			outputBranch: preview.outputBranch,
-			commitLanguage: settings.effective.metadata.commitLanguage,
 		}));
 	await exportPlanToOutputBranch({
 		git: input.git,
@@ -178,12 +172,15 @@ export async function finalizeAcceptedPlan(input: {
 	};
 }
 
+// No commitLanguage here on purpose: this export message is assembled
+// deterministically (no model call), so there is nothing to translate. Its
+// prose comes from final_summary.md — already written in the user's language —
+// and the rest (feat:, Summary:, Verification:) are technical tokens.
 async function buildAcceptedPlanCommitMessage(input: {
 	fs: PlannerFs;
 	planPaths: ReturnType<typeof createPlanStoragePaths>;
 	planId: string;
 	outputBranch: string;
-	commitLanguage: string;
 }): Promise<string> {
 	const plan = await readPlanRecord(input.fs, input.planPaths);
 	const finalSummary = await readOptionalText(
