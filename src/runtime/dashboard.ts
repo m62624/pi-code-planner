@@ -183,7 +183,12 @@ export async function openPlannerWorkspace(
 				footerReserve,
 				load,
 				getEntries,
-				sendUserMessage: (text) => pi.sendUserMessage(text),
+				// deliverAs:"followUp" queues the message when the agent is busy
+				// (streaming/compacting) instead of dropping it; when idle it sends
+				// normally. Without it a message typed in the workspace mid-turn is
+				// lost.
+				sendUserMessage: (text) =>
+					pi.sendUserMessage(text, { deliverAs: "followUp" }),
 				onClose: () => done(undefined),
 			});
 		},
@@ -318,6 +323,12 @@ class PlannerWorkspaceComponent implements Component {
 	private cachedHeight = -1;
 	private cachedVersion = -1;
 	private cachedLines: string[] = [];
+	// The transcript is the expensive part of a draw. The live clock and stage
+	// timings change the overall signature every second, but they never change
+	// the transcript — so cache it by a content key and reuse it across those
+	// clock-only redraws instead of re-laying-out every row.
+	private cachedTranscriptKey = "";
+	private cachedTranscript: ReturnType<typeof renderTranscript> | null = null;
 
 	constructor(input: {
 		tui: TUI;
@@ -672,17 +683,38 @@ class PlannerWorkspaceComponent implements Component {
 			1,
 			bodyHeight - top.length - bottom.length,
 		);
-		const transcript = renderTranscript(
-			rows,
-			{
-				width: inner,
-				height: transcriptHeight,
-				atBottom: this.atBottom,
-				topLine: this.topLine,
-				expanded: this.expandedKeys(),
-			},
-			this.palette,
-		);
+		// Reuse the last transcript layout across clock-only redraws: only when a
+		// transcript input actually changed do we re-lay-out the rows.
+		const lastRow = rows[rows.length - 1];
+		const expandedSig = [...this.expandedKeys()].sort().join(",");
+		const transcriptKey = [
+			inner,
+			transcriptHeight,
+			this.atBottom ? "bottom" : `top${this.topLine}`,
+			rows.length,
+			lastRow?.key ?? "",
+			lastRow?.text.length ?? 0,
+			this.hideThinking ? "hide" : "show",
+			expandedSig,
+		].join("#");
+		let transcript: ReturnType<typeof renderTranscript>;
+		if (this.cachedTranscriptKey === transcriptKey && this.cachedTranscript) {
+			transcript = this.cachedTranscript;
+		} else {
+			transcript = renderTranscript(
+				rows,
+				{
+					width: inner,
+					height: transcriptHeight,
+					atBottom: this.atBottom,
+					topLine: this.topLine,
+					expanded: this.expandedKeys(),
+				},
+				this.palette,
+			);
+			this.cachedTranscriptKey = transcriptKey;
+			this.cachedTranscript = transcript;
+		}
 		this.lastTranscriptTotal = transcript.totalLines;
 		this.lastTranscriptHeight = transcriptHeight;
 		if (!this.atBottom) this.topLine = transcript.topLine;
@@ -754,6 +786,8 @@ class PlannerWorkspaceComponent implements Component {
 		this.cachedWidth = -1;
 		this.cachedHeight = -1;
 		this.cachedVersion = -1;
+		this.cachedTranscriptKey = "";
+		this.cachedTranscript = null;
 	}
 
 	dispose(): void {

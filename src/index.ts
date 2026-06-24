@@ -120,6 +120,7 @@ import {
 	markPlannerIdleWakeQueued,
 	markPlannerToolActivity,
 } from "./runtime/idle-watchdog";
+import { pickPlansToDelete } from "./runtime/multi-select-plans";
 import { runPlannerOrchestrator } from "./runtime/orchestrator";
 import {
 	parsePlannerCreateCommandArgs,
@@ -184,6 +185,7 @@ import {
 } from "./runtime/user-command-ui";
 import {
 	executePlannerUserCommand,
+	type PlannerListEntry,
 	readPlannerPlanList,
 } from "./runtime/user-commands";
 import {
@@ -1736,60 +1738,93 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
 				ctx.cwd,
 			);
-			const parsed = await resolveDeleteCommandArgs({
-				args,
-				ctx,
-				fs,
-				projectPaths,
-			});
-			if (!parsed) return;
-			if (parsed.deleteActive) {
-				const handoffCwd = (await fs.exists(projectPaths.projectRoot))
-					? projectPaths.projectRoot
-					: agentDir;
-				if (handoffCwd !== projectPaths.projectRoot) {
-					ctx.ui.notify(
-						"Original project directory is missing. Planner will switch to agent dir and delete planner storage best-effort.",
-						"warning",
-					);
-				}
-				const session = await createPlannerHandoffSession({
+
+			// An explicit `/planner-delete <id>` keeps the single-plan path.
+			if (args.trim().length > 0) {
+				const parsed = await resolveDeleteCommandArgs({
+					args,
+					ctx,
 					fs,
-					agentDir,
-					worktreePath: handoffCwd,
-					parentSession: ctx.sessionManager.getSessionFile(),
+					projectPaths,
 				});
+				if (!parsed) return;
+				if (parsed.deleteActive) {
+					await deleteActivePlanViaHandoff({
+						pi,
+						ctx,
+						fs,
+						agentDir,
+						projectPaths,
+						planId: parsed.planId,
+					});
+					return;
+				}
+				const result = await executePlannerUserCommand({
+					fs,
+					git: gitRunner,
+					projectPaths,
+					commandName: "planner_delete",
+					params: { planId: parsed.planId, deleteSessions: true },
+				});
+				notifyPlannerCommandResult(ctx, result);
 				resetPlanActiveCache(pi);
-				await ctx.switchSession(session.sessionFile, {
-					withSession: async (replacementCtx) => {
-						const result = await executePlannerUserCommand({
-							fs,
-							git: gitRunner,
-							projectPaths,
-							commandName: "planner_delete",
-							params: {
-								planId: parsed.planId,
-								deleteSessions: true,
-							},
-						});
-						notifyPlannerCommandResult(replacementCtx, result);
-					},
-				});
 				return;
 			}
 
-			const result = await executePlannerUserCommand({
+			// No argument: multi-select several plans and delete them at once.
+			const { project, plans } = await readPlannerPlanList({
 				fs,
-				git: gitRunner,
 				projectPaths,
-				commandName: "planner_delete",
-				params: {
-					planId: parsed.planId,
-					deleteSessions: true,
-				},
 			});
-			notifyPlannerCommandResult(ctx, result);
+			if (plans.length === 0) {
+				ctx.ui.notify("No planner plans in this project.", "warning");
+				return;
+			}
+			const chosen = await pickPlansToDelete(
+				ctx.ui,
+				plans.map((plan) => ({
+					planId: plan.planId,
+					active: plan.active,
+					label: planDeleteLabel(plan),
+				})),
+			);
+			if (!chosen || chosen.length === 0) {
+				ctx.ui.notify("Planner delete cancelled.", "info");
+				return;
+			}
+			const confirmed = await ctx.ui.confirm(
+				"Delete planner plans?",
+				`Delete ${chosen.length} planner plan(s), their worktrees, planner files, and related worktree chats? This cannot be undone.`,
+			);
+			if (!confirmed) {
+				ctx.ui.notify("Planner delete cancelled.", "info");
+				return;
+			}
+
+			// Delete non-active plans first; the active plan (if chosen) needs a
+			// session handoff and must go last because switchSession is terminal.
+			const activeId = project?.activePlanId ?? null;
+			for (const planId of chosen.filter((id) => id !== activeId)) {
+				const result = await executePlannerUserCommand({
+					fs,
+					git: gitRunner,
+					projectPaths,
+					commandName: "planner_delete",
+					params: { planId, deleteSessions: true },
+				});
+				notifyPlannerCommandResult(ctx, result);
+			}
 			resetPlanActiveCache(pi);
+			if (activeId && chosen.includes(activeId)) {
+				await deleteActivePlanViaHandoff({
+					pi,
+					ctx,
+					fs,
+					agentDir,
+					projectPaths,
+					planId: activeId,
+				});
+			}
 		},
 	});
 
@@ -3062,11 +3097,73 @@ function registerPlannerTools(
 	});
 }
 
+const PLANNER_COMPACT_STATUS_KEY = "planner-compact";
+const PLANNER_COMPACT_FRAMES = [
+	"⠋",
+	"⠙",
+	"⠹",
+	"⠸",
+	"⠼",
+	"⠴",
+	"⠦",
+	"⠧",
+	"⠇",
+	"⠏",
+];
+const PLANNER_COMPACT_FRAME_MS = 150;
+// Safety cap so a missing completion event can never leave the indicator
+// spinning forever.
+const PLANNER_COMPACT_MAX_MS = 120_000;
+
 function registerPlannerCompactEvents(
 	pi: ExtensionAPI,
 	compactRuntime: PlannerCompactRuntimeState,
 ): void {
+	// Animated footer indicator while context is compacting, so a long
+	// compaction never looks frozen. The footer renders below the planner
+	// workspace overlay too (reserved rows), so it is visible in both the plain
+	// chat and the custom workspace.
+	let compactTimer: ReturnType<typeof setInterval> | null = null;
+	const stopCompactIndicator = (ctx: ExtensionContext) => {
+		if (compactTimer) {
+			clearInterval(compactTimer);
+			compactTimer = null;
+		}
+		try {
+			ctx.ui.setStatus(PLANNER_COMPACT_STATUS_KEY, undefined);
+		} catch {
+			// Stale ctx after a session switch: nothing to clear.
+		}
+	};
+
+	pi.on("session_before_compact", async (_event, ctx) => {
+		if (compactTimer) clearInterval(compactTimer);
+		let frame = 0;
+		const renderFrame = () => {
+			try {
+				const glyph =
+					PLANNER_COMPACT_FRAMES[frame % PLANNER_COMPACT_FRAMES.length];
+				frame += 1;
+				ctx.ui.setStatus(
+					PLANNER_COMPACT_STATUS_KEY,
+					ctx.ui.theme.fg("accent", `${glyph} Compacting context…`),
+				);
+			} catch {
+				// Never let the animation throw out of the interval.
+			}
+		};
+		renderFrame();
+		compactTimer = setInterval(renderFrame, PLANNER_COMPACT_FRAME_MS);
+		compactTimer.unref?.();
+		const safety = setTimeout(
+			() => stopCompactIndicator(ctx),
+			PLANNER_COMPACT_MAX_MS,
+		);
+		safety.unref?.();
+	});
+
 	pi.on("session_compact", async (_event, ctx) => {
+		stopCompactIndicator(ctx);
 		consumePlannerControlledCompact(compactRuntime);
 
 		const fs = createNodeFs();
@@ -3955,6 +4052,54 @@ async function resolveRenameCommandArgs(input: {
 		return null;
 	}
 	return { planId, title };
+}
+
+function planDeleteLabel(plan: PlannerListEntry): string {
+	const position =
+		plan.stage && plan.step ? `${plan.stage}/${plan.step}` : "missing";
+	return `${plan.title} [${plan.status}] ${position} — ${plan.planId}`;
+}
+
+// Deleting the active plan switches to a fresh handoff session first, since the
+// active worktree session is being torn down. switchSession is terminal, so a
+// batch delete must run this last.
+async function deleteActivePlanViaHandoff(input: {
+	pi: ExtensionAPI;
+	ctx: ExtensionCommandContext;
+	fs: ReturnType<typeof createNodeFs>;
+	agentDir: string;
+	projectPaths: ProjectStoragePaths;
+	planId: string;
+}): Promise<void> {
+	const { pi, ctx, fs, agentDir, projectPaths, planId } = input;
+	const handoffCwd = (await fs.exists(projectPaths.projectRoot))
+		? projectPaths.projectRoot
+		: agentDir;
+	if (handoffCwd !== projectPaths.projectRoot) {
+		ctx.ui.notify(
+			"Original project directory is missing. Planner will switch to agent dir and delete planner storage best-effort.",
+			"warning",
+		);
+	}
+	const session = await createPlannerHandoffSession({
+		fs,
+		agentDir,
+		worktreePath: handoffCwd,
+		parentSession: ctx.sessionManager.getSessionFile(),
+	});
+	resetPlanActiveCache(pi);
+	await ctx.switchSession(session.sessionFile, {
+		withSession: async (replacementCtx) => {
+			const result = await executePlannerUserCommand({
+				fs,
+				git: gitRunner,
+				projectPaths,
+				commandName: "planner_delete",
+				params: { planId, deleteSessions: true },
+			});
+			notifyPlannerCommandResult(replacementCtx, result);
+		},
+	});
 }
 
 async function resolveDeleteCommandArgs(input: {

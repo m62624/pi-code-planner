@@ -134,7 +134,7 @@ export const DEFAULT_PLANNER_SETTINGS = {
 	exec: {
 		defaultTimeoutSeconds: 240,
 		maxTimeoutSeconds: 1800,
-		maxOutputBytes: 10 * 1024 * 1024,
+		maxOutputBytes: 256 * 1024,
 	},
 	metadata: {
 		humanLanguage: DEFAULT_LANGUAGE,
