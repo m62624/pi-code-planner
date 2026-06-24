@@ -29,6 +29,28 @@ export class GitCommandError extends Error {
 }
 
 export class NodeGitRunner implements GitRunner {
+	async isInstalled(): Promise<boolean> {
+		try {
+			await execFileAsync("git", buildGitVersionArgs());
+			return true;
+		} catch {
+			// ENOENT (git not on PATH) or any other spawn failure: treat as absent.
+			return false;
+		}
+	}
+
+	async isRepository(input: GitRepoInput): Promise<boolean> {
+		try {
+			const output = await runGitCommandOutput(
+				buildGitIsInsideWorkTreeArgs(input),
+			);
+			return output.trim() === "true";
+		} catch {
+			// Not a repository (or git unavailable): not a usable repo here.
+			return false;
+		}
+	}
+
 	async init(input: GitRepoInput): Promise<void> {
 		await runGitCommand(buildGitInitArgs(input));
 	}
@@ -142,6 +164,14 @@ export class NodeGitRunner implements GitRunner {
 	async discardWorktreeChanges(input: GitRepoInput): Promise<void> {
 		await runGitCommand(buildGitRestoreArgs(input));
 	}
+}
+
+export function buildGitVersionArgs(): string[] {
+	return ["--version"];
+}
+
+export function buildGitIsInsideWorkTreeArgs(input: GitRepoInput): string[] {
+	return ["-C", input.repoRoot, "rev-parse", "--is-inside-work-tree"];
 }
 
 export function buildGitInitArgs(input: GitRepoInput): string[] {

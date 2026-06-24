@@ -1,9 +1,11 @@
 import { errorMessage } from "../errors";
+import { probeGitAvailability } from "../git/git-availability";
 import type { GitRunner } from "../git/runner";
 import { createPiSessionDir } from "../session/handoff";
 import type { PlannerFs } from "../storage/fs";
 import {
 	createPlanStoragePaths,
+	type PlanStoragePaths,
 	type ProjectStoragePaths,
 } from "../storage/paths";
 import { readPlanRecordIfExists, savePlanRecord } from "../storage/plan-store";
@@ -18,8 +20,9 @@ import type {
 	PlanSummaryStatus,
 	ProjectRecord,
 } from "../storage/schema";
-import { readPlanStateIfExists } from "../storage/state-store";
+import { readPlanStateIfExists, savePlanState } from "../storage/state-store";
 import { createWorktreeProjectIndexPath } from "../storage/worktree-index";
+import { bootstrapPlanWorktree, resolveUniquePlanBranch } from "./plan-tools";
 import type { PlannerToolContext } from "./tool-context";
 import { asObject } from "./values";
 
@@ -225,11 +228,29 @@ async function resumePlan(
 		);
 	}
 	if (!(await input.fs.exists(target.state.worktreePath))) {
-		return blocked(
-			input.commandName,
-			`Target planner worktree is missing: ${target.state.worktreePath}.`,
-			{ target },
-		);
+		// A plan persisted while git was unavailable has no worktree yet. Finish
+		// creating it now that the user is back (git may have become available),
+		// instead of treating it as broken and losing the saved request.
+		if (target.state.worktreeBootstrapPending) {
+			const rebootstrap = await rebootstrapPendingWorktree({
+				fs: input.fs,
+				git: input.git,
+				projectPaths: input.projectPaths,
+				commandName: input.commandName,
+				planId: targetPlanId,
+				state: target.state,
+			});
+			if (!rebootstrap.allow) {
+				return rebootstrap.result;
+			}
+			target.state = rebootstrap.state;
+		} else {
+			return blocked(
+				input.commandName,
+				`Target planner worktree is missing: ${target.state.worktreePath}.`,
+				{ target },
+			);
+		}
 	}
 
 	const nextProject = await setActivePlan(
@@ -244,6 +265,112 @@ async function resumePlan(
 		creationMethod: target.state.creationMethod ?? "create",
 		compatibilityMode: target.state.compatibilityMode ?? "additive",
 	});
+}
+
+/**
+ * Finish creating the git worktree for a plan that was persisted while git was
+ * unavailable. Returns the promoted state on success, or a blocked result that
+ * points at the saved request.md when git is still unavailable or the bootstrap
+ * fails — so the request is never lost and the user can retry.
+ */
+async function rebootstrapPendingWorktree(input: {
+	fs: PlannerFs;
+	git: GitRunner;
+	projectPaths: ProjectStoragePaths;
+	commandName: PlannerUserCommandName;
+	planId: string;
+	state: PlanStateRecord;
+}): Promise<
+	| { allow: true; state: PlanStateRecord }
+	| { allow: false; result: PlannerUserCommandResult }
+> {
+	const planPaths: PlanStoragePaths = createPlanStoragePaths(
+		input.projectPaths,
+		input.planId,
+	);
+	const worktreePath = input.state.worktreePath;
+	if (!worktreePath) {
+		return {
+			allow: false,
+			result: blocked(
+				input.commandName,
+				`Target planner plan has no worktreePath: ${input.planId}.`,
+				{ planId: input.planId },
+			),
+		};
+	}
+
+	const availability = await probeGitAvailability({
+		git: input.git,
+		projectRoot: input.projectPaths.projectRoot,
+	});
+	if (!availability.installed || !availability.repository) {
+		const detail = !availability.installed
+			? "Git is not installed."
+			: "No git repository was found here. Run `git init` first.";
+		return {
+			allow: false,
+			result: blocked(
+				input.commandName,
+				[
+					`${detail} The planner cannot finish creating the worktree for "${input.planId}" yet.`,
+					`Your request is saved at: ${planPaths.requestMd}`,
+					"Make git available and run /planner-resume again.",
+				].join("\n"),
+				{
+					planId: input.planId,
+					requestMd: planPaths.requestMd,
+					worktreeBootstrapPending: true,
+				},
+			),
+		};
+	}
+
+	try {
+		const planBranch = await resolveUniquePlanBranch({
+			git: input.git,
+			repoRoot: input.projectPaths.projectRoot,
+			planBranch: input.state.activeBranches.plan,
+		});
+		const { reality } = await bootstrapPlanWorktree({
+			fs: input.fs,
+			git: input.git,
+			projectPaths: input.projectPaths,
+			planId: input.planId,
+			worktreeLocation: worktreePath,
+			planBranch,
+			baseBranch: input.state.activeBranches.base,
+		});
+		const nextState: PlanStateRecord = {
+			...input.state,
+			worktreeBootstrapPending: false,
+			stage: "intake",
+			step: "draft_goal",
+			stepStatus: "running",
+			currentBranch: reality.branch,
+			activeBranches: { ...input.state.activeBranches, plan: planBranch },
+		};
+		await savePlanState(input.fs, planPaths, nextState);
+		return { allow: true, state: nextState };
+	} catch (error) {
+		return {
+			allow: false,
+			result: blocked(
+				input.commandName,
+				[
+					`The planner could not create the git worktree for "${input.planId}": ${errorMessage(error)}.`,
+					`Your request is saved at: ${planPaths.requestMd}`,
+					"Fix git and run /planner-resume again.",
+				].join("\n"),
+				{
+					planId: input.planId,
+					requestMd: planPaths.requestMd,
+					error,
+					worktreeBootstrapPending: true,
+				},
+			),
+		};
+	}
 }
 
 async function deletePlan(

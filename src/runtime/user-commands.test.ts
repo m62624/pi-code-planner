@@ -28,25 +28,37 @@ import {
 	createPlanRecord,
 	type PlanStateRecord,
 } from "../storage/schema";
-import { initializePlanState } from "../storage/state-store";
+import { initializePlanState, readPlanState } from "../storage/state-store";
 import { createWorktreeProjectIndexPath } from "../storage/worktree-index";
 import { MockPlannerFs } from "../test/mock-fs";
 import { executePlannerUserCommand } from "./user-commands";
 
 class MockGitRunner implements GitRunner {
 	status = "";
+	/** Probe answers used by the worktree-rebootstrap path. */
+	installed = true;
+	repository = true;
 	readonly calls: Array<{ name: string; input: unknown }> = [];
 	/** Branches reported as already gone by branchExists. */
 	readonly missingBranches = new Set<string>();
 	/** Branches whose deleteBranch should throw (e.g. unmerged, force:false). */
 	readonly failDeleteBranches = new Set<string>();
 
+	async isInstalled(): Promise<boolean> {
+		return this.installed;
+	}
+	async isRepository(_input: GitRepoInput): Promise<boolean> {
+		return this.repository;
+	}
 	async init(_input: GitRepoInput): Promise<void> {}
 	async currentBranch(_input: GitRepoInput): Promise<string> {
 		return "main";
 	}
 	async headCommit(_input: GitRepoInput): Promise<string> {
 		return "head";
+	}
+	async hasCommits(_input: GitRepoInput): Promise<boolean> {
+		return true;
 	}
 	async statusPorcelain(input: GitRepoInput): Promise<string> {
 		this.calls.push({ name: "statusPorcelain", input });
@@ -176,6 +188,44 @@ async function createPlanFixture(
 		planId,
 		title: input.title,
 		status: "active",
+	});
+}
+
+/**
+ * Seed a plan that was persisted while git was unavailable: request.md exists,
+ * the state is worktreeBootstrapPending, the summary is paused, and the worktree
+ * directory is deliberately absent.
+ */
+async function createPendingPlanFixture(input: {
+	fs: MockPlannerFs;
+	projectPaths: ProjectStoragePaths;
+	planId: string;
+	worktreePath: string;
+	request: string;
+}): Promise<void> {
+	const planPaths = createPlanStoragePaths(input.projectPaths, input.planId);
+	await initializePlanFiles(
+		input.fs,
+		planPaths,
+		createPlanRecord({
+			planId: input.planId,
+			title: "Pending",
+			status: "active",
+		}),
+	);
+	await input.fs.writeTextAtomic(planPaths.requestMd, `${input.request}\n`);
+	await initializePlanState(input.fs, planPaths, {
+		...createInitialPlanState({
+			baseBranch: "main",
+			planBranch: `plan/${input.planId}`,
+			worktreePath: input.worktreePath,
+		}),
+		worktreeBootstrapPending: true,
+	});
+	await upsertProjectPlanSummary(input.fs, input.projectPaths, {
+		planId: input.planId,
+		title: "Pending",
+		status: "paused",
 	});
 }
 
@@ -416,6 +466,84 @@ describe("planner user commands", () => {
 		expect(result.text).toContain("dirty worktree");
 		await expect(readProjectRecord(fs, projectPaths)).resolves.toMatchObject({
 			activePlanId: "plan-a",
+		});
+	});
+
+	it("rebootstraps a pending worktree on resume when git is available", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		await ensureProjectRecord(fs, projectPaths);
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-pending";
+		await createPendingPlanFixture({
+			fs,
+			projectPaths,
+			planId: "plan-pending",
+			worktreePath,
+			request: "Do the thing.",
+		});
+
+		const result = await executePlannerUserCommand({
+			fs,
+			git,
+			projectPaths,
+			commandName: "planner_resume",
+			params: { planId: "plan-pending" },
+		});
+
+		expect(result.status).toBe("applied");
+		expect(result.details).toMatchObject({ worktreePath });
+		await expect(fs.exists(worktreePath)).resolves.toBe(true);
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-pending");
+		await expect(readPlanState(fs, planPaths)).resolves.toMatchObject({
+			worktreeBootstrapPending: false,
+			stage: "intake",
+			step: "draft_goal",
+		});
+		await expect(readProjectRecord(fs, projectPaths)).resolves.toMatchObject({
+			activePlanId: "plan-pending",
+		});
+	});
+
+	it("keeps the request and reports its path when git is still unavailable on resume", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		git.installed = false;
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		await ensureProjectRecord(fs, projectPaths);
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-pending";
+		await createPendingPlanFixture({
+			fs,
+			projectPaths,
+			planId: "plan-pending",
+			worktreePath,
+			request: "Do the thing.",
+		});
+
+		const result = await executePlannerUserCommand({
+			fs,
+			git,
+			projectPaths,
+			commandName: "planner_resume",
+			params: { planId: "plan-pending" },
+		});
+
+		expect(result.status).toBe("blocked");
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-pending");
+		expect(result.text).toContain(planPaths.requestMd);
+		expect(result.text).toContain("Git is not installed");
+		await expect(fs.exists(worktreePath)).resolves.toBe(false);
+		await expect(readPlanState(fs, planPaths)).resolves.toMatchObject({
+			worktreeBootstrapPending: true,
+		});
+		await expect(readProjectRecord(fs, projectPaths)).resolves.toMatchObject({
+			activePlanId: null,
 		});
 	});
 

@@ -138,6 +138,7 @@ function normalizePlanState(state: PlanStateRecord): PlanStateRecord {
 		...state,
 		creationMethod: state.creationMethod ?? "create",
 		compatibilityMode: state.compatibilityMode ?? "additive",
+		worktreeBootstrapPending: state.worktreeBootstrapPending ?? false,
 		questionsSubmitted: state.questionsSubmitted ?? false,
 		questionsResolved: state.questionsResolved ?? false,
 		compactBoundaries: state.compactBoundaries ?? {
