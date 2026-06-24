@@ -104,7 +104,7 @@ function parseLevelTwoSections(text: string): Map<string, string> {
 	let buffer: string[] = [];
 
 	for (const line of text.split(/\r?\n/)) {
-		const heading = /^##\s+(.+)$/.exec(line);
+		const heading = /^##\s+(\S.*)$/.exec(line);
 		if (heading) {
 			if (current) sections.set(current, buffer.join("\n").trim());
 			current = heading[1].trim();
