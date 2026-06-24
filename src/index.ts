@@ -200,7 +200,7 @@ import {
 	selectPlannerResumeSessionFile,
 } from "./session/handoff";
 import { loadEffectivePlannerSettings } from "./settings/manager";
-import { createNodeFs } from "./storage/fs";
+import { createNodeFs, type PlannerFs } from "./storage/fs";
 import type { ProjectStoragePaths } from "./storage/paths";
 import { createPlanStoragePaths } from "./storage/paths";
 import { resolveProjectStoragePaths } from "./storage/project-resolver";
@@ -741,7 +741,7 @@ const SUMMARY_SUBMIT_TOOL_PARAMETERS = {
 		content: {
 			type: "string",
 			description:
-				"Full final_summary.md markdown: what changed, verification evidence, and any follow-ups.",
+				"Full final_summary.md markdown: what changed, verification evidence, and any follow-ups. Write the prose in the metadata.humanLanguage reported by planner_status unless the user requested another language.",
 		},
 	},
 	required: ["content"],
@@ -874,7 +874,7 @@ const DOUBT_REVIEW_TOOL_PARAMETERS = {
 		summary: {
 			type: "string",
 			description:
-				"Short final doubt-review summary. State whether proven bugs remain, probes are needed, or the result can proceed.",
+				"Short final doubt-review summary. State whether proven bugs remain, probes are needed, or the result can proceed. Write the human-readable text here and in each finding's claim in the metadata.doubtReviewLanguage reported by planner_status unless the user requested another language.",
 		},
 		possibleErrors: {
 			type: "array",
@@ -1255,10 +1255,16 @@ const OPTIONAL_REASON_TOOL_PARAMETERS = {
 	additionalProperties: false,
 } as const;
 
+const COMMIT_MESSAGE_PARAMETER_DESCRIPTION =
+	"Commit message. Write the human-readable text in the metadata.commitLanguage reported by planner_status unless repository conventions or an explicit user instruction override it. Conventional type prefixes (feat:, fix:, test:) are technical tokens, not translatable text.";
+
 const GIT_MESSAGE_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {
-		message: { type: "string" },
+		message: {
+			type: "string",
+			description: COMMIT_MESSAGE_PARAMETER_DESCRIPTION,
+		},
 	},
 	required: ["message"],
 	additionalProperties: false,
@@ -1276,7 +1282,10 @@ const GIT_TASK_TOOL_PARAMETERS = {
 const GIT_OPTIONAL_MESSAGE_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {
-		message: { type: "string" },
+		message: {
+			type: "string",
+			description: `Optional merge message. ${COMMIT_MESSAGE_PARAMETER_DESCRIPTION}`,
+		},
 	},
 	additionalProperties: false,
 } as const;
@@ -1314,11 +1323,13 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 	};
 	const timerRuntime = createPlannerTimerRuntimeState();
 	installPlannerToolErrorBoundary(pi);
+	// planner-dashboard is registered first so it heads the command selector;
+	// registerPlannerCommands then adds the rest in the order they should appear.
+	registerPlannerDashboard(pi);
 	registerPlannerCommands(pi);
 	registerPlannerTools(pi, compactRuntime);
 	registerPlannerIdleWatchdog(pi, idleRuntime);
 	registerPlannerRuntimeTimer(pi, timerRuntime);
-	registerPlannerDashboard(pi);
 	registerPlannerWorkspaceAutoOpen(pi);
 	registerPlannerBuiltinToolGuard(pi);
 	registerPlannerCompactEvents(pi, compactRuntime);
@@ -1540,135 +1551,6 @@ function buildPlannerImproveRequest(input: {
 }
 
 function registerPlannerCommands(pi: ExtensionAPI): void {
-	pi.registerCommand("planner-helper", {
-		description:
-			"Show pi-code-planner settings, defaults, sources, and runtime behavior.",
-		handler: async (_args, ctx) => {
-			const fs = createNodeFs();
-			try {
-				const projectPaths = await resolveProjectStoragePaths({
-					fs,
-					agentDir: getAgentDir(),
-					cwd: ctx.cwd,
-				});
-				const settings = await loadEffectivePlannerSettings({
-					fs,
-					projectPaths,
-				});
-				pi.sendMessage(
-					{
-						customType: "planner-helper",
-						content: buildPlannerAboutReport({
-							settings,
-							projectPaths,
-							audience: "human",
-						}),
-						display: true,
-					},
-					{ triggerTurn: false } as never,
-				);
-			} catch (error) {
-				ctx.ui.notify(`Planner helper failed: ${errorMessage(error)}`, "error");
-			}
-		},
-	});
-
-	pi.registerCommand("planner-skills", {
-		description:
-			"Search, view, and delete planner-generated skills saved by pi-code-planner.",
-		handler: async (_args, ctx) => {
-			await ctx.waitForIdle();
-			const fs = createNodeFs();
-			try {
-				const projectPaths = await resolveProjectStoragePaths({
-					fs,
-					agentDir: getAgentDir(),
-					cwd: ctx.cwd,
-				});
-				const inventory = await listPlannerSkillInventory({
-					fs,
-					projectPaths,
-				});
-				if (inventory.length === 0) {
-					ctx.ui.notify("No planner-generated skills found.", "info");
-					return;
-				}
-
-				const query = await ctx.ui.input(
-					"Search planner skills",
-					"Type keywords or leave empty",
-				);
-				if (query === undefined) {
-					ctx.ui.notify("Planner skills cancelled.", "info");
-					return;
-				}
-				const matches = filterPlannerSkillInventory(inventory, query.trim());
-				if (matches.length === 0) {
-					ctx.ui.notify("No planner skills matched that search.", "info");
-					return;
-				}
-
-				const labels = matches.map(plannerSkillOptionLabel);
-				const selectedLabel = await ctx.ui.select(
-					`Planner skills (${matches.length})`,
-					labels,
-				);
-				if (!selectedLabel) {
-					ctx.ui.notify("Planner skills cancelled.", "info");
-					return;
-				}
-				const selected = matches[labels.indexOf(selectedLabel)];
-				if (!selected) {
-					ctx.ui.notify("Planner skill selection failed.", "error");
-					return;
-				}
-
-				const viewLabel = "View details";
-				const deleteLabel = "Delete skill";
-				const action = await ctx.ui.select("Planner skill action", [
-					viewLabel,
-					deleteLabel,
-				]);
-				if (!action) {
-					ctx.ui.notify("Planner skills cancelled.", "info");
-					return;
-				}
-				if (action === viewLabel) {
-					pi.sendMessage(
-						{
-							customType: "planner-skills",
-							content: buildPlannerSkillDetailsMarkdown(selected),
-							display: true,
-						},
-						{ triggerTurn: false } as never,
-					);
-					return;
-				}
-
-				const confirmed = await ctx.ui.confirm(
-					"Delete planner skill?",
-					`Delete "${selected.name}" from the planner skill library? This removes its SKILL.md and index entry. Future planner sessions will not load it.`,
-				);
-				if (!confirmed) {
-					ctx.ui.notify("Planner skill delete cancelled.", "info");
-					return;
-				}
-				const deleted = await deletePlannerSkill({
-					fs,
-					projectPaths,
-					name: selected.name,
-				});
-				if (!deleted) {
-					ctx.ui.notify("Planner skill no longer exists.", "warning");
-					return;
-				}
-				ctx.ui.notify(`Deleted planner skill: ${deleted.name}`, "info");
-			} catch (error) {
-				ctx.ui.notify(`Planner skills failed: ${errorMessage(error)}`, "error");
-			}
-		},
-	});
-
 	pi.registerCommand("planner-create", {
 		description:
 			"Open a multiline planner request editor, then create a worktree plan.",
@@ -1684,6 +1566,16 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					return;
 				}
 
+				const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
+					ctx.cwd,
+				);
+				// Surface stale/deprecated settings keys before the request editor
+				// and the workspace TUI take over. Once the plan is created the
+				// session switches to the custom workspace, where a toast queued
+				// from this command context is never seen — so warn up front, the
+				// same point /planner-resume warns from.
+				await notifyPlannerSettingsWarnings(ctx, fs, projectPaths);
+
 				// ctx.ui.editor is async and may span a session replacement
 				// (e.g. ESC → "Resumed session"). Keep editor and post-editor
 				// work inside this guard so stale ctx errors cannot crash Pi.
@@ -1697,9 +1589,6 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				}
 				const normalizedRequest = request.trim();
 
-				const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
-					ctx.cwd,
-				);
 				const project = await ensureProjectRecord(fs, projectPaths);
 				let planId: string;
 				try {
@@ -1840,273 +1729,67 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.registerCommand("planner-improve", {
-		description:
-			"Create a discovery-first self-improvement plan for this repository. Use --breaking to allow breaking proposals.",
+	pi.registerCommand("planner-delete", {
+		description: "Delete a planner plan after confirmation.",
 		handler: async (args, ctx) => {
-			try {
-				await ctx.waitForIdle();
-				const parsed = parsePlannerImproveCommandArgs(args);
-				if (!parsed) {
-					ctx.ui.notify(
-						"Usage: /planner-improve [--additive|--breaking|--compat additive|breaking] [optional focus]",
-						"error",
-					);
-					return;
-				}
-
-				const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
-					ctx.cwd,
-				);
-				const request = buildPlannerImproveRequest({
-					request: parsed.request,
-					compatibilityMode: parsed.compatibilityMode,
-				});
-				const project = await ensureProjectRecord(fs, projectPaths);
-				let planId: string;
-				try {
-					planId = resolvePlannerPlanId({
-						request,
-						project,
-					});
-				} catch (error) {
-					ctx.ui.notify(errorMessage(error), "error");
-					return;
-				}
-
-				// Same git probe as /planner-create: degrade gracefully (and keep
-				// the request) instead of crashing when git is missing or absent.
-				let degradedReason: "git-missing" | "no-repository" | undefined;
-				const availability = await probeGitAvailability({
-					git: gitRunner,
-					projectRoot: projectPaths.projectRoot,
-				});
-				if (!availability.installed) {
-					degradedReason = "git-missing";
-				} else if (!availability.repository) {
-					const initHere = await ctx.ui.confirm(
-						"Initialize a git repository?",
-						`No git repository was found at ${projectPaths.projectRoot}. Initialize one here so the planner can create a worktree? Choosing No still saves your request so you can resume it later.`,
-					);
-					if (initHere) {
-						try {
-							await gitRunner.init({ repoRoot: projectPaths.projectRoot });
-						} catch (error) {
-							await safeNotify(
-								ctx,
-								`git init failed: ${errorMessage(error)}. Your request will still be saved.`,
-								"warning",
-							);
-							degradedReason = "no-repository";
-						}
-					} else {
-						degradedReason = "no-repository";
-					}
-				}
-
-				const result = await executePlannerPlanTool({
-					fs,
-					git: gitRunner,
-					projectPaths,
-					toolName: "planner_create_plan",
-					params: {
-						planId,
-						request,
-						title:
-							parsed.compatibilityMode === "breaking"
-								? "Improve planner with breaking proposals"
-								: "Improve planner compatibility",
-						description:
-							parsed.compatibilityMode === "breaking"
-								? "Discovery-first self-improvement plan that may propose approved breaking changes."
-								: "Discovery-first additive self-improvement plan for this repository.",
-						...(degradedReason ? { degradedReason } : {}),
-					},
-				});
-
-				if (result.status !== "applied") {
-					const degraded = (result.details as { degraded?: boolean } | null)
-						?.degraded;
-					await safeNotify(ctx, result.text, degraded ? "warning" : "error");
-					return;
-				}
-				markPlannerToolVisibilityActive();
-
-				const {
-					worktreePath,
-					createdPlanId,
-					descriptionLanguage,
-					titleLanguage,
-				} = readPlannerCreateOutcome(result.details, planId);
-				if (!worktreePath) {
-					ctx.ui.notify(
-						"Planner plan was created without worktreePath.",
-						"error",
-					);
-					return;
-				}
-
-				const planPaths = createPlanStoragePaths(projectPaths, createdPlanId);
-				await updatePlanState(fs, planPaths, (current) => ({
-					...current,
-					stage: "discovery",
-					step: "scan_project_structure",
-					stepStatus: "running",
-					nextStep: null,
-					creationMethod: "improve",
-					compatibilityMode: parsed.compatibilityMode,
-				}));
-
-				const originalSessionFile = ctx.sessionManager.getSessionFile();
-				await bindWorktreeRootSession({
-					fs,
-					agentDir,
-					worktreePath,
-					projectRoot: projectPaths.projectRoot,
-					projectId: projectPaths.projectId,
-					planId: createdPlanId,
-					createdFromSessionFile: originalSessionFile ?? null,
-					lastRootSessionFile: originalSessionFile ?? null,
-				});
-
-				const session = await createPlannerHandoffSession({
-					fs,
-					agentDir,
-					worktreePath,
-					parentSession: originalSessionFile,
-				});
-				await persistPlannerToolVisibilityActiveToSession({
-					fs,
-					sessionFile: session.sessionFile,
-				});
-				await ctx.switchSession(session.sessionFile, {
-					withSession: async (replacementCtx) => {
-						await replacementCtx.sendUserMessage(
-							buildPlannerImproveHandoffPrompt({
-								planId: createdPlanId,
-								worktreePath,
-								titleLanguage,
-								descriptionLanguage,
-								compatibilityMode: parsed.compatibilityMode,
-							}),
-							FOLLOW_UP_MESSAGE_OPTIONS,
-						);
-					},
-				});
-			} catch (error) {
-				const msg = error instanceof Error ? error.message : String(error);
-				if (msg.includes("stale")) {
-					await safeNotify(ctx, "Planner improve cancelled.", "info");
-				} else {
-					await safeNotify(ctx, msg, "error");
-				}
-			}
-		},
-	});
-
-	pi.registerCommand("planner-exit", {
-		description:
-			"Return from the active planner worktree session to the original project chat without finishing or deleting the plan.",
-		handler: async (_args, ctx) => {
 			await ctx.waitForIdle();
 			const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
 				ctx.cwd,
 			);
-			try {
-				const project = await readProjectRecordIfExists(fs, projectPaths);
-				if (!project?.activePlanId) {
-					ctx.ui.notify("No active planner plan to exit.", "info");
-					resetPlanActiveCache(pi);
-					return;
-				}
-				const activePlanId = project.activePlanId;
-				const planPaths = createPlanStoragePaths(projectPaths, activePlanId);
-				const state = await readPlanStateIfExists(fs, planPaths);
-				const worktreePath = state?.worktreePath;
-				if (!worktreePath) {
-					ctx.ui.notify("Active planner plan has no worktree path.", "error");
-					return;
-				}
-				const index = await readWorktreeProjectIndexIfExists({
-					fs,
-					agentDir,
-					worktreePath,
-				});
-				const targetSessionFile = await resolveProjectSessionForHandoff({
-					fs,
-					agentDir,
-					projectRoot: projectPaths.projectRoot,
-					preferredSessionFiles: [
-						index?.lastRootSessionFile ?? null,
-						index?.createdFromSessionFile ?? null,
-					],
-					parentSession: ctx.sessionManager.getSessionFile(),
-				});
-				if (!targetSessionFile.sessionFile) {
-					ctx.ui.notify(
-						"Planner exit could not resolve a project session for handoff.",
-						"error",
-					);
-					return;
-				}
-				await setActivePlan(fs, projectPaths, null);
-				resetPlanActiveCache(pi);
-				await ctx.switchSession(targetSessionFile.sessionFile, {
-					withSession: async (replacementCtx) => {
-						if (targetSessionFile.recovered) {
-							replacementCtx.ui.notify(
-								"Original Pi JSONL session path was missing or stale. Planner returned to an existing project-root session.",
-								"warning",
-							);
-						}
-						if (targetSessionFile.created) {
-							replacementCtx.ui.notify(
-								"Original Pi JSONL session was missing. Planner created a replacement project-root session.",
-								"warning",
-							);
-						}
-						await replacementCtx.sendUserMessage(
-							buildPlannerExitPrompt({
-								planId: activePlanId,
-								worktreePath,
-							}),
-							FOLLOW_UP_MESSAGE_OPTIONS,
-						);
-					},
-				});
-			} catch (error) {
-				await safeNotify(
-					ctx,
-					`Planner exit failed: ${errorMessage(error)}`,
-					"error",
-				);
-			}
-		},
-	});
-
-	pi.registerCommand("planner-rename", {
-		description:
-			"Rename a planner plan title without changing its stable plan id.",
-		handler: async (args, ctx) => {
-			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
-			const parsed = await resolveRenameCommandArgs({
+			const parsed = await resolveDeleteCommandArgs({
 				args,
 				ctx,
 				fs,
 				projectPaths,
 			});
 			if (!parsed) return;
+			if (parsed.deleteActive) {
+				const handoffCwd = (await fs.exists(projectPaths.projectRoot))
+					? projectPaths.projectRoot
+					: agentDir;
+				if (handoffCwd !== projectPaths.projectRoot) {
+					ctx.ui.notify(
+						"Original project directory is missing. Planner will switch to agent dir and delete planner storage best-effort.",
+						"warning",
+					);
+				}
+				const session = await createPlannerHandoffSession({
+					fs,
+					agentDir,
+					worktreePath: handoffCwd,
+					parentSession: ctx.sessionManager.getSessionFile(),
+				});
+				resetPlanActiveCache(pi);
+				await ctx.switchSession(session.sessionFile, {
+					withSession: async (replacementCtx) => {
+						const result = await executePlannerUserCommand({
+							fs,
+							git: gitRunner,
+							projectPaths,
+							commandName: "planner_delete",
+							params: {
+								planId: parsed.planId,
+								deleteSessions: true,
+							},
+						});
+						notifyPlannerCommandResult(replacementCtx, result);
+					},
+				});
+				return;
+			}
+
 			const result = await executePlannerUserCommand({
 				fs,
 				git: gitRunner,
 				projectPaths,
-				commandName: "planner_rename",
+				commandName: "planner_delete",
 				params: {
 					planId: parsed.planId,
-					title: parsed.title,
+					deleteSessions: true,
 				},
 			});
 			notifyPlannerCommandResult(ctx, result);
+			resetPlanActiveCache(pi);
 		},
 	});
 
@@ -2117,6 +1800,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
 				ctx.cwd,
 			);
+			await notifyPlannerSettingsWarnings(ctx, fs, projectPaths);
 			const planId =
 				parseSinglePlanIdArg(args) ??
 				(await selectPlannerPlanId({
@@ -2199,67 +1883,83 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.registerCommand("planner-delete", {
-		description: "Delete a planner plan after confirmation.",
-		handler: async (args, ctx) => {
+	pi.registerCommand("planner-exit", {
+		description:
+			"Return from the active planner worktree session to the original project chat without finishing or deleting the plan.",
+		handler: async (_args, ctx) => {
 			await ctx.waitForIdle();
 			const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
 				ctx.cwd,
 			);
-			const parsed = await resolveDeleteCommandArgs({
-				args,
-				ctx,
-				fs,
-				projectPaths,
-			});
-			if (!parsed) return;
-			if (parsed.deleteActive) {
-				const handoffCwd = (await fs.exists(projectPaths.projectRoot))
-					? projectPaths.projectRoot
-					: agentDir;
-				if (handoffCwd !== projectPaths.projectRoot) {
-					ctx.ui.notify(
-						"Original project directory is missing. Planner will switch to agent dir and delete planner storage best-effort.",
-						"warning",
-					);
+			try {
+				const project = await readProjectRecordIfExists(fs, projectPaths);
+				if (!project?.activePlanId) {
+					ctx.ui.notify("No active planner plan to exit.", "info");
+					resetPlanActiveCache(pi);
+					return;
 				}
-				const session = await createPlannerHandoffSession({
+				const activePlanId = project.activePlanId;
+				const planPaths = createPlanStoragePaths(projectPaths, activePlanId);
+				const state = await readPlanStateIfExists(fs, planPaths);
+				const worktreePath = state?.worktreePath;
+				if (!worktreePath) {
+					ctx.ui.notify("Active planner plan has no worktree path.", "error");
+					return;
+				}
+				const index = await readWorktreeProjectIndexIfExists({
 					fs,
 					agentDir,
-					worktreePath: handoffCwd,
+					worktreePath,
+				});
+				const targetSessionFile = await resolveProjectSessionForHandoff({
+					fs,
+					agentDir,
+					projectRoot: projectPaths.projectRoot,
+					preferredSessionFiles: [
+						index?.lastRootSessionFile ?? null,
+						index?.createdFromSessionFile ?? null,
+					],
 					parentSession: ctx.sessionManager.getSessionFile(),
 				});
+				if (!targetSessionFile.sessionFile) {
+					ctx.ui.notify(
+						"Planner exit could not resolve a project session for handoff.",
+						"error",
+					);
+					return;
+				}
+				await setActivePlan(fs, projectPaths, null);
 				resetPlanActiveCache(pi);
-				await ctx.switchSession(session.sessionFile, {
+				await ctx.switchSession(targetSessionFile.sessionFile, {
 					withSession: async (replacementCtx) => {
-						const result = await executePlannerUserCommand({
-							fs,
-							git: gitRunner,
-							projectPaths,
-							commandName: "planner_delete",
-							params: {
-								planId: parsed.planId,
-								deleteSessions: true,
-							},
-						});
-						notifyPlannerCommandResult(replacementCtx, result);
+						if (targetSessionFile.recovered) {
+							replacementCtx.ui.notify(
+								"Original Pi JSONL session path was missing or stale. Planner returned to an existing project-root session.",
+								"warning",
+							);
+						}
+						if (targetSessionFile.created) {
+							replacementCtx.ui.notify(
+								"Original Pi JSONL session was missing. Planner created a replacement project-root session.",
+								"warning",
+							);
+						}
+						await replacementCtx.sendUserMessage(
+							buildPlannerExitPrompt({
+								planId: activePlanId,
+								worktreePath,
+							}),
+							FOLLOW_UP_MESSAGE_OPTIONS,
+						);
 					},
 				});
-				return;
+			} catch (error) {
+				await safeNotify(
+					ctx,
+					`Planner exit failed: ${errorMessage(error)}`,
+					"error",
+				);
 			}
-
-			const result = await executePlannerUserCommand({
-				fs,
-				git: gitRunner,
-				projectPaths,
-				commandName: "planner_delete",
-				params: {
-					planId: parsed.planId,
-					deleteSessions: true,
-				},
-			});
-			notifyPlannerCommandResult(ctx, result);
-			resetPlanActiveCache(pi);
 		},
 	});
 
@@ -2433,6 +2133,324 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					`Planner finish failed: ${gitErrorMessage(error)}`,
 					"error",
 				);
+			}
+		},
+	});
+	pi.registerCommand("planner-helper", {
+		description:
+			"Show pi-code-planner settings, defaults, sources, and runtime behavior.",
+		handler: async (_args, ctx) => {
+			const fs = createNodeFs();
+			try {
+				const projectPaths = await resolveProjectStoragePaths({
+					fs,
+					agentDir: getAgentDir(),
+					cwd: ctx.cwd,
+				});
+				const settings = await loadEffectivePlannerSettings({
+					fs,
+					projectPaths,
+				});
+				pi.sendMessage(
+					{
+						customType: "planner-helper",
+						content: buildPlannerAboutReport({
+							settings,
+							projectPaths,
+							audience: "human",
+						}),
+						display: true,
+					},
+					{ triggerTurn: false } as never,
+				);
+			} catch (error) {
+				ctx.ui.notify(`Planner helper failed: ${errorMessage(error)}`, "error");
+			}
+		},
+	});
+
+	pi.registerCommand("planner-skills", {
+		description:
+			"Search, view, and delete planner-generated skills saved by pi-code-planner.",
+		handler: async (_args, ctx) => {
+			await ctx.waitForIdle();
+			const fs = createNodeFs();
+			try {
+				const projectPaths = await resolveProjectStoragePaths({
+					fs,
+					agentDir: getAgentDir(),
+					cwd: ctx.cwd,
+				});
+				const inventory = await listPlannerSkillInventory({
+					fs,
+					projectPaths,
+				});
+				if (inventory.length === 0) {
+					ctx.ui.notify("No planner-generated skills found.", "info");
+					return;
+				}
+
+				const query = await ctx.ui.input(
+					"Search planner skills",
+					"Type keywords or leave empty",
+				);
+				if (query === undefined) {
+					ctx.ui.notify("Planner skills cancelled.", "info");
+					return;
+				}
+				const matches = filterPlannerSkillInventory(inventory, query.trim());
+				if (matches.length === 0) {
+					ctx.ui.notify("No planner skills matched that search.", "info");
+					return;
+				}
+
+				const labels = matches.map(plannerSkillOptionLabel);
+				const selectedLabel = await ctx.ui.select(
+					`Planner skills (${matches.length})`,
+					labels,
+				);
+				if (!selectedLabel) {
+					ctx.ui.notify("Planner skills cancelled.", "info");
+					return;
+				}
+				const selected = matches[labels.indexOf(selectedLabel)];
+				if (!selected) {
+					ctx.ui.notify("Planner skill selection failed.", "error");
+					return;
+				}
+
+				const viewLabel = "View details";
+				const deleteLabel = "Delete skill";
+				const action = await ctx.ui.select("Planner skill action", [
+					viewLabel,
+					deleteLabel,
+				]);
+				if (!action) {
+					ctx.ui.notify("Planner skills cancelled.", "info");
+					return;
+				}
+				if (action === viewLabel) {
+					pi.sendMessage(
+						{
+							customType: "planner-skills",
+							content: buildPlannerSkillDetailsMarkdown(selected),
+							display: true,
+						},
+						{ triggerTurn: false } as never,
+					);
+					return;
+				}
+
+				const confirmed = await ctx.ui.confirm(
+					"Delete planner skill?",
+					`Delete "${selected.name}" from the planner skill library? This removes its SKILL.md and index entry. Future planner sessions will not load it.`,
+				);
+				if (!confirmed) {
+					ctx.ui.notify("Planner skill delete cancelled.", "info");
+					return;
+				}
+				const deleted = await deletePlannerSkill({
+					fs,
+					projectPaths,
+					name: selected.name,
+				});
+				if (!deleted) {
+					ctx.ui.notify("Planner skill no longer exists.", "warning");
+					return;
+				}
+				ctx.ui.notify(`Deleted planner skill: ${deleted.name}`, "info");
+			} catch (error) {
+				ctx.ui.notify(`Planner skills failed: ${errorMessage(error)}`, "error");
+			}
+		},
+	});
+
+	pi.registerCommand("planner-rename", {
+		description:
+			"Rename a planner plan title without changing its stable plan id.",
+		handler: async (args, ctx) => {
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+			const parsed = await resolveRenameCommandArgs({
+				args,
+				ctx,
+				fs,
+				projectPaths,
+			});
+			if (!parsed) return;
+			const result = await executePlannerUserCommand({
+				fs,
+				git: gitRunner,
+				projectPaths,
+				commandName: "planner_rename",
+				params: {
+					planId: parsed.planId,
+					title: parsed.title,
+				},
+			});
+			notifyPlannerCommandResult(ctx, result);
+		},
+	});
+
+	pi.registerCommand("planner-improve", {
+		description:
+			"Create a discovery-first self-improvement plan for this repository. Use --breaking to allow breaking proposals.",
+		handler: async (args, ctx) => {
+			try {
+				await ctx.waitForIdle();
+				const parsed = parsePlannerImproveCommandArgs(args);
+				if (!parsed) {
+					ctx.ui.notify(
+						"Usage: /planner-improve [--additive|--breaking|--compat additive|breaking] [optional focus]",
+						"error",
+					);
+					return;
+				}
+
+				const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
+					ctx.cwd,
+				);
+				const request = buildPlannerImproveRequest({
+					request: parsed.request,
+					compatibilityMode: parsed.compatibilityMode,
+				});
+				const project = await ensureProjectRecord(fs, projectPaths);
+				let planId: string;
+				try {
+					planId = resolvePlannerPlanId({
+						request,
+						project,
+					});
+				} catch (error) {
+					ctx.ui.notify(errorMessage(error), "error");
+					return;
+				}
+
+				// Same git probe as /planner-create: degrade gracefully (and keep
+				// the request) instead of crashing when git is missing or absent.
+				let degradedReason: "git-missing" | "no-repository" | undefined;
+				const availability = await probeGitAvailability({
+					git: gitRunner,
+					projectRoot: projectPaths.projectRoot,
+				});
+				if (!availability.installed) {
+					degradedReason = "git-missing";
+				} else if (!availability.repository) {
+					const initHere = await ctx.ui.confirm(
+						"Initialize a git repository?",
+						`No git repository was found at ${projectPaths.projectRoot}. Initialize one here so the planner can create a worktree? Choosing No still saves your request so you can resume it later.`,
+					);
+					if (initHere) {
+						try {
+							await gitRunner.init({ repoRoot: projectPaths.projectRoot });
+						} catch (error) {
+							await safeNotify(
+								ctx,
+								`git init failed: ${errorMessage(error)}. Your request will still be saved.`,
+								"warning",
+							);
+							degradedReason = "no-repository";
+						}
+					} else {
+						degradedReason = "no-repository";
+					}
+				}
+
+				const result = await executePlannerPlanTool({
+					fs,
+					git: gitRunner,
+					projectPaths,
+					toolName: "planner_create_plan",
+					params: {
+						planId,
+						request,
+						title:
+							parsed.compatibilityMode === "breaking"
+								? "Improve planner with breaking proposals"
+								: "Improve planner compatibility",
+						description:
+							parsed.compatibilityMode === "breaking"
+								? "Discovery-first self-improvement plan that may propose approved breaking changes."
+								: "Discovery-first additive self-improvement plan for this repository.",
+						...(degradedReason ? { degradedReason } : {}),
+					},
+				});
+
+				if (result.status !== "applied") {
+					const degraded = (result.details as { degraded?: boolean } | null)
+						?.degraded;
+					await safeNotify(ctx, result.text, degraded ? "warning" : "error");
+					return;
+				}
+				markPlannerToolVisibilityActive();
+
+				const {
+					worktreePath,
+					createdPlanId,
+					descriptionLanguage,
+					titleLanguage,
+				} = readPlannerCreateOutcome(result.details, planId);
+				if (!worktreePath) {
+					ctx.ui.notify(
+						"Planner plan was created without worktreePath.",
+						"error",
+					);
+					return;
+				}
+
+				const planPaths = createPlanStoragePaths(projectPaths, createdPlanId);
+				await updatePlanState(fs, planPaths, (current) => ({
+					...current,
+					stage: "discovery",
+					step: "scan_project_structure",
+					stepStatus: "running",
+					nextStep: null,
+					creationMethod: "improve",
+					compatibilityMode: parsed.compatibilityMode,
+				}));
+
+				const originalSessionFile = ctx.sessionManager.getSessionFile();
+				await bindWorktreeRootSession({
+					fs,
+					agentDir,
+					worktreePath,
+					projectRoot: projectPaths.projectRoot,
+					projectId: projectPaths.projectId,
+					planId: createdPlanId,
+					createdFromSessionFile: originalSessionFile ?? null,
+					lastRootSessionFile: originalSessionFile ?? null,
+				});
+
+				const session = await createPlannerHandoffSession({
+					fs,
+					agentDir,
+					worktreePath,
+					parentSession: originalSessionFile,
+				});
+				await persistPlannerToolVisibilityActiveToSession({
+					fs,
+					sessionFile: session.sessionFile,
+				});
+				await ctx.switchSession(session.sessionFile, {
+					withSession: async (replacementCtx) => {
+						await replacementCtx.sendUserMessage(
+							buildPlannerImproveHandoffPrompt({
+								planId: createdPlanId,
+								worktreePath,
+								titleLanguage,
+								descriptionLanguage,
+								compatibilityMode: parsed.compatibilityMode,
+							}),
+							FOLLOW_UP_MESSAGE_OPTIONS,
+						);
+					},
+				});
+			} catch (error) {
+				const msg = error instanceof Error ? error.message : String(error);
+				if (msg.includes("stale")) {
+					await safeNotify(ctx, "Planner improve cancelled.", "info");
+				} else {
+					await safeNotify(ctx, msg, "error");
+				}
 			}
 		},
 	});
@@ -3605,7 +3623,7 @@ function gitToolDescription(toolName: PlannerGitToolName): string {
 	}
 }
 
-function gitToolParameters(toolName: PlannerGitToolName) {
+export function gitToolParameters(toolName: PlannerGitToolName) {
 	switch (toolName) {
 		case "planner_git_commit":
 			return GIT_MESSAGE_TOOL_PARAMETERS;
@@ -4106,4 +4124,28 @@ function notifyPlannerCommandResult(
 	result: { status: "applied" | "blocked"; text: string },
 ): void {
 	ctx.ui.notify(result.text, result.status === "applied" ? "info" : "error");
+}
+
+// Surface unrecognized/deprecated keys in settings.json once, when the user
+// enters the planner via /planner-create or /planner-resume. The JSON still
+// loads (unknown keys are ignored); this just tells the user a key does
+// nothing, so a stale config is visible instead of silently inert.
+async function notifyPlannerSettingsWarnings(
+	ctx: ExtensionCommandContext,
+	fs: PlannerFs,
+	projectPaths: ProjectStoragePaths,
+): Promise<void> {
+	try {
+		const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
+		if (settings.warnings.length === 0) return;
+		await safeNotify(
+			ctx,
+			`Planner settings: ${settings.warnings.length} ignored or deprecated key(s):\n${settings.warnings
+				.map((w) => `• ${w}`)
+				.join("\n")}`,
+			"warning",
+		);
+	} catch {
+		// Never block entering the planner on a settings-warning read.
+	}
 }

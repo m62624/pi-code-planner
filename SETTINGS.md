@@ -47,9 +47,7 @@ getAgentDir()/extensions/pi-code-planner/settings.json
       "root": 1800,
       "ancestor": 3000,
       "nearest": 7000
-    },
-    "requireAfterTdd": true,
-    "requireBeforeEditOutsideChain": true
+    }
   },
   "workspace": {
     "enabled": true,
@@ -118,7 +116,7 @@ Affects human-facing generated text only. Tool names, JSON fields, branch names,
 | `metadata.humanLanguage` | `"English"` | Default for all language settings below. |
 | `metadata.titleLanguage` | `humanLanguage` | Plan title proposed through `planner_goal_submit`. |
 | `metadata.descriptionLanguage` | `humanLanguage` | Short `/planner-resume` list description. |
-| `metadata.commitLanguage` | `humanLanguage` | Human-readable parts of planner commit messages. |
+| `metadata.commitLanguage` | `humanLanguage` | Human-readable parts of the commit/merge messages the model writes (task, refactor, and task-to-plan merges). The final accepted-plan export commit is assembled automatically from `final_summary.md` and is not re-translated; `feat:`/`fix:` prefixes always stay English. |
 | `metadata.doubtReviewLanguage` | `humanLanguage` | Human-readable content inside `finalize/doubt_review`. |
 | `metadata.skillLanguage` | `humanLanguage` | Body text for planner-generated Pi skills. |
 
@@ -144,8 +142,6 @@ Planner-generated skills are stored under `getAgentDir()/extensions/pi-code-plan
 | `contracts.levelBudgets.root` | `1800` | Summary budget for root-level routing contracts. |
 | `contracts.levelBudgets.ancestor` | `3000` | Summary budget for intermediate domain contracts. |
 | `contracts.levelBudgets.nearest` | `7000` | Summary budget for the nearest applicable domain contract. |
-| `contracts.requireAfterTdd` | `true` | Require `execution/contract_check` after a green implementation. |
-| `contracts.requireBeforeEditOutsideChain` | `true` | Instruct the model to route/read contracts before leaving declared task scope. |
 
 ## Workspace (TUI)
 

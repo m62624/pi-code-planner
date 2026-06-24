@@ -159,7 +159,7 @@ It does **not** make the model smarter — nothing here adds reasoning. It adds 
 - **Local contracts (AGENTS.md)** — scope is pinned to the relevant directory chain instead of guessed.
 - **Mechanical consistency ([elenchus](https://github.com/m62624/elenchus))** — the model states only facts and first principles in a tiny DSL; a wasm SAT engine does the inference and reports `CONSISTENT / WARNING / UNDERDETERMINED / CONFLICT` with the premises to blame, so the model can only be wrong at the premise level and that is caught immediately. It is a soft gate with a `not_applicable` escape, so it never traps simple work.
 
-The honest part, kept short: a local model is still a local model, and the project itself is largely vibe-coded. A small model can't infer hidden requirements on its own — it wants everything explicit rather than implied, and the more detailed the plan, the better the result. Even at its best, its ceiling today still sits below the cloud models. It helps; it doesn't guarantee anything.
+The honest part, kept short: a local model is still a local model, and the project itself is largely vibe-coded — so expect rough edges, bugs, and instability, and be ready for them. A small model can't infer hidden requirements on its own — it wants everything explicit rather than implied, and the more detailed the plan, the better the result. Even at its best, its ceiling today still sits below the cloud models. It helps; it doesn't guarantee anything.
 
 ## License
 

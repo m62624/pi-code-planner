@@ -38,6 +38,13 @@ export interface EffectivePlannerSettings {
 	contractsSource: "project" | "global" | "default";
 	workspaceSource: "project" | "global" | "default";
 	diagnosticsSource: "project" | "global" | "default";
+	/**
+	 * Human-readable notes about unrecognized or deprecated keys found in the
+	 * settings files. Parsing never fails on them — unknown keys are ignored —
+	 * but the planner surfaces these once at /planner-create and /planner-resume
+	 * so a stale settings.json does not silently do nothing.
+	 */
+	warnings: string[];
 }
 
 export async function loadEffectivePlannerSettings(input: {
@@ -47,10 +54,8 @@ export async function loadEffectivePlannerSettings(input: {
 	const paths = createPlannerSettingsPaths(input.projectPaths);
 	await ensureGlobalPlannerSettings(input.fs, paths);
 
-	const global = normalizeSettingsFile(
-		await readJson<unknown>(input.fs, paths.globalSettingsJson),
-		paths.globalSettingsJson,
-	);
+	const globalRaw = await readJson<unknown>(input.fs, paths.globalSettingsJson);
+	const global = normalizeSettingsFile(globalRaw, paths.globalSettingsJson);
 	const projectRaw = await readJsonIfExists<unknown>(
 		input.fs,
 		paths.projectSettingsJson,
@@ -59,6 +64,12 @@ export async function loadEffectivePlannerSettings(input: {
 		projectRaw === null
 			? null
 			: normalizeSettingsFile(projectRaw, paths.projectSettingsJson);
+	const warnings = [
+		...collectSettingsWarnings(globalRaw, paths.globalSettingsJson),
+		...(projectRaw === null
+			? []
+			: collectSettingsWarnings(projectRaw, paths.projectSettingsJson)),
+	];
 	// Unlike compact/idle/timer/skills/contracts/workspace below, `worktree` is
 	// taken wholesale from whichever level wins — not merged field-by-field.
 	// A project `worktree` block fully replaces global's, even if it only
@@ -182,7 +193,81 @@ export async function loadEffectivePlannerSettings(input: {
 		contractsSource,
 		workspaceSource,
 		diagnosticsSource,
+		warnings,
 	};
+}
+
+// Known settings keys per group, used only to warn about unrecognized or
+// deprecated keys. Parsing ignores unknown keys, so the JSON always loads;
+// this list just lets the planner say "this key does nothing". Keep in sync
+// with PlannerSettings. Nested objects (contracts.levelBudgets, workspace.keys)
+// are intentionally not descended into here.
+const KNOWN_SETTING_KEYS: Record<string, readonly string[]> = {
+	worktree: ["mode", "root"],
+	compact: ["stage", "task"],
+	idle: ["enabled", "timeoutMinutes"],
+	exec: ["defaultTimeoutSeconds", "maxTimeoutSeconds", "maxOutputBytes"],
+	metadata: [
+		"humanLanguage",
+		"titleLanguage",
+		"descriptionLanguage",
+		"commitLanguage",
+		"doubtReviewLanguage",
+		"skillLanguage",
+	],
+	timer: [
+		"enabled",
+		"mode",
+		"showCheckpoints",
+		"maxCheckpoints",
+		"syncIntervalMinutes",
+	],
+	skills: ["enabled", "maxActive"],
+	contracts: [
+		"enabled",
+		"finalPolicy",
+		"scanBatchSize",
+		"statusCharBudget",
+		"readChunkChars",
+		"maxActiveChains",
+		"levelBudgets",
+	],
+	workspace: ["enabled", "autoOpen", "footerReserveRows", "keys"],
+	diagnostics: ["enabled", "blockedTransitions", "stuckMinutes"],
+};
+
+// Keys that used to exist but were removed. They never gated behavior, so the
+// note explains why removing them changes nothing.
+const DEPRECATED_SETTING_KEYS: Record<string, string> = {
+	"contracts.requireAfterTdd":
+		"it never had any effect — contract_check always runs after a green task",
+	"contracts.requireBeforeEditOutsideChain":
+		"it never had any effect — contract routing before out-of-scope edits is always on",
+};
+
+function collectSettingsWarnings(raw: unknown, path: string): string[] {
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+	const warnings: string[] = [];
+	for (const [group, value] of Object.entries(raw as Record<string, unknown>)) {
+		const known = KNOWN_SETTING_KEYS[group];
+		if (known === undefined) {
+			warnings.push(`${path}: unknown setting "${group}" is ignored`);
+			continue;
+		}
+		if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+		for (const key of Object.keys(value as Record<string, unknown>)) {
+			const full = `${group}.${key}`;
+			const deprecated = DEPRECATED_SETTING_KEYS[full];
+			if (deprecated) {
+				warnings.push(
+					`${path}: "${full}" is deprecated and ignored — ${deprecated}; remove it`,
+				);
+			} else if (!known.includes(key)) {
+				warnings.push(`${path}: unknown setting "${full}" is ignored`);
+			}
+		}
+	}
+	return warnings;
 }
 
 export async function ensureGlobalPlannerSettings(
@@ -634,22 +719,6 @@ function normalizeContractsSettings(
 		);
 	}
 	if (
-		record.requireAfterTdd !== undefined &&
-		typeof record.requireAfterTdd !== "boolean"
-	) {
-		throw new TypeError(
-			`Planner contracts setting requireAfterTdd must be boolean: ${path}`,
-		);
-	}
-	if (
-		record.requireBeforeEditOutsideChain !== undefined &&
-		typeof record.requireBeforeEditOutsideChain !== "boolean"
-	) {
-		throw new TypeError(
-			`Planner contracts setting requireBeforeEditOutsideChain must be boolean: ${path}`,
-		);
-	}
-	if (
 		record.finalPolicy !== undefined &&
 		record.finalPolicy !== "ask" &&
 		record.finalPolicy !== "keep" &&
@@ -710,12 +779,6 @@ function normalizeContractsSettings(
 						path,
 					),
 				}),
-		...(typeof record.requireAfterTdd === "boolean"
-			? { requireAfterTdd: record.requireAfterTdd }
-			: {}),
-		...(typeof record.requireBeforeEditOutsideChain === "boolean"
-			? { requireBeforeEditOutsideChain: record.requireBeforeEditOutsideChain }
-			: {}),
 	};
 }
 
