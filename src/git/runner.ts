@@ -52,6 +52,11 @@ export interface GitCommitInput {
 // depend on — never shell out to `git` directly outside an implementation of
 // this interface, or tests lose the ability to substitute a mock runner.
 export interface GitRunner {
+	// Optional environment probes. Implementations that omit them (test mocks)
+	// are treated by probeGitAvailability as "git present" to preserve the
+	// pre-existing behavior; only the real NodeGitRunner needs to answer them.
+	isInstalled?(): Promise<boolean>;
+	isRepository?(input: GitRepoInput): Promise<boolean>;
 	init(input: GitRepoInput): Promise<void>;
 	currentBranch(input: GitRepoInput): Promise<string>;
 	headCommit(input: GitRepoInput): Promise<string>;

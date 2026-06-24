@@ -9,6 +9,7 @@ import {
 	buildGitDiffStatArgs,
 	buildGitHeadCommitArgs,
 	buildGitInitArgs,
+	buildGitIsInsideWorkTreeArgs,
 	buildGitListProjectFilesArgs,
 	buildGitMergeAbortArgs,
 	buildGitMergeArgs,
@@ -16,11 +17,22 @@ import {
 	buildGitStageAllArgs,
 	buildGitStatusPorcelainArgs,
 	buildGitSwitchBranchArgs,
+	buildGitVersionArgs,
 	buildGitWorktreeAddArgs,
 	buildGitWorktreeRemoveArgs,
 } from "./node-runner";
 
 describe("node git runner command args", () => {
+	it("builds git availability probe args", () => {
+		expect(buildGitVersionArgs()).toEqual(["--version"]);
+		expect(buildGitIsInsideWorkTreeArgs({ repoRoot: "/repo/app" })).toEqual([
+			"-C",
+			"/repo/app",
+			"rev-parse",
+			"--is-inside-work-tree",
+		]);
+	});
+
 	it("builds repo read/status args", () => {
 		expect(buildGitInitArgs({ repoRoot: "/repo/app" })).toEqual([
 			"-C",

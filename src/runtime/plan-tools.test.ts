@@ -31,6 +31,7 @@ import { executePlannerPlanTool } from "./plan-tools";
 
 class MockGitRunner implements GitRunner {
 	failCurrentBranch = false;
+	failWorktreeAdd = false;
 	readonly calls: Array<{ name: string; input: unknown }> = [];
 	private branch: string;
 	private head = "abc123";
@@ -86,6 +87,9 @@ class MockGitRunner implements GitRunner {
 	async merge(_input: GitMergeInput): Promise<void> {}
 	async worktreeAdd(input: GitWorktreeAddInput): Promise<void> {
 		this.calls.push({ name: "worktreeAdd", input });
+		if (this.failWorktreeAdd) {
+			throw new Error("git worktree add failed");
+		}
 		this.branch = input.branch;
 	}
 	async worktreeRemove(_input: GitWorktreeRemoveInput): Promise<void> {}
@@ -447,6 +451,89 @@ describe("planner plan tools", () => {
 			activePlanId: expect.stringMatching(
 				/^audit-safe-find-command-[a-f0-9]{8}$/,
 			),
+		});
+	});
+
+	it("persists the request as a bootstrap-pending plan when git is unavailable", async () => {
+		const fs = new MockPlannerFs();
+		await seedInstructionDefaults(fs, BUNDLED_INSTRUCTION_DEFAULTS_DIR);
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+
+		const result = await executePlannerPlanTool({
+			fs,
+			git: new MockGitRunner(),
+			projectPaths,
+			toolName: "planner_create_plan",
+			params: {
+				planId: "plan-a",
+				request: "Create plan A.",
+				title: "Plan A",
+				degradedReason: "git-missing",
+			},
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.details).toMatchObject({
+			degraded: true,
+			reason: "git-missing",
+		});
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		expect(result.text).toContain(planPaths.requestMd);
+
+		// The request survives even though no worktree was created.
+		expect(fs.snapshot()[planPaths.requestMd]).toBe("Create plan A.\n");
+		await expect(
+			fs.exists("/repo/app/.pi/pi-code-planner/worktrees/plan-a"),
+		).resolves.toBe(false);
+
+		// State is recorded as bootstrap-pending and the plan is NOT made active.
+		await expect(readPlanState(fs, planPaths)).resolves.toMatchObject({
+			worktreeBootstrapPending: true,
+			worktreePath: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
+		});
+		await expect(readProjectRecord(fs, projectPaths)).resolves.toMatchObject({
+			activePlanId: null,
+			plans: [expect.objectContaining({ planId: "plan-a", status: "paused" })],
+		});
+	});
+
+	it("persists the request when worktree bootstrap fails mid-way", async () => {
+		const fs = new MockPlannerFs();
+		await seedInstructionDefaults(fs, BUNDLED_INSTRUCTION_DEFAULTS_DIR);
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const git = new MockGitRunner("main");
+		git.failWorktreeAdd = true;
+
+		const result = await executePlannerPlanTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_create_plan",
+			params: {
+				planId: "plan-a",
+				request: "Create plan A.",
+				title: "Plan A",
+			},
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.details).toMatchObject({
+			degraded: true,
+			reason: "bootstrap-failed",
+		});
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		expect(fs.snapshot()[planPaths.requestMd]).toBe("Create plan A.\n");
+		await expect(readPlanState(fs, planPaths)).resolves.toMatchObject({
+			worktreeBootstrapPending: true,
+		});
+		await expect(readProjectRecord(fs, projectPaths)).resolves.toMatchObject({
+			activePlanId: null,
 		});
 	});
 });

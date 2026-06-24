@@ -8,6 +8,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { DEFAULT_LANGUAGE, MS_PER_MINUTE } from "./constants";
 import { errorMessage, gitErrorMessage } from "./errors";
+import { probeGitAvailability } from "./git/git-availability";
 import { NodeGitRunner } from "./git/node-runner";
 import {
 	buildPlanExportConflictPrompt,
@@ -1710,6 +1711,38 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					ctx.ui.notify(errorMessage(error), "error");
 					return;
 				}
+
+				// Probe git up-front so a missing binary or an uninitialized repo
+				// degrades gracefully instead of crashing. The request is persisted
+				// either way, so the user can resume once git is available.
+				let degradedReason: "git-missing" | "no-repository" | undefined;
+				const availability = await probeGitAvailability({
+					git: gitRunner,
+					projectRoot: projectPaths.projectRoot,
+				});
+				if (!availability.installed) {
+					degradedReason = "git-missing";
+				} else if (!availability.repository) {
+					const initHere = await ctx.ui.confirm(
+						"Initialize a git repository?",
+						`No git repository was found at ${projectPaths.projectRoot}. Initialize one here so the planner can create a worktree? Choosing No still saves your request so you can resume it later.`,
+					);
+					if (initHere) {
+						try {
+							await gitRunner.init({ repoRoot: projectPaths.projectRoot });
+						} catch (error) {
+							await safeNotify(
+								ctx,
+								`git init failed: ${errorMessage(error)}. Your request will still be saved.`,
+								"warning",
+							);
+							degradedReason = "no-repository";
+						}
+					} else {
+						degradedReason = "no-repository";
+					}
+				}
+
 				const result = await executePlannerPlanTool({
 					fs,
 					git: gitRunner,
@@ -1718,11 +1751,17 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					params: {
 						planId,
 						request: normalizedRequest,
+						...(degradedReason ? { degradedReason } : {}),
 					},
 				});
 
 				if (result.status !== "applied") {
-					ctx.ui.notify(result.text, "error");
+					// A degraded result means the request was saved but no worktree
+					// could be created (git missing/declined, or a mid-bootstrap
+					// failure). Surface the saved path as a warning, not an error.
+					const degraded = (result.details as { degraded?: boolean } | null)
+						?.degraded;
+					await safeNotify(ctx, result.text, degraded ? "warning" : "error");
 					return;
 				}
 				markPlannerToolVisibilityActive();
@@ -1834,6 +1873,37 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					ctx.ui.notify(errorMessage(error), "error");
 					return;
 				}
+
+				// Same git probe as /planner-create: degrade gracefully (and keep
+				// the request) instead of crashing when git is missing or absent.
+				let degradedReason: "git-missing" | "no-repository" | undefined;
+				const availability = await probeGitAvailability({
+					git: gitRunner,
+					projectRoot: projectPaths.projectRoot,
+				});
+				if (!availability.installed) {
+					degradedReason = "git-missing";
+				} else if (!availability.repository) {
+					const initHere = await ctx.ui.confirm(
+						"Initialize a git repository?",
+						`No git repository was found at ${projectPaths.projectRoot}. Initialize one here so the planner can create a worktree? Choosing No still saves your request so you can resume it later.`,
+					);
+					if (initHere) {
+						try {
+							await gitRunner.init({ repoRoot: projectPaths.projectRoot });
+						} catch (error) {
+							await safeNotify(
+								ctx,
+								`git init failed: ${errorMessage(error)}. Your request will still be saved.`,
+								"warning",
+							);
+							degradedReason = "no-repository";
+						}
+					} else {
+						degradedReason = "no-repository";
+					}
+				}
+
 				const result = await executePlannerPlanTool({
 					fs,
 					git: gitRunner,
@@ -1850,11 +1920,14 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 							parsed.compatibilityMode === "breaking"
 								? "Discovery-first self-improvement plan that may propose approved breaking changes."
 								: "Discovery-first additive self-improvement plan for this repository.",
+						...(degradedReason ? { degradedReason } : {}),
 					},
 				});
 
 				if (result.status !== "applied") {
-					ctx.ui.notify(result.text, "error");
+					const degraded = (result.details as { degraded?: boolean } | null)
+						?.degraded;
+					await safeNotify(ctx, result.text, degraded ? "warning" : "error");
 					return;
 				}
 				markPlannerToolVisibilityActive();

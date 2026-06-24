@@ -353,6 +353,11 @@ export interface PlanStateRecord {
 	nextStep: PlannerStep | null;
 	activeTaskId: string | null;
 	worktreePath: string | null;
+	// True when the plan record + request.md were persisted but the git worktree
+	// could not be created yet (git missing, no repository, or a mid-bootstrap
+	// failure). /planner-resume rebuilds the worktree from this state once git is
+	// available, so a crash after the user typed the request never loses it.
+	worktreeBootstrapPending?: boolean;
 	activeBranches: ActivePlanBranches;
 	managedBranches: ManagedBranchRegistry;
 	currentBranch: string | null;
@@ -451,6 +456,7 @@ export function createInitialPlanState(input: {
 		nextStep: null,
 		activeTaskId: null,
 		worktreePath: input.worktreePath ?? null,
+		worktreeBootstrapPending: false,
 		activeBranches: {
 			base: input.baseBranch,
 			plan: input.planBranch,
