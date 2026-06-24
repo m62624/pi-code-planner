@@ -741,7 +741,7 @@ const SUMMARY_SUBMIT_TOOL_PARAMETERS = {
 		content: {
 			type: "string",
 			description:
-				"Full final_summary.md markdown: what changed, verification evidence, and any follow-ups.",
+				"Full final_summary.md markdown: what changed, verification evidence, and any follow-ups. Write the prose in the metadata.humanLanguage reported by planner_status unless the user requested another language.",
 		},
 	},
 	required: ["content"],
@@ -874,7 +874,7 @@ const DOUBT_REVIEW_TOOL_PARAMETERS = {
 		summary: {
 			type: "string",
 			description:
-				"Short final doubt-review summary. State whether proven bugs remain, probes are needed, or the result can proceed.",
+				"Short final doubt-review summary. State whether proven bugs remain, probes are needed, or the result can proceed. Write the human-readable text here and in each finding's claim in the metadata.doubtReviewLanguage reported by planner_status unless the user requested another language.",
 		},
 		possibleErrors: {
 			type: "array",
