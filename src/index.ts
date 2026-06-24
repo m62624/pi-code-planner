@@ -1566,6 +1566,16 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					return;
 				}
 
+				const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
+					ctx.cwd,
+				);
+				// Surface stale/deprecated settings keys before the request editor
+				// and the workspace TUI take over. Once the plan is created the
+				// session switches to the custom workspace, where a toast queued
+				// from this command context is never seen — so warn up front, the
+				// same point /planner-resume warns from.
+				await notifyPlannerSettingsWarnings(ctx, fs, projectPaths);
+
 				// ctx.ui.editor is async and may span a session replacement
 				// (e.g. ESC → "Resumed session"). Keep editor and post-editor
 				// work inside this guard so stale ctx errors cannot crash Pi.
@@ -1579,10 +1589,6 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				}
 				const normalizedRequest = request.trim();
 
-				const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
-					ctx.cwd,
-				);
-				await notifyPlannerSettingsWarnings(ctx, fs, projectPaths);
 				const project = await ensureProjectRecord(fs, projectPaths);
 				let planId: string;
 				try {
