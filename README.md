@@ -43,7 +43,7 @@ flowchart TD
     INIT["**init** — bootstrap worktree and plan record"]
     INTAKE["**intake** — write and approve goal"]
     DISCOVERY["**discovery** — scan project, write verification protocol"]
-    PLANNING["**planning** — write plan.md, split into tasks"]
+    PLANNING["**planning** — write plan.md, split into tasks, consistency check"]
     EXECUTION["**execution** — TDD → implement → contracts → refactor → merge"]
     FINALIZE["**finalize** — integration check, doubt review, summary"]
     DONE["**done** — present result, await user acceptance"]
@@ -142,6 +142,24 @@ pi -e ./src/index.ts
 ```
 
 ---
+
+## Why local, and what this actually does
+
+This section is the reasoning behind the project, not a feature list. Read it before deciding whether the trade is worth it for you.
+
+**The model is the bottleneck, and this extension does not change that.** It adds no intelligence, no extra reasoning, no fine-tuning. A small local model stays exactly as capable as it was. What changes is the *shape* of the work it is allowed to do.
+
+**Why the focus on local models.** Local and mid-size models behave well on small, localized edits: a function, a file, a change whose entire context fits in the window at once. They degrade on medium and large codebases for a structural reason, not a knowledge one — there is no stable global picture. The relevant facts do not fit in context together; they drift across compaction; a decision made in step 3 is silently contradicted in step 9; "done" gets declared while half the plan is unbuilt. The failure mode is rarely a wrong line of code. It is loss of coherence over distance — across files, across time, across compaction boundaries.
+
+**So the extension is built around boundaries, not cleverness.** Each stage exists to remove one degree of freedom the model would otherwise get wrong:
+
+- **Persisted state machine** — the plan, tasks, decisions, and current step live in JSON/Markdown on disk, not in chat. Compaction can wipe the window; the state survives. The model reconstructs from artifacts via `planner_status`, not from memory.
+- **Forced stage/step order** — you cannot implement before discovery, cannot write production code before tests, cannot declare done with pending tasks. The order is enforced by a guard, so a model that "feels finished" early is still held to the protocol.
+- **Per-task Git isolation** — one task, one branch, one merge. A bad task is contained instead of smearing across the whole change.
+- **Local contracts (AGENTS.md)** — scope is pinned to the relevant directory chain, so the model is told where the edges are instead of guessing and wandering.
+- **Mechanical consistency check (elenchus)** — the part a model is *worst* at. Models state individual facts well but cannot hold a long chain of interacting conditions without quietly contradicting themselves. The `planner_elenchus_check` tool moves that chain out of the model: the model states only facts and first principles in a tiny DSL, and a three-valued SAT engine (shipped as wasm, version-locked) does the inference and reports `CONSISTENT / WARNING / UNDERDETERMINED / CONFLICT` with the exact premises to blame. The model can only be wrong at the premise level — and that is caught immediately. It runs as a **soft gate** at `planning/consistency_check` (with availability in discovery, doubt review, and recovery) and always has a `not_applicable` escape, so it never traps linear work that has no interacting constraints to check.
+
+**Honest expectation.** Output quality tracks the clarity of the request far more than the structure does. A vague task ("make it better") gives the structure nothing to hold onto, and the overhead — stage transitions, task splits, test-first loops — can make the result *worse* than a single freewheeling prompt. A precise task with testable acceptance criteria gives the structure something to enforce, and the same weak model can stay on rails for hours and produce something it could not hold together unstructured. It is a trade: you pay in protocol overhead and the risk of a bad task split, and you buy coherence over distance. Sometimes that pays off and sometimes it does not. The goal is not a better model — it is a weak model that does not lose the thread on work too large to fit in its head at once.
 
 ## License
 
