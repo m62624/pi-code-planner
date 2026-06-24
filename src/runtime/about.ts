@@ -39,6 +39,21 @@ const SETTING_DESCRIPTORS: SettingDescriptor[] = [
 		purpose: "Minutes since last planner/tool activity before idle wake-up.",
 	},
 	{
+		path: "exec.defaultTimeoutSeconds",
+		purpose:
+			"Timeout for planner_exec when the model passes no timeoutSeconds.",
+	},
+	{
+		path: "exec.maxTimeoutSeconds",
+		purpose:
+			"Hard ceiling for planner_exec timeoutSeconds the model can request.",
+	},
+	{
+		path: "exec.maxOutputBytes",
+		purpose:
+			"Maximum stdout+stderr bytes kept from planner_exec; extra output is truncated.",
+	},
+	{
 		path: "timer.enabled",
 		purpose: "Show or hide passive planner runtime telemetry.",
 	},
@@ -124,6 +139,20 @@ const SETTING_DESCRIPTORS: SettingDescriptor[] = [
 			"Terminal rows left for Pi's native footer below the workspace overlay (raise if the footer overlaps).",
 	},
 	{
+		path: "diagnostics.enabled",
+		purpose:
+			"Enable stuck detection and the sanitized planner_recovery_report tool.",
+	},
+	{
+		path: "diagnostics.blockedTransitions",
+		purpose: "Blocked planner transitions in a row that count as stuck.",
+	},
+	{
+		path: "diagnostics.stuckMinutes",
+		purpose:
+			"Minutes since the first blocked transition that count as stuck, even without a long streak.",
+	},
+	{
 		path: "metadata.humanLanguage",
 		purpose: "Default language for user-facing planner text.",
 	},
@@ -137,7 +166,8 @@ const SETTING_DESCRIPTORS: SettingDescriptor[] = [
 	},
 	{
 		path: "metadata.commitLanguage",
-		purpose: "Human-readable parts of planner commit messages.",
+		purpose:
+			"Human-readable parts of the commit/merge messages the model writes; the auto-assembled export commit is not re-translated.",
 	},
 	{
 		path: "metadata.doubtReviewLanguage",
@@ -188,10 +218,12 @@ export function buildPlannerAboutReport(input: {
 		"- Missing SKILL.md files are ignored by inventory/resource discovery; delete stale index entries through /planner-skills when needed.",
 		"",
 		"## Logical Consistency (elenchus)",
-		"- planner_elenchus_check runs the bundled elenchus engine (elenchus-wasm) to mechanically check a web of interacting constraints (exactly-one-owner, mutually-exclusive states, gate/branch coverage, access matrices, dependency ordering) and answer CONSISTENT/WARNING/UNDERDETERMINED/CONFLICT.",
-		"- It runs as a soft gate at planning/consistency_check and is available at the discovery scan, finalize/doubt_review, and recovery/repair_or_resume. resolution=not_applicable with a reason is the terminal escape so the flow never deadlocks.",
+		"- elenchus is a mechanical logical-consistency checker: you state facts and first principles in a tiny English-like DSL and a three-valued SAT engine answers CONSISTENT/WARNING/UNDERDETERMINED/CONFLICT, pointing at the premises to blame. It catches contradictions and gaps a hand-derived argument misses. Project home: https://github.com/m62624/elenchus",
+		"- This extension ships its OWN WebAssembly build of the engine (the elenchus-wasm npm package) bundled inside it. planner_elenchus_check always calls that in-process wasm engine — never a host-installed `elenchus` CLI or an elenchus MCP server. This is deliberate: it avoids version conflicts and keeps the engine locked to the DSL version the planner was built against, so nothing you install globally changes planner behavior.",
+		"- The matching DSL skill ships bundled too and is served (version-locked) as pi-planner-elenchus, taking priority over any host-installed elenchus skill.",
+		"- planner_elenchus_check is a soft gate at planning/consistency_check and is also available at the discovery scan, finalize/doubt_review, and recovery/repair_or_resume. It fits a web of interacting constraints (exactly-one-owner, mutually-exclusive states, gate/branch coverage, access matrices, dependency ordering); resolution=not_applicable with a reason is the terminal escape so the flow never deadlocks.",
 		"- Sources (<name>.vrf) and verdicts (<name>.result.json) are stored under getAgentDir()/extensions/pi-code-planner/plans/<planId>/elenchus/.",
-		"- The matching DSL skill ships bundled and is served (version-locked) as pi-planner-elenchus, taking priority over any host-installed elenchus skill.",
+		"- To use elenchus outside this extension or in another harness, install the matching binary or read more at https://github.com/m62624/elenchus — that standalone install is independent of the wasm engine bundled here.",
 		"",
 		"## Planner Workspace TUI",
 		"- /planner-dashboard opens the workspace: stage dashboard + the model chat in one window. It also opens automatically for planner-worktree sessions (workspace.autoOpen).",
@@ -213,6 +245,15 @@ export function buildPlannerAboutReport(input: {
 		...SETTING_DESCRIPTORS.map((descriptor) =>
 			formatSettingRow(descriptor, input.settings),
 		),
+		"",
+		...(input.settings.warnings.length > 0
+			? [
+					"",
+					"## Settings Warnings",
+					"Unrecognized or deprecated keys found in your settings.json. They are ignored (parsing never fails); remove them to silence this.",
+					...input.settings.warnings.map((warning) => `- ${warning}`),
+				]
+			: []),
 		"",
 		"## Notes",
 		"- worktree and compact settings are captured when a plan is created.",
@@ -248,6 +289,10 @@ function settingSource(
 			return settings.compactSource;
 		case "idle":
 			return settings.idleSource;
+		case "exec":
+			return settings.execSource;
+		case "diagnostics":
+			return settings.diagnosticsSource;
 		case "metadata":
 			return settings.metadataSource;
 		case "timer":
