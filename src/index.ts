@@ -3146,7 +3146,7 @@ function registerPlannerCompactEvents(
 				frame += 1;
 				ctx.ui.setStatus(
 					PLANNER_COMPACT_STATUS_KEY,
-					ctx.ui.theme.fg("dim", `${glyph} Compacting context…`),
+					ctx.ui.theme.fg("accent", `${glyph} Compacting context…`),
 				);
 			} catch {
 				// Never let the animation throw out of the interval.
