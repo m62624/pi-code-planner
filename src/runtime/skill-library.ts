@@ -8,6 +8,7 @@ import { readJsonIfExists, writeJson } from "../storage/json";
 import type { ProjectStoragePaths } from "../storage/paths";
 import { resolveProjectStoragePaths } from "../storage/project-resolver";
 import { ARTIFACT_CANONICAL_SCHEMA, formatArtifactEcho } from "./artifact-echo";
+import { ensureBundledElenchusSkillPath } from "./elenchus-skill";
 import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
@@ -243,7 +244,37 @@ export async function listPlannerSkillResourcePaths(input: {
 	if (!input.plannerActive) {
 		return [];
 	}
-	return await listActivePlannerSkillPathsForCwd(input);
+	const projectPaths = await resolveProjectStoragePaths({
+		fs: input.fs,
+		agentDir: input.agentDir,
+		cwd: input.cwd,
+	});
+	const settings = await loadEffectivePlannerSettings({
+		fs: input.fs,
+		projectPaths,
+	});
+	// The master switch disables every planner-served skill, including the
+	// bundled elenchus one.
+	if (!settings.effective.skills.enabled) {
+		return [];
+	}
+	const userSkills = await listActivePlannerSkillPaths({
+		fs: input.fs,
+		projectPaths,
+	});
+	// Prepend the bundled, version-matched elenchus skill so it takes priority
+	// (and is not subject to the user-skill maxActive cap). A wasm load or write
+	// failure must never break discovery — fall back to the user skills.
+	let bundled: string | null = null;
+	try {
+		bundled = await ensureBundledElenchusSkillPath({
+			fs: input.fs,
+			agentDir: input.agentDir,
+		});
+	} catch {
+		bundled = null;
+	}
+	return bundled ? [bundled, ...userSkills] : userSkills;
 }
 
 export async function executePlannerSkillTool(
