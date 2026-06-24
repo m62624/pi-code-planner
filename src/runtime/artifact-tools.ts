@@ -226,7 +226,7 @@ export function stripVerificationProtocolSection(body: string): string {
 	const out: string[] = [];
 	let skipping = false;
 	for (const line of lines) {
-		const heading = /^(#{1,6})\s+(.+?)\s*$/.exec(line.trim());
+		const heading = /^(#{1,6})\s+(.+)$/.exec(line.trim());
 		if (heading) {
 			skipping = heading[2].trim().toLowerCase() === "verification protocol";
 			if (skipping) continue;

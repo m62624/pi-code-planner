@@ -283,5 +283,7 @@ function formatValue(value: unknown): string {
 }
 
 function escapeTableText(value: string): string {
-	return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
+	// Escape the backslash first, otherwise an input backslash before a pipe
+	// would consume the pipe's escape and break the markdown table cell.
+	return value.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\n/g, " ");
 }

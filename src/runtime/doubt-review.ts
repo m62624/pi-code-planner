@@ -554,7 +554,7 @@ export function extractVerificationProtocol(content: string): string[] {
 	const result: string[] = [];
 	let collecting = false;
 	for (const line of lines) {
-		const heading = /^(#{2,6})\s+(.+?)\s*$/.exec(line);
+		const heading = /^(#{2,6})\s+(.+)$/.exec(line);
 		if (heading) {
 			const title = heading[2].trim().toLowerCase();
 			if (collecting) break;
