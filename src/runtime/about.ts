@@ -139,6 +139,11 @@ const SETTING_DESCRIPTORS: SettingDescriptor[] = [
 			"Terminal rows left for Pi's native footer below the workspace overlay (raise if the footer overlaps).",
 	},
 	{
+		path: "workspace.keys",
+		purpose:
+			"Optional per-action keybinding overrides for the workspace TUI; unset means built-in keys (see SETTINGS.md).",
+	},
+	{
 		path: "diagnostics.enabled",
 		purpose:
 			"Enable stuck detection and the sanitized planner_recovery_report tool.",
@@ -301,6 +306,8 @@ function settingSource(
 			return settings.skillsSource;
 		case "contracts":
 			return settings.contractsSource;
+		case "workspace":
+			return settings.workspaceSource;
 		default:
 			return "default";
 	}
