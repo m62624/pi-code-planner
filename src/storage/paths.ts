@@ -31,6 +31,7 @@ export interface PlanStoragePaths {
 	contractsManifestJson: string;
 	contractsBaselineDir: string;
 	diagnosticsDir: string;
+	elenchusDir: string;
 }
 
 export interface TaskStoragePaths {
@@ -85,6 +86,7 @@ export function createPlanStoragePaths(
 		contractsManifestJson: join(planDir, "contracts", "manifest.json"),
 		contractsBaselineDir: join(planDir, "contracts", "baseline"),
 		diagnosticsDir: join(planDir, "diagnostics"),
+		elenchusDir: join(planDir, "elenchus"),
 	};
 }
 
