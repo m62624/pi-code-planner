@@ -16,7 +16,7 @@ getAgentDir()/extensions/pi-code-planner/settings.json
   "worktree": { "mode": "custom", "root": "/mnt/fast/pi-worktrees" },
   "compact": { "stage": true, "task": false },
   "idle": { "enabled": true, "timeoutMinutes": 10 },
-  "exec": { "defaultTimeoutSeconds": 240, "maxTimeoutSeconds": 1800, "maxOutputBytes": 10485760 },
+  "exec": { "defaultTimeoutSeconds": 240, "maxTimeoutSeconds": 1800, "maxOutputBytes": 262144 },
   "metadata": {
     "humanLanguage": "English",
     "titleLanguage": "English",
@@ -93,7 +93,7 @@ Sends a follow-up when an active plan has had no planner/tool calls for `timeout
 | --- | --- | --- |
 | `exec.defaultTimeoutSeconds` | `240` | Timeout used when the model does not pass `timeoutSeconds`. The process is killed on expiry. |
 | `exec.maxTimeoutSeconds` | `1800` | Hard ceiling for `timeoutSeconds`. The model cannot exceed this value regardless of what it requests. |
-| `exec.maxOutputBytes` | `10485760` | Maximum bytes collected from stdout+stderr combined. Output beyond this limit is silently dropped and a truncation note is appended to the result. |
+| `exec.maxOutputBytes` | `262144` | Maximum bytes collected from stdout+stderr combined (256 KB). Output beyond this limit is dropped and a truncation note is appended, so a noisy command (e.g. a broad `find`) cannot flood the model context. Raise it for commands with legitimately large output. |
 
 ## Timer
 

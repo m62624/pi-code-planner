@@ -97,8 +97,13 @@ export async function executePlannerExecTool(input: {
 
 			const stdout = Buffer.concat(stdoutChunks).toString("utf8");
 			const stderr = Buffer.concat(stderrChunks).toString("utf8");
+			const limit = settings.maxOutputBytes;
+			const limitLabel =
+				limit >= 1024 * 1024
+					? `${(limit / 1024 / 1024).toFixed(limit % (1024 * 1024) ? 1 : 0)} MB`
+					: `${Math.round(limit / 1024)} KB`;
 			const truncatedNote = truncated
-				? `\n[Output truncated — exceeded ${settings.maxOutputBytes / 1024 / 1024} MB]\n`
+				? `\n[Output truncated — exceeded ${limitLabel}. Narrow the command (e.g. add filters/paths or pipe through head) and rerun.]\n`
 				: "";
 			const out =
 				[stdout, stderr].filter(Boolean).join("\n").trim() + truncatedNote;
