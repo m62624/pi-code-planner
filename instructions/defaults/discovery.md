@@ -102,6 +102,10 @@ If a task stays blocked, do not retry the same approach. Being stuck signals a w
 
 Write only the minimum code required for the goal. Reuse existing utilities, helpers, and classes found during discovery instead of rewriting them. Avoid speculative abstractions, factories, and patterns unless explicitly requested.
 
+## Optional: mechanical consistency check
+
+If, while scanning, you find the project's correctness rests on interacting invariants you have not fully pinned down (mutually-exclusive states, access rules, ordering constraints), you can model them in elenchus's DSL and run `planner_elenchus_check`. A WARNING or UNDERDETERMINED verdict names exactly the missing fact — that is your cue to re-read the relevant code and record it in `discovery.md` rather than guess. This is a tool you reach for when it helps, not a required step here.
+
 ## manual-compact
 
 Preserve the approved goal, `discovery.md`, relevant paths, commands, open questions, and the exact current planner step. After compaction, call `planner_status`.

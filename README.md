@@ -43,7 +43,7 @@ flowchart TD
     INIT["**init** — bootstrap worktree and plan record"]
     INTAKE["**intake** — write and approve goal"]
     DISCOVERY["**discovery** — scan project, write verification protocol"]
-    PLANNING["**planning** — write plan.md, split into tasks"]
+    PLANNING["**planning** — write plan.md, split into tasks, consistency check"]
     EXECUTION["**execution** — TDD → implement → contracts → refactor → merge"]
     FINALIZE["**finalize** — integration check, doubt review, summary"]
     DONE["**done** — present result, await user acceptance"]
@@ -142,6 +142,24 @@ pi -e ./src/index.ts
 ```
 
 ---
+
+## Why local, and why this exists
+
+These are closer to notes out loud than a pitch.
+
+After a few months of using both cloud and local models day to day, one thing became clear to me: **the harness decides as much as the model does.** How work is framed, bounded, and fed to the model matters about as much as which model it is. Pi happens to give fine-grained control over exactly that — a minimal core that doesn't bloat the context and an extension API flexible enough to reshape the whole loop. That is why I picked Pi as the base for this rather than something heavier.
+
+Why local, specifically? Over these months the token economics shifted — running everything through a cloud model got noticeably expensive — and I'm already used to working with neural nets and run them myself. For small and mid-size tasks I use **[Qwen3.6-35B-A3B](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF)** (the experiment here was carried out only on this model, specifically the `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf` quant), with the context set to **131k** for my hardware, at roughly **30–40 t/s** depending on how full the window is. Their output is still not optimal. But given where things are heading — more and cheaper hardware, better optimization aimed at local inference — I expect that handing at least the simpler tasks to a small local model for the sake of cost will become normal before long. So I wrote this extension for myself: to help my own local model carry development work, and to be ready for when that's the default rather than the exception.
+
+It does **not** make the model smarter — nothing here adds reasoning. It adds boundaries and moves out of the model the parts a small model is worst at. The failure mode of a local model on a medium or large codebase is rarely a wrong line; it is loss of coherence over distance — facts that don't fit in the window together, drift across compaction, a decision contradicted ten steps later, "done" declared early. So each stage removes one degree of freedom:
+
+- **Persisted state** — plan, tasks, decisions, and the current step live on disk, not in chat; they survive compaction and are reconstructed via `planner_status`.
+- **Forced order** — no implementation before discovery, no production code before tests, no "done" with pending tasks; a guard holds a model that "feels finished" to the protocol.
+- **Per-task Git isolation** — one task, one branch, one merge; a bad task is contained instead of smearing across the change.
+- **Local contracts (AGENTS.md)** — scope is pinned to the relevant directory chain instead of guessed.
+- **Mechanical consistency ([elenchus](https://github.com/m62624/elenchus))** — the model states only facts and first principles in a tiny DSL; a wasm SAT engine does the inference and reports `CONSISTENT / WARNING / UNDERDETERMINED / CONFLICT` with the premises to blame, so the model can only be wrong at the premise level and that is caught immediately. It is a soft gate with a `not_applicable` escape, so it never traps simple work.
+
+Honest expectation: results are not ideal, and this project is itself largely a product of vibe coding. Output quality tracks the clarity of the request far more than the structure does — a vague task makes the overhead a net loss, while a precise one with testable criteria lets a weak model stay on rails for hours. It is a trade, not a guarantee; sometimes the structure pays off and sometimes it does not. But Pi's minimalism — not loading the context, staying flexibly extensible — is exactly what makes it possible to prop a local model up now and to be prepared for when this becomes the norm.
 
 ## License
 

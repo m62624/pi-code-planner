@@ -52,6 +52,10 @@ Treat recovery as state reconstruction, not continuation of a remembered plan.
 - **Root cause:** read the recovery inspection report and decide whether the issue is a missing worktree, a manual checkout, or corrupted JSON.
 - **Destructive acts:** never run reset or delete without asking the user. Resolution flow: inspect with `planner_recovery_inspect`, follow the classification suggestions, then resume to a safe stage/step via `planner_recovery_resume`.
 
+## Optional: mechanical consistency check
+
+When a loop looks stuck because the rules themselves contradict each other (a gate that can never open, two conditions that cannot both hold), model the relevant facts and premises in elenchus's DSL and run `planner_elenchus_check` at `repair_or_resume`. A CONFLICT with its CORE names the exact premises to blame, turning a vague stall into a concrete fix. This never replaces `planner_recovery_inspect`/`planner_recovery_resume` and never touches git — it only diagnoses the logic.
+
 ## auto-compact
 
 Call `planner_status` immediately. Do not assume recovery was completed. Reload persisted state, rerun recovery inspection, and wait for explicit user approval before destructive repair.

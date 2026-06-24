@@ -70,6 +70,7 @@ describe("simplified local-model workflow", () => {
 			"planner_contract_route",
 			"planner_contract_read",
 			"planner_contract_upsert",
+			"planner_elenchus_check",
 			"planner_git_commit",
 			"planner_exec",
 		]);

@@ -1270,7 +1270,7 @@ export function parsePlannerContractMarkdown(
 	let current: ContractSectionHeading | null = null;
 	for (const rawLine of lines.slice(1)) {
 		const line = rawLine.trimEnd();
-		const heading = /^###\s+(.+)$/.exec(line)?.[1]?.trim();
+		const heading = /^###\s+(\S.*)$/.exec(line)?.[1]?.trim();
 		if (heading) {
 			if (!isKnownSectionHeading(heading)) {
 				diagnostics.push({
@@ -1895,7 +1895,7 @@ function parseChildIndex(
 			});
 			continue;
 		}
-		const fallback = /^-\s+(.+)$/.exec(trimmed);
+		const fallback = /^-\s+(\S.*)$/.exec(trimmed);
 		if (fallback) {
 			entries.push({
 				path: stripBackticks(fallback[1].trim()),

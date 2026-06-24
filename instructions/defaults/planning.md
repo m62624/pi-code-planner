@@ -30,8 +30,9 @@ At `planning/read_context`, load context in this order:
    - Each `task.md` must state scope, acceptance criteria, expected files or symbols, dependency context, checks, and the relevant AGENTS.md chain when known.
    - In a follow-up planning pass, call `planner_task_upsert` only for new or still-pending revision tasks. Completed task IDs are immutable audit history.
 5. `verify_plan` — verify tasks are ordered, bounded, testable, and free of hidden broad work. Record decisions and remaining risks.
-6. `compact_planning` — compact the finished plan and task list.
-7. `enter_execution` — advance to `execution/prepare_task`.
+6. `consistency_check` — mechanically check the plan's interacting constraints with `planner_elenchus_check`, or record the escape. See "Consistency Check" below.
+7. `compact_planning` — compact the finished plan and task list.
+8. `enter_execution` — advance to `execution/prepare_task`.
 
 ## Task Design Rules
 
@@ -76,6 +77,18 @@ Before finishing planning, doubt the plan shape:
 - Does `plan.md` explain remaining work without repeating work already completed?
 
 If doubt remains, revise `plan.md` or task artifacts before entering execution. Do not rely on chat memory.
+
+## Consistency Check (elenchus)
+
+At `consistency_check`, decide whether the plan's correctness hinges on a **web of interacting conditions** that a hand-derived argument gets subtly wrong. If so, model the facts and first principles in elenchus's DSL (the `pi-planner-elenchus` skill is the whole language) and call `planner_elenchus_check` with `resolution: "checked"`. Read the verdict and iterate until it is **CONSISTENT** — WARNING/UNDERDETERMINED/CONFLICT each tell you exactly what fact to add or which premise to fix; a real CONFLICT means the plan or task breakdown is wrong, so fix it before execution. Sources and verdicts are stored under the plan's `elenchus/` dir.
+
+Reach for it when the plan depends on, for example:
+
+- **Exactly-one / mutual exclusion:** exactly one task owns a given file or responsibility; two states or feature flags that must never both hold.
+- **Coverage of cases:** every branch of an if/else or state machine is handled; a readiness/deploy gate is reachable and its negative path has an escape (so the flow cannot deadlock).
+- **Ordering / dependencies:** task A must land before task B; a migration precedes the code that needs it.
+
+This is **not** for linear or CRUD work with no interacting constraints. In that case call `planner_elenchus_check` with `resolution: "not_applicable"` and a one-line reason — that escape resolves the step in one call and never traps the flow. Record the conclusion (CONSISTENT or not-applicable) in `decisions.md`, then advance.
 
 ## Fundamental Rule: Integration vs New Entity
 

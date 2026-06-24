@@ -23,14 +23,14 @@ export function sanitizeIdPart(value: string): string {
 		.trim()
 		.toLowerCase()
 		.replace(/[^a-z0-9._-]+/g, "-")
-		.replace(/^-+|-+$/g, "");
+		.replace(/^-+|(?<!-)-+$/g, "");
 }
 
 export function sanitizePathIdPart(value: string): string {
 	return sanitizeIdPart(value)
 		.replace(/\./g, "-")
 		.replace(/-+/g, "-")
-		.replace(/^-+|-+$/g, "");
+		.replace(/^-+|(?<!-)-+$/g, "");
 }
 
 export function compactIdPart(value: string, maxLength: number): string {

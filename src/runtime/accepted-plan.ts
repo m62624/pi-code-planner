@@ -288,7 +288,7 @@ function extractSectionLines(content: string, headings: string[]): string[] {
 	const collected: string[] = [];
 	let collecting = false;
 	for (const line of lines) {
-		const heading = /^(#{2,6})\s+(.+?)\s*$/.exec(line);
+		const heading = /^(#{2,6})\s+(\S.*)$/.exec(line);
 		if (heading) {
 			const title = heading[2]
 				.replace(/[#*_`]/g, "")

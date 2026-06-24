@@ -195,7 +195,7 @@ function parseLevelTwoSections(text: string): Map<string, string> {
 	let buffer: string[] = [];
 
 	for (const line of text.split(/\r?\n/)) {
-		const heading = /^##\s+(.+?)\s*$/.exec(line);
+		const heading = /^##\s+(\S.*)$/.exec(line);
 		if (heading) {
 			if (current) {
 				sections.set(current, buffer.join("\n").trim());
@@ -266,7 +266,7 @@ function levelThreeSection(text: string, heading: string): string | null {
 	let current: string | null = null;
 	let buffer: string[] = [];
 	for (const line of text.split(/\r?\n/)) {
-		const match = /^###\s+(.+?)\s*$/.exec(line);
+		const match = /^###\s+(\S.*)$/.exec(line);
 		if (match) {
 			if (current) sections.set(current, buffer.join("\n").trim());
 			current = match[1].trim();

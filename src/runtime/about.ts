@@ -196,6 +196,12 @@ export function buildPlannerAboutReport(input: {
 		"- /planner-skills shows the saved inventory even when runtime exposure is disabled or capped.",
 		"- Missing SKILL.md files are ignored by inventory/resource discovery; delete stale index entries through /planner-skills when needed.",
 		"",
+		"## Logical Consistency (elenchus)",
+		"- planner_elenchus_check runs the bundled elenchus engine (elenchus-wasm) to mechanically check a web of interacting constraints (exactly-one-owner, mutually-exclusive states, gate/branch coverage, access matrices, dependency ordering) and answer CONSISTENT/WARNING/UNDERDETERMINED/CONFLICT.",
+		"- It runs as a soft gate at planning/consistency_check and is available at the discovery scan, finalize/doubt_review, and recovery/repair_or_resume. resolution=not_applicable with a reason is the terminal escape so the flow never deadlocks.",
+		"- Sources (<name>.vrf) and verdicts (<name>.result.json) are stored under getAgentDir()/extensions/pi-code-planner/plans/<planId>/elenchus/.",
+		"- The matching DSL skill ships bundled and is served (version-locked) as pi-planner-elenchus, taking priority over any host-installed elenchus skill.",
+		"",
 		"## Planner Workspace TUI",
 		"- /planner-dashboard opens the workspace: stage dashboard + the model chat in one window. It also opens automatically for planner-worktree sessions (workspace.autoOpen).",
 		"- Inside the workspace, Tab cycles three focus panes:",
@@ -277,5 +283,7 @@ function formatValue(value: unknown): string {
 }
 
 function escapeTableText(value: string): string {
-	return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
+	// Escape the backslash first, otherwise an input backslash before a pipe
+	// would consume the pipe's escape and break the markdown table cell.
+	return value.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\n/g, " ");
 }
