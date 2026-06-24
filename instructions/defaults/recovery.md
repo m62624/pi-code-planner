@@ -56,6 +56,8 @@ Treat recovery as state reconstruction, not continuation of a remembered plan.
 
 When a loop looks stuck because the rules themselves contradict each other (a gate that can never open, two conditions that cannot both hold), model the relevant facts and premises in elenchus's DSL and run `planner_elenchus_check` at `repair_or_resume`. A CONFLICT with its CORE names the exact premises to blame, turning a vague stall into a concrete fix. This never replaces `planner_recovery_inspect`/`planner_recovery_resume` and never touches git — it only diagnoses the logic.
 
+Read the `pi-planner-elenchus` skill for the grammar before writing the program. The engine is a SAT checker over **formal logic only** — no arithmetic; encode quantities as named symbolic states, not numbers.
+
 ## auto-compact
 
 Call `planner_status` immediately. Do not assume recovery was completed. Reload persisted state, rerun recovery inspection, and wait for explicit user approval before destructive repair.

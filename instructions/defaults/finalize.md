@@ -112,6 +112,8 @@ Finalize is complete only when the integrated plan branch is checked, `final_sum
 
 During `doubt_review`, if a finding turns on whether a set of conditions can jointly hold — gate coverage, mutually-exclusive states, "exactly one of", access or ordering rules — model it in elenchus's DSL and run `planner_elenchus_check` instead of trusting a hand-derived argument. A CONFLICT pinpoints the contradictory premises; cite the verdict as evidence in the review. For findings with no such constraint web, resolve them the normal doubt-review way — this tool is available, not required.
 
+Read the `pi-planner-elenchus` skill for the grammar before writing the program. The engine is a SAT checker over **formal logic only** — no arithmetic; encode quantities as named symbolic states, not numbers.
+
 ## manual-compact
 
 Preserve `final_summary.md`, project-level verification results, changed-file summary, branch state, known risks, and unresolved limitations. After compaction, call `planner_status`, read the final summary and verify artifacts, then enter done flow.
