@@ -183,7 +183,12 @@ export async function openPlannerWorkspace(
 				footerReserve,
 				load,
 				getEntries,
-				sendUserMessage: (text) => pi.sendUserMessage(text),
+				// deliverAs:"followUp" queues the message when the agent is busy
+				// (streaming/compacting) instead of dropping it; when idle it sends
+				// normally. Without it a message typed in the workspace mid-turn is
+				// lost.
+				sendUserMessage: (text) =>
+					pi.sendUserMessage(text, { deliverAs: "followUp" }),
 				onClose: () => done(undefined),
 			});
 		},
