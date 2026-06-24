@@ -82,6 +82,8 @@ If doubt remains, revise `plan.md` or task artifacts before entering execution. 
 
 At `consistency_check`, decide whether the plan's correctness hinges on a **web of interacting conditions** that a hand-derived argument gets subtly wrong. If so, model the facts and first principles in elenchus's DSL (the `pi-planner-elenchus` skill is the whole language) and call `planner_elenchus_check` with `resolution: "checked"`. Read the verdict and iterate until it is **CONSISTENT** — WARNING/UNDERDETERMINED/CONFLICT each tell you exactly what fact to add or which premise to fix; a real CONFLICT means the plan or task breakdown is wrong, so fix it before execution. Sources and verdicts are stored under the plan's `elenchus/` dir.
 
+Before you write the program, read the `pi-planner-elenchus` skill — it is the entire DSL; do not guess the grammar from examples, or you will burn turns on parse errors. The engine is a three-valued **SAT** checker over **formal logic only**: it decides which named propositions can jointly hold and has no arithmetic — it cannot add, count, or compare magnitudes. Model quantities as named symbolic states (`is_negative`, `over_threshold`, `mode is Compact`), never as numbers.
+
 Reach for it when the plan depends on, for example:
 
 - **Exactly-one / mutual exclusion:** exactly one task owns a given file or responsibility; two states or feature flags that must never both hold.

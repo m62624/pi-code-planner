@@ -84,6 +84,12 @@ Treat TDD as the proof engine. Do not trust an implementation until the test sig
 
 For every behavioral task, choose only the cases that falsify a real acceptance risk before writing production code: the happy path that the task changes; minimum bounds (empty/zero) only when boundaries are part of the behavior; maximum bounds only when the task can plausibly break them; error/danger cases only when the task owns validation/error behavior. No reassurance tests: add a test only when it would fail before the fix or protect a named requirement. Write only the minimum production code to make the tests pass; if you handle a case no test covers, add the test first.
 
+## Optional: mechanical consistency check
+
+`planner_elenchus_check` is **available during `write_tdd_plan`** — there is no gate and no required step, so it never blocks the task. Reach for it only when the task's own logic is a **web of interacting conditions** that the test matrix must respect and a hand-derived argument gets subtly wrong: mutually-exclusive states or feature flags the implementation must keep apart, "exactly one of", full branch/case coverage of an if/else or state machine, access or ordering rules. Modelling it before you write tests tells you which cases actually falsify the behavior, so you cover the real risks instead of guessing. For ordinary linear task logic, skip it — do not model trivial flows.
+
+Read the `pi-planner-elenchus` skill for the grammar before writing the program; do not guess the DSL. The engine is a three-valued SAT checker over **formal logic only** — no arithmetic, it cannot add, count, or compare magnitudes; encode quantities as named symbolic states (`is_negative`, `over_threshold`), not numbers. Sources and verdicts land under the plan's `elenchus/` dir.
+
 ## Planner Skill Memory
 
 `planner_skill_create` is future memory. Use it after a lesson is proven by a failing signal, debug probe, counterexample review, repeated mistake, stale-context recovery, or state-machine/tooling mistake. Create the skill before leaving the step that proved the lesson when it is reusable. Do not create skills for ordinary task summaries, non-generalizing project paths, unverified opinions, or broad advice. Write the body in `metadata.skillLanguage`; the wrapper writes `name`/`description` frontmatter and stores the skill.

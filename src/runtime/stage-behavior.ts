@@ -340,6 +340,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
+			"planner_elenchus_check",
 			"planner_debug_strategy",
 			"planner_debug_probe",
 			"planner_debug_result",
