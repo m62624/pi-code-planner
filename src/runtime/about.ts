@@ -109,15 +109,6 @@ const SETTING_DESCRIPTORS: SettingDescriptor[] = [
 		purpose: "Summary budget for the nearest applicable domain contract.",
 	},
 	{
-		path: "contracts.requireAfterTdd",
-		purpose: "Require execution/contract_check after a green implementation.",
-	},
-	{
-		path: "contracts.requireBeforeEditOutsideChain",
-		purpose:
-			"Instruct the model to route/read contracts before leaving declared task scope.",
-	},
-	{
 		path: "workspace.enabled",
 		purpose:
 			"Master switch for the /planner-dashboard workspace window (dashboard + model chat).",

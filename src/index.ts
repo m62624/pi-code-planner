@@ -200,7 +200,7 @@ import {
 	selectPlannerResumeSessionFile,
 } from "./session/handoff";
 import { loadEffectivePlannerSettings } from "./settings/manager";
-import { createNodeFs } from "./storage/fs";
+import { createNodeFs, type PlannerFs } from "./storage/fs";
 import type { ProjectStoragePaths } from "./storage/paths";
 import { createPlanStoragePaths } from "./storage/paths";
 import { resolveProjectStoragePaths } from "./storage/project-resolver";
@@ -1709,6 +1709,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
 					ctx.cwd,
 				);
+				await notifyPlannerSettingsWarnings(ctx, fs, projectPaths);
 				const project = await ensureProjectRecord(fs, projectPaths);
 				let planId: string;
 				try {
@@ -2126,6 +2127,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
 				ctx.cwd,
 			);
+			await notifyPlannerSettingsWarnings(ctx, fs, projectPaths);
 			const planId =
 				parseSinglePlanIdArg(args) ??
 				(await selectPlannerPlanId({
@@ -4115,4 +4117,28 @@ function notifyPlannerCommandResult(
 	result: { status: "applied" | "blocked"; text: string },
 ): void {
 	ctx.ui.notify(result.text, result.status === "applied" ? "info" : "error");
+}
+
+// Surface unrecognized/deprecated keys in settings.json once, when the user
+// enters the planner via /planner-create or /planner-resume. The JSON still
+// loads (unknown keys are ignored); this just tells the user a key does
+// nothing, so a stale config is visible instead of silently inert.
+async function notifyPlannerSettingsWarnings(
+	ctx: ExtensionCommandContext,
+	fs: PlannerFs,
+	projectPaths: ProjectStoragePaths,
+): Promise<void> {
+	try {
+		const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
+		if (settings.warnings.length === 0) return;
+		await safeNotify(
+			ctx,
+			`Planner settings: ${settings.warnings.length} ignored or deprecated key(s):\n${settings.warnings
+				.map((w) => `• ${w}`)
+				.join("\n")}`,
+			"warning",
+		);
+	} catch {
+		// Never block entering the planner on a settings-warning read.
+	}
 }

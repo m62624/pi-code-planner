@@ -114,8 +114,6 @@ export interface PlannerContractsSettings {
 	readChunkChars: number;
 	maxActiveChains: number;
 	levelBudgets: PlannerContractLevelBudgets;
-	requireAfterTdd: boolean;
-	requireBeforeEditOutsideChain: boolean;
 }
 
 export interface PlannerContractsSettingsFile
@@ -174,8 +172,6 @@ export const DEFAULT_PLANNER_SETTINGS = {
 			ancestor: 3_000,
 			nearest: 7_000,
 		},
-		requireAfterTdd: true,
-		requireBeforeEditOutsideChain: true,
 	},
 	workspace: {
 		enabled: true,

@@ -53,8 +53,6 @@ describe("planner settings", () => {
 				ancestor: 3000,
 				nearest: 7000,
 			},
-			requireAfterTdd: true,
-			requireBeforeEditOutsideChain: true,
 		});
 		expect(settings.effective.workspace).toEqual({
 			enabled: true,
@@ -65,7 +63,7 @@ describe("planner settings", () => {
 		expect(
 			fs.snapshot()["/agent/extensions/pi-code-planner/settings.json"],
 		).toBe(
-			'{\n  "worktree": {\n    "mode": "project-local"\n  },\n  "compact": {\n    "stage": true,\n    "task": false\n  },\n  "idle": {\n    "enabled": true,\n    "timeoutMinutes": 10\n  },\n  "metadata": {\n    "humanLanguage": "English"\n  },\n  "timer": {\n    "enabled": true,\n    "mode": "status",\n    "showCheckpoints": true,\n    "maxCheckpoints": 5,\n    "syncIntervalMinutes": 10\n  },\n  "skills": {\n    "enabled": true,\n    "maxActive": 0\n  },\n  "contracts": {\n    "enabled": true,\n    "finalPolicy": "ask",\n    "scanBatchSize": 10,\n    "statusCharBudget": 12000,\n    "readChunkChars": 6000,\n    "maxActiveChains": 3,\n    "levelBudgets": {\n      "root": 1800,\n      "ancestor": 3000,\n      "nearest": 7000\n    },\n    "requireAfterTdd": true,\n    "requireBeforeEditOutsideChain": true\n  },\n  "workspace": {\n    "enabled": true,\n    "autoOpen": true,\n    "footerReserveRows": 3\n  }\n}\n',
+			'{\n  "worktree": {\n    "mode": "project-local"\n  },\n  "compact": {\n    "stage": true,\n    "task": false\n  },\n  "idle": {\n    "enabled": true,\n    "timeoutMinutes": 10\n  },\n  "metadata": {\n    "humanLanguage": "English"\n  },\n  "timer": {\n    "enabled": true,\n    "mode": "status",\n    "showCheckpoints": true,\n    "maxCheckpoints": 5,\n    "syncIntervalMinutes": 10\n  },\n  "skills": {\n    "enabled": true,\n    "maxActive": 0\n  },\n  "contracts": {\n    "enabled": true,\n    "finalPolicy": "ask",\n    "scanBatchSize": 10,\n    "statusCharBudget": 12000,\n    "readChunkChars": 6000,\n    "maxActiveChains": 3,\n    "levelBudgets": {\n      "root": 1800,\n      "ancestor": 3000,\n      "nearest": 7000\n    }\n  },\n  "workspace": {\n    "enabled": true,\n    "autoOpen": true,\n    "footerReserveRows": 3\n  }\n}\n',
 		);
 	});
 
@@ -87,6 +85,31 @@ describe("planner settings", () => {
 			root: "/tmp/worktrees",
 		});
 		expect(settings.worktreeSource).toBe("global");
+	});
+
+	it("warns about deprecated and unknown keys without failing to parse", async () => {
+		const fs = new MockPlannerFs();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		await fs.writeTextAtomic(
+			"/agent/extensions/pi-code-planner/settings.json",
+			JSON.stringify({
+				contracts: { requireAfterTdd: true, bogusKey: 1 },
+				mysteryGroup: { a: 1 },
+			}),
+		);
+
+		const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
+
+		// The JSON still loads and known defaults stay intact.
+		expect(settings.effective.contracts.enabled).toBe(true);
+		const joined = settings.warnings.join("\n");
+		expect(joined).toContain("contracts.requireAfterTdd");
+		expect(joined).toContain("deprecated");
+		expect(joined).toContain("contracts.bogusKey");
+		expect(joined).toContain("mysteryGroup");
 	});
 
 	it("lets project worktree settings override global worktree settings as a whole", async () => {
