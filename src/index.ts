@@ -1255,10 +1255,16 @@ const OPTIONAL_REASON_TOOL_PARAMETERS = {
 	additionalProperties: false,
 } as const;
 
+const COMMIT_MESSAGE_PARAMETER_DESCRIPTION =
+	"Commit message. Write the human-readable text in the metadata.commitLanguage reported by planner_status unless repository conventions or an explicit user instruction override it. Conventional type prefixes (feat:, fix:, test:) are technical tokens, not translatable text.";
+
 const GIT_MESSAGE_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {
-		message: { type: "string" },
+		message: {
+			type: "string",
+			description: COMMIT_MESSAGE_PARAMETER_DESCRIPTION,
+		},
 	},
 	required: ["message"],
 	additionalProperties: false,
@@ -1276,7 +1282,10 @@ const GIT_TASK_TOOL_PARAMETERS = {
 const GIT_OPTIONAL_MESSAGE_TOOL_PARAMETERS = {
 	type: "object",
 	properties: {
-		message: { type: "string" },
+		message: {
+			type: "string",
+			description: `Optional merge message. ${COMMIT_MESSAGE_PARAMETER_DESCRIPTION}`,
+		},
 	},
 	additionalProperties: false,
 } as const;
@@ -3605,7 +3614,7 @@ function gitToolDescription(toolName: PlannerGitToolName): string {
 	}
 }
 
-function gitToolParameters(toolName: PlannerGitToolName) {
+export function gitToolParameters(toolName: PlannerGitToolName) {
 	switch (toolName) {
 		case "planner_git_commit":
 			return GIT_MESSAGE_TOOL_PARAMETERS;
