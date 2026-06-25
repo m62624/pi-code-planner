@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { PlannerWorkspaceComponent } from "./dashboard";
 
 /**
- * Behavioral tests for the workspace composer and message queue. The component
- * is driven through its public handleInput(); TUI/theme/keybindings are faked
- * since these tests assert state, not rendered pixels.
+ * Behavioral tests for the workspace wrapper around Pi's native Editor: the
+ * message queue, Alt+Up dequeue, queue flush, and overlay focus gating. The
+ * editor's own text editing (typing, newline, submit, paste markers) is pi-tui's
+ * concern and is not retested here. TUI/theme/keybindings are faked.
  */
 
 type Sent = { text: string; queued: boolean };
@@ -25,15 +26,13 @@ function makeComponent(opts: { busy: boolean }) {
 		},
 		terminal: { rows: 40 },
 	} as never;
-	// Fake keybindings: submit on "\r", newline on the shift+enter marker, dequeue
-	// on the alt+up marker. Everything else is not a bound action.
+	// Fake keybindings: only the dequeue action is needed here (the editor uses
+	// the global keybindings internally for its own keys).
 	const keybindings = {
 		matches(data: string, id: string) {
-			if (id === "tui.input.submit") return data === "\r";
-			if (id === "tui.input.newLine") return data === "<shift+enter>";
-			if (id === "app.message.dequeue") return data === "<alt+up>";
-			return false;
+			return id === "app.message.dequeue" && data === "<alt+up>";
 		},
+		getKeys: () => [] as string[],
 	} as never;
 	const keys = {
 		focusNext: ["tab"],
@@ -64,22 +63,27 @@ function makeComponent(opts: { busy: boolean }) {
 		onClose: () => {},
 	});
 	const access = component as unknown as {
-		input: string;
 		queued: string[];
 		flushQueue: () => void;
 		scheduleRender: () => void;
+		onEditorSubmit: (text: string) => void;
+		editor: { getText: () => string };
 	};
 	let focused = true;
+	let hidden = false;
 	const attachHandle = () => {
 		component.attachHandle({
 			isFocused: () => focused,
 			hide() {},
-			setHidden() {},
-			isHidden: () => false,
+			setHidden(h: boolean) {
+				hidden = h;
+			},
+			isHidden: () => hidden,
 			focus() {},
 			unfocus() {},
 		} as never);
 	};
+	const tickAccess = component as unknown as { onTick: () => void };
 	return {
 		component,
 		access,
@@ -92,67 +96,40 @@ function makeComponent(opts: { busy: boolean }) {
 			focused = f;
 		},
 		renderCount: () => renderCount,
+		isHidden: () => hidden,
+		tick: () => tickAccess.onTick(),
 	};
 }
 
-function type(component: PlannerWorkspaceComponent, text: string): void {
-	for (const ch of text) component.handleInput(ch);
-}
-
-describe("PlannerWorkspaceComponent composer", () => {
-	it("inserts a newline for a bare LF (ctrl+j) instead of submitting", () => {
-		const { component, access, sent } = makeComponent({ busy: false });
-		type(component, "ab");
-		component.handleInput("\n");
-		type(component, "cd");
-		expect(access.input).toBe("ab\ncd");
-		expect(sent).toHaveLength(0);
-	});
-
-	it("inserts a newline for shift+enter", () => {
-		const { component, access } = makeComponent({ busy: false });
-		type(component, "x");
-		component.handleInput("<shift+enter>");
-		type(component, "y");
-		expect(access.input).toBe("x\ny");
-	});
-
-	it("submits on enter and sends immediately when the agent is idle", () => {
-		const { component, access, sent } = makeComponent({ busy: false });
-		type(component, "hello");
-		component.handleInput("\r");
-		expect(sent).toEqual([{ text: "hello", queued: false }]);
-		expect(access.input).toBe("");
-	});
-});
-
 describe("PlannerWorkspaceComponent queue", () => {
-	it("queues messages typed while the agent is busy instead of sending", () => {
-		const { component, access, sent } = makeComponent({ busy: true });
-		type(component, "first");
-		component.handleInput("\r");
-		type(component, "second");
-		component.handleInput("\r");
+	it("sends immediately when the agent is idle", () => {
+		const { access, sent } = makeComponent({ busy: false });
+		access.onEditorSubmit("hello");
+		expect(sent).toEqual([{ text: "hello", queued: false }]);
+		expect(access.queued).toEqual([]);
+	});
+
+	it("queues submissions while the agent is busy", () => {
+		const { access, sent } = makeComponent({ busy: true });
+		access.onEditorSubmit("first");
+		access.onEditorSubmit("second");
 		expect(sent).toHaveLength(0);
 		expect(access.queued).toEqual(["first", "second"]);
 	});
 
-	it("restores the last queued message into the composer on Alt+Up", () => {
+	it("restores the last queued message into the editor on Alt+Up", () => {
 		const { component, access } = makeComponent({ busy: true });
-		type(component, "draft");
-		component.handleInput("\r");
+		access.onEditorSubmit("draft");
 		expect(access.queued).toEqual(["draft"]);
 		component.handleInput("<alt+up>");
 		expect(access.queued).toEqual([]);
-		expect(access.input).toBe("draft");
+		expect(access.editor.getText()).toBe("draft");
 	});
 
 	it("flushes the queue in FIFO order as follow-ups when the agent goes idle", () => {
-		const { component, access, sent, setBusy } = makeComponent({ busy: true });
-		type(component, "one");
-		component.handleInput("\r");
-		type(component, "two");
-		component.handleInput("\r");
+		const { access, sent, setBusy } = makeComponent({ busy: true });
+		access.onEditorSubmit("one");
+		access.onEditorSubmit("two");
 		setBusy(false);
 		access.flushQueue();
 		expect(sent).toEqual([
@@ -164,18 +141,30 @@ describe("PlannerWorkspaceComponent queue", () => {
 });
 
 describe("PlannerWorkspaceComponent overlay focus", () => {
-	it("pauses repaints while a foreign overlay is focused above it", () => {
-		const { access, attachHandle, setFocused, renderCount } = makeComponent({
+	it("hides itself but keeps repainting while a foreign overlay is focused", () => {
+		const { attachHandle, setFocused, renderCount, isHidden, tick } =
+			makeComponent({ busy: false });
+		attachHandle();
+		setFocused(false);
+		const before = renderCount();
+		tick();
+		// Yields the top layer (hidden) but still requests a render so the foreign
+		// overlay's timers stay live — the freeze was caused by stopping repaints.
+		expect(isHidden()).toBe(true);
+		expect(renderCount()).toBeGreaterThan(before);
+	});
+
+	it("unhides and repaints when focus returns", () => {
+		const { attachHandle, setFocused, isHidden, tick } = makeComponent({
 			busy: false,
 		});
 		attachHandle();
 		setFocused(false);
-		const before = renderCount();
-		access.scheduleRender();
-		expect(renderCount()).toBe(before); // suppressed while unfocused
+		tick();
+		expect(isHidden()).toBe(true);
 		setFocused(true);
-		access.scheduleRender();
-		expect(renderCount()).toBe(before + 1); // resumes when refocused
+		tick();
+		expect(isHidden()).toBe(false);
 	});
 
 	it("ignores input that reaches it while not the focused overlay", () => {
@@ -184,7 +173,7 @@ describe("PlannerWorkspaceComponent overlay focus", () => {
 		});
 		attachHandle();
 		setFocused(false);
-		type(component, "ghost");
-		expect(access.input).toBe("");
+		component.handleInput("x");
+		expect(access.editor.getText()).toBe("");
 	});
 });

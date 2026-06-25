@@ -155,30 +155,29 @@ Planner-generated skills are stored under `getAgentDir()/extensions/pi-code-plan
 
 ### Workspace keys
 
-The composer is always live at the bottom of the chat stream — type anywhere, no need to focus an input pane first. `Enter` sends; `Shift+Enter` (or `Ctrl+J`) inserts a newline, so the composer grows for multiline messages. `Tab` toggles which pane the navigation keys drive:
+The input is **Pi's own editor** embedded in the workspace and is the single, always-live composer — type from anywhere, there is no separate input/chat pane to switch into. It behaves exactly like the plain chat editor: multiline, input history (`↑`/`↓` at the edges), kill-ring, word navigation, undo, slash/file autocomplete, and **collapsed paste markers** (a paste over ~10 lines / 1000 characters becomes a short `[paste #N …]` marker and is expanded back to full text on send — there is no in-place expand key; smaller pastes are inserted as plain text). All of its keys are Pi's `tui.editor.*` / `tui.input.*` bindings, configurable in `~/.pi/agent/keybindings.json` (e.g. `Enter` sends, `Shift+Enter`/`Ctrl+J` newline).
 
-| Pane | Keys |
-| --- | --- |
-| chat | `↑`/`↓`, `PageUp`/`PageDown` scroll; `End` jumps back to the live tail, `Home` to the top; `x` toggles expand-all for collapsed tool calls |
-| tasks | `↑`/`↓` select a task and reveal the task list + stage timings; `←`/`→` nudge the ticker |
+Navigation that isn't typing is done with dedicated keys, so the editor never loses focus:
 
-`↑`/`↓` move the cursor between composer lines while you have a multiline draft; on a single line they fall through to the active pane (scroll the chat or select a task).
+- **Scroll the transcript** with `PageUp`/`PageDown` (`pageUp`/`pageDown`). While scrolled up the view stays anchored; new output appends below without moving it, and `PageDown` past the bottom re-follows the live tail.
+- **Expand/collapse tool output** with `Ctrl+O` (Pi's `app.tools.expand`).
+- **Show/hide thinking** with `Ctrl+T` (Pi's `app.thinking.toggle`).
+- `Tab` toggles a **tasks** view — `↑`/`↓` select a task and reveal the task list + stage timings, `←`/`→` nudge the ticker; typing still composes a message. `Tab` again returns to the editor.
+- `Esc` (or `Ctrl+C`) closes the workspace.
 
-If you type while the agent is busy, the message is **queued** — shown dimmed above the composer — and sent (as a follow-up) when the agent goes idle, instead of being dropped or interrupting the current turn. `Alt+↑` pulls the last queued message back into the composer to edit it (Pi's `app.message.dequeue` binding).
+If you submit while the agent is busy, the message is **queued** — shown dimmed above the editor — and sent (as a follow-up) when the agent goes idle, instead of being dropped or interrupting the current turn. `Alt+↑` pulls the last queued message back into the editor to edit it (Pi's `app.message.dequeue` binding).
 
-While scrolled up, the transcript stays anchored — new streamed output appends below without moving your view. Press `End` to jump back to the live tail. History is projected as a sliding window over the session (a chunk of trailing entries); scrolling to the top loads the next older chunk, so very long sessions never project the whole conversation at once.
+History is projected as a sliding window over the session (a chunk of trailing entries); scrolling to the top loads the next older chunk, so very long sessions never project the whole conversation at once.
 
-Pasting text into the composer works (bracketed paste is handled; line breaks are kept). Pasting **images** is not supported in the workspace window — Pi's image paste targets its built-in editor, which the workspace replaces; close the workspace (`Esc`) to use the plain editor for image input.
-
-The workspace also inherits two Pi bindings (work in any pane): `app.thinking.toggle` (default `Ctrl+T`) shows/hides thinking blocks, and `app.tools.expand` (default `Ctrl+O`) expands/collapses tool output. Rebind them in `~/.pi/agent/keybindings.json`.
+Pasting **images** is not supported in the workspace window — Pi's image paste targets its standalone editor; close the workspace (`Esc`) to use the plain editor for image input.
 
 The workspace's own keys are configurable in planner settings (Pi's `keybindings.json` only accepts Pi's built-in action ids, not ours). Override any of them under `workspace.keys`; omitted actions keep their defaults:
 
 ```json
-{ "workspace": { "keys": { "jumpBottom": ["end", "ctrl+e"], "expand": ["x", "o"] } } }
+{ "workspace": { "keys": { "pageUp": ["pageUp", "ctrl+u"], "pageDown": ["pageDown", "ctrl+d"] } } }
 ```
 
-Actions: `focusNext` (`tab`), `up` (`up`), `down` (`down`), `pageUp` (`pageUp`), `pageDown` (`pageDown`), `jumpBottom` (`end`), `jumpTop` (`home`), `expand` (`x`), `exit` (`escape`). `Ctrl+C` always exits regardless of overrides. Send/newline and "edit last queued" follow Pi's own bindings (`tui.input.submit`, `tui.input.newLine`, `app.message.dequeue`) so they stay consistent with the plain editor — rebind those in `~/.pi/agent/keybindings.json`.
+Active actions: `focusNext` (`tab`, toggles tasks), `pageUp` (`pageUp`), `pageDown` (`pageDown`), `up`/`down` (`up`/`down`, task selection), `exit` (`escape`). `Ctrl+C` always exits regardless of overrides. Send/newline, expand, thinking, and "edit last queued" follow Pi's own bindings (`tui.input.submit`, `tui.input.newLine`, `app.tools.expand`, `app.thinking.toggle`, `app.message.dequeue`) — rebind those in `~/.pi/agent/keybindings.json`.
 
 The line under the stage ribbon is a static context line (active task, branch, or a blocking note), clipped with `…` — it does not scroll, so it never forces a repaint.
 

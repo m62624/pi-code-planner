@@ -46,7 +46,7 @@ describe("planner about report", () => {
 		expect(report).toContain("| `skills.maxActive` | `3` | `0` | global |");
 		// Workspace key hints reflect the live Pi override (newline → ctrl+j),
 		// not the hardcoded shift+enter default.
-		expect(report).toContain("ctrl+j inserts a newline");
-		expect(report).not.toContain("shift+enter inserts a newline");
+		expect(report).toContain("ctrl+j newline");
+		expect(report).not.toContain("shift+enter newline");
 	});
 });
