@@ -13,11 +13,14 @@ import {
 	readProjectRecordIfExists,
 	saveProjectRecord,
 	setActivePlan,
+	upsertProjectPlanSummary,
 } from "../storage/project-store";
 import type {
 	PlanRecord,
 	PlanStateRecord,
+	PlanStatus,
 	PlanSummaryStatus,
+	ProjectPlanSummary,
 	ProjectRecord,
 } from "../storage/schema";
 import { readPlanStateIfExists, savePlanState } from "../storage/state-store";
@@ -106,7 +109,7 @@ async function renamePlan(
 	input: PlannerUserCommandInput,
 ): Promise<PlannerUserCommandResult> {
 	const params = asObject(input.params);
-	const project = await readProjectRecordIfExists(input.fs, input.projectPaths);
+	let project = await readProjectRecordIfExists(input.fs, input.projectPaths);
 	if (!project) {
 		return noProjectPlans(input.commandName);
 	}
@@ -117,16 +120,14 @@ async function renamePlan(
 			project,
 		});
 	}
-	const summary = project.plans.find((plan) => plan.planId === planId);
-	if (!summary) {
-		return blocked(
-			input.commandName,
-			`Planner plan does not exist: ${planId}.`,
-			{
-				project,
-				planId,
-			},
-		);
+	if (!project.plans.some((plan) => plan.planId === planId)) {
+		const recovered = await reconcilePlanSummaryFromDisk(input, planId);
+		if (!recovered) {
+			return planDoesNotExist(input.commandName, project, planId);
+		}
+		project =
+			(await readProjectRecordIfExists(input.fs, input.projectPaths)) ??
+			project;
 	}
 
 	const planPaths = createPlanStoragePaths(input.projectPaths, planId);
@@ -156,24 +157,71 @@ async function renamePlan(
 	});
 }
 
+function planStatusToSummaryStatus(status: PlanStatus): PlanSummaryStatus {
+	return status === "draft" ? "active" : status;
+}
+
+/**
+ * `project.json` plans[] is an index over the on-disk plan dirs, which are the
+ * source of truth. If a planId is missing from the index but its plan.json
+ * exists on disk, re-index it and return the recovered summary; otherwise null.
+ * This keeps plan commands working when the index drifts from disk (a moved or
+ * partially-written project.json) instead of reporting a present plan as gone.
+ */
+async function reconcilePlanSummaryFromDisk(
+	input: PlannerUserCommandInput,
+	planId: string,
+): Promise<ProjectPlanSummary | null> {
+	const planPaths = createPlanStoragePaths(input.projectPaths, planId);
+	const plan = await readPlanRecordIfExists(input.fs, planPaths);
+	if (!plan) return null;
+	const summary: ProjectPlanSummary = {
+		planId,
+		title: plan.title,
+		status: planStatusToSummaryStatus(plan.status),
+	};
+	await upsertProjectPlanSummary(input.fs, input.projectPaths, summary);
+	return summary;
+}
+
+/** "does not exist" diagnostic that lists the plan ids the project does know. */
+function planDoesNotExist(
+	commandName: PlannerUserCommandName,
+	project: ProjectRecord,
+	planId: string,
+): PlannerUserCommandResult {
+	const ids = project.plans.map((plan) => plan.planId);
+	return blocked(
+		commandName,
+		[
+			`Planner plan does not exist: ${planId}.`,
+			ids.length > 0
+				? `Known plans in this project: ${ids.join(", ")}.`
+				: "This project has no plans yet. Create one with /planner-create.",
+		].join("\n"),
+		{ project, planId, knownPlanIds: ids },
+	);
+}
+
 async function resumePlan(
 	input: PlannerUserCommandInput,
 ): Promise<PlannerUserCommandResult> {
 	const params = asObject(input.params);
 	const targetPlanId = requiredString(params, "planId");
-	const project = await readProjectRecordIfExists(input.fs, input.projectPaths);
+	let project = await readProjectRecordIfExists(input.fs, input.projectPaths);
 	if (!project) {
 		return noProjectPlans(input.commandName);
 	}
-	const targetSummary = project.plans.find(
-		(plan) => plan.planId === targetPlanId,
-	);
-	if (!targetSummary) {
-		return blocked(
-			input.commandName,
-			`Planner plan does not exist: ${targetPlanId}.`,
-			{ project, targetPlanId },
-		);
+	if (!project.plans.some((plan) => plan.planId === targetPlanId)) {
+		// Index may be out of sync with disk: recover from the on-disk plan record
+		// before declaring the plan missing.
+		const recovered = await reconcilePlanSummaryFromDisk(input, targetPlanId);
+		if (!recovered) {
+			return planDoesNotExist(input.commandName, project, targetPlanId);
+		}
+		project =
+			(await readProjectRecordIfExists(input.fs, input.projectPaths)) ??
+			project;
 	}
 	if (project.activePlanId === targetPlanId) {
 		const target = await readPlanStateForCommand(
@@ -383,19 +431,20 @@ async function deletePlan(
 	if (!project) {
 		return noProjectPlans(input.commandName);
 	}
-	const summary = project.plans.find((plan) => plan.planId === planId);
-	if (!summary) {
-		return blocked(
-			input.commandName,
-			`Planner plan does not exist: ${planId}.`,
-			{
-				project,
-				planId,
-			},
-		);
+	const planPaths = createPlanStoragePaths(input.projectPaths, planId);
+	if (!project.plans.some((plan) => plan.planId === planId)) {
+		// Allow deleting an on-disk plan whose index entry drifted away — otherwise
+		// there would be no way to remove it. Only a plan with no disk artifacts at
+		// all is truly gone.
+		const onDisk =
+			(await readPlanRecordIfExists(input.fs, planPaths)) !== null ||
+			(await readPlanStateIfExists(input.fs, planPaths)) !== null ||
+			(await input.fs.exists(planPaths.planDir));
+		if (!onDisk) {
+			return planDoesNotExist(input.commandName, project, planId);
+		}
 	}
 
-	const planPaths = createPlanStoragePaths(input.projectPaths, planId);
 	const state = await readPlanStateIfExists(input.fs, planPaths);
 	const projectRootExists = await input.fs.exists(
 		input.projectPaths.projectRoot,
