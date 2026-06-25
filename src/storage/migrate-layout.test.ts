@@ -157,6 +157,22 @@ describe("migrateLayout", () => {
 		).toBe(true);
 	});
 
+	it("skips immediately when nothing legacy is on disk", async () => {
+		const fs = new MockPlannerFs();
+		const paths = await seedProject(fs, "/home/me/app", {
+			plans: [{ planId: "plan-a", title: "A", status: "active" }],
+		});
+		// The plan is already at its nested per-project path (no legacy flat dir).
+		const dst = createPlanStoragePaths(paths, "plan-a").planDir;
+		await fs.writeText(`${dst}/plan.json`, "{}");
+
+		const result = await migrateLayout({ fs, agentDir: AGENT_DIR });
+
+		expect(result.plansMoved).toBe(0);
+		// Nested plan is untouched.
+		expect(await fs.readText(`${dst}/plan.json`)).toBe("{}");
+	});
+
 	it("leaves orphan plans (not referenced by any project) untouched", async () => {
 		const fs = new MockPlannerFs();
 		await seedProject(fs, "/home/me/app", { plans: [] });

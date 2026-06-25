@@ -6,16 +6,22 @@ import { createPlanStoragePaths, createProjectStoragePaths } from "./paths";
 import type { ProjectRecord } from "./schema";
 
 /**
- * One-time, idempotent migration of the on-disk layout to the unified scheme
- * where everything a project owns lives under projects/<projectId>/. Runs on
- * session start, best-effort: it must never throw into the host.
+ * Idempotent migration of the on-disk layout to the unified scheme where
+ * everything a project owns lives under projects/<projectId>/. Triggered from
+ * /planner-create and /planner-resume (not every session), best-effort: it must
+ * never throw into the host.
  *
- * Currently moves plans from the legacy flat extensionDir/plans/<planId> into
- * projects/<projectId>/plans/<planId>, attributing each plan via the owning
+ * Fast path: if neither legacy artifact exists on disk (the flat plans dir or
+ * the old skills/bundled system-skill dir), there is nothing to migrate and we
+ * return immediately without scanning any project — so once migrated, every
+ * later /planner-create and /planner-resume pays only two `exists` checks.
+ *
+ * When there is work: moves plans from the legacy flat extensionDir/plans/<id>
+ * into projects/<projectId>/plans/<id>, attributing each plan via the owning
  * project.json (plans[] + activePlanId). A plan is moved only when the source
  * exists and the destination does not, so re-running is a no-op and a name
  * collision never destroys the source. Orphan plans (not referenced by any
- * project record) are left untouched in the legacy dir.
+ * project record) are left in the legacy dir.
  */
 export async function migrateLayout(input: {
 	fs: PlannerFs;
@@ -24,50 +30,58 @@ export async function migrateLayout(input: {
 	const { fs, agentDir } = input;
 	const extensionDir = join(agentDir, "extensions", EXTENSION_NAME);
 	const legacyPlansDir = join(extensionDir, "plans");
-	const projectsDir = join(extensionDir, "projects");
+	const legacyBundledDir = join(extensionDir, "skills", "bundled");
+	const skillsDir = join(extensionDir, "skills");
+
+	const hasLegacyPlans = await fs.exists(legacyPlansDir);
+	const hasLegacyBundled = await fs.exists(legacyBundledDir);
+	// Nothing legacy on disk: skip. This is the steady state after the first
+	// migration, so it must not scan projects or move anything.
+	if (!hasLegacyPlans && !hasLegacyBundled) {
+		return { plansMoved: 0 };
+	}
 
 	let plansMoved = 0;
-	for (const projectId of await safeReaddir(fs, projectsDir)) {
-		const projectJson = join(projectsDir, projectId, "project.json");
-		const record = await readJsonIfExists<ProjectRecord>(fs, projectJson);
-		if (!record?.projectRoot) continue;
+	if (hasLegacyPlans) {
+		const projectsDir = join(extensionDir, "projects");
+		for (const projectId of await safeReaddir(fs, projectsDir)) {
+			const projectJson = join(projectsDir, projectId, "project.json");
+			const record = await readJsonIfExists<ProjectRecord>(fs, projectJson);
+			if (!record?.projectRoot) continue;
 
-		const projectPaths = createProjectStoragePaths({
-			agentDir,
-			projectRoot: record.projectRoot,
-		});
-		const planIds = new Set<string>();
-		for (const plan of record.plans ?? []) {
-			if (plan.planId) planIds.add(plan.planId);
-		}
-		if (record.activePlanId) planIds.add(record.activePlanId);
+			const projectPaths = createProjectStoragePaths({
+				agentDir,
+				projectRoot: record.projectRoot,
+			});
+			const planIds = new Set<string>();
+			for (const plan of record.plans ?? []) {
+				if (plan.planId) planIds.add(plan.planId);
+			}
+			if (record.activePlanId) planIds.add(record.activePlanId);
 
-		for (const planId of planIds) {
-			const src = join(legacyPlansDir, planId);
-			const dst = createPlanStoragePaths(projectPaths, planId).planDir;
-			if (!(await fs.exists(src))) continue;
-			if (await fs.exists(dst)) continue;
-			await fs.move(src, dst);
-			plansMoved += 1;
+			for (const planId of planIds) {
+				const src = join(legacyPlansDir, planId);
+				const dst = createPlanStoragePaths(projectPaths, planId).planDir;
+				if (!(await fs.exists(src))) continue;
+				if (await fs.exists(dst)) continue;
+				await fs.move(src, dst);
+				plansMoved += 1;
+			}
 		}
+		// Drop the flat plans dir once every owned plan moved out (orphans, if
+		// any, keep it non-empty and it is left alone).
+		await removeDirIfEmpty(fs, legacyPlansDir);
 	}
 
 	// The bundled elenchus system skill moved from skills/bundled/elenchus to the
 	// top-level system-skills/elenchus; it self-heals at the new path on the next
 	// resource discovery, so drop the stale copy. The legacy global user pool
 	// (skills/library + skills/index.json) is left in place for the read-only
-	// discovery fallback.
-	const legacyBundledDir = join(extensionDir, "skills", "bundled");
-	if (await fs.exists(legacyBundledDir)) {
+	// discovery fallback; the skills dir itself is only removed once empty.
+	if (hasLegacyBundled) {
 		await fs.removeDir(legacyBundledDir);
 	}
-
-	// Clean up now-empty legacy dirs: the flat plans dir once every owned plan
-	// moved out (orphans, if any, keep it non-empty and it is left alone), and
-	// the global skills dir once the bundled copy is gone and no legacy user pool
-	// remains. removeDirIfEmpty is a no-op when entries are still present.
-	await removeDirIfEmpty(fs, legacyPlansDir);
-	await removeDirIfEmpty(fs, join(extensionDir, "skills"));
+	await removeDirIfEmpty(fs, skillsDir);
 
 	return { plansMoved };
 }
