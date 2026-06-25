@@ -16,6 +16,8 @@ export type WorkspaceAction =
 	| "focusNext"
 	| "up"
 	| "down"
+	| "scrollUp"
+	| "scrollDown"
 	| "pageUp"
 	| "pageDown"
 	| "jumpBottom"
@@ -29,6 +31,10 @@ export const DEFAULT_WORKSPACE_KEYS: Record<WorkspaceAction, string[]> = {
 	focusNext: ["tab"],
 	up: ["up"],
 	down: ["down"],
+	// Ctrl+Up/Down scroll the transcript one line at a time (precise) so the
+	// plain arrows stay with the editor; PageUp/Down jump by a page (wider).
+	scrollUp: ["ctrl+up"],
+	scrollDown: ["ctrl+down"],
 	pageUp: ["pageUp"],
 	pageDown: ["pageDown"],
 	jumpBottom: ["end"],
@@ -92,6 +98,7 @@ export interface WorkspaceKeyHints {
 	toolsExpand: string;
 	focusNext: string;
 	scroll: string;
+	lineScroll: string;
 	pageScroll: string;
 	jumpBottom: string;
 	jumpTop: string;
@@ -116,6 +123,7 @@ export function buildWorkspaceKeyHints(input: {
 		toolsExpand: resolvePiKeyHint("app.tools.expand", piOverrides),
 		focusNext: fmtKeys(workspaceKeys.focusNext),
 		scroll: `${fmtKeys(workspaceKeys.up)}/${fmtKeys(workspaceKeys.down)}`,
+		lineScroll: `${fmtKeys(workspaceKeys.scrollUp)}/${fmtKeys(workspaceKeys.scrollDown)}`,
 		pageScroll: `${fmtKeys(workspaceKeys.pageUp)}/${fmtKeys(workspaceKeys.pageDown)}`,
 		jumpBottom: fmtKeys(workspaceKeys.jumpBottom),
 		jumpTop: fmtKeys(workspaceKeys.jumpTop),

@@ -592,10 +592,19 @@ export class PlannerWorkspaceComponent implements Component {
 			this.cycleFocus();
 			return;
 		}
-		// Transcript scroll is global (no pane to focus): PageUp/PageDown move the
-		// view, PageDown past the bottom re-follows the live tail. These do not
-		// collide with typing, so the editor stays the single input.
+		// Transcript scroll is global (no pane to focus) and uses dedicated keys so
+		// the plain arrows stay with the editor: Ctrl+Up/Down nudge one line
+		// (precise), PageUp/PageDown jump a page (wider). PageDown/Ctrl+Down past
+		// the bottom re-follow the live tail.
 		const page = Math.max(1, this.lastTranscriptHeight - 1);
+		if (this.matchesAction("scrollUp", data)) {
+			this.scrollBy(-1);
+			return;
+		}
+		if (this.matchesAction("scrollDown", data)) {
+			this.scrollBy(1);
+			return;
+		}
 		if (this.matchesAction("pageUp", data)) {
 			this.scrollBy(-page);
 			return;
@@ -850,7 +859,7 @@ export class PlannerWorkspaceComponent implements Component {
 	}
 
 	private renderHelpLine(inner: number): string {
-		const pg = `${this.keys.pageUp.join("/")}/${this.keys.pageDown.join("/")}`;
+		const scroll = `${this.keys.scrollUp.join("/")}/${this.keys.scrollDown.join("/")} (or ${this.keys.pageUp.join("/")}/${this.keys.pageDown.join("/")})`;
 		const left =
 			this.focus === "tasks"
 				? this.palette.accent("tasks")
@@ -858,10 +867,10 @@ export class PlannerWorkspaceComponent implements Component {
 		const keys =
 			this.focus === "editor"
 				? this.palette.dim(
-						`${this.keyHint("tui.input.submit")} send · ${this.keyHint("tui.input.newLine")} newline · ${pg} scroll · ${this.keyHint("app.tools.expand")} expand · tab tasks · esc exit`,
+						`${this.keyHint("tui.input.submit")} send · ${this.keyHint("tui.input.newLine")} newline · ${scroll} scroll · ${this.keyHint("app.tools.expand")} expand · tab tasks · esc exit`,
 					)
 				: this.palette.dim(
-						`↑↓ select task · ${pg} scroll · type to compose · tab editor · esc exit`,
+						`↑↓ select task · ${scroll} scroll · type to compose · tab editor · esc exit`,
 					);
 		return spread(left, keys, inner, this.palette);
 	}

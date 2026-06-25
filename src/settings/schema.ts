@@ -55,6 +55,8 @@ export type PlannerWorkspaceAction =
 	| "focusNext"
 	| "up"
 	| "down"
+	| "scrollUp"
+	| "scrollDown"
 	| "pageUp"
 	| "pageDown"
 	| "jumpBottom"

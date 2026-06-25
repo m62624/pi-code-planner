@@ -159,7 +159,7 @@ The input is **Pi's own editor** embedded in the workspace and is the single, al
 
 Navigation that isn't typing is done with dedicated keys, so the editor never loses focus:
 
-- **Scroll the transcript** with `PageUp`/`PageDown` (`pageUp`/`pageDown`). While scrolled up the view stays anchored; new output appends below without moving it, and `PageDown` past the bottom re-follows the live tail.
+- **Scroll the transcript** with `Ctrl+↑`/`Ctrl+↓` (`scrollUp`/`scrollDown`, one line — precise) or `PageUp`/`PageDown` (`pageUp`/`pageDown`, one page — wider). The plain arrows stay with the editor. While scrolled up the view stays anchored; new output appends below without moving it, and scrolling past the bottom re-follows the live tail.
 - **Expand/collapse tool output** with `Ctrl+O` (Pi's `app.tools.expand`).
 - **Show/hide thinking** with `Ctrl+T` (Pi's `app.thinking.toggle`).
 - `Tab` toggles a **tasks** view — `↑`/`↓` select a task and reveal the task list + stage timings, `←`/`→` nudge the ticker; typing still composes a message. `Tab` again returns to the editor.
@@ -174,10 +174,10 @@ Pasting **images** is not supported in the workspace window — Pi's image paste
 The workspace's own keys are configurable in planner settings (Pi's `keybindings.json` only accepts Pi's built-in action ids, not ours). Override any of them under `workspace.keys`; omitted actions keep their defaults:
 
 ```json
-{ "workspace": { "keys": { "pageUp": ["pageUp", "ctrl+u"], "pageDown": ["pageDown", "ctrl+d"] } } }
+{ "workspace": { "keys": { "scrollUp": ["ctrl+up", "ctrl+u"], "scrollDown": ["ctrl+down", "ctrl+d"] } } }
 ```
 
-Active actions: `focusNext` (`tab`, toggles tasks), `pageUp` (`pageUp`), `pageDown` (`pageDown`), `up`/`down` (`up`/`down`, task selection), `exit` (`escape`). `Ctrl+C` always exits regardless of overrides. Send/newline, expand, thinking, and "edit last queued" follow Pi's own bindings (`tui.input.submit`, `tui.input.newLine`, `app.tools.expand`, `app.thinking.toggle`, `app.message.dequeue`) — rebind those in `~/.pi/agent/keybindings.json`.
+Active actions: `focusNext` (`tab`, toggles tasks), `scrollUp` (`ctrl+up`), `scrollDown` (`ctrl+down`), `pageUp` (`pageUp`), `pageDown` (`pageDown`), `up`/`down` (`up`/`down`, task selection), `exit` (`escape`). `Ctrl+C` always exits regardless of overrides. Send/newline, expand, thinking, and "edit last queued" follow Pi's own bindings (`tui.input.submit`, `tui.input.newLine`, `app.tools.expand`, `app.thinking.toggle`, `app.message.dequeue`) — rebind those in `~/.pi/agent/keybindings.json`.
 
 The line under the stage ribbon is a static context line (active task, branch, or a blocking note), clipped with `…` — it does not scroll, so it never forces a repaint.
 

@@ -237,7 +237,7 @@ export function buildPlannerAboutReport(input: {
 		"## Planner Workspace TUI",
 		"- /planner-dashboard opens the workspace: stage dashboard + the model chat in one window. It also opens automatically for planner-worktree sessions (workspace.autoOpen).",
 		`- The input is Pi's own editor embedded in the workspace and is the single, always-live composer (type from anywhere): multiline, input history, kill-ring, word-nav, undo, autocomplete, and collapsed paste markers (a paste over 10 lines / 1000 chars becomes a short [paste #N …] marker, expanded back to full text on send — there is no in-place expand). ${k.send} sends; ${k.newline} newline. All editor keys are Pi's tui.editor.*/tui.input.* bindings.`,
-		`- The transcript scrolls with ${k.pageScroll} (no pane to focus); ${k.toolsExpand} (app.tools.expand) toggles expand-all for collapsed tool output.`,
+		`- The transcript scrolls with ${k.lineScroll} (one line, precise) or ${k.pageScroll} (one page) — no pane to focus, and the plain arrows stay with the editor; ${k.toolsExpand} (app.tools.expand) toggles expand-all for collapsed tool output.`,
 		`- ${k.focusNext} toggles a tasks view: ↑↓ select a task and reveal the task list + stage timings (typing still composes a message). ${k.focusNext} again returns to the editor.`,
 		`- Submitting while the agent is busy queues the message (shown dimmed above the editor) and sends it as a follow-up when the agent goes idle; ${k.dequeue} pulls the last queued message back to edit it.`,
 		"- Send/newline/dequeue follow Pi's own bindings (tui.input.submit, tui.input.newLine, app.message.dequeue); the keys above reflect your current overrides.",
