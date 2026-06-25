@@ -12,6 +12,7 @@ type Sent = { text: string; queued: boolean };
 function makeComponent(opts: { busy: boolean }) {
 	const sent: Sent[] = [];
 	let busy = opts.busy;
+	let renderCount = 0;
 	const idColor = (s: string) => s;
 	const theme = {
 		fg: (_role: string, s: string) => s,
@@ -19,7 +20,9 @@ function makeComponent(opts: { busy: boolean }) {
 		inverse: idColor,
 	} as never;
 	const tui = {
-		requestRender() {},
+		requestRender() {
+			renderCount += 1;
+		},
 		terminal: { rows: 40 },
 	} as never;
 	// Fake keybindings: submit on "\r", newline on the shift+enter marker, dequeue
@@ -64,6 +67,18 @@ function makeComponent(opts: { busy: boolean }) {
 		input: string;
 		queued: string[];
 		flushQueue: () => void;
+		scheduleRender: () => void;
+	};
+	let focused = true;
+	const attachHandle = () => {
+		component.attachHandle({
+			isFocused: () => focused,
+			hide() {},
+			setHidden() {},
+			isHidden: () => false,
+			focus() {},
+			unfocus() {},
+		} as never);
 	};
 	return {
 		component,
@@ -72,6 +87,11 @@ function makeComponent(opts: { busy: boolean }) {
 		setBusy: (b: boolean) => {
 			busy = b;
 		},
+		attachHandle,
+		setFocused: (f: boolean) => {
+			focused = f;
+		},
+		renderCount: () => renderCount,
 	};
 }
 
@@ -140,5 +160,31 @@ describe("PlannerWorkspaceComponent queue", () => {
 			{ text: "two", queued: true },
 		]);
 		expect(access.queued).toEqual([]);
+	});
+});
+
+describe("PlannerWorkspaceComponent overlay focus", () => {
+	it("pauses repaints while a foreign overlay is focused above it", () => {
+		const { access, attachHandle, setFocused, renderCount } = makeComponent({
+			busy: false,
+		});
+		attachHandle();
+		setFocused(false);
+		const before = renderCount();
+		access.scheduleRender();
+		expect(renderCount()).toBe(before); // suppressed while unfocused
+		setFocused(true);
+		access.scheduleRender();
+		expect(renderCount()).toBe(before + 1); // resumes when refocused
+	});
+
+	it("ignores input that reaches it while not the focused overlay", () => {
+		const { component, access, attachHandle, setFocused } = makeComponent({
+			busy: false,
+		});
+		attachHandle();
+		setFocused(false);
+		type(component, "ghost");
+		expect(access.input).toBe("");
 	});
 });

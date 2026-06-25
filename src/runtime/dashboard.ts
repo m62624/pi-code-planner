@@ -11,6 +11,7 @@ import {
 	type Component,
 	type KeyId,
 	matchesKey,
+	type OverlayHandle,
 	type TUI,
 	truncateToWidth,
 	visibleWidth,
@@ -156,9 +157,10 @@ export async function openPlannerWorkspace(
 	const load = () => loadDashboardModel(fs, ctx.cwd, config.syncMs);
 	const getEntries = () => ctx.sessionManager.getBranch();
 	const initial = await load();
+	let component: PlannerWorkspaceComponent | null = null;
 	await ctx.ui.custom<void>(
 		(tui, theme, keybindings, done) => {
-			return new PlannerWorkspaceComponent({
+			component = new PlannerWorkspaceComponent({
 				tui,
 				theme,
 				keybindings,
@@ -179,6 +181,7 @@ export async function openPlannerWorkspace(
 				},
 				onClose: () => done(undefined),
 			});
+			return component;
 		},
 		{
 			// Render as a fixed top overlay so the workspace does not live in the
@@ -200,6 +203,11 @@ export async function openPlannerWorkspace(
 				col: 0,
 				margin: { bottom: footerReserve },
 			},
+			// When another extension opens its own overlay (e.g. an ask_user
+			// dialog), it captures focus and stacks above us. We use the handle to
+			// pause our timer-driven repaints while unfocused so we stop clobbering
+			// the foreign overlay's frame, and resume when focus returns.
+			onHandle: (handle) => component?.attachHandle(handle),
 		},
 	);
 }
@@ -328,6 +336,10 @@ export class PlannerWorkspaceComponent implements Component {
 	// clock-only redraws instead of re-laying-out every row.
 	private cachedTranscriptKey = "";
 	private cachedTranscript: ReturnType<typeof renderTranscript> | null = null;
+	// Overlay handle (set once shown). While another overlay is focused above us
+	// we pause repaints so we don't clobber its frame; we resume on refocus.
+	private handle: OverlayHandle | null = null;
+	private wasFocused = true;
 
 	constructor(input: {
 		tui: TUI;
@@ -361,7 +373,23 @@ export class PlannerWorkspaceComponent implements Component {
 		agentIdleListener = () => this.flushQueue();
 	}
 
+	attachHandle(handle: OverlayHandle): void {
+		this.handle = handle;
+	}
+
+	/** True unless a foreign overlay is focused above us (or before we have a handle). */
+	private isOverlayFocused(): boolean {
+		return this.handle ? this.handle.isFocused() : true;
+	}
+
 	private onTick(): void {
+		// When a foreign overlay closes, focus returns to us. Force one repaint so
+		// our content (which kept changing while hidden) refreshes immediately
+		// rather than waiting for the next signature change.
+		const focused = this.isOverlayFocused();
+		if (focused && !this.wasFocused) this.tui.requestRender();
+		this.wasFocused = focused;
+
 		this.refreshRows();
 		if (this.tick % RELOAD_EVERY_TICKS === 0) void this.reloadModel();
 		this.tick += 1;
@@ -467,7 +495,11 @@ export class PlannerWorkspaceComponent implements Component {
 	private scheduleRender(signature = this.computeSignature()): void {
 		this.lastSignature = signature;
 		this.version += 1;
-		this.tui.requestRender();
+		// Skip the actual repaint while a foreign overlay is focused above us: the
+		// version still advances, so the next render after refocus reflects the
+		// current state, but our timer-driven redraws stop overwriting the other
+		// overlay's frame.
+		if (this.isOverlayFocused()) this.tui.requestRender();
 	}
 
 	private clampSelection(): void {
@@ -496,6 +528,9 @@ export class PlannerWorkspaceComponent implements Component {
 	}
 
 	handleInput(data: string): void {
+		// A focused foreign overlay receives input directly; ignore anything that
+		// still reaches us while we are not the focused overlay.
+		if (!this.isOverlayFocused()) return;
 		// ctrl+c always exits as a safety net, regardless of key overrides.
 		if (this.matchesAction("exit", data) || matchesKey(data, "ctrl+c")) {
 			this.dispose();
