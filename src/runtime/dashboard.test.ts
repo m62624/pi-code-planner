@@ -38,6 +38,8 @@ function makeComponent(opts: { busy: boolean }) {
 		focusNext: ["tab"],
 		up: ["up"],
 		down: ["down"],
+		scrollUp: ["ctrl+up"],
+		scrollDown: ["ctrl+down"],
 		pageUp: ["pageUp"],
 		pageDown: ["pageDown"],
 		jumpBottom: ["end"],
@@ -67,7 +69,8 @@ function makeComponent(opts: { busy: boolean }) {
 		flushQueue: () => void;
 		scheduleRender: () => void;
 		onEditorSubmit: (text: string) => void;
-		editor: { getText: () => string };
+		editor: { getText: () => string; setText: (text: string) => void };
+		version: number;
 	};
 	let focused = true;
 	let hidden = false;
@@ -165,6 +168,21 @@ describe("PlannerWorkspaceComponent overlay focus", () => {
 		setFocused(true);
 		tick();
 		expect(isHidden()).toBe(false);
+	});
+
+	it("repaints on a pure cursor move so the cursor never lags behind", () => {
+		// Regression: cursor moves (arrows, ctrl+] jumpForward, word-nav) don't fire
+		// the editor's onChange, so they used to leave our version-cached render()
+		// returning the previous frame — the cursor only caught up on the next clock
+		// tick. Delegating any key to the editor must bump the version so render()
+		// relays out the editor and the hardware cursor follows immediately.
+		const { component, access } = makeComponent({ busy: false });
+		access.editor.setText("hello");
+		const before = access.version;
+		// Left-arrow escape: the editor consumes it as a cursor move (no text change).
+		component.handleInput("\x1b[D");
+		expect(access.editor.getText()).toBe("hello");
+		expect(access.version).toBeGreaterThan(before);
 	});
 
 	it("ignores input that reaches it while not the focused overlay", () => {
