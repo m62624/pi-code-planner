@@ -1,5 +1,8 @@
 import type { GitRunner } from "../git/runner";
-import type { PlannerWrapperTool } from "../guard/tool-policy";
+import {
+	findPlannerToolOwnerSteps,
+	type PlannerWrapperTool,
+} from "../guard/tool-policy";
 import { createInstructionPaths } from "../instructions/paths";
 import {
 	getInstructionRoutingForState,
@@ -125,6 +128,15 @@ export function checkPlannerPreflightToolAllowed(input: {
 }): PlannerPreflightToolDecision {
 	const allowedTools = input.preflight.decision.allowedTools;
 	const allow = allowedTools.includes(input.tool);
+	// When a tool is blocked only because the planner is on an earlier step,
+	// name the step(s) where it unlocks so the model advances there with
+	// planner_finish_step instead of re-calling the tool or polling status.
+	const owners = allow
+		? []
+		: findPlannerToolOwnerSteps(
+				input.tool,
+				input.preflight.decision.stage ?? undefined,
+			);
 	return {
 		allow,
 		tool: input.tool,
@@ -136,6 +148,9 @@ export function checkPlannerPreflightToolAllowed(input: {
 					`Runtime action: ${input.preflight.decision.action}.`,
 					input.preflight.decision.reason,
 					`Extension tools (this planner session only): ${allowedTools.join(", ") || "(none)"}.`,
+					owners.length > 0
+						? `${input.tool} is allowed at: ${owners.join(", ")}. Advance there with planner_finish_step before calling it.`
+						: null,
 				]
 					.filter(Boolean)
 					.join("\n"),

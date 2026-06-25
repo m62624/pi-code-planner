@@ -3,6 +3,7 @@ import { loadEffectivePlannerSettings } from "../settings/manager";
 import { createProjectStoragePaths } from "../storage/paths";
 import { MockPlannerFs } from "../test/mock-fs";
 import { buildPlannerAboutReport } from "./about";
+import { buildWorkspaceKeyHints, resolveWorkspaceKeys } from "./workspace-keys";
 
 describe("planner about report", () => {
 	it("explains current settings, defaults, and sources from one settings core", async () => {
@@ -25,6 +26,10 @@ describe("planner about report", () => {
 			settings,
 			projectPaths,
 			audience: "agent",
+			keyHints: buildWorkspaceKeyHints({
+				workspaceKeys: resolveWorkspaceKeys(undefined),
+				piOverrides: { "tui.input.newLine": ["ctrl+j"] },
+			}),
 		});
 
 		expect(report).toContain("# Planner About");
@@ -39,5 +44,9 @@ describe("planner about report", () => {
 			'| `timer.mode` | `"widget"` | `"status"` | project |',
 		);
 		expect(report).toContain("| `skills.maxActive` | `3` | `0` | global |");
+		// Workspace key hints reflect the live Pi override (newline → ctrl+j),
+		// not the hardcoded shift+enter default.
+		expect(report).toContain("ctrl+j newline");
+		expect(report).not.toContain("shift+enter newline");
 	});
 });

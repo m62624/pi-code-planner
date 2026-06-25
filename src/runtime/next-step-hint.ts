@@ -74,21 +74,33 @@ function describeNextMove(
 	}
 	const allowed = safeAllowedNext(state);
 	if (allowed.length > 1) {
-		const targets = allowed
-			.map(
-				(position) =>
-					`{stage: '${position.stage}', step: '${position.step}'}${
-						isBackwardMove(state, position) ? " (loops back)" : ""
-					}`,
-			)
-			.join(" or ");
-		return `When the exit condition holds, call planner_finish_step and choose ONE target: ${targets}.`;
+		return `When the exit condition holds, call planner_finish_step and choose ONE target: ${formatAllowedNextTargets(state, allowed)}.`;
 	}
 	return fallback ?? "When the exit condition holds, call planner_finish_step.";
 }
 
+/**
+ * Render the allowed next positions as `{stage, step}` targets, tagging any
+ * backward/fix move with "(loops back)". Shared by the next-step hint and the
+ * `ambiguous_next_step` blocked-transition message so a model choosing a branch
+ * sees the same concrete options inline — no planner_status round-trip.
+ */
+export function formatAllowedNextTargets(
+	from: PlannerPosition,
+	allowed: readonly PlannerPosition[],
+): string {
+	return allowed
+		.map(
+			(position) =>
+				`{stage: '${position.stage}', step: '${position.step}'}${
+					isBackwardMove(from, position) ? " (loops back)" : ""
+				}`,
+		)
+		.join(" or ");
+}
+
 function isBackwardMove(
-	state: PlanStateRecord,
+	state: PlannerPosition,
 	target: PlannerPosition,
 ): boolean {
 	const currentStageIndex = STAGE_ORDER.indexOf(state.stage);

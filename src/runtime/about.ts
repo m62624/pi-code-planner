@@ -5,6 +5,7 @@ import {
 	PLANNER_READONLY_CONTEXT_BASENAMES,
 	PLANNER_WRITABLE_CONTRACT_BASENAMES,
 } from "./contracts";
+import type { WorkspaceKeyHints } from "./workspace-keys";
 
 interface SettingDescriptor {
 	path: string;
@@ -188,7 +189,10 @@ export function buildPlannerAboutReport(input: {
 	settings: EffectivePlannerSettings;
 	projectPaths: ProjectStoragePaths;
 	audience: "human" | "agent";
+	/** Effective workspace key bindings, resolved from Pi + planner settings. */
+	keyHints: WorkspaceKeyHints;
 }): string {
+	const k = input.keyHints;
 	const heading =
 		input.audience === "human" ? "Planner Helper" : "Planner About";
 	return [
@@ -232,12 +236,13 @@ export function buildPlannerAboutReport(input: {
 		"",
 		"## Planner Workspace TUI",
 		"- /planner-dashboard opens the workspace: stage dashboard + the model chat in one window. It also opens automatically for planner-worktree sessions (workspace.autoOpen).",
-		"- Inside the workspace, Tab cycles three focus panes:",
-		"  - input: type or paste, press Enter to send a message to the model.",
-		"  - chat: ↑↓ / PageUp / PageDown scroll; End jumps to the live tail, Home to the top; x toggles expand-all for tool calls.",
-		"  - tasks: ↑↓ select a task and reveal the task list + stage timings; ←→ nudge the ticker.",
-		"- Inherits Pi bindings: app.thinking.toggle (Ctrl+T) hides/shows thinking; app.tools.expand (Ctrl+O) expands/collapses tool output.",
-		"- Esc (or Ctrl+C) closes the workspace and returns to the plain chat.",
+		`- The input is Pi's own editor embedded in the workspace and is the single, always-live composer (type from anywhere): multiline, input history, kill-ring, word-nav, undo, autocomplete, and collapsed paste markers (a paste over 10 lines / 1000 chars becomes a short [paste #N …] marker, expanded back to full text on send — there is no in-place expand). ${k.send} sends; ${k.newline} newline. All editor keys are Pi's tui.editor.*/tui.input.* bindings.`,
+		`- The transcript scrolls with ${k.lineScroll} (one line, precise) or ${k.pageScroll} (one page) — no pane to focus, and the plain arrows stay with the editor; ${k.toolsExpand} (app.tools.expand) toggles expand-all for collapsed tool output.`,
+		`- ${k.focusNext} toggles a tasks view: ↑↓ select a task and reveal the task list + stage timings (typing still composes a message). ${k.focusNext} again returns to the editor.`,
+		`- Submitting while the agent is busy queues the message (shown dimmed above the editor) and sends it as a follow-up when the agent goes idle; ${k.dequeue} pulls the last queued message back to edit it.`,
+		"- Send/newline/dequeue follow Pi's own bindings (tui.input.submit, tui.input.newLine, app.message.dequeue); the keys above reflect your current overrides.",
+		`- Inherits Pi bindings: app.thinking.toggle (${k.thinkingToggle}) hides/shows thinking; app.tools.expand (${k.toolsExpand}) expands/collapses tool output.`,
+		`- ${k.exit} (or Ctrl+C) closes the workspace and returns to the plain chat.`,
 		"- Streaming assistant output is shown live, token by token, as it is generated.",
 		"- Pi's own keys (cursor movement, model/thinking selectors, etc.) are configured in ~/.pi/agent/keybindings.json; run /reload after editing. See SETTINGS.md and the Pi keybindings docs.",
 		"- If Pi's native footer overlaps or leaves a gap below the workspace, tune workspace.footerReserveRows.",

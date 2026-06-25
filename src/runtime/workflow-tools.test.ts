@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type {
 	GitBranchInput,
@@ -383,6 +384,72 @@ describe("workflowToolTransition", () => {
 		await expect(readTaskRecord(fs, taskPaths.paths)).resolves.toMatchObject({
 			status: "done",
 		});
+	});
+
+	it("lists the branch targets inline when finish_step is ambiguous", async () => {
+		const fs = new MockPlannerFs();
+		const git = new (class extends MockGitRunner {
+			async currentBranch(): Promise<string> {
+				return "task/plan-a/fix-a";
+			}
+		})();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await ensureProjectRecord(fs, projectPaths);
+		await initializePlanFiles(
+			fs,
+			planPaths,
+			createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+		);
+		await fs.mkdirp(worktreePath);
+		const taskPaths = await upsertTaskArtifacts(fs, planPaths, {
+			taskId: "fix-a",
+			title: "Fix A",
+			objective: "Fix the thing.",
+			scope: ["src/a.ts"],
+			acceptanceCriteria: ["Tests pass."],
+		});
+		await fs.writeTextAtomic(
+			join(taskPaths.paths.taskDir, "refactor.md"),
+			"## Refactor Review\n\nNo refactor needed.\n",
+		);
+		await initializePlanState(fs, planPaths, {
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "execution",
+			step: "run_final_tests",
+			stepStatus: "running",
+			currentBranch: "task/plan-a/fix-a",
+			activeTaskId: "fix-a",
+		});
+		await setActivePlan(fs, projectPaths, "plan-a");
+
+		const blocked = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+
+		expect(blocked.result.status).toBe("blocked");
+		expect(blocked.result.stateMachineErrorCode).toBe("ambiguous_next_step");
+		expect(blocked.text).toContain(
+			"Allowed next: {stage: 'execution', step: 'capture_skill'} or {stage: 'execution', step: 'implement_task'} (loops back)",
+		);
+		expect(blocked.text).toContain(
+			"Re-call planner_finish_step with ONE of these as nextStep",
+		);
+		expect(blocked.text).not.toContain(
+			"Call planner_status before choosing the next planner action.",
+		);
 	});
 
 	it("requires a recorded doubt review before leaving finalize doubt_review", async () => {

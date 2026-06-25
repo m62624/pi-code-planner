@@ -9,8 +9,11 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import {
 	type Component,
+	Editor,
+	type EditorTheme,
 	type KeyId,
 	matchesKey,
+	type OverlayHandle,
 	type TUI,
 	truncateToWidth,
 	visibleWidth,
@@ -41,6 +44,7 @@ import {
 	renderDashboardBand,
 	renderDashboardColumns,
 } from "./dashboard-model";
+import { resolveWorkspaceKeys, type WorkspaceAction } from "./workspace-keys";
 
 const TICK_MS = 180;
 /**
@@ -59,47 +63,6 @@ const DEFAULT_FOOTER_RESERVE = 3;
 const HISTORY_WINDOW = 400;
 /** Minimum gap between streaming-driven redraws (~12 fps). */
 const STREAM_THROTTLE_MS = 80;
-
-type WorkspaceAction =
-	| "focusNext"
-	| "up"
-	| "down"
-	| "pageUp"
-	| "pageDown"
-	| "jumpBottom"
-	| "jumpTop"
-	| "expand"
-	| "submit"
-	| "exit";
-
-/** Built-in workspace keys; overridable via settings workspace.keys. */
-const DEFAULT_WORKSPACE_KEYS: Record<WorkspaceAction, string[]> = {
-	focusNext: ["tab"],
-	up: ["up"],
-	down: ["down"],
-	pageUp: ["pageUp"],
-	pageDown: ["pageDown"],
-	jumpBottom: ["end"],
-	jumpTop: ["home"],
-	expand: ["x"],
-	submit: ["enter"],
-	exit: ["escape"],
-};
-
-function resolveWorkspaceKeys(
-	overrides: Partial<Record<WorkspaceAction, string[]>> | undefined,
-): Record<WorkspaceAction, string[]> {
-	const resolved = { ...DEFAULT_WORKSPACE_KEYS };
-	if (overrides) {
-		for (const action of Object.keys(
-			DEFAULT_WORKSPACE_KEYS,
-		) as WorkspaceAction[]) {
-			const keys = overrides[action];
-			if (keys && keys.length > 0) resolved[action] = keys;
-		}
-	}
-	return resolved;
-}
 
 const STAGE_THEME_COLOR: Record<PlannerStage, ThemeColor> = {
 	init: "syntaxComment",
@@ -120,6 +83,14 @@ const STAGE_THEME_COLOR: Record<PlannerStage, ThemeColor> = {
 let liveAssistantMessage: unknown | null = null;
 /** Notifies the open workspace (if any) to redraw on each streaming token. */
 let liveStreamListener: (() => void) | null = null;
+/**
+ * Whether the agent is mid-run (between agent_start and agent_end). The
+ * workspace queues messages typed while busy and flushes them when it clears,
+ * instead of dropping them or interrupting the current turn.
+ */
+let agentBusy = false;
+/** Notifies the open workspace that the agent went idle, so it can flush its queue. */
+let agentIdleListener: (() => void) | null = null;
 
 export function registerPlannerDashboard(pi: ExtensionAPI): void {
 	pi.registerCommand("planner-dashboard", {
@@ -140,6 +111,22 @@ export function registerPlannerDashboard(pi: ExtensionAPI): void {
 		liveAssistantMessage = null;
 		liveStreamListener?.();
 	});
+
+	// Track whether the agent is running so the workspace can queue messages
+	// typed mid-turn and flush them when the agent goes idle. agent_start/end
+	// bracket the whole run; message_update covers the streaming window so a
+	// message typed during the first token is still treated as "busy".
+	const markBusy = () => {
+		agentBusy = true;
+	};
+	const markIdle = () => {
+		agentBusy = false;
+		agentIdleListener?.();
+	};
+	pi.on("agent_start", markBusy);
+	pi.on("turn_start", markBusy);
+	pi.on("message_update", markBusy);
+	pi.on("agent_end", markIdle);
 }
 
 export async function openPlannerWorkspace(
@@ -172,9 +159,10 @@ export async function openPlannerWorkspace(
 	const load = () => loadDashboardModel(fs, ctx.cwd, config.syncMs);
 	const getEntries = () => ctx.sessionManager.getBranch();
 	const initial = await load();
+	let component: PlannerWorkspaceComponent | null = null;
 	await ctx.ui.custom<void>(
 		(tui, theme, keybindings, done) => {
-			return new PlannerWorkspaceComponent({
+			component = new PlannerWorkspaceComponent({
 				tui,
 				theme,
 				keybindings,
@@ -183,14 +171,19 @@ export async function openPlannerWorkspace(
 				footerReserve,
 				load,
 				getEntries,
-				// deliverAs:"followUp" queues the message when the agent is busy
-				// (streaming/compacting) instead of dropping it; when idle it sends
-				// normally. Without it a message typed in the workspace mid-turn is
-				// lost.
-				sendUserMessage: (text) =>
-					pi.sendUserMessage(text, { deliverAs: "followUp" }),
+				messaging: {
+					isAgentBusy: () => agentBusy,
+					// Idle: send normally (triggers the turn immediately).
+					send: (text) => pi.sendUserMessage(text),
+					// Flushing a queued message: deliverAs:"followUp" so it waits for
+					// the current turn to finish instead of interrupting it, even if a
+					// new turn started in the gap before we flushed.
+					sendQueued: (text) =>
+						pi.sendUserMessage(text, { deliverAs: "followUp" }),
+				},
 				onClose: () => done(undefined),
 			});
+			return component;
 		},
 		{
 			// Render as a fixed top overlay so the workspace does not live in the
@@ -212,6 +205,11 @@ export async function openPlannerWorkspace(
 				col: 0,
 				margin: { bottom: footerReserve },
 			},
+			// When another extension opens its own overlay (e.g. an ask_user
+			// dialog), it captures focus and stacks above us. We use the handle to
+			// pause our timer-driven repaints while unfocused so we stop clobbering
+			// the foreign overlay's frame, and resume when focus returns.
+			onHandle: (handle) => component?.attachHandle(handle),
 		},
 	);
 }
@@ -276,14 +274,23 @@ async function loadDashboardModel(
 	}
 }
 
-type WorkspaceFocus = "input" | "chat" | "tasks";
+// The editor (Pi's native Editor) is always the input — type from anywhere.
+// There is no separate "chat" pane: the transcript scrolls with PageUp/PageDown
+// and never takes focus. Tab only toggles a "tasks" view for selecting a task.
+type WorkspaceFocus = "editor" | "tasks";
 
-class PlannerWorkspaceComponent implements Component {
+interface WorkspaceMessaging {
+	isAgentBusy: () => boolean;
+	send: (text: string) => void;
+	sendQueued: (text: string) => void;
+}
+
+export class PlannerWorkspaceComponent implements Component {
 	private readonly tui: TUI;
 	private readonly palette: DashboardPalette;
 	private readonly load: () => Promise<PlannerDashboardModel>;
 	private readonly getEntries: () => SessionEntry[];
-	private readonly sendUserMessage: (text: string) => void;
+	private readonly messaging: WorkspaceMessaging;
 	private readonly onClose: () => void;
 	private readonly footerReserve: number;
 	private readonly keybindings: KeybindingsManager;
@@ -291,9 +298,11 @@ class PlannerWorkspaceComponent implements Component {
 
 	private model: PlannerDashboardModel;
 	private rows: ChatRow[] = [];
-	private input = "";
-	private cursor = 0;
-	private focus: WorkspaceFocus = "input";
+	/** Pi's native editor, used as the composer (paste markers, history, etc.). */
+	private readonly editor: Editor;
+	/** Messages typed while the agent was busy, shown dimmed above the composer. */
+	private queued: string[] = [];
+	private focus: WorkspaceFocus = "editor";
 	/** Follow the live tail (true) or hold an absolute scroll position. */
 	private atBottom = true;
 	private topLine = 0;
@@ -329,6 +338,10 @@ class PlannerWorkspaceComponent implements Component {
 	// clock-only redraws instead of re-laying-out every row.
 	private cachedTranscriptKey = "";
 	private cachedTranscript: ReturnType<typeof renderTranscript> | null = null;
+	// Overlay handle (set once shown). While another overlay is focused above us
+	// we pause repaints so we don't clobber its frame; we resume on refocus.
+	private handle: OverlayHandle | null = null;
+	private wasFocused = true;
 
 	constructor(input: {
 		tui: TUI;
@@ -339,7 +352,7 @@ class PlannerWorkspaceComponent implements Component {
 		footerReserve: number;
 		load: () => Promise<PlannerDashboardModel>;
 		getEntries: () => SessionEntry[];
-		sendUserMessage: (text: string) => void;
+		messaging: WorkspaceMessaging;
 		onClose: () => void;
 	}) {
 		this.tui = input.tui;
@@ -349,18 +362,59 @@ class PlannerWorkspaceComponent implements Component {
 		this.footerReserve = input.footerReserve;
 		this.load = input.load;
 		this.getEntries = input.getEntries;
-		this.sendUserMessage = input.sendUserMessage;
+		this.messaging = input.messaging;
 		this.onClose = input.onClose;
 		this.model = input.initial;
+		// Pi's native editor as the composer: paste markers, multiline, history,
+		// kill-ring, undo, word-nav — all on Pi's configurable keybindings. We just
+		// wrap it with the queue + pane navigation.
+		this.editor = new Editor(input.tui, buildEditorTheme(this.palette));
+		// Always live so you can type from any pane (Tab only re-targets the
+		// navigation keys); the cursor is always shown.
+		this.editor.focused = true;
+		this.editor.onSubmit = (text) => this.onEditorSubmit(text);
+		// Repaint on every edit (typing, paste collapse, history nav).
+		this.editor.onChange = () => this.bump();
 		this.refreshRows();
 		this.interval = setInterval(() => this.onTick(), TICK_MS);
 		this.interval.unref?.();
 		// Redraw on streaming tokens, throttled so a fast token stream cannot
 		// drive an unbounded repaint rate.
 		liveStreamListener = () => this.onStreamUpdate();
+		// Flush queued messages once the agent goes idle.
+		agentIdleListener = () => this.flushQueue();
+	}
+
+	attachHandle(handle: OverlayHandle): void {
+		this.handle = handle;
+	}
+
+	/** True unless a foreign overlay is focused above us (or before we have a handle). */
+	private isOverlayFocused(): boolean {
+		return this.handle ? this.handle.isFocused() : true;
 	}
 
 	private onTick(): void {
+		const focused = this.isOverlayFocused();
+		// Yield the top layer to a focused foreign overlay (e.g. another
+		// extension's ask_user dialog): hide ourselves so we don't draw over it,
+		// but KEEP requesting renders so the TUI keeps compositing and the foreign
+		// overlay's own timers/animations stay live. (Stopping repaints entirely
+		// froze those overlays until the user typed.)
+		if (!focused) {
+			this.handle?.setHidden(true);
+			this.tui.requestRender();
+			this.wasFocused = false;
+			return;
+		}
+		// Focus returned (foreign overlay closed): unhide and force one repaint so
+		// our content refreshes immediately.
+		if (!this.wasFocused) {
+			this.handle?.setHidden(false);
+			this.tui.requestRender();
+		}
+		this.wasFocused = true;
+
 		this.refreshRows();
 		if (this.tick % RELOAD_EVERY_TICKS === 0) void this.reloadModel();
 		this.tick += 1;
@@ -452,7 +506,12 @@ class PlannerWorkspaceComponent implements Component {
 		const modelSig = this.model.available
 			? `${this.model.stage}/${this.model.step}/${this.model.stepStatus}/${this.model.tasksDone}/${this.model.tasksTotal}`
 			: "unavailable";
-		const uiSig = `${this.focus}|${this.input}|${this.cursor}|${this.ui.selectedIndex}|${this.atBottom}:${this.topLine}|${this.expandAll}|${this.hideThinking}`;
+		// queued length + total chars is enough to detect any queue change without
+		// hashing every message; agentBusy flips the composer hint.
+		const queueSig = `${this.queued.length}:${this.queued.reduce((n, m) => n + m.length, 0)}:${this.messaging.isAgentBusy() ? "busy" : "idle"}`;
+		// The editor's own text/cursor are not in the signature — editor edits call
+		// onChange -> bump() directly, which advances the version and repaints.
+		const uiSig = `${this.focus}|${this.ui.selectedIndex}|${this.atBottom}:${this.topLine}|${this.expandAll}|${this.hideThinking}|${queueSig}`;
 		// Terminal size is part of the signature so a resize triggers a redraw.
 		// Without it the idle tick keeps the same signature after a resize and
 		// never calls requestRender(), leaving the overlay frozen at the old size.
@@ -463,6 +522,9 @@ class PlannerWorkspaceComponent implements Component {
 	private scheduleRender(signature = this.computeSignature()): void {
 		this.lastSignature = signature;
 		this.version += 1;
+		// Always request the render: when a foreign overlay is up we are hidden
+		// (see onTick), so this composites the foreign overlay without drawing our
+		// content over it — and keeps that overlay's timers live.
 		this.tui.requestRender();
 	}
 
@@ -477,15 +539,36 @@ class PlannerWorkspaceComponent implements Component {
 		return this.keys[action].some((key) => matchesKey(data, key as KeyId));
 	}
 
+	/**
+	 * The effective key(s) for a Pi-inherited action, resolved live from the
+	 * user's keybindings so composer hints show what is actually bound (e.g.
+	 * ctrl+j for newline when the user rebound tui.input.newLine).
+	 */
+	private keyHint(id: string): string {
+		try {
+			const keys = this.keybindings.getKeys(id as never);
+			return keys.length > 0 ? keys.join("/") : id;
+		} catch {
+			return id;
+		}
+	}
+
 	handleInput(data: string): void {
+		// A focused foreign overlay receives input directly; ignore anything that
+		// still reaches us while we are not the focused overlay.
+		if (!this.isOverlayFocused()) return;
+		// While the editor's completion popup is open it owns esc/tab to close it.
+		const editorBusy =
+			this.focus === "editor" && this.editor.isShowingAutocomplete();
 		// ctrl+c always exits as a safety net, regardless of key overrides.
-		if (this.matchesAction("exit", data) || matchesKey(data, "ctrl+c")) {
+		if (matchesKey(data, "ctrl+c")) {
 			this.dispose();
 			this.onClose();
 			return;
 		}
-		if (this.matchesAction("focusNext", data)) {
-			this.cycleFocus();
+		if (!editorBusy && this.matchesAction("exit", data)) {
+			this.dispose();
+			this.onClose();
 			return;
 		}
 		// Inherit Pi's own keybindings for thinking visibility and tool expansion.
@@ -499,88 +582,73 @@ class PlannerWorkspaceComponent implements Component {
 			this.bump();
 			return;
 		}
-		if (this.focus === "input") {
-			this.handleInputFocus(data);
+		// Alt+Up restores the last queued message into the editor (app.message.dequeue).
+		if (this.keybindings.matches(data, "app.message.dequeue")) {
+			this.editLastQueued();
 			return;
 		}
-		if (this.focus === "chat") {
-			this.handleChatFocus(data);
+		// Tab toggles the tasks view, unless the editor's completion popup wants Tab.
+		if (!editorBusy && this.matchesAction("focusNext", data)) {
+			this.cycleFocus();
 			return;
 		}
-		this.handleTasksFocus(data);
+		// Transcript scroll is global (no pane to focus) and uses dedicated keys so
+		// the plain arrows stay with the editor: Ctrl+Up/Down nudge one line
+		// (precise), PageUp/PageDown jump a page (wider). PageDown/Ctrl+Down past
+		// the bottom re-follow the live tail.
+		const page = Math.max(1, this.lastTranscriptHeight - 1);
+		if (this.matchesAction("scrollUp", data)) {
+			this.scrollBy(-1);
+			return;
+		}
+		if (this.matchesAction("scrollDown", data)) {
+			this.scrollBy(1);
+			return;
+		}
+		if (this.matchesAction("pageUp", data)) {
+			this.scrollBy(-page);
+			return;
+		}
+		if (this.matchesAction("pageDown", data)) {
+			this.scrollBy(page);
+			return;
+		}
+		// In the tasks view, ↑/↓ select a task; everything else falls through.
+		if (this.focus === "tasks" && this.handleTasksFocus(data)) return;
+		// Pi's editor handles typing, cursor, multiline, paste markers, history,
+		// kill-ring, undo — all on its own (Pi) keybindings.
+		this.editor.handleInput(data);
 	}
 
 	private cycleFocus(): void {
-		this.focus =
-			this.focus === "input"
-				? "chat"
-				: this.focus === "chat"
-					? "tasks"
-					: "input";
+		this.focus = this.focus === "editor" ? "tasks" : "editor";
 		this.bump();
 	}
 
-	private handleInputFocus(data: string): void {
-		if (this.matchesAction("submit", data)) {
-			this.submit();
-			return;
-		}
-		if (matchesKey(data, "backspace")) {
-			if (this.cursor > 0) {
-				this.input =
-					this.input.slice(0, this.cursor - 1) + this.input.slice(this.cursor);
-				this.cursor -= 1;
-				this.bump();
-			}
-			return;
-		}
-		if (matchesKey(data, "left")) {
-			this.cursor = Math.max(0, this.cursor - 1);
-			this.bump();
-			return;
-		}
-		if (matchesKey(data, "right")) {
-			this.cursor = Math.min(this.input.length, this.cursor + 1);
-			this.bump();
-			return;
-		}
-		const insert = toInsertableText(data);
-		if (insert) {
-			this.input =
-				this.input.slice(0, this.cursor) +
-				insert +
-				this.input.slice(this.cursor);
-			this.cursor += insert.length;
-			this.bump();
-		}
+	private editLastQueued(): void {
+		const last = this.queued.pop();
+		if (last === undefined) return;
+		// Restore into the editor, merging with any current draft, and re-target
+		// the navigation keys to the editor.
+		const draft = this.editor.getText();
+		this.editor.setText(draft ? `${draft}\n${last}` : last);
+		this.focus = "editor";
+		this.bump();
 	}
 
-	private handleChatFocus(data: string): void {
-		const page = Math.max(1, this.lastTranscriptHeight - 1);
-		if (this.matchesAction("up", data)) {
-			this.scrollBy(-1);
-		} else if (this.matchesAction("down", data)) {
-			this.scrollBy(1);
-		} else if (this.matchesAction("pageUp", data)) {
-			this.scrollBy(-page);
-		} else if (this.matchesAction("pageDown", data)) {
-			this.scrollBy(page);
-		} else if (this.matchesAction("jumpBottom", data)) {
-			// Jump back to the live tail (newest output).
-			this.atBottom = true;
-			this.bump();
-		} else if (this.matchesAction("jumpTop", data)) {
-			this.atBottom = false;
-			this.topLine = 0;
-			if (this.hasMoreHistory) this.growHistory();
-			this.bump();
-		} else if (this.matchesAction("expand", data)) {
-			this.expandAll = !this.expandAll;
-			this.bump();
+	private flushQueue(): void {
+		if (this.queued.length === 0) return;
+		const pending = this.queued;
+		this.queued = [];
+		for (const text of pending) {
+			this.editor.addToHistory(text);
+			this.messaging.sendQueued(text);
 		}
+		this.bump();
 	}
 
-	private handleTasksFocus(data: string): void {
+	/** Returns true when the key was a task-navigation key (and thus consumed). */
+	private handleTasksFocus(data: string): boolean {
 		const total = this.model.available ? this.model.tasks.length : 0;
 		if (this.matchesAction("up", data)) {
 			this.ui.selectedIndex = Math.max(0, this.ui.selectedIndex - 1);
@@ -591,7 +659,10 @@ class PlannerWorkspaceComponent implements Component {
 				this.ui.selectedIndex + 1,
 			);
 			this.bump();
+		} else {
+			return false;
 		}
+		return true;
 	}
 
 	/**
@@ -617,14 +688,22 @@ class PlannerWorkspaceComponent implements Component {
 		this.bump();
 	}
 
-	private submit(): void {
-		const text = this.input.trim();
-		if (!text) return;
-		this.input = "";
-		this.cursor = 0;
+	/**
+	 * The editor cleared itself and handed us the fully expanded (paste markers
+	 * resolved), trimmed text. Send it now if idle, else hold it in our queue —
+	 * shown dimmed above the editor, editable via Alt+Up — and flush on idle.
+	 */
+	private onEditorSubmit(text: string): void {
+		const trimmed = text.trim();
+		if (!trimmed) return;
 		this.atBottom = true;
 		try {
-			this.sendUserMessage(text);
+			if (this.messaging.isAgentBusy()) {
+				this.queued.push(trimmed);
+			} else {
+				this.editor.addToHistory(trimmed);
+				this.messaging.send(trimmed);
+			}
 		} catch {
 			// Ignore send failures; the next refresh will reflect agent state.
 		}
@@ -673,9 +752,15 @@ class PlannerWorkspaceComponent implements Component {
 		}
 		top.push(dashboardDivider(inner, this.palette));
 
+		// The editor draws its own top border, so it needs no divider above it
+		// (that produced a doubled line). When a queue is present we add one
+		// divider to separate it from the transcript.
+		const queueLines = this.renderQueue(inner);
 		const bottom: string[] = [
-			dashboardDivider(inner, this.palette),
-			this.renderInputLine(inner),
+			...(queueLines.length > 0
+				? [dashboardDivider(inner, this.palette), ...queueLines]
+				: []),
+			...this.editor.render(inner),
 			this.renderHelpLine(inner),
 		];
 
@@ -747,39 +832,47 @@ class PlannerWorkspaceComponent implements Component {
 		return `Planner · ${this.model.planTitle}`;
 	}
 
-	private renderInputLine(inner: number): string {
-		const promptText = "› ";
-		const prompt =
-			this.focus === "input"
-				? this.palette.accent(promptText)
-				: this.palette.dim(promptText);
-		let body: string;
-		if (this.focus === "input") {
-			const before = this.input.slice(0, this.cursor);
-			const at = this.input.slice(this.cursor, this.cursor + 1) || " ";
-			const after = this.input.slice(this.cursor + 1);
-			body = `${this.palette.text(before)}${this.palette.inverse(at)}${this.palette.text(after)}`;
-		} else if (this.input) {
-			body = this.palette.text(this.input);
-		} else {
-			body = this.palette.dim("type a message, tab to switch panes");
-		}
-		return clipPad(prompt + body, inner, this.palette);
+	/**
+	 * Queued messages stacked dimmed above the editor (newest at the bottom,
+	 * nearest the input), each clipped to one line. Empty when nothing is queued.
+	 */
+	private renderQueue(inner: number): string[] {
+		if (this.queued.length === 0) return [];
+		const lines = this.queued.map((msg) => {
+			const oneLine = msg.replace(/\s+/g, " ").trim();
+			return clipPad(
+				this.palette.dim(`⤷ queued: ${oneLine}`),
+				inner,
+				this.palette,
+			);
+		});
+		lines.push(
+			clipPad(
+				this.palette.dim(
+					`${this.queued.length} queued — sends when the agent is idle · ${this.keyHint("app.message.dequeue")} edit last`,
+				),
+				inner,
+				this.palette,
+			),
+		);
+		return lines;
 	}
 
 	private renderHelpLine(inner: number): string {
-		const tabs = (["input", "chat", "tasks"] as WorkspaceFocus[])
-			.map((f) =>
-				f === this.focus ? this.palette.accent(f) : this.palette.dim(f),
-			)
-			.join(this.palette.dim(" · "));
+		const scroll = `${this.keys.scrollUp.join("/")}/${this.keys.scrollDown.join("/")} (or ${this.keys.pageUp.join("/")}/${this.keys.pageDown.join("/")})`;
+		const left =
+			this.focus === "tasks"
+				? this.palette.accent("tasks")
+				: this.palette.dim("editor");
 		const keys =
-			this.focus === "input"
-				? this.palette.dim("enter send · paste ok · tab pane · esc exit")
-				: this.focus === "chat"
-					? this.palette.dim("↑↓ scroll · end live · x expand · tab pane")
-					: this.palette.dim("↑↓ task · ←→ ribbon · tab pane · esc exit");
-		return spread(tabs, keys, inner, this.palette);
+			this.focus === "editor"
+				? this.palette.dim(
+						`${this.keyHint("tui.input.submit")} send · ${this.keyHint("tui.input.newLine")} newline · ${scroll} scroll · ${this.keyHint("app.tools.expand")} expand · tab tasks · esc exit`,
+					)
+				: this.palette.dim(
+						`↑↓ select task · ${scroll} scroll · type to compose · tab editor · esc exit`,
+					);
+		return spread(left, keys, inner, this.palette);
 	}
 
 	invalidate(): void {
@@ -800,28 +893,27 @@ class PlannerWorkspaceComponent implements Component {
 			this.streamFlushTimer = null;
 		}
 		liveStreamListener = null;
+		agentIdleListener = null;
 	}
 }
 
 const EMPTY_SET: ReadonlySet<string> = new Set<string>();
 
 /**
- * Convert raw terminal input (a typed key or a pasted block, possibly in
- * bracketed-paste mode) into insertable single-line text: drop paste markers
- * and ANSI escapes, fold tabs/newlines to spaces, strip other control bytes.
+ * Build the EditorTheme pi-tui's Editor needs from our palette: a border color
+ * and the autocomplete dropdown styling.
  */
-function toInsertableText(data: string): string {
-	// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control-byte stripping
-	const bracket = /\u001B\[20[01]~/g;
-	// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control-byte stripping
-	const ansi = /\u001B\[[0-9;?]*[ -/]*[@-~]/g;
-	// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control-byte stripping
-	const control = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
-	return data
-		.replace(bracket, "")
-		.replace(ansi, "")
-		.replace(/[\r\n\t]/g, " ")
-		.replace(control, "");
+function buildEditorTheme(palette: DashboardPalette): EditorTheme {
+	return {
+		borderColor: (s) => palette.border(s),
+		selectList: {
+			selectedPrefix: (s) => palette.accent(s),
+			selectedText: (s) => palette.bold(palette.text(s)),
+			description: (s) => palette.dim(s),
+			scrollInfo: (s) => palette.dim(s),
+			noMatch: (s) => palette.dim(s),
+		},
+	};
 }
 
 function clipPad(

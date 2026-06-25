@@ -5,7 +5,7 @@ import {
 	type PlannerStep,
 	type PlanStateRecord,
 } from "../storage/schema";
-import { buildNextStepHint } from "./next-step-hint";
+import { buildNextStepHint, formatAllowedNextTargets } from "./next-step-hint";
 
 describe("buildNextStepHint", () => {
 	it("states the worktree location, current step, and goal", () => {
@@ -78,6 +78,22 @@ describe("buildNextStepHint", () => {
 		);
 		expect(hint).not.toContain("planner_request_compact");
 		expect(hint).toContain("select_next_task");
+	});
+});
+
+describe("formatAllowedNextTargets", () => {
+	it("renders each target and tags backward moves as loops back", () => {
+		const from = {
+			stage: "execution" as const,
+			step: "run_final_tests" as const,
+		};
+		const text = formatAllowedNextTargets(from, [
+			{ stage: "execution", step: "capture_skill" },
+			{ stage: "execution", step: "implement_task" },
+		]);
+		expect(text).toBe(
+			"{stage: 'execution', step: 'capture_skill'} or {stage: 'execution', step: 'implement_task'} (loops back)",
+		);
 	});
 });
 

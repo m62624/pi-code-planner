@@ -361,6 +361,35 @@ export function getAllowedPlannerWrapperTools(
 	return withAlwaysAllowed(filterDebugToolsForState(stepRules, state));
 }
 
+/**
+ * Steps whose allow-list contains `tool`, as `stage/step` labels. Used to tell a
+ * model that called a submit/upsert tool one step too early exactly where that
+ * tool unlocks, so it can advance there instead of guessing. Steps in
+ * `preferStage` are listed first (the model is usually in the right stage, wrong
+ * step).
+ */
+export function findPlannerToolOwnerSteps(
+	tool: PlannerWrapperTool,
+	preferStage?: PlannerStage,
+): string[] {
+	const owners: { stage: PlannerStage; step: string }[] = [];
+	for (const stage of Object.keys(STEP_ALLOWED_TOOLS) as PlannerStage[]) {
+		const steps = STEP_ALLOWED_TOOLS[stage] as Record<
+			string,
+			readonly PlannerWrapperTool[]
+		>;
+		for (const step of Object.keys(steps)) {
+			if (steps[step]?.includes(tool)) owners.push({ stage, step });
+		}
+	}
+	owners.sort((a, b) => {
+		const ap = a.stage === preferStage ? 0 : 1;
+		const bp = b.stage === preferStage ? 0 : 1;
+		return ap - bp;
+	});
+	return owners.map((o) => `${o.stage}/${o.step}`);
+}
+
 export function checkPlannerWrapperAllowed(input: {
 	tool: PlannerWrapperTool;
 	state: Pick<
