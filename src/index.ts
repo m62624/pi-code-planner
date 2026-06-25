@@ -194,6 +194,12 @@ import {
 	type PlannerWorkflowToolName,
 } from "./runtime/workflow-tools";
 import {
+	buildWorkspaceKeyHints,
+	type PiKeybindingOverrides,
+	resolveWorkspaceKeys,
+	type WorkspaceKeyHints,
+} from "./runtime/workspace-keys";
+import {
 	buildPlannerHandoffPrompt,
 	buildPlannerImproveHandoffPrompt,
 	buildPlannerResumePrompt,
@@ -224,6 +230,31 @@ export * from "./public-api";
 // command helpers), so a single shared instance serves all tool handlers
 // instead of allocating one per call.
 const gitRunner = new NodeGitRunner();
+
+/**
+ * Resolve the effective workspace key hints for /planner-helper: the user's Pi
+ * overrides (read live from keybindings.json) combined with the workspace's own
+ * keys from settings, so the report shows the keys that are actually bound.
+ */
+async function loadWorkspaceKeyHints(input: {
+	fs: PlannerFs;
+	workspaceKeys: Parameters<typeof resolveWorkspaceKeys>[0];
+}): Promise<WorkspaceKeyHints> {
+	let piOverrides: PiKeybindingOverrides | undefined;
+	try {
+		const raw = await input.fs.readText(`${getAgentDir()}/keybindings.json`);
+		const parsed: unknown = JSON.parse(raw);
+		if (parsed && typeof parsed === "object") {
+			piOverrides = parsed as PiKeybindingOverrides;
+		}
+	} catch {
+		// No overrides file (or unreadable/invalid) — Pi defaults apply.
+	}
+	return buildWorkspaceKeyHints({
+		workspaceKeys: resolveWorkspaceKeys(input.workspaceKeys),
+		piOverrides,
+	});
+}
 
 const EMPTY_TOOL_PARAMETERS = {
 	type: "object",
@@ -2186,6 +2217,10 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 					fs,
 					projectPaths,
 				});
+				const keyHints = await loadWorkspaceKeyHints({
+					fs,
+					workspaceKeys: settings.effective.workspace.keys,
+				});
 				pi.sendMessage(
 					{
 						customType: "planner-helper",
@@ -2193,6 +2228,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 							settings,
 							projectPaths,
 							audience: "human",
+							keyHints,
 						}),
 						display: true,
 					},
@@ -2533,10 +2569,15 @@ function registerPlannerTools(
 				fs,
 				projectPaths,
 			});
+			const keyHints = await loadWorkspaceKeyHints({
+				fs,
+				workspaceKeys: settings.effective.workspace.keys,
+			});
 			const text = buildPlannerAboutReport({
 				settings,
 				projectPaths,
 				audience: "agent",
+				keyHints,
 			});
 			return {
 				content: [{ type: "text", text }],
