@@ -51,5 +51,16 @@ export async function migrateLayout(input: {
 			plansMoved += 1;
 		}
 	}
+
+	// The bundled elenchus system skill moved from skills/bundled/elenchus to the
+	// top-level system-skills/elenchus; it self-heals at the new path on the next
+	// resource discovery, so drop the stale copy. The legacy global user pool
+	// (skills/library + skills/index.json) is left in place for the read-only
+	// discovery fallback.
+	const legacyBundledDir = join(extensionDir, "skills", "bundled");
+	if (await fs.exists(legacyBundledDir)) {
+		await fs.removeDir(legacyBundledDir);
+	}
+
 	return { plansMoved };
 }

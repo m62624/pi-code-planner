@@ -74,8 +74,12 @@ describe("migrateLayout", () => {
 		});
 		await fs.writeText(`${legacyPlanDir("plan-a")}/plan.json`, "{}");
 
-		expect((await migrateLayout({ fs, agentDir: AGENT_DIR })).plansMoved).toBe(1);
-		expect((await migrateLayout({ fs, agentDir: AGENT_DIR })).plansMoved).toBe(0);
+		expect((await migrateLayout({ fs, agentDir: AGENT_DIR })).plansMoved).toBe(
+			1,
+		);
+		expect((await migrateLayout({ fs, agentDir: AGENT_DIR })).plansMoved).toBe(
+			0,
+		);
 	});
 
 	it("never destroys the source on a destination collision", async () => {
@@ -94,6 +98,25 @@ describe("migrateLayout", () => {
 		expect(await fs.readText(`${legacyPlanDir("plan-a")}/plan.json`)).toBe(
 			"legacy",
 		);
+	});
+
+	it("drops the stale skills/bundled dir but keeps the legacy global user pool", async () => {
+		const fs = new MockPlannerFs();
+		await seedProject(fs, "/home/me/app", { plans: [] });
+		const ext = `${AGENT_DIR}/extensions/pi-code-planner`;
+		await fs.writeText(`${ext}/skills/bundled/elenchus/SKILL.md`, "# old");
+		await fs.writeText(
+			`${ext}/skills/library/legacy/SKILL.md`,
+			"# legacy user",
+		);
+		await fs.writeText(`${ext}/skills/index.json`, "{}");
+
+		await migrateLayout({ fs, agentDir: AGENT_DIR });
+
+		expect(await fs.exists(`${ext}/skills/bundled`)).toBe(false);
+		// The legacy global user pool stays for the read-only discovery fallback.
+		expect(await fs.exists(`${ext}/skills/library/legacy/SKILL.md`)).toBe(true);
+		expect(await fs.exists(`${ext}/skills/index.json`)).toBe(true);
 	});
 
 	it("leaves orphan plans (not referenced by any project) untouched", async () => {

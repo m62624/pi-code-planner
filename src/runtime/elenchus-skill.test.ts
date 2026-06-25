@@ -7,9 +7,9 @@ import {
 } from "./elenchus-skill";
 
 const SKILL_PATH =
-	"/agent/extensions/pi-code-planner/skills/bundled/elenchus/SKILL.md";
+	"/agent/extensions/pi-code-planner/system-skills/elenchus/SKILL.md";
 const MARKER_PATH =
-	"/agent/extensions/pi-code-planner/skills/bundled/elenchus/.engine-version";
+	"/agent/extensions/pi-code-planner/system-skills/elenchus/.engine-version";
 
 describe("bundled elenchus skill", () => {
 	it("materializes the skill under a planner-namespaced name with a version marker", async () => {

@@ -231,7 +231,7 @@ describe("planner skill library", () => {
 				plannerActive: true,
 			}),
 		).resolves.toEqual([
-			"/agent/extensions/pi-code-planner/skills/bundled/elenchus/SKILL.md",
+			"/agent/extensions/pi-code-planner/system-skills/elenchus/SKILL.md",
 			`${createPlannerSkillStoragePaths(projectPaths).libraryDir}/pi-planner-new-22222222/SKILL.md`,
 			`${createPlannerSkillStoragePaths(projectPaths).libraryDir}/pi-planner-mid-33333333/SKILL.md`,
 		]);
