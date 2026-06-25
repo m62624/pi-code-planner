@@ -722,7 +722,15 @@ export class PlannerWorkspaceComponent implements Component {
 		this.scheduleRender();
 	}
 
-	render(width: number): string[] {
+	render(widthInput: number): string[] {
+		// Never emit a line wider than the live terminal. A stale overlay width
+		// (e.g. the terminal shrank between layout and draw) would otherwise build
+		// a frame wider than the terminal and trip the TUI's hard width check,
+		// crashing Pi. Clamp to the real column count as a safety net.
+		const width = Math.max(
+			1,
+			Math.min(widthInput, this.tui.terminal.columns || widthInput),
+		);
 		const height = Math.max(16, this.tui.terminal.rows - this.footerReserve);
 		if (
 			width === this.cachedWidth &&
