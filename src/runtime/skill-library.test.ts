@@ -107,20 +107,16 @@ describe("planner skill library", () => {
 		expect(result.details?.item.name).toBe(
 			"pi-planner-stale-ctx-session-switch-12345678",
 		);
-		expect(
-			fs.snapshot()[
-				"/agent/extensions/pi-code-planner/skills/library/pi-planner-stale-ctx-session-switch-12345678/SKILL.md"
-			],
-		).toContain("description: >\n  ACTIVATE when a Pi extension switches");
-		expect(
-			fs.snapshot()["/agent/extensions/pi-code-planner/skills/index.json"],
-		).toContain('"language": "Russian"');
+		const skills = createPlannerSkillStoragePaths(projectPaths);
+		const createdPath = `${skills.libraryDir}/pi-planner-stale-ctx-session-switch-12345678/SKILL.md`;
+		expect(fs.snapshot()[createdPath]).toContain(
+			"description: >\n  ACTIVATE when a Pi extension switches",
+		);
+		expect(fs.snapshot()[skills.indexJson]).toContain('"language": "Russian"');
 
 		await expect(
 			listActivePlannerSkillPaths({ fs, projectPaths }),
-		).resolves.toEqual([
-			"/agent/extensions/pi-code-planner/skills/library/pi-planner-stale-ctx-session-switch-12345678/SKILL.md",
-		]);
+		).resolves.toEqual([createdPath]);
 	});
 
 	it("rejects skill bodies that include frontmatter", async () => {
@@ -236,8 +232,8 @@ describe("planner skill library", () => {
 			}),
 		).resolves.toEqual([
 			"/agent/extensions/pi-code-planner/skills/bundled/elenchus/SKILL.md",
-			"/agent/extensions/pi-code-planner/skills/library/pi-planner-new-22222222/SKILL.md",
-			"/agent/extensions/pi-code-planner/skills/library/pi-planner-mid-33333333/SKILL.md",
+			`${createPlannerSkillStoragePaths(projectPaths).libraryDir}/pi-planner-new-22222222/SKILL.md`,
+			`${createPlannerSkillStoragePaths(projectPaths).libraryDir}/pi-planner-mid-33333333/SKILL.md`,
 		]);
 
 		await fs.writeTextAtomic(
@@ -313,7 +309,7 @@ describe("planner skill library", () => {
 			{ name: "pi-planner-existing-22222222", updatedAt: 2000 },
 		]);
 		await fs.removeFile(
-			"/agent/extensions/pi-code-planner/skills/library/pi-planner-missing-11111111/SKILL.md",
+			`${createPlannerSkillStoragePaths(projectPaths).libraryDir}/pi-planner-missing-11111111/SKILL.md`,
 		);
 
 		await expect(
@@ -342,7 +338,7 @@ describe("planner skill library", () => {
 		).resolves.toMatchObject([{ name: "pi-planner-keep-me-22222222" }]);
 		expect(
 			await fs.exists(
-				"/agent/extensions/pi-code-planner/skills/library/pi-planner-delete-me-11111111/SKILL.md",
+				`${createPlannerSkillStoragePaths(projectPaths).libraryDir}/pi-planner-delete-me-11111111/SKILL.md`,
 			),
 		).toBe(false);
 	});
@@ -416,6 +412,79 @@ describe("planner skill library", () => {
 
 		expect(result.status).toBe("blocked");
 		expect(result.text).toContain("Project record does not exist");
+	});
+
+	it("keeps each project's skill pool isolated", async () => {
+		const fs = new MockPlannerFs();
+		const projectA = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app-a",
+		});
+		const projectB = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app-b",
+		});
+		await seedPlannerSkillIndex(fs, projectA, [
+			{ name: "pi-planner-only-a-11111111", updatedAt: 1000 },
+		]);
+
+		await expect(
+			listPlannerSkillInventory({ fs, projectPaths: projectA }),
+		).resolves.toMatchObject([{ name: "pi-planner-only-a-11111111" }]);
+		// Project B has its own (empty) pool and cannot see project A's skill.
+		await expect(
+			listPlannerSkillInventory({ fs, projectPaths: projectB }),
+		).resolves.toEqual([]);
+		expect(createPlannerSkillStoragePaths(projectA).libraryDir).not.toBe(
+			createPlannerSkillStoragePaths(projectB).libraryDir,
+		);
+	});
+
+	it("still surfaces pre-per-project global skills as a read-only fallback", async () => {
+		const { fs, projectPaths } = await createSkillSetup();
+		// A skill from the old global pool at extensionDir/skills (no projectId).
+		const legacyPath =
+			"/agent/extensions/pi-code-planner/skills/library/pi-planner-legacy-99999999/SKILL.md";
+		await fs.writeTextAtomic(
+			legacyPath,
+			"---\nname: pi-planner-legacy-99999999\ndescription: legacy.\n---\n\n# Legacy\n",
+		);
+		await fs.writeTextAtomic(
+			"/agent/extensions/pi-code-planner/skills/index.json",
+			`${JSON.stringify(
+				{
+					version: 1,
+					items: [
+						{
+							id: "pi-planner-legacy-99999999",
+							name: "pi-planner-legacy-99999999",
+							description: "legacy.",
+							status: "active",
+							tags: [],
+							sourceKind: "other",
+							sourcePlanId: null,
+							sourceTaskId: null,
+							language: "English",
+							skillPath: legacyPath,
+							createdAt: 1,
+							updatedAt: 1,
+							hash: "legacy",
+						},
+					],
+				},
+				null,
+				2,
+			)}\n`,
+		);
+
+		await expect(
+			listPlannerSkillResourcePaths({
+				fs,
+				agentDir: "/agent",
+				cwd: projectPaths.projectRoot,
+				plannerActive: true,
+			}),
+		).resolves.toContain(legacyPath);
 	});
 
 	it("validates Pi-compatible folded and single-line skill frontmatter", () => {
