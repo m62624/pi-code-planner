@@ -705,7 +705,7 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredArtifacts: ["state.json", "decisions.md"],
 		updatedArtifacts: ["state.json"],
 		requiredGates: ["user_repair_decision"],
-		expectedTools: ["planner_recovery_resume", "planner_elenchus_check"],
+		expectedTools: ["planner_recovery_resume"],
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),

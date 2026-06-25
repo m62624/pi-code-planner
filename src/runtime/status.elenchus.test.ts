@@ -51,7 +51,9 @@ describe("elenchus step reminders", () => {
 	});
 
 	it("does not advertise elenchus at recovery/repair_or_resume (blocked while broken)", () => {
-		expect(ruleText("repair_or_resume")).not.toContain("planner_elenchus_check");
+		expect(ruleText("repair_or_resume")).not.toContain(
+			"planner_elenchus_check",
+		);
 		const whileBroken = getAllowedPlannerWrapperTools({
 			stage: "recovery",
 			step: "repair_or_resume",
