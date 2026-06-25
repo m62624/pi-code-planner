@@ -15,6 +15,8 @@ export interface PlannerFs {
 	exists(path: string): Promise<boolean>;
 	isDirectory(path: string): Promise<boolean>;
 	mkdirp(path: string): Promise<void>;
+	/** Move a file or directory; parent of `dst` is created first. */
+	move(src: string, dst: string): Promise<void>;
 	readText(path: string): Promise<string>;
 	readdir(path: string): Promise<string[]>;
 	removeDir(path: string): Promise<void>;
@@ -48,6 +50,10 @@ export function createNodeFs(): PlannerFs {
 		},
 		async mkdirp(path) {
 			await mkdir(path, { recursive: true });
+		},
+		async move(src, dst) {
+			await mkdir(dirname(dst), { recursive: true });
+			await rename(src, dst);
 		},
 		async readText(path) {
 			return await readFile(path, "utf8");

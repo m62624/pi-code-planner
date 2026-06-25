@@ -60,6 +60,32 @@ export class MockPlannerFs implements PlannerFs {
 		this.dirs.add(normalize(path));
 	}
 
+	async move(src: string, dst: string): Promise<void> {
+		const from = normalize(src);
+		const to = normalize(dst);
+		await this.mkdirp(dirname(to));
+		const rebase = (key: string): string | null => {
+			if (key === from) return to;
+			if (key.startsWith(`${from}/`)) return `${to}${key.slice(from.length)}`;
+			return null;
+		};
+		for (const [key, value] of [...this.files.entries()]) {
+			const next = rebase(key);
+			if (next !== null) {
+				this.files.delete(key);
+				this.files.set(next, value);
+			}
+		}
+		for (const dir of [...this.dirs]) {
+			const next = rebase(dir);
+			if (next !== null) {
+				this.dirs.delete(dir);
+				this.dirs.add(next);
+			}
+		}
+		this.dirs.add(to);
+	}
+
 	async readText(path: string): Promise<string> {
 		const key = normalize(path);
 		const value = this.files.get(key);

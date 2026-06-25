@@ -209,6 +209,7 @@ import {
 } from "./session/handoff";
 import { loadEffectivePlannerSettings } from "./settings/manager";
 import { createNodeFs, type PlannerFs } from "./storage/fs";
+import { migrateLayout } from "./storage/migrate-layout";
 import type { ProjectStoragePaths } from "./storage/paths";
 import { createPlanStoragePaths } from "./storage/paths";
 import { resolveProjectStoragePaths } from "./storage/project-resolver";
@@ -1366,6 +1367,7 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 	registerPlannerWorkspaceAutoOpen(pi);
 	registerPlannerBuiltinToolGuard(pi);
 	registerPlannerCompactEvents(pi, compactRuntime);
+	registerLayoutMigration(pi);
 	registerPlannerSkillResources(pi);
 	registerInstructionDefaultsSync(pi);
 	registerPlannerToolVisibility(pi);
@@ -1479,6 +1481,23 @@ function registerPlannerSkillResources(pi: ExtensionAPI): void {
 			return { skillPaths };
 		} catch {
 			return { skillPaths: [] };
+		}
+	});
+}
+
+/**
+ * Migrate the on-disk layout to the unified projects/<projectId>/ scheme on
+ * session start. Best-effort and idempotent: a failure must never block the
+ * session, so it only logs at debug level via the no-throw migrator.
+ */
+function registerLayoutMigration(pi: ExtensionAPI): void {
+	pi.on("session_start", async () => {
+		const fs = createNodeFs();
+		try {
+			await migrateLayout({ fs, agentDir: getAgentDir() });
+		} catch {
+			// Never block session start on migration; plans are read through the
+			// project paths either way once moved.
 		}
 	});
 }
