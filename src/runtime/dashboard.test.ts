@@ -1,3 +1,4 @@
+import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it } from "vitest";
 import { PlannerWorkspaceComponent } from "./dashboard";
 
@@ -24,7 +25,7 @@ function makeComponent(opts: { busy: boolean }) {
 		requestRender() {
 			renderCount += 1;
 		},
-		terminal: { rows: 40 },
+		terminal: { rows: 40, columns: 80 },
 	} as never;
 	// Fake keybindings: only the dequeue action is needed here (the editor uses
 	// the global keybindings internally for its own keys).
@@ -193,5 +194,21 @@ describe("PlannerWorkspaceComponent overlay focus", () => {
 		setFocused(false);
 		component.handleInput("x");
 		expect(access.editor.getText()).toBe("");
+	});
+});
+
+describe("PlannerWorkspaceComponent rendering", () => {
+	it("never emits a line wider than the terminal even with a stale overlay width", () => {
+		const { component } = makeComponent({ busy: false });
+		// The compositor hands a width wider than the live terminal (80 columns),
+		// e.g. after a shrink: the frame must still clamp to the real width so the
+		// TUI's hard width check cannot crash Pi. (Fake theme adds no ANSI, so
+		// string length equals the visible width.)
+		const lines = component.render(200);
+		expect(lines.length).toBeGreaterThan(0);
+		// Measure visible width (what the TUI checks), ignoring ANSI/cursor markers.
+		for (const line of lines) {
+			expect(visibleWidth(line)).toBeLessThanOrEqual(80);
+		}
 	});
 });

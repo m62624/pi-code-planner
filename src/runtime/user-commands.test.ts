@@ -768,4 +768,78 @@ describe("planner user commands", () => {
 			fs.exists(createPlanStoragePaths(projectPaths, "plan-b").planDir),
 		).resolves.toBe(false);
 	});
+
+	it("resumes a plan that is on disk but dropped from the project index", async () => {
+		const { fs, git, projectPaths } = await createProjectFixture();
+		await dropFromIndex(fs, projectPaths, "plan-a");
+
+		const result = await executePlannerUserCommand({
+			fs,
+			git,
+			projectPaths,
+			commandName: "planner_resume",
+			params: { planId: "plan-a" },
+		});
+
+		expect(result.status).toBe("applied");
+		// The index was self-healed from the on-disk plan record.
+		const project = await readProjectRecord(fs, projectPaths);
+		expect(project.plans.some((plan) => plan.planId === "plan-a")).toBe(true);
+	});
+
+	it("deletes a plan that is on disk but dropped from the project index", async () => {
+		const { fs, git, projectPaths } = await createProjectFixture();
+		await dropFromIndex(fs, projectPaths, "plan-a");
+
+		const result = await executePlannerUserCommand({
+			fs,
+			git,
+			projectPaths,
+			commandName: "planner_delete",
+			params: { planId: "plan-a" },
+		});
+
+		expect(result.status).toBe("applied");
+		await expect(
+			fs.exists(createPlanStoragePaths(projectPaths, "plan-a").planDir),
+		).resolves.toBe(false);
+	});
+
+	it("lists the known plan ids when the target plan is truly absent", async () => {
+		const { fs, git, projectPaths } = await createProjectFixture();
+
+		const result = await executePlannerUserCommand({
+			fs,
+			git,
+			projectPaths,
+			commandName: "planner_resume",
+			params: { planId: "ghost" },
+		});
+
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("Planner plan does not exist: ghost");
+		expect(result.text).toContain("Known plans in this project:");
+		expect(result.text).toContain("plan-a");
+	});
 });
+
+async function dropFromIndex(
+	fs: MockPlannerFs,
+	projectPaths: ProjectStoragePaths,
+	planId: string,
+): Promise<void> {
+	const project = await readProjectRecord(fs, projectPaths);
+	await fs.writeTextAtomic(
+		projectPaths.projectJson,
+		`${JSON.stringify(
+			{
+				...project,
+				activePlanId:
+					project.activePlanId === planId ? null : project.activePlanId,
+				plans: project.plans.filter((plan) => plan.planId !== planId),
+			},
+			null,
+			2,
+		)}\n`,
+	);
+}

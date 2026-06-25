@@ -59,7 +59,10 @@ export function createProjectStoragePaths(input: {
 		displayName: basename(projectRoot),
 		projectDir,
 		projectJson: join(projectDir, "project.json"),
-		plansDir: join(extensionDir, "plans"),
+		// Plans live INSIDE the project dir so everything owned by a project
+		// (project.json, skills, plans) sits under projects/<projectId>/ instead
+		// of a flat extensionDir/plans shared across every project.
+		plansDir: join(projectDir, "plans"),
 		instructionsDir: join(extensionDir, "instructions"),
 		projectLocalDir: join(projectRoot, ".pi", EXTENSION_NAME),
 	};
@@ -93,7 +96,7 @@ export function createPlanStoragePaths(
 export function createPlansDirectory(
 	projectPaths: ProjectStoragePaths,
 ): string {
-	return join(projectPaths.extensionDir, "plans");
+	return projectPaths.plansDir;
 }
 
 export function createTaskStoragePaths(

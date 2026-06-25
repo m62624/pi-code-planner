@@ -118,14 +118,13 @@ describe("planner stuck tools", () => {
 		expect(result.text).toContain("Choose exactly one next probe");
 		expect(result.text).toContain("Do not repeat the previous attempt");
 
+		const stuckPath = `${setup.planPaths.tasksDir}/task-1/attempts/attempt-001/stuck.md`;
 		await expect(
 			readPlanState(setup.fs, setup.planPaths),
 		).resolves.toMatchObject({
 			lastStuckAttemptId: "attempt-001",
-			lastStuckReportPath:
-				"/agent/extensions/pi-code-planner/plans/plan-a/tasks/task-1/attempts/attempt-001/stuck.md",
-			blockedReason:
-				"Stuck attempt recorded: /agent/extensions/pi-code-planner/plans/plan-a/tasks/task-1/attempts/attempt-001/stuck.md",
+			lastStuckReportPath: stuckPath,
+			blockedReason: `Stuck attempt recorded: ${stuckPath}`,
 		});
 	});
 

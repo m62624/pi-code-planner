@@ -90,12 +90,41 @@ export interface PlannerSkillCreateResult {
 export function createPlannerSkillStoragePaths(
 	projectPaths: ProjectStoragePaths,
 ) {
-	const skillsDir = join(projectPaths.extensionDir, "skills");
+	// Per-project pool: skills live under projects/<projectId>/skills so each
+	// project keeps its own library + index, instead of one global pool shared
+	// across every project. The same projectId resolves from any plan worktree
+	// (project-resolver), so all plans of a project share these skills.
+	const skillsDir = join(projectPaths.projectDir, "skills");
 	return {
 		skillsDir,
 		libraryDir: join(skillsDir, "library"),
 		indexJson: join(skillsDir, "index.json"),
 	};
+}
+
+/**
+ * Pre-per-project layout: a single global pool at extensionDir/skills. Read-only
+ * fallback so skills created before the per-project split are still discovered
+ * by the model (and never silently lost) until the user re-captures them per
+ * project. New skills are only ever written to the per-project pool.
+ */
+function createLegacyGlobalSkillStoragePaths(extensionDir: string) {
+	const skillsDir = join(extensionDir, "skills");
+	return { skillsDir, indexJson: join(skillsDir, "index.json") };
+}
+
+async function listLegacyGlobalSkillPaths(
+	fs: PlannerFs,
+	extensionDir: string,
+): Promise<string[]> {
+	const paths = createLegacyGlobalSkillStoragePaths(extensionDir);
+	const index = await readPlannerSkillIndex(fs, paths.indexJson);
+	const existing: string[] = [];
+	for (const item of index.items) {
+		if (item.status !== "active") continue;
+		if (await fs.exists(item.skillPath)) existing.push(item.skillPath);
+	}
+	return existing;
 }
 
 export async function listActivePlannerSkillPaths(input: {
@@ -262,6 +291,12 @@ export async function listPlannerSkillResourcePaths(input: {
 		fs: input.fs,
 		projectPaths,
 	});
+	// Read-only fallback: surface any pre-per-project global skills so they are
+	// not silently lost after the split. Appended after the per-project pool.
+	const legacy = await listLegacyGlobalSkillPaths(
+		input.fs,
+		projectPaths.extensionDir,
+	);
 	// Prepend the bundled, version-matched elenchus skill so it takes priority
 	// (and is not subject to the user-skill maxActive cap). A wasm load or write
 	// failure must never break discovery — fall back to the user skills.
@@ -274,7 +309,10 @@ export async function listPlannerSkillResourcePaths(input: {
 	} catch {
 		bundled = null;
 	}
-	return bundled ? [bundled, ...userSkills] : userSkills;
+	// Dedup while preserving order (bundled → per-project → legacy global).
+	return [
+		...new Set([...(bundled ? [bundled] : []), ...userSkills, ...legacy]),
+	];
 }
 
 export async function executePlannerSkillTool(

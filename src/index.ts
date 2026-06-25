@@ -209,6 +209,7 @@ import {
 } from "./session/handoff";
 import { loadEffectivePlannerSettings } from "./settings/manager";
 import { createNodeFs, type PlannerFs } from "./storage/fs";
+import { migrateLayout } from "./storage/migrate-layout";
 import type { ProjectStoragePaths } from "./storage/paths";
 import { createPlanStoragePaths } from "./storage/paths";
 import { resolveProjectStoragePaths } from "./storage/project-resolver";
@@ -1483,6 +1484,24 @@ function registerPlannerSkillResources(pi: ExtensionAPI): void {
 	});
 }
 
+/**
+ * Migrate the on-disk layout to the unified projects/<projectId>/ scheme.
+ * Triggered only from /planner-create and /planner-resume (the explicit
+ * planner entry points), not on every session start. Best-effort and
+ * idempotent: a failure must never block the command, and it must run before
+ * the command reads a plan so resume finds it at the nested path.
+ */
+async function migratePlannerLayoutSafely(
+	fs: PlannerFs,
+	agentDir: string,
+): Promise<void> {
+	try {
+		await migrateLayout({ fs, agentDir });
+	} catch {
+		// Never block /planner-create or /planner-resume on migration.
+	}
+}
+
 function registerInstructionDefaultsSync(pi: ExtensionAPI): void {
 	pi.on("session_start", async (_event, ctx) => {
 		const fs = createNodeFs();
@@ -1602,6 +1621,9 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 				const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
 					ctx.cwd,
 				);
+				// Bring the on-disk layout up to date (nest legacy flat plans, drop
+				// stale system-skill dirs) at this explicit planner entry point.
+				await migratePlannerLayoutSafely(fs, agentDir);
 				// Surface stale/deprecated settings keys before the request editor
 				// and the workspace TUI take over. Once the plan is created the
 				// session switches to the custom workspace, where a toast queued
@@ -1866,6 +1888,9 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 			const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
 				ctx.cwd,
 			);
+			// Must run before the plan list/read below so a legacy flat plan is
+			// found at its new nested projects/<id>/plans path on resume.
+			await migratePlannerLayoutSafely(fs, agentDir);
 			await notifyPlannerSettingsWarnings(ctx, fs, projectPaths);
 			const planId =
 				parseSinglePlanIdArg(args) ??

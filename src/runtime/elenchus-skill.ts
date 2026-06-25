@@ -12,15 +12,16 @@ import { loadBundledElenchusSkill } from "./elenchus-engine";
 export const BUNDLED_ELENCHUS_SKILL_NAME = "pi-planner-elenchus";
 
 function bundledSkillDir(agentDir: string): string {
-	// Kept apart from the user skill `library/` (it is not model-generated, not
-	// in the planner skill index, not subject to maxActive truncation, and not
-	// editable through the planner-skills UI).
+	// System skill: lives in its own top-level system-skills/ dir, kept entirely
+	// apart from the per-project user skills (projects/<id>/skills). It is not
+	// model-generated, not in any skill index, not subject to maxActive
+	// truncation, and not editable through the planner-skills UI. The dedicated
+	// top-level name avoids confusing it with a project's own skills.
 	return join(
 		agentDir,
 		"extensions",
 		EXTENSION_NAME,
-		"skills",
-		"bundled",
+		"system-skills",
 		"elenchus",
 	);
 }
