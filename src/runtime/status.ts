@@ -59,7 +59,7 @@ export const PLANNER_STATUS_INVARIANTS = [
 	"Before finishing any step, doubt the result: identify the artifact, command, diff, or user answer that proves the exit condition is true.",
 	"Doubt must lead to a concrete probe or recorded risk. Do not create extra tests only to feel safer; add tests only when they falsify a specific requirement risk.",
 	"If repeated attempts fail, treat stuck state as under-instrumentation. Use planner_report_stuck with stuckLoad and continue from evidence after compact.",
-	"Create planner skills only from verified reusable lessons. A planner skill is future memory for later sessions, not a substitute for current stage evidence.",
+	"Capture planner skills by default: a verified reusable lesson OR a recurring code pattern (a trait/impl skeleton, boilerplate shape, error-enum, builder, test harness you wrote or would write again) is worth a skill. Put the snippet plus when-to-apply in the body. A planner skill is future memory for later sessions, not a substitute for current stage evidence.",
 	"Repository AGENTS.md files are planner local contracts. Prefer reading the relevant contract chain before source reads; update contracts when completed work changes a durable domain rule.",
 	"Task branch cannot merge into plan before final task checks pass.",
 	"Next task cannot start before merge_task_to_plan and compact_task.",
@@ -422,7 +422,7 @@ export const PLANNER_STEP_RULES = {
 			"After green focused checks, add ## Post-Implementation Counterexample Review to tdd.md.",
 			"Reject placeholder/stub/TODO-only/hardcoded implementations unless the task explicitly asked for a placeholder and tests prove that contract.",
 			"Run focused checks, update tdd.md with the implementation/check result, then commit through planner_git_commit when project files changed.",
-			"If a repeated failure, stale-context hazard, state-machine/tooling mistake, or non-obvious verified lesson was resolved, call planner_skill_create before leaving this step.",
+			"If a repeated failure, stale-context hazard, state-machine/tooling mistake, non-obvious verified lesson, or a recurring code pattern/boilerplate shape was resolved or written, call planner_skill_create before leaving this step.",
 		],
 		allowedNow: [
 			"Edit production/test files in scope, run checks, use planner_git_commit.",
@@ -469,7 +469,7 @@ export const PLANNER_STEP_RULES = {
 			"Call planner_refactor_review with semantic review fields and every category review: duplication, naming, control_flow, abstraction_level, hidden_coupling, error_handling, test_clarity, debug_leftovers, scope_creep.",
 			"If refactor changes a durable domain contract or discovers stale AGENTS.md guidance, call planner_contract_check and planner_contract_upsert.",
 			"A passing test, linter, formatter, or build is not a refactor review.",
-			"If the review proves a reusable refactor/debug lesson, repeated mistake, or category-specific audit method, call planner_skill_create with sourceKind=refactor before leaving this step.",
+			"If the review proves a reusable refactor/debug lesson, repeated mistake, category-specific audit method, or a recurring code pattern/boilerplate shape worth reusing, call planner_skill_create with sourceKind=refactor before leaving this step.",
 			"Commit if project files changed.",
 		],
 		allowedNow: [
@@ -501,13 +501,14 @@ export const PLANNER_STEP_RULES = {
 	}),
 	capture_skill: stepRule("execution", "capture_skill", {
 		objective:
-			"Decide whether this task produced a reusable planner lesson and create or update a skill.",
+			"Capture a reusable skill for this project. The default is to create or update a skill; no-skill is the exception that must be justified.",
 		requiredActions: [
-			"Review skills already loaded in this session.",
+			"Review skills already loaded in this session for this project.",
+			"Enumerate candidate patterns from this task: any recurring code shape (trait/impl skeleton, boilerplate, error-enum, builder, test harness), a verified lesson, or a repeated mistake. A code pattern you wrote that you would write again counts.",
 			"If an existing skill is outdated or wrong: call planner_skill_update.",
-			"If a new reusable lesson exists with no matching skill: call planner_skill_create.",
+			"If a candidate has no matching skill: call planner_skill_create. Put the reusable snippet plus a precise when-to-apply in the body.",
 			"If the skill body describes a runnable probe, run it, then call planner_git_inspect. If the worktree is dirty, call planner_git_discard_changes immediately.",
-			"If no skill action is taken: write an explicit no-skill note in decisions.md with the reason.",
+			"Only if NO candidate is reusable: record an explicit no-skill note in decisions.md that NAMES each candidate considered and the specific reason it will not recur. A generic 'nothing reusable' note is not acceptable.",
 		],
 		allowedNow: [
 			"planner_skill_create, planner_skill_update, planner_git_inspect, planner_git_discard_changes.",
@@ -515,9 +516,10 @@ export const PLANNER_STEP_RULES = {
 		forbiddenNow: [
 			"Do not commit at this step.",
 			"Do not merge before capture_skill is complete.",
+			"Do not write a generic no-skill note to skip capture; the default is to capture.",
 		],
 		exitCondition:
-			"A skill was created/updated, or a no-skill decision is recorded in decisions.md.",
+			"A skill was created/updated, or decisions.md records a justified no-skill note that names each considered candidate and why it will not recur.",
 		nextInstruction: "Call planner_finish_step to open merge_task_to_plan.",
 	}),
 	merge_task_to_plan: stepRule("execution", "merge_task_to_plan", {
