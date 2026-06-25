@@ -25,12 +25,13 @@ import {
 	decidePlannerLifecycleNext,
 	type PlannerLifecycleDecision,
 } from "./lifecycle";
-import { buildNextStepHint } from "./next-step-hint";
+import { buildNextStepHint, formatAllowedNextTargets } from "./next-step-hint";
 import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
 import { validateRefactorReviewArtifact } from "./refactor-review";
+import { getAllowedNextPlannerPositions } from "./state-machine";
 import {
 	applyPlannerStateTransition,
 	type PlannerStateTransition,
@@ -698,17 +699,32 @@ function formatWorkflowToolResult(
 	result: PlannerStateTransitionResult,
 ): string {
 	if (result.status === "blocked") {
-		return [
+		const lines: (string | null)[] = [
 			`Planner transition blocked: ${result.transition.type}`,
 			`Code: ${result.code}`,
 			`Reason: ${result.reason}`,
 			result.stateMachineErrorCode
 				? `State machine error: ${result.stateMachineErrorCode}`
 				: null,
-			"Call planner_status before choosing the next planner action.",
-		]
-			.filter(Boolean)
-			.join("\n");
+		];
+		// A branch step bounced finish_step because no target was chosen. List the
+		// concrete allowed targets inline so the model re-calls finish_step with a
+		// nextStep directly, instead of round-tripping through planner_status.
+		const branchTargets =
+			result.stateMachineErrorCode === "ambiguous_next_step" && result.state
+				? safeAllowedNext(result.state)
+				: [];
+		if (result.state && branchTargets.length > 0) {
+			lines.push(
+				`Allowed next: ${formatAllowedNextTargets(result.state, branchTargets)}.`,
+				"Re-call planner_finish_step with ONE of these as nextStep — no need to call planner_status.",
+			);
+		} else {
+			lines.push(
+				"Call planner_status before choosing the next planner action.",
+			);
+		}
+		return lines.filter(Boolean).join("\n");
 	}
 
 	// The applied result reflects the step we just moved INTO, so build the
@@ -719,6 +735,18 @@ function formatWorkflowToolResult(
 		"",
 		buildNextStepHint(result.state),
 	].join("\n");
+}
+
+function safeAllowedNext(state: PlanStateRecord): PlannerTargetPosition[] {
+	try {
+		return getAllowedNextPlannerPositions({
+			stage: state.stage,
+			step: state.step,
+			creationMethod: state.creationMethod,
+		});
+	} catch {
+		return [];
+	}
 }
 
 function stringOrUndefined(value: unknown): string | undefined {
