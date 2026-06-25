@@ -200,9 +200,10 @@ export const PLANNER_STEP_RULES = {
 			"If no AGENTS.md exists, create initial root/domain AGENTS.md only for meaningful architectural zones once discovery evidence proves the domains. Do not create one in every folder.",
 			"If planner_contract_upsert changes AGENTS.md files, commit them through planner_git_commit before finishing discovery/scan_project_structure.",
 			"If commands are missing or the project is empty, record unknowns in ## Verification Protocol for discovery/write_questions.",
+			"Record in discovery.md any rule or invariant the existing code enforces that the change must not break. Default to mechanically verifying it with planner_elenchus_check (see the elenchus skill) rather than trusting your reading; record resolution=not_applicable with a one-line reason only when you found no such rule.",
 		],
 		allowedNow: [
-			"Use planner_contract_scan/route/read, read-only shell commands, focused source reads, and discovery.md.",
+			"Use planner_contract_scan/route/read, read-only shell commands, focused source reads, discovery.md, and planner_elenchus_check.",
 		],
 		forbiddenNow: [
 			"Do not implement code.",
@@ -327,8 +328,8 @@ export const PLANNER_STEP_RULES = {
 		objective:
 			"Mechanically check the plan's interacting constraints with elenchus before execution.",
 		requiredActions: [
-			"Decide if the plan hinges on a web of interacting conditions (exactly-one-owner, mutually-exclusive states, gate/branch coverage, dependency ordering, access rules). If so, model the facts and first principles as a .vrf program and call planner_elenchus_check, then iterate until the verdict is CONSISTENT.",
-			"If the plan has no such constraint web (linear/CRUD work), call planner_elenchus_check with resolution=not_applicable and a one-line reason. This is the escape: it never traps the flow.",
+			"Default to modeling the plan's facts and the conditions it depends on as a .vrf program and calling planner_elenchus_check, then iterating until the verdict is CONSISTENT — mechanically verify the plan instead of trusting your own reasoning (see the elenchus skill for how to model it).",
+			"Call planner_elenchus_check with resolution=not_applicable and a one-line reason only when the plan has no conditional logic to verify (purely linear/CRUD work). This is the narrow escape; it never traps the flow.",
 		],
 		allowedNow: [
 			"Use planner_elenchus_check (run a check or record not_applicable). Re-read planner artifacts and contract chains.",
@@ -378,9 +379,10 @@ export const PLANNER_STEP_RULES = {
 		objective: "Write the TDD plan before changing behavior.",
 		requiredActions: [
 			"Read task.md and relevant source files, then write tdd.md with failing test strategy and checks.",
+			"Default to mechanically verifying with planner_elenchus_check that the cases your test plan claims to cover are complete and non-contradictory, before writing tests (see the elenchus skill). Record resolution=not_applicable with a one-line reason only when the task has no conditional behavior to cover.",
 		],
 		allowedNow: [
-			"Write TDD planner artifacts and inspect discovery context/source for test design.",
+			"Write TDD planner artifacts, inspect discovery context/source for test design, and use planner_elenchus_check.",
 		],
 		forbiddenNow: ["Do not change production behavior."],
 		exitCondition:
@@ -606,6 +608,7 @@ export const PLANNER_STEP_RULES = {
 			"Populate verificationEvidence with every command/check from discovery.md ## Verification Protocol. A missing command means the result is not verified.",
 			"If a required command/check failed when you ran it, create a proven_bug (reproduced) or needs_probe finding that names that command. If a required command could not be run here (not_run/unknown — e.g. the tool is not installed), name it in a finding and resolve it: not_a_bug with evidence of why it is not actionable locally (e.g. it runs in CI), or needs_probe to defer it. Do not continue to final_summary while such a command is unaddressed.",
 			"Treat each possible error like TDD for a suspected problem: prove it with a focused failing test/command, exact code-path proof, or exact spec contradiction; otherwise disprove it or mark needs_probe.",
+			"As the final logical pass, default to mechanically re-checking the conditions the finished result depends on with planner_elenchus_check, instead of trusting the reasoning chain from earlier steps (see the elenchus skill). Record resolution=not_applicable with a one-line reason only when there is no conditional logic to verify.",
 			"Use planner_doubt_review to write verify.md. Do not hand-write weak doubt notes.",
 			"Audit AGENTS.md local contracts: check stale guidance, missing parent backlinks, wrong child routing, or missing durable domain details. Use planner_contract_check/upsert when needed.",
 			"Before leaving this step, resolve every needs_probe: run the probe if you can and record the outcome; if it cannot be run in this environment (tool/dependency missing), close it as not_a_bug with evidence of why it is not actionable locally instead of leaving it pending. Never silently drop a probe.",
@@ -616,7 +619,7 @@ export const PLANNER_STEP_RULES = {
 			"If no proven bugs and no needs_probe findings remain, complete with target finalize/write_final_summary.",
 		],
 		allowedNow: [
-			"Run focused checks, inspect planner git state from the planner worktree, call planner_doubt_review, and update AGENTS.md contracts when evidence shows they changed.",
+			"Run focused checks, inspect planner git state from the planner worktree, call planner_doubt_review, use planner_elenchus_check, and update AGENTS.md contracts when evidence shows they changed.",
 		],
 		forbiddenNow: [
 			"Do not ask the user for acceptance yet.",
