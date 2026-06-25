@@ -618,6 +618,14 @@ export class PlannerWorkspaceComponent implements Component {
 		// Pi's editor handles typing, cursor, multiline, paste markers, history,
 		// kill-ring, undo — all on its own (Pi) keybindings.
 		this.editor.handleInput(data);
+		// Repaint after every key the editor consumed. Text edits fire onChange
+		// (which bumps for us), but pure cursor moves — arrows, ctrl+] jumpForward,
+		// word-nav — do NOT. Without this bump our version-cached render() returns
+		// the previous frame, so the cursor only catches up on the next clock tick:
+		// that delay is the cursor-movement lag. Re-running render() relays out the
+		// editor (transcript stays cached), and the TUI's line diff writes nothing
+		// when the frame is unchanged, so the extra repaint is cheap.
+		this.bump();
 	}
 
 	private cycleFocus(): void {
