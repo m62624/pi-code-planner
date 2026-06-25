@@ -50,6 +50,10 @@ describe("migrateLayout", () => {
 		expect(await fs.exists(`${dst}/plan.json`)).toBe(true);
 		expect(await fs.exists(`${dst}/tasks/t1/task.json`)).toBe(true);
 		expect(await fs.exists(`${legacyPlanDir("plan-a")}/plan.json`)).toBe(false);
+		// The now-empty legacy flat plans dir is cleaned up.
+		expect(
+			await fs.exists(`${AGENT_DIR}/extensions/pi-code-planner/plans`),
+		).toBe(false);
 	});
 
 	it("picks up the active plan even if absent from plans[]", async () => {
@@ -114,9 +118,43 @@ describe("migrateLayout", () => {
 		await migrateLayout({ fs, agentDir: AGENT_DIR });
 
 		expect(await fs.exists(`${ext}/skills/bundled`)).toBe(false);
-		// The legacy global user pool stays for the read-only discovery fallback.
+		// The legacy global user pool stays for the read-only discovery fallback,
+		// so the skills dir itself is kept.
 		expect(await fs.exists(`${ext}/skills/library/legacy/SKILL.md`)).toBe(true);
 		expect(await fs.exists(`${ext}/skills/index.json`)).toBe(true);
+		expect(await fs.exists(`${ext}/skills`)).toBe(true);
+	});
+
+	it("removes the legacy skills dir when only the stale bundled copy existed", async () => {
+		const fs = new MockPlannerFs();
+		await seedProject(fs, "/home/me/app", { plans: [] });
+		const ext = `${AGENT_DIR}/extensions/pi-code-planner`;
+		await fs.writeText(`${ext}/skills/bundled/elenchus/SKILL.md`, "# old");
+
+		await migrateLayout({ fs, agentDir: AGENT_DIR });
+
+		// No legacy user pool remained, so the whole skills dir is cleaned up.
+		expect(await fs.exists(`${ext}/skills`)).toBe(false);
+	});
+
+	it("keeps the legacy plans dir when an orphan plan remains", async () => {
+		const fs = new MockPlannerFs();
+		const paths = await seedProject(fs, "/home/me/app", {
+			plans: [{ planId: "plan-a", title: "A", status: "active" }],
+		});
+		await fs.writeText(`${legacyPlanDir("plan-a")}/plan.json`, "{}");
+		await fs.writeText(`${legacyPlanDir("orphan")}/plan.json`, "{}");
+
+		await migrateLayout({ fs, agentDir: AGENT_DIR });
+
+		// plan-a moved out, but the orphan keeps the legacy dir alive.
+		expect(
+			await fs.exists(createPlanStoragePaths(paths, "plan-a").planDir),
+		).toBe(true);
+		expect(await fs.exists(`${legacyPlanDir("orphan")}/plan.json`)).toBe(true);
+		expect(
+			await fs.exists(`${AGENT_DIR}/extensions/pi-code-planner/plans`),
+		).toBe(true);
 	});
 
 	it("leaves orphan plans (not referenced by any project) untouched", async () => {

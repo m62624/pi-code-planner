@@ -62,5 +62,19 @@ export async function migrateLayout(input: {
 		await fs.removeDir(legacyBundledDir);
 	}
 
+	// Clean up now-empty legacy dirs: the flat plans dir once every owned plan
+	// moved out (orphans, if any, keep it non-empty and it is left alone), and
+	// the global skills dir once the bundled copy is gone and no legacy user pool
+	// remains. removeDirIfEmpty is a no-op when entries are still present.
+	await removeDirIfEmpty(fs, legacyPlansDir);
+	await removeDirIfEmpty(fs, join(extensionDir, "skills"));
+
 	return { plansMoved };
+}
+
+/** Remove a directory only when it exists and has no entries. */
+async function removeDirIfEmpty(fs: PlannerFs, dir: string): Promise<void> {
+	if (!(await fs.exists(dir))) return;
+	const entries = await safeReaddir(fs, dir);
+	if (entries.length === 0) await fs.removeDir(dir);
 }
