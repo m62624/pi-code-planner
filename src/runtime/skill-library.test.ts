@@ -183,6 +183,43 @@ describe("planner skill library", () => {
 		).resolves.toEqual([created.details?.skillPath]);
 	});
 
+	it("prepends the system elenchus skill ahead of project skills on resume", async () => {
+		const customWorktreePath = "/tmp/pi-worktrees/plan-a";
+		const { fs, projectPaths } = await createSkillSetup({
+			worktreePath: customWorktreePath,
+		});
+		await saveWorktreeProjectIndex({
+			fs,
+			agentDir: "/agent",
+			record: {
+				schemaVersion: SCHEMA_VERSION,
+				worktreePath: customWorktreePath,
+				projectRoot: projectPaths.projectRoot,
+				projectId: projectPaths.projectId,
+				planId: "plan-a",
+			},
+		});
+		await seedPlannerSkillIndex(fs, projectPaths, [
+			{ name: "pi-planner-proj-44444444", updatedAt: 1000 },
+		]);
+
+		// Resume runs discovery with the worktree as cwd; it must resolve back to
+		// the owning project's skills and still serve the system elenchus first.
+		const resolved = await listPlannerSkillResourcePaths({
+			fs,
+			agentDir: "/agent",
+			cwd: customWorktreePath,
+			plannerActive: true,
+		});
+
+		expect(resolved[0]).toBe(
+			"/agent/extensions/pi-code-planner/system-skills/elenchus/SKILL.md",
+		);
+		expect(resolved).toContain(
+			`${createPlannerSkillStoragePaths(projectPaths).libraryDir}/pi-planner-proj-44444444/SKILL.md`,
+		);
+	});
+
 	it("does not expose planner skills to non-planner sessions", async () => {
 		const { fs, git, projectPaths } = await createSkillSetup();
 		const created = await executePlannerSkillTool({
