@@ -248,6 +248,41 @@ describe("planner skill library", () => {
 		).resolves.toEqual([]);
 	});
 
+	it("serves the project pool only while a plan is active (exit hides, create/resume restores)", async () => {
+		// Lifecycle invariant: discovery is gated on plannerActive, which is true
+		// inside a worktree session (after /planner-create or /planner-resume) and
+		// false after /planner-exit. The SAME on-disk pool must be served when
+		// active and fully hidden — including the system elenchus skill — when not.
+		const { fs, projectPaths } = await createSkillSetup();
+		await seedPlannerSkillIndex(fs, projectPaths, [
+			{ name: "pi-planner-proj-55555555", updatedAt: 1000 },
+		]);
+		const projectSkill = `${createPlannerSkillStoragePaths(projectPaths).libraryDir}/pi-planner-proj-55555555/SKILL.md`;
+		const systemElenchus =
+			"/agent/extensions/pi-code-planner/system-skills/elenchus/SKILL.md";
+
+		// Active (create/resume): system skill + the project's own skill are served.
+		await expect(
+			listPlannerSkillResourcePaths({
+				fs,
+				agentDir: "/agent",
+				cwd: projectPaths.projectRoot,
+				plannerActive: true,
+			}),
+		).resolves.toEqual([systemElenchus, projectSkill]);
+
+		// Inactive (after exit): nothing is served — not even the system skill —
+		// so no planner skill "hangs around" outside an active plan.
+		await expect(
+			listPlannerSkillResourcePaths({
+				fs,
+				agentDir: "/agent",
+				cwd: projectPaths.projectRoot,
+				plannerActive: false,
+			}),
+		).resolves.toEqual([]);
+	});
+
 	it("respects skills.enabled and skills.maxActive when exposing resources", async () => {
 		const { fs, projectPaths } = await createSkillSetup();
 		await seedPlannerSkillIndex(fs, projectPaths, [

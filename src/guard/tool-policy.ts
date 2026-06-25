@@ -322,7 +322,6 @@ const STEP_ALLOWED_TOOLS = {
 		repair_or_resume: [
 			"planner_recovery_inspect",
 			"planner_recovery_resume",
-			"planner_elenchus_check",
 			"planner_git_inspect",
 		],
 	},
