@@ -842,4 +842,85 @@ describe("workflowToolTransition", () => {
 			expect(result.text, `step=${step}`).toContain("/planner-finish");
 		}
 	});
+
+	it("blocks planner_finish_step on finalize/done stages if worktree is dirty", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		git.statusPorcelain = async () => " M modified_file.txt\n";
+
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await ensureProjectRecord(fs, projectPaths);
+		await initializePlanFiles(
+			fs,
+			planPaths,
+			createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+		);
+		await fs.mkdirp(worktreePath);
+		await initializePlanState(fs, planPaths, {
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "finalize",
+			step: "doubt_review",
+			stepStatus: "running",
+			currentBranch: "plan/plan-a",
+		});
+		await setActivePlan(fs, projectPaths, "plan-a");
+
+		await fs.writeTextAtomic(
+			planPaths.verifyMd,
+			[
+				"# Doubt Review",
+				"",
+				"## Summary",
+				"",
+				"No actionable concern found.",
+				"",
+				"## Verification Evidence",
+				"",
+				"- command: npm test",
+				"  status: passed",
+				"  evidence: Unit tests passed.",
+				"",
+				"## Possible Errors",
+				"",
+				"### 1. resume-selection-bug",
+				"",
+				"- riskCategory: user_flow_regression",
+				"- status: disproven",
+				"- proofLevel: disproven_by_code",
+				"- nextAction: no_action",
+				"- claim: Resume selection compares labels instead of ids.",
+				"- specReference: goal.md resume behavior",
+				"- codePath: src/commands/resume.ts",
+				"- verification: Inspected adapter and confirmed selected value is vaultChatId.",
+				"",
+				"#### Evidence",
+				"- Selection value is vaultChatId.",
+				"",
+				"#### Counter Evidence",
+				"- (none)",
+				"",
+			].join("\n"),
+		);
+
+		const blocked = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: { nextStage: "finalize", nextStep: "write_final_summary" },
+		});
+		expect(blocked.result.status).toBe("blocked");
+		expect(blocked.text).toContain(
+			"Discard any worktree changes using planner_git_discard_changes",
+		);
+	});
 });

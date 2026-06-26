@@ -116,6 +116,10 @@ class MockGitRunner implements GitRunner {
 	async worktreeRemove(input: GitWorktreeRemoveInput): Promise<void> {
 		this.calls.push({ name: "worktreeRemove", input });
 	}
+	async discardWorktreeChanges(input: GitRepoInput): Promise<void> {
+		this.calls.push({ name: "discardWorktreeChanges", input });
+		this.status = "";
+	}
 }
 
 describe("planner git tools", () => {
@@ -409,6 +413,65 @@ describe("planner git tools", () => {
 
 		expect(result.status).toBe("blocked");
 		expect(result.text).toContain("blocked");
+	});
+
+	it("discards changes through planner git when worktree is dirty", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createGitToolSetup(fs, {
+			state: {
+				stage: "finalize",
+				step: "doubt_review",
+				stepStatus: "running",
+			},
+		});
+		const git = new MockGitRunner({
+			status: " M src/a.ts",
+		});
+
+		const result = await executePlannerGitTool({
+			fs,
+			git,
+			projectPaths: setup.projectPaths,
+			toolName: "planner_git_discard_changes",
+			params: {},
+		});
+
+		expect(result.status).toBe("applied");
+		expect(result.text).toContain(
+			"Planner discarded all uncommitted worktree changes",
+		);
+		expect(git.calls).toContainEqual({
+			name: "discardWorktreeChanges",
+			input: { repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a" },
+		});
+	});
+
+	it("does nothing when discarding changes on a clean worktree", async () => {
+		const fs = new MockPlannerFs();
+		const setup = await createGitToolSetup(fs, {
+			state: {
+				stage: "finalize",
+				step: "doubt_review",
+				stepStatus: "running",
+			},
+		});
+		const git = new MockGitRunner({
+			status: "",
+		});
+
+		const result = await executePlannerGitTool({
+			fs,
+			git,
+			projectPaths: setup.projectPaths,
+			toolName: "planner_git_discard_changes",
+			params: {},
+		});
+
+		expect(result.status).toBe("applied");
+		expect(result.text).toContain("Planner worktree is already clean");
+		expect(git.calls.some((c) => c.name === "discardWorktreeChanges")).toBe(
+			false,
+		);
 	});
 });
 

@@ -275,6 +275,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_git_inspect",
 			"planner_contract_route",
 			"planner_contract_read",
+			"planner_git_discard_changes",
 		],
 		doubt_review: [
 			"planner_git_inspect",
@@ -286,6 +287,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_contract_read",
 			"planner_contract_check",
 			"planner_contract_upsert",
+			"planner_git_discard_changes",
 		],
 		write_final_summary: [
 			"planner_summary_submit",
@@ -295,6 +297,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_contract_read",
 			"planner_contract_check",
 			"planner_contract_upsert",
+			"planner_git_discard_changes",
 		],
 		compact_finalize: [],
 		enter_done: [],
@@ -304,8 +307,12 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_skill_create",
 			"planner_skill_update",
 			"planner_contract_decide",
+			"planner_git_discard_changes",
 		],
-		await_user_acceptance: ["planner_contract_decide"],
+		await_user_acceptance: [
+			"planner_contract_decide",
+			"planner_git_discard_changes",
+		],
 		handle_change_request: ["planner_plan_submit", "planner_discovery_submit"],
 		prepare_output_branch: [],
 		merge_or_export_result: [],
