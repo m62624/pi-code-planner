@@ -388,7 +388,7 @@ function recoveryRecommendation(
 		return "Stop normal flow. Ask the user before aborting merge, resetting, or resolving conflicts.";
 	}
 	if (issues.some((issue) => issue.code === "wrong_branch")) {
-		return "Do not continue on the wrong branch. If the worktree is clean, a planner repair may switch back to the expected branch; otherwise ask the user.";
+		return "Do not continue on the wrong branch. planner_recovery_resume realigns a clean worktree back to the expected branch automatically; if the worktree is dirty or mid-conflict, ask the user before any switch.";
 	}
 	if (issues.some((issue) => issue.code === "dirty_worktree")) {
 		return "Do not switch plans until dirty changes are committed, reverted by user approval, or explained.";
@@ -405,7 +405,7 @@ function safeOptionsForIssues(
 	const options = new Set<string>(["Call planner_status after inspection."]);
 	if (issues.some((issue) => issue.code === "wrong_branch")) {
 		options.add(
-			"If worktree is clean and expected branch exists, ask user before switching back through a future recovery action.",
+			"Call planner_recovery_resume: it switches a clean worktree back to the expected branch automatically (non-destructive checkout, no reset or delete).",
 		);
 	}
 	if (issues.some((issue) => issue.code === "dirty_worktree")) {
@@ -486,6 +486,77 @@ function formatOptions(options: readonly string[]): string[] {
 	return options.length > 0
 		? options.map((option) => `- ${option}`)
 		: ["- (none)"];
+}
+
+export interface WrongBranchRepairResult {
+	repaired: boolean;
+	from: string | null;
+	to: string | null;
+	skippedReason: string | null;
+}
+
+/**
+ * Non-destructively realign the worktree to the branch plan state expects.
+ *
+ * A failed mid-flight git mutation (e.g. an aborted task→plan merge) can leave
+ * the worktree checked out on a different branch than state.currentBranch,
+ * which recovery flags as the blocking `wrong_branch` issue. Because raw git is
+ * forbidden while the planner is active, the user otherwise has no way to fix
+ * it. This performs the one safe repair the recovery recommendation already
+ * describes: when the worktree is clean and the expected branch still exists,
+ * check it back out. It never resets, deletes, or discards anything — if the
+ * worktree is dirty or mid-conflict, it does nothing and leaves the decision to
+ * the user.
+ */
+export async function repairWrongBranchIfSafe(input: {
+	git: GitRunner;
+	state: PlanStateRecord;
+}): Promise<WrongBranchRepairResult> {
+	const { state } = input;
+	const skip = (skippedReason: string): WrongBranchRepairResult => ({
+		repaired: false,
+		from: null,
+		to: null,
+		skippedReason,
+	});
+	if (!state.worktreePath || !state.currentBranch) {
+		return skip("no worktree path or expected branch recorded in state");
+	}
+	const reality = await safeInspectGitReality({
+		git: input.git,
+		repoRoot: state.worktreePath,
+	});
+	if (!reality) {
+		return skip("git reality could not be inspected");
+	}
+	if (reality.branch === state.currentBranch) {
+		return skip("worktree already on the expected branch");
+	}
+	if (reality.isDirty || reality.hasConflicts) {
+		return skip("worktree is not clean; ask the user before switching");
+	}
+	const expectedExists = await safeBranchExists({
+		git: input.git,
+		repoRoot: state.worktreePath,
+		branch: state.currentBranch,
+	});
+	if (expectedExists !== true) {
+		return skip("expected branch does not exist");
+	}
+	try {
+		await input.git.switchBranch({
+			repoRoot: state.worktreePath,
+			branch: state.currentBranch,
+		});
+	} catch {
+		return skip("checkout to the expected branch failed");
+	}
+	return {
+		repaired: true,
+		from: reality.branch,
+		to: state.currentBranch,
+		skippedReason: null,
+	};
 }
 
 async function safeInspectGitReality(input: {
