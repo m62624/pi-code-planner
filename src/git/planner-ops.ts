@@ -108,13 +108,26 @@ export async function mergeRefactorToTask(input: {
 	const worktreePath = requireWorktreePath(input.state);
 	const taskBranch = requireCurrentTaskBranch(input.state);
 	const refactorBranch = refactorBranchName(input.planId, input.taskId);
+	// Same atomicity guard as mergeTaskToPlan: state still records the refactor
+	// branch as current until this returns, so a failed merge must put the
+	// worktree back on the refactor branch instead of leaving it on the task
+	// branch (which would diverge from state and trip wrong_branch recovery).
 	await input.git.switchBranch({ repoRoot: worktreePath, branch: taskBranch });
-	await input.git.merge({
-		repoRoot: worktreePath,
-		sourceBranch: refactorBranch,
-		noFastForward: true,
-		message: input.message,
-	});
+	try {
+		await input.git.merge({
+			repoRoot: worktreePath,
+			sourceBranch: refactorBranch,
+			noFastForward: true,
+			message: input.message,
+		});
+	} catch (error) {
+		await abortMergeAndRestoreBranch({
+			git: input.git,
+			repoRoot: worktreePath,
+			restoreBranch: refactorBranch,
+		});
+		throw error;
+	}
 	await deleteManagedBranch({
 		git: input.git,
 		repoRoot: worktreePath,
@@ -142,13 +155,28 @@ export async function mergeTaskToPlan(input: {
 	const taskBranch = requireCurrentTaskBranch(input.state);
 	const planBranch = input.state.activeBranches.plan;
 	const registry = getTaskBranchRegistry(input.state, taskId);
+	// Switching to the plan branch is a real git side effect, but plan state is
+	// only updated (currentBranch -> plan) on full success below. If the merge
+	// throws mid-flight, git would sit on the plan branch while state still
+	// records the task branch as current — recovery then flags wrong_branch and
+	// deadlocks. Roll the worktree back to the task branch so git and state stay
+	// consistent and the step is cleanly retryable.
 	await input.git.switchBranch({ repoRoot: worktreePath, branch: planBranch });
-	await input.git.merge({
-		repoRoot: worktreePath,
-		sourceBranch: taskBranch,
-		noFastForward: true,
-		message: input.message,
-	});
+	try {
+		await input.git.merge({
+			repoRoot: worktreePath,
+			sourceBranch: taskBranch,
+			noFastForward: true,
+			message: input.message,
+		});
+	} catch (error) {
+		await abortMergeAndRestoreBranch({
+			git: input.git,
+			repoRoot: worktreePath,
+			restoreBranch: taskBranch,
+		});
+		throw error;
+	}
 	for (const branch of uniqueBranches([registry.refactor])) {
 		await deleteManagedBranch({
 			git: input.git,
@@ -389,6 +417,26 @@ async function rollbackFailedExport(input: {
 			repoRoot: input.repoRoot,
 			branch: input.outputBranch,
 			force: true,
+		}),
+	);
+}
+
+/**
+ * Roll a worktree back after an in-worktree merge fails: abort the half-applied
+ * merge and return to the branch the wrapper switched away from. Best-effort —
+ * a rollback step that is unnecessary or itself fails must never mask the
+ * original merge error, which the caller rethrows.
+ */
+async function abortMergeAndRestoreBranch(input: {
+	git: GitRunner;
+	repoRoot: string;
+	restoreBranch: string;
+}): Promise<void> {
+	await runSafely(() => input.git.mergeAbort({ repoRoot: input.repoRoot }));
+	await runSafely(() =>
+		input.git.switchBranch({
+			repoRoot: input.repoRoot,
+			branch: input.restoreBranch,
 		}),
 	);
 }
