@@ -259,6 +259,14 @@ async function validateWorkflowExit(input: {
 		return null;
 	}
 	const { state } = input.orchestrator.preflight.context;
+	if (state.stage === "finalize" || state.stage === "done") {
+		const cleanBlock = validateCleanWorktreeForFinalizeOrDone(
+			input.orchestrator.preflight.gitReality,
+		);
+		if (cleanBlock) {
+			return cleanBlock;
+		}
+	}
 	if (state.stage === "discovery" && state.step === "scan_project_structure") {
 		const settings = await loadEffectivePlannerSettings({
 			fs: input.fs,
@@ -570,6 +578,17 @@ function validateCleanWorktree(
 	return !gitReality.isDirty
 		? null
 		: "Commit planner changes before finishing this step.";
+}
+
+function validateCleanWorktreeForFinalizeOrDone(
+	gitReality: PlannerGitReality | null,
+): string | null {
+	if (!gitReality) {
+		return "Git reality is unavailable.";
+	}
+	return !gitReality.isDirty
+		? null
+		: "Discard any worktree changes using planner_git_discard_changes before finishing this step.";
 }
 
 async function requireNonEmptyArtifact(
