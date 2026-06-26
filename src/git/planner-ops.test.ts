@@ -195,6 +195,91 @@ describe("planner git operations", () => {
 		});
 	});
 
+	it("rolls the worktree back to the task branch when the task→plan merge fails", async () => {
+		const git = new MockGitRunner();
+		const task = (
+			await createAndSwitchTaskBranch({
+				git,
+				state: baseState(),
+				planId: "plan-a",
+				taskId: "task-1",
+			})
+		).state;
+		git.calls.length = 0;
+		git.mergeError = new Error("merge failed");
+
+		const error = await mergeTaskToPlan({
+			git,
+			state: task,
+			message: "merge task",
+		}).catch((thrown: unknown) => thrown);
+
+		expect(error).toBeInstanceOf(Error);
+		// Switched to plan to merge, the merge threw, then we abort the partial
+		// merge and return to the task branch so git matches the unchanged state.
+		expect(git.calls.map((call) => call.name)).toEqual([
+			"switchBranch",
+			"merge",
+			"mergeAbort",
+			"switchBranch",
+		]);
+		expect(git.calls.at(-1)).toEqual({
+			name: "switchBranch",
+			input: {
+				repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
+				branch: "task/plan-a/task-1",
+			},
+		});
+		// No branch deletions happened on the failure path.
+		expect(git.calls.some((call) => call.name === "deleteBranch")).toBe(false);
+	});
+
+	it("rolls the worktree back to the refactor branch when the refactor→task merge fails", async () => {
+		const git = new MockGitRunner();
+		const task = (
+			await createAndSwitchTaskBranch({
+				git,
+				state: baseState(),
+				planId: "plan-a",
+				taskId: "task-1",
+			})
+		).state;
+		const refactor = (
+			await createAndSwitchRefactorBranch({
+				git,
+				state: task,
+				planId: "plan-a",
+				taskId: "task-1",
+			})
+		).state;
+		git.calls.length = 0;
+		git.mergeError = new Error("merge failed");
+
+		const error = await mergeRefactorToTask({
+			git,
+			state: refactor,
+			planId: "plan-a",
+			taskId: "task-1",
+			message: "merge refactor",
+		}).catch((thrown: unknown) => thrown);
+
+		expect(error).toBeInstanceOf(Error);
+		expect(git.calls.map((call) => call.name)).toEqual([
+			"switchBranch",
+			"merge",
+			"mergeAbort",
+			"switchBranch",
+		]);
+		expect(git.calls.at(-1)).toEqual({
+			name: "switchBranch",
+			input: {
+				repoRoot: "/repo/app/.pi/pi-code-planner/worktrees/plan-a",
+				branch: "refactor/plan-a/task-1",
+			},
+		});
+		expect(git.calls.some((call) => call.name === "deleteBranch")).toBe(false);
+	});
+
 	it("exports plan to output branch in original repo", async () => {
 		const git = new MockGitRunner();
 
