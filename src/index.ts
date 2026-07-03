@@ -4,6 +4,7 @@ import {
 	type ExtensionContext,
 	getAgentDir,
 	isToolCallEventType,
+	VERSION as PI_SDK_VERSION,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import {
@@ -167,6 +168,11 @@ import {
 	REFACTOR_REVIEW_CATEGORIES,
 	REFACTOR_REVIEW_CATEGORY_STATUSES,
 } from "./runtime/refactor-tools";
+import {
+	buildSdkCompatReport,
+	formatSdkCompatWarning,
+	sdkCompatReportSignature,
+} from "./runtime/sdk-compat";
 import {
 	deletePlannerSkill,
 	executePlannerSkillTool,
@@ -1624,6 +1630,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 		handler: async (args, ctx) => {
 			try {
 				await ctx.waitForIdle();
+				await notifyPlannerSdkCompatibility(pi, ctx);
 				const parsed = parsePlannerCreateCommandArgs(args);
 				if (!parsed) {
 					ctx.ui.notify(
@@ -1900,6 +1907,7 @@ function registerPlannerCommands(pi: ExtensionAPI): void {
 		description: "Resume a planner plan in the current project.",
 		handler: async (args, ctx) => {
 			await ctx.waitForIdle();
+			await notifyPlannerSdkCompatibility(pi, ctx);
 			const { fs, agentDir, projectPaths } = await resolveRuntimeContext(
 				ctx.cwd,
 			);
@@ -4578,5 +4586,34 @@ async function notifyPlannerSettingsWarnings(
 		);
 	} catch {
 		// Never block entering the planner on a settings-warning read.
+	}
+}
+
+// Identical compatibility reports already surfaced this session, so re-entering the
+// planner does not repeat the same notice. Critical breakage still shows once per
+// distinct report signature (version + finding set).
+const shownSdkCompatSignatures = new Set<string>();
+
+// Probe the live Pi SDK surfaces the extension depends on and, if something the
+// extension calls is missing or the Pi build is outside the tested range, surface a
+// single local warning. Never blocks entry and never sends anything anywhere.
+async function notifyPlannerSdkCompatibility(
+	pi: ExtensionAPI,
+	ctx: ExtensionCommandContext,
+): Promise<void> {
+	try {
+		const report = buildSdkCompatReport({
+			sdkVersion: typeof PI_SDK_VERSION === "string" ? PI_SDK_VERSION : null,
+			api: pi,
+			ctx,
+		});
+		const signature = sdkCompatReportSignature(report);
+		if (shownSdkCompatSignatures.has(signature)) return;
+		const warning = formatSdkCompatWarning(report);
+		if (!warning) return;
+		shownSdkCompatSignatures.add(signature);
+		await safeNotify(ctx, warning.message, warning.level);
+	} catch {
+		// A compatibility self-check must never block entering the planner.
 	}
 }
