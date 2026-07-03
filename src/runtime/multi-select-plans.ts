@@ -1,4 +1,8 @@
-import { type KeyId, matchesKey } from "@earendil-works/pi-tui";
+import {
+	type KeyId,
+	matchesKey,
+	truncateToWidth,
+} from "@earendil-works/pi-tui";
 
 /**
  * Pure selection state for the multi-select plan picker. Kept free of any TUI
@@ -99,7 +103,7 @@ export async function pickPlansToDelete(
 		const model = new MultiSelectModel(plans.map((plan) => plan.planId));
 		const maxVisible = Math.min(plans.length, MAX_VISIBLE_ROWS);
 		return {
-			render(_width: number): string[] {
+			render(width: number): string[] {
 				const lines: string[] = [
 					theme.fg("accent", theme.bold("Delete planner plans")),
 					theme.fg(
@@ -127,7 +131,12 @@ export async function pickPlansToDelete(
 				}
 				lines.push("");
 				lines.push(theme.fg("dim", `${model.selectedCount()} selected`));
-				return lines;
+				// Clip every line to the overlay width. Labels (and the hint row) can
+				// exceed a narrow terminal, and the TUI aborts the whole render if any
+				// component emits a line wider than the viewport, so truncate here —
+				// ANSI-aware, using visible width — before returning.
+				const clip = width > 0 ? width : 0;
+				return lines.map((line) => truncateToWidth(line, clip, ""));
 			},
 			invalidate() {},
 			handleInput(data: string) {
