@@ -25,6 +25,7 @@
 		"!src/**/*.test.ts",
 		"!src/test/**",
 		"instructions/defaults/*.md",
+		"vrf/defaults/*.vrf",
 		"README.md",
 		"LICENSE"
 	],

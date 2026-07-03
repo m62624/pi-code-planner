@@ -247,6 +247,41 @@ describe("planner elenchus tool", () => {
 		expect(result.text).toContain("values");
 	});
 
+	it("auto-syncs the template library so IMPORT templates/... resolves", async () => {
+		const setup = await createSetup();
+		const result = await executePlannerElenchusTool({
+			fs: setup.fs,
+			git,
+			projectPaths: setup.projectPaths,
+			params: {
+				name: "plan-gate",
+				resolution: "checked",
+				program: [
+					"DOMAIN check",
+					'IMPORT "templates/plan-consistency.vrf"',
+					"FACT plan_consistency.plan is_ready",
+					"NOT  plan_consistency.plan has_dependencies",
+					"NOT  plan_consistency.plan touches_public_api",
+					"CHECK",
+				].join("\n"),
+				values: {
+					goal_approved: true,
+					tasks_cover_goal: true,
+					every_task_has_file: true,
+					no_open_questions: true,
+				},
+			},
+		});
+		expect(result.status).toBe("applied");
+		expect(result.details?.verdict).toBe("CONSISTENT");
+		// The library landed inside the plan's elenchus dir (sandbox intact).
+		expect(
+			await setup.fs.exists(
+				join(setup.planPaths.elenchusDir, "templates", "plan-consistency.vrf"),
+			),
+		).toBe(true);
+	});
+
 	it("records the not_applicable escape without running the engine", async () => {
 		const setup = await createSetup();
 		const result = await executePlannerElenchusTool({

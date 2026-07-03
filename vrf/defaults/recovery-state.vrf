@@ -1,0 +1,75 @@
+// recovery-state — premise library for recovery/repair_or_resume.
+//
+// WHEN TO USE: the planner is in recovery and you are about to repair state or
+// resume. Prove the repair decision is sound before touching anything: the
+// cause is pinned, the action kind is settled, and destructive actions carry
+// user approval. Skip (not_applicable) only when recovery found nothing to
+// repair (states already match).
+//
+// HOW TO USE (your program):
+//   DOMAIN check
+//   IMPORT "templates/recovery-state.vrf"
+//   FACT recovery_state.repair safe_to_apply     // the claim under test
+//   FACT recovery_state.repair is non_destructive   // or: is destructive
+//   NOT  recovery_state.planner resumes_without_repair  // FACT or NOT, never omit
+//   CHECK BIDIRECTIONAL
+// Bind ports via `values`: {"cause_identified": true, ...}.
+// A destructive repair additionally needs
+//   FACT recovery_state.user approved_destructive
+// and that fact must be REAL — the user actually said yes.
+//
+// INLINE RECIPE — hypotheses about what broke (copy into YOUR file):
+//   // the engine's RETRACT list does the backtracking across guesses:
+//   ASSUME crash during_merge
+//   ASSUME NOT worktree was_touched_manually
+//   ASSUME state_json is_stale
+DOMAIN recovery_state
+
+// -- external ports (bind via `values`) --
+VAR cause_identified        // the expected-vs-actual divergence is explained
+VAR expected_state_read     // state.json/plan records were actually read
+VAR actual_state_inspected  // git/filesystem state was actually inspected
+VAR repair_is_minimal       // the repair touches only what diverged
+
+// -- exactly one repair kind, settled before acting; the closing rules
+//    derive the negation so the other branch really closes --
+PREMISE one_repair_kind:
+    ONEOF
+        repair is destructive
+        repair is non_destructive
+RULE destructive_closes_other:
+    WHEN repair is destructive
+    THEN NOT repair is non_destructive
+RULE non_destructive_closes_other:
+    WHEN repair is non_destructive
+    THEN NOT repair is destructive
+
+// -- destructive repairs demand explicit user approval --
+PREMISE destructive_needs_approval:
+    WHEN repair is destructive
+    THEN user approved_destructive
+
+// -- the claim: the repair is safe to apply --
+PREMISE safe_needs_cause:
+    WHEN repair safe_to_apply
+    THEN cause_identified
+PREMISE safe_needs_expected_read:
+    WHEN repair safe_to_apply
+    THEN expected_state_read
+PREMISE safe_needs_actual_inspected:
+    WHEN repair safe_to_apply
+    THEN actual_state_inspected
+PREMISE safe_needs_minimal:
+    WHEN repair safe_to_apply
+    THEN repair_is_minimal
+
+// -- resuming without repairing is a claim too --
+RULE resume_needs_alignment:
+    WHEN planner resumes_without_repair
+    THEN planner needs_state_match
+RULE repair_path_no_alignment_claim:
+    WHEN NOT planner resumes_without_repair
+    THEN NOT planner needs_state_match
+PREMISE state_match_gate:
+    WHEN planner needs_state_match
+    THEN planner states_match

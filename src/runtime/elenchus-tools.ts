@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { errorMessage } from "../errors";
 import { isPathInsideOrEqual } from "../path-utils";
+import { syncVrfTemplatesToPlan } from "../vrf/manager";
 import { runElenchusCheck } from "./elenchus-engine";
 import {
 	checkPlannerOrchestratorToolAllowed,
@@ -82,6 +83,13 @@ export async function executePlannerElenchusTool(
 		if (params.resolution === "not_applicable") {
 			return await recordNotApplicable(input, elenchusDir, params);
 		}
+		// Materialize the premise-template library before every check so a
+		// program's `IMPORT "templates/<name>.vrf"` always resolves, stays inside
+		// the sandbox, and picks up project overrides. Hash-compared: idempotent.
+		await syncVrfTemplatesToPlan(input.fs, {
+			projectPaths: input.projectPaths,
+			planPaths,
+		});
 		return await runCheck(input, elenchusDir, params);
 	} catch (error) {
 		return blocked(errorMessage(error));

@@ -1,0 +1,72 @@
+// discovery-gaps — premise library for discovery/scan_project_structure.
+//
+// WHEN TO USE: after scanning the project, prove the discovery is honest:
+// what you know vs what you merely assume, and that the basics are mapped.
+// Skip (not_applicable) only when the project was already discovered by an
+// earlier plan and nothing structural changed.
+//
+// HOW TO USE (your program):
+//   DOMAIN check
+//   IMPORT "templates/discovery-gaps.vrf"
+//   FACT discovery_gaps.discovery is_complete    // the claim under test
+//   // account for EVERY hazard explicitly — FACT or NOT, never omit:
+//   FACT discovery_gaps.project uses_external_services
+//   NOT  discovery_gaps.project contains_generated_code
+//   CHECK BIDIRECTIONAL
+// Bind ports via `values`: {"entry_points_mapped": true, ...}.
+//
+// INLINE RECIPES (copy into YOUR file):
+//   // every assumption you did NOT verify goes on record as a belief —
+//   // a false one is reported, and it cannot masquerade as knowledge:
+//   BELIEVES planner build uses_npm
+//   BELIEVES planner tests run_offline
+//   // areas you decided to skip — exactly one disposition per area:
+//   SET areas
+//       api_layer
+//       storage
+//   PREMISE one_disposition FOR EACH a IN areas:
+//       ONEOF
+//           a was explored
+//           a was skipped
+DOMAIN discovery_gaps
+
+// -- external ports (bind via `values`) --
+VAR entry_points_mapped     // main entry points / commands are identified
+VAR build_test_known        // how to build and run tests is recorded
+VAR conventions_recorded    // code style / structure conventions noted
+VAR unknowns_written_down   // every open unknown became a written question
+
+// -- the claim: discovery is complete --
+PREMISE discovery_needs_entry_points:
+    WHEN discovery is_complete
+    THEN entry_points_mapped
+PREMISE discovery_needs_build_test:
+    WHEN discovery is_complete
+    THEN build_test_known
+PREMISE discovery_needs_conventions:
+    WHEN discovery is_complete
+    THEN conventions_recorded
+PREMISE discovery_needs_unknowns:
+    WHEN discovery is_complete
+    THEN unknowns_written_down
+
+// -- environment hazards create duties; closing rules discharge absent ones --
+RULE external_services_need_notes:
+    WHEN project uses_external_services
+    THEN project needs_env_notes
+RULE no_external_services_no_notes:
+    WHEN NOT project uses_external_services
+    THEN NOT project needs_env_notes
+PREMISE env_notes_gate:
+    WHEN project needs_env_notes
+    THEN project env_notes_written
+
+RULE generated_code_needs_marking:
+    WHEN project contains_generated_code
+    THEN project needs_generated_markers
+RULE no_generated_code_no_marking:
+    WHEN NOT project contains_generated_code
+    THEN NOT project needs_generated_markers
+PREMISE generated_markers_gate:
+    WHEN project needs_generated_markers
+    THEN project generated_areas_marked
