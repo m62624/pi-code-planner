@@ -240,42 +240,137 @@ export function formatPlannerCompactSkipped(reason: string): string {
 
 export type PlannerCompactionSkipReason = "below_threshold";
 
-export interface PlannerCompactionDecision {
+export type PlannerCompactionRunReason = "output_budget";
+
+export interface PlannerContextBudgetDecision {
+	/** True when context has reached the point where compaction is worthwhile. */
 	run: boolean;
-	reason: PlannerCompactionSkipReason | null;
+	reason: PlannerCompactionRunReason | PlannerCompactionSkipReason | null;
+	/** The computed compaction floor (tokens); `projected` above it triggers. */
+	floor: number;
+	/** Confirmed tokens plus any instructions we are about to inject. */
+	projected: number;
+	/** Tokens still free below the floor (negative once we are over it). */
+	headroom: number;
+}
+
+function clamp(value: number, min: number, max: number): number {
+	return Math.min(Math.max(value, min), max);
+}
+
+/** Estimate the token cost of text we are about to inject, matching Pi's
+ * conservative chars/4 heuristic (`estimateTokens`). Used to fold a soon-to-be
+ * injected `[SYSTEM_INSTRUCTIONS]` block into the budget projection. */
+export function estimatePlannerInstructionTokens(text: string): number {
+	return Math.ceil(text.length / 4);
 }
 
 /**
- * Decide whether a planner-controlled compaction should actually run when the
- * model reaches a compact step, or be skipped and the boundary resolved without
- * an LLM round-trip. Pure, so it unit-tests without the SDK.
+ * Compute the planner's output-aware compaction budget. Pure, so it unit-tests
+ * without the SDK.
  *
- * `below_threshold`: context is not yet close to the window, so there is nothing
- * worth compacting (this is also what makes a too-small session skip compaction
- * entirely, avoiding Pi's "Nothing to compact" throw at the source). The floor
- * is `contextWindow - reserveTokens * reserveMultiplier`; with a multiplier > 1
- * it sits *below* Pi's own auto-compaction floor (multiplier 1), so the planner
- * compaction fires first at a stage boundary and Pi's generic auto-compaction
- * rarely triggers. Scales with the window (correct on a 32k or a 1M window).
- * When `tokens` is unknown (e.g. right after a compaction) the threshold cannot
- * be evaluated, so we let compaction run — layer B (onError) backstops the rare
- * throw that follows.
+ * The compaction floor is driven by the model's *real* generation budget
+ * (`maxOutputTokens`) rather than Pi's fixed `reserveTokens` knob (which the
+ * extension cannot read): reserving `maxOutputTokens` guarantees there is always
+ * room to generate a full response, which is what prevents the
+ * "length + output===0" context-overflow variant of the maximum-output stop.
+ *
+ * Everything is derived from the live `contextWindow` / `maxOutputTokens`, so the
+ * math self-adapts across models and windows (correct on 32k and on 1M). The
+ * output reserve is clamped so a model reporting `maxTokens ≈ window` cannot drive
+ * the floor to zero, and the floor itself is clamped into a sane band.
+ *
+ * `projected = tokens + pendingInstructionTokens` — folding in an instruction
+ * block we are about to inject so a burst does not slip past the check. When
+ * `tokens` is unknown (right after a compaction) we cannot evaluate the floor, so
+ * `run` is false and the `onError`/watchdog layers remain the backstop.
  */
-export function decidePlannerCompactionRun(input: {
+export function projectPlannerContextBudget(input: {
 	tokens: number | null;
 	contextWindow: number;
-	reserveTokens: number;
-	reserveMultiplier: number;
-}): PlannerCompactionDecision {
-	if (input.tokens !== null && input.contextWindow > 0) {
-		const floor =
-			input.contextWindow - input.reserveTokens * input.reserveMultiplier;
-		if (input.tokens <= floor) {
-			return { run: false, reason: "below_threshold" };
-		}
+	maxOutputTokens: number;
+	pendingInstructionTokens?: number;
+	toolHeadroomRatio: number;
+	maxOutputReserveRatio: number;
+	minOutputReserve: number;
+	minFloorRatio: number;
+	maxFloorRatio: number;
+}): PlannerContextBudgetDecision {
+	const { contextWindow } = input;
+	const pending = input.pendingInstructionTokens ?? 0;
+
+	if (input.tokens === null || contextWindow <= 0) {
+		return {
+			run: false,
+			reason: null,
+			floor: 0,
+			projected: pending,
+			headroom: 0,
+		};
 	}
-	return { run: true, reason: null };
+
+	const outputReserve = clamp(
+		input.maxOutputTokens,
+		input.minOutputReserve,
+		contextWindow * input.maxOutputReserveRatio,
+	);
+	const toolHeadroom = contextWindow * input.toolHeadroomRatio;
+	const floor = clamp(
+		contextWindow - (outputReserve + toolHeadroom),
+		contextWindow * input.minFloorRatio,
+		contextWindow * input.maxFloorRatio,
+	);
+
+	const projected = input.tokens + pending;
+	const headroom = floor - projected;
+	if (projected > floor) {
+		return { run: true, reason: "output_budget", floor, projected, headroom };
+	}
+	return { run: false, reason: "below_threshold", floor, projected, headroom };
 }
+
+/**
+ * Decide whether the `turn_end` monitor should proactively trigger a
+ * planner-controlled compaction. Pure, so it unit-tests without the SDK.
+ *
+ * We compact only when the budget says so, no compaction is already running, and
+ * the plan is in a working stage that is not already handling (or blocked on)
+ * something else: a pending compact boundary is left to the dedicated compact
+ * step, and broken / user-decision states must not be disturbed mid-turn.
+ */
+export function shouldProactivelyCompact(input: {
+	stage: PlannerProactiveStage;
+	run: boolean;
+	compactionInFlight: boolean;
+	requiresCompact: boolean;
+	requiresUserDecision: boolean;
+	broken: boolean;
+}): boolean {
+	if (!input.run || input.compactionInFlight) return false;
+	if (input.requiresCompact || input.requiresUserDecision || input.broken) {
+		return false;
+	}
+	return PROACTIVE_COMPACT_STAGES.has(input.stage);
+}
+
+// Only stages that accumulate meaningful context and are safe to compact between
+// turns. `init`/`intake` barely have context; `done`/`recovery` must be left alone.
+type PlannerProactiveStage =
+	| "init"
+	| "intake"
+	| "discovery"
+	| "planning"
+	| "execution"
+	| "finalize"
+	| "done"
+	| "recovery";
+
+const PROACTIVE_COMPACT_STAGES = new Set<PlannerProactiveStage>([
+	"discovery",
+	"planning",
+	"execution",
+	"finalize",
+]);
 
 export async function collectAutoCompactInstructionSections(input: {
 	fs: PlannerFs;

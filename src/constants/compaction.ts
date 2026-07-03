@@ -1,9 +1,29 @@
-// Planner-controlled compaction fires one reserve-window *earlier* than Pi's
-// built-in auto-compaction so the two never race: Pi auto-compacts when
-// `tokens > contextWindow - reserveTokens` (multiplier 1), so using a larger
-// multiplier here lowers our floor and makes the planner compaction trigger
-// first — at a natural stage boundary, with planner-preserving instructions —
-// keeping context under Pi's threshold. The value scales with the context
-// window, so it stays correct on a tiny 32k local window and on a 1M window
-// alike (a fixed percentage would not).
-export const PLANNER_COMPACT_RESERVE_MULTIPLIER = 1.5;
+// Planner compaction is output-aware: instead of leaning on Pi's fixed
+// `reserveTokens` knob (which the extension cannot even read — the ExtensionContext
+// exposes no compaction settings, only `getContextUsage()`), the planner computes
+// its own compaction floor from live values. The reserve is driven by the model's
+// real generation budget (`model.maxTokens`), guaranteeing there is always room to
+// produce a full response — which is exactly what prevents the "length + output===0"
+// context-overflow variant of the "maximum output token limit" stop.
+//
+// All knobs below are *ratios of live values* (context window / max output), so the
+// math self-adapts across models and windows — correct on a tiny 32k local window
+// and on a 1M window alike, without any fixed per-window preset.
+
+// Share of the context window kept free for the next turn's unpredictable
+// tool-calling output (tool results are injected mid-turn and Pi's reactive check
+// cannot see them until the turn after).
+export const PLANNER_TOOL_HEADROOM_RATIO = 0.06;
+
+// Cap on how much of the window we hand to the output reserve, so a model that
+// reports a pathologically large `maxTokens` (≈ the whole window) cannot push the
+// floor to zero and cause compaction thrashing.
+export const PLANNER_MAX_OUTPUT_RESERVE_RATIO = 0.25;
+
+// Absolute floor for the output reserve, for models that report a tiny `maxTokens`.
+export const PLANNER_MIN_OUTPUT_RESERVE = 4096;
+
+// The computed compaction floor is clamped into this band (as a share of the
+// window) so neither a huge `maxTokens` nor a tiny window drives it out of range.
+export const PLANNER_MIN_FLOOR_RATIO = 0.5;
+export const PLANNER_MAX_FLOOR_RATIO = 0.92;
