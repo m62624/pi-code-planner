@@ -35,6 +35,7 @@ type ElenchusParams =
 			name: string;
 			program: string;
 			format: "json" | "human";
+			values: Record<string, boolean> | undefined;
 	  }
 	| { resolution: "not_applicable"; name: string; reason: string };
 
@@ -111,6 +112,7 @@ async function runCheck(
 		root: sourceName,
 		read,
 		format: params.format,
+		values: params.values,
 	});
 	if (!run.ok) {
 		return blocked(run.reason);
@@ -219,6 +221,7 @@ function parseElenchusParams(value: unknown): ElenchusParams {
 			name,
 			program: requiredString(record, "program"),
 			format: (format as "json" | "human" | undefined) ?? "json",
+			values: optionalValues(record, "values"),
 		};
 	}
 	throw new TypeError(
@@ -239,6 +242,29 @@ function sanitizeName(value: string): string {
 		);
 	}
 	return slug;
+}
+
+function optionalValues(
+	record: Record<string, unknown>,
+	key: string,
+): Record<string, boolean> | undefined {
+	const value = record[key];
+	if (value === undefined || value === null) return undefined;
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		throw new TypeError(
+			`planner_elenchus_check.${key} must be an object of { "port name": true|false }.`,
+		);
+	}
+	const out: Record<string, boolean> = {};
+	for (const [port, bool] of Object.entries(value)) {
+		if (typeof bool !== "boolean") {
+			throw new TypeError(
+				`planner_elenchus_check.${key}["${port}"] must be true or false.`,
+			);
+		}
+		out[port] = bool;
+	}
+	return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function requiredString(record: Record<string, unknown>, key: string): string {

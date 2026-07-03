@@ -2848,12 +2848,18 @@ function registerPlannerTools(
 				program: {
 					type: "string",
 					description:
-						"The .vrf program (facts + first principles) to check. Required when resolution=checked. May IMPORT sibling .vrf files stored under the plan's elenchus/ dir.",
+						'The .vrf program (facts + first principles) to check. Required when resolution=checked. May IMPORT sibling .vrf files stored under the plan\'s elenchus/ dir, including the bundled premise templates under templates/ (e.g. IMPORT "templates/tdd-gate.vrf").',
 				},
 				format: {
 					type: "string",
 					enum: ["json", "human"],
 					description: "Verdict format. Defaults to json.",
+				},
+				values: {
+					type: "object",
+					additionalProperties: { type: "boolean" },
+					description:
+						'Optional values for the program\'s VAR ports, e.g. {"tests_green": true}. A key may be domain-qualified ("tdd_gate.tests_green") or name a multi-word atom ("task1 depends_on task2") to assert it externally.',
 				},
 				reason: {
 					type: "string",

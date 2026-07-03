@@ -10,6 +10,13 @@
 
 export type ElenchusFormat = "json" | "human";
 
+/**
+ * External `VAR` port values (`{ portName: true|false }`). A key may be
+ * qualified with a `domain.` prefix to disambiguate imports, or name a
+ * multi-word atom (`"engine has_fuel"`) to assert that atom externally.
+ */
+export type ElenchusValues = Record<string, boolean>;
+
 export type ElenchusRunResult =
 	| { ok: true; output: string; engineVersion: string }
 	| { ok: false; reason: string };
@@ -56,6 +63,8 @@ export async function runElenchusCheck(input: {
 	root: string;
 	read: (path: string) => string;
 	format?: ElenchusFormat;
+	/** Values for `VAR` ports (and multi-word atom injection), see {@link ElenchusValues}. */
+	values?: ElenchusValues;
 }): Promise<ElenchusRunResult> {
 	const engine = await loadEngine();
 	if (!engine) return unavailable();
@@ -64,6 +73,9 @@ export async function runElenchusCheck(input: {
 			input.root,
 			input.read,
 			input.format ?? "json",
+			undefined,
+			undefined,
+			input.values,
 		);
 		return { ok: true, output, engineVersion: engine.version() };
 	} catch (error) {

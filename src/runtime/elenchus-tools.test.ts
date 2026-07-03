@@ -191,6 +191,62 @@ describe("planner elenchus tool", () => {
 		expect(result.details?.verdict).toBe("CONFLICT");
 	});
 
+	it("binds VAR ports through the values parameter", async () => {
+		const setup = await createSetup();
+		const program = [
+			"DOMAIN deploy",
+			"VAR tests_green",
+			"VAR db_migrated DEFAULT false",
+			"PREMISE gate:",
+			"    WHEN tests_green",
+			"    AND  db_migrated",
+			"    THEN ship a",
+			"NOT ship a",
+			"CHECK",
+		].join("\n");
+		// Ports unset: the gate cannot fire, so the deny stands (no conflict).
+		const open = await executePlannerElenchusTool({
+			fs: setup.fs,
+			git,
+			projectPaths: setup.projectPaths,
+			params: { name: "gate-open", resolution: "checked", program },
+		});
+		expect(open.status).toBe("applied");
+		expect(open.details?.verdict).not.toBe("CONFLICT");
+
+		// Both ports supplied true: the gate fires and clashes with `NOT ship a`.
+		const fired = await executePlannerElenchusTool({
+			fs: setup.fs,
+			git,
+			projectPaths: setup.projectPaths,
+			params: {
+				name: "gate-fired",
+				resolution: "checked",
+				program,
+				values: { tests_green: true, db_migrated: true },
+			},
+		});
+		expect(fired.status).toBe("applied");
+		expect(fired.details?.verdict).toBe("CONFLICT");
+	});
+
+	it("blocks a non-boolean values entry", async () => {
+		const setup = await createSetup();
+		const result = await executePlannerElenchusTool({
+			fs: setup.fs,
+			git,
+			projectPaths: setup.projectPaths,
+			params: {
+				name: "bad-values",
+				resolution: "checked",
+				program: "DOMAIN d\nVAR p\nFACT x a\nCHECK x",
+				values: { p: "yes" },
+			},
+		});
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("values");
+	});
+
 	it("records the not_applicable escape without running the engine", async () => {
 		const setup = await createSetup();
 		const result = await executePlannerElenchusTool({
