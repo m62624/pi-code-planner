@@ -2,6 +2,7 @@
 // `../constants` resolve here unchanged after the flat constants.ts became a
 // folder.
 export * from "./compaction";
+export * from "./compat";
 export * from "./extension";
 export * from "./language";
 export * from "./time";
