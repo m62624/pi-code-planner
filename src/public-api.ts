@@ -332,6 +332,23 @@ export {
 	PLANNER_REFACTOR_TOOL_NAMES,
 } from "./runtime/refactor-tools";
 export type {
+	SdkCompatReport,
+	SdkSurfaceFinding,
+	SdkSurfaceKind,
+	SdkSurfaceSeverity,
+	SdkSurfaceSpec,
+	SdkSurfaceStatus,
+	SdkSurfaceTarget,
+	SdkVersionAdvisory,
+} from "./runtime/sdk-compat";
+export {
+	buildSdkCompatReport,
+	evaluatePiVersionAdvisory,
+	formatSdkCompatWarning,
+	SDK_REQUIRED_SURFACES,
+	sdkCompatReportSignature,
+} from "./runtime/sdk-compat";
+export type {
 	PlannerBehaviorAction,
 	PlannerBehaviorArtifact,
 	PlannerBehaviorGate,
