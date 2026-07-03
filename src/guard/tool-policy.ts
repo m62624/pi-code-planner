@@ -218,6 +218,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_contract_read",
 			"planner_contract_check",
 			"planner_contract_upsert",
+			"planner_elenchus_check",
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
@@ -330,6 +331,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_recovery_inspect",
 			"planner_recovery_resume",
 			"planner_git_inspect",
+			"planner_elenchus_check",
 		],
 	},
 } as const satisfies Record<
@@ -353,6 +355,12 @@ export function getAllowedPlannerWrapperTools(
 			"planner_git_inspect",
 			...STEP_ALLOWED_TOOLS.recovery.read_state,
 			"planner_recovery_resume",
+			// At the repair decision itself, the consistency checker is a pure
+			// diagnosis tool (in-process engine, writes only planner artifacts) —
+			// the one broken-state step where it must stay reachable.
+			...(state.stage === "recovery" && state.step === "repair_or_resume"
+				? (["planner_elenchus_check"] as const)
+				: []),
 		]);
 	}
 

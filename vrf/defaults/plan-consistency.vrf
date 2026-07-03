@@ -1,0 +1,75 @@
+// plan-consistency — premise library for planning/consistency_check.
+//
+// WHEN TO USE: the plan is split into tasks and you must prove the plan as a
+// whole holds together before execution starts. Skip (not_applicable) only if
+// the plan is a single linear task with no dependencies and no open questions.
+//
+// HOW TO USE (your program):
+//   DOMAIN check
+//   IMPORT "templates/plan-consistency.vrf"
+//   FACT plan_consistency.plan is_ready              // the claim under test
+//   // account for EVERY hazard explicitly — FACT if it applies, NOT if not.
+//   // Leaving one unstated keeps the check blocked (WARNING) on purpose:
+//   FACT plan_consistency.plan has_dependencies
+//   NOT  plan_consistency.plan touches_public_api
+//   CHECK BIDIRECTIONAL
+// Supply the VAR ports honestly via the tool's `values` parameter, e.g.
+//   {"goal_approved": true, "tasks_cover_goal": true, ...}
+// A port you cannot honestly set true is the finding — do not guess it green.
+//
+// INLINE RECIPES (copy into YOUR file; quantifiers do not span files):
+//   // task dependency graph — a cycle is rejected at compile time:
+//   FACT task_a depends_on task_b
+//   CLOSE depends_on TRANSITIVE
+//   // exactly one status per task (also catches typo'd statuses):
+//   SET tasks
+//       task_a
+//       task_b
+//   PREMISE one_status FOR EACH t IN tasks:
+//       ONEOF
+//           t status pending
+//           t status in_progress
+//           t status done
+DOMAIN plan_consistency
+
+// -- external ports (bind via `values`) --
+VAR goal_approved        // intake: the user approved the goal
+VAR tasks_cover_goal     // together the tasks achieve the whole goal
+VAR every_task_has_file  // each task has a written task file
+VAR no_open_questions    // discovery questions are resolved or parked
+VAR deps_acyclic         // dependency order checked (CLOSE TRANSITIVE passed)
+
+// -- the readiness claim: asserting it demands every prerequisite --
+PREMISE ready_needs_approved_goal:
+    WHEN plan is_ready
+    THEN goal_approved
+PREMISE ready_needs_coverage:
+    WHEN plan is_ready
+    THEN tasks_cover_goal
+PREMISE ready_needs_task_files:
+    WHEN plan is_ready
+    THEN every_task_has_file
+PREMISE ready_needs_questions_closed:
+    WHEN plan is_ready
+    THEN no_open_questions
+
+// -- hazards create duties; the closing rule discharges an absent hazard --
+RULE dependencies_need_order_check:
+    WHEN plan has_dependencies
+    THEN plan needs_order_check
+RULE no_dependencies_no_order_check:
+    WHEN NOT plan has_dependencies
+    THEN NOT plan needs_order_check
+PREMISE order_check_gate:
+    WHEN plan needs_order_check
+    THEN deps_acyclic
+
+RULE api_change_needs_contract:
+    WHEN plan touches_public_api
+    THEN plan needs_contract_review
+RULE no_api_change_no_contract:
+    WHEN NOT plan touches_public_api
+    THEN NOT plan needs_contract_review
+PREMISE contract_review_gate:
+    WHEN plan needs_contract_review
+    THEN plan contracts_recorded

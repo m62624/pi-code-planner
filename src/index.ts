@@ -2830,7 +2830,7 @@ function registerPlannerTools(
 		description:
 			"Mechanically check a web of interacting plan constraints for logical consistency with the bundled elenchus engine (a three-valued SAT checker). Write facts and first principles in elenchus's tiny DSL (see the pi-planner-elenchus skill); the engine answers CONSISTENT / WARNING / UNDERDETERMINED / CONFLICT and shows why. Reach for it on exactly-one-owner, mutually-exclusive states, gate/branch coverage, access matrices, and dependency ordering — not on linear/CRUD work. Sources and verdicts are stored under the plan's elenchus/ dir.",
 		promptSnippet:
-			"Use planner_elenchus_check when correctness hinges on interacting conditions that are easy to get subtly wrong. Iterate until the verdict is CONSISTENT. If the work has no such constraint web, call it with resolution=not_applicable and a one-line reason — that escape never traps the flow. It is available at planning/consistency_check, the discovery scan, finalize/doubt_review, and recovery/repair_or_resume.",
+			"Default to planner_elenchus_check at its gated steps: import the step's recommended premise template (IMPORT \"templates/<name>.vrf\"), state your facts, bind the template's VAR ports via values, and iterate until the verdict is CONSISTENT. A CONFLICT hard-blocks planner_finish_step for that step. If the work genuinely has no interacting constraints, call it with resolution=not_applicable and a one-line reason — that escape never traps the flow. Available at the discovery scan, planning/consistency_check, execution/write_tdd_plan, execution/contract_check, finalize/doubt_review, and recovery/repair_or_resume.",
 		parameters: {
 			type: "object",
 			properties: {
@@ -2848,12 +2848,18 @@ function registerPlannerTools(
 				program: {
 					type: "string",
 					description:
-						"The .vrf program (facts + first principles) to check. Required when resolution=checked. May IMPORT sibling .vrf files stored under the plan's elenchus/ dir.",
+						'The .vrf program (facts + first principles) to check. Required when resolution=checked. May IMPORT sibling .vrf files stored under the plan\'s elenchus/ dir, including the bundled premise templates under templates/ (e.g. IMPORT "templates/tdd-gate.vrf").',
 				},
 				format: {
 					type: "string",
 					enum: ["json", "human"],
 					description: "Verdict format. Defaults to json.",
+				},
+				values: {
+					type: "object",
+					additionalProperties: { type: "boolean" },
+					description:
+						'Optional values for the program\'s VAR ports, e.g. {"tests_green": true}. A key may be domain-qualified ("tdd_gate.tests_green") or name a multi-word atom ("task1 depends_on task2") to assert it externally.',
 				},
 				reason: {
 					type: "string",

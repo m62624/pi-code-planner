@@ -104,7 +104,7 @@ Write only the minimum code required for the goal. Reuse existing utilities, hel
 
 ## Optional: mechanical consistency check
 
-If, while scanning, you find the project's correctness rests on interacting invariants you have not fully pinned down (mutually-exclusive states, access rules, ordering constraints), you can model them in elenchus's DSL and run `planner_elenchus_check`. A WARNING or UNDERDETERMINED verdict names exactly the missing fact — that is your cue to re-read the relevant code and record it in `discovery.md` rather than guess. This is a tool you reach for when it helps, not a required step here.
+Before finishing the scan, prove the discovery is honest with `planner_elenchus_check`. Start from `IMPORT "templates/discovery-gaps.vrf"`: claim `FACT discovery_gaps.discovery is_complete`, state each environment hazard `FACT` or `NOT` (external services, generated code), and bind the `values` ports (entry points mapped, build/test commands known, conventions recorded, unknowns written down) honestly — a port you cannot set true is a gap to close, not to guess. Put every unverified assumption on record as a `BELIEVES planner ...` line so it cannot masquerade as knowledge. A WARNING or UNDERDETERMINED verdict names exactly the missing fact — that is your cue to re-read the relevant code and record it in `discovery.md`. The narrow escape (`resolution: "not_applicable"` with a one-line reason) is only for a project already discovered by an earlier plan with nothing structural changed.
 
 Read the `pi-planner-elenchus` skill for the grammar before writing the program. The engine is a SAT checker over **formal logic only** — no arithmetic; encode quantities as named symbolic states, not numbers.
 

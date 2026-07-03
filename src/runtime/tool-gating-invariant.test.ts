@@ -65,30 +65,41 @@ describe("planner tool gating invariant", () => {
 	// Half 2 — special states bypass the behavior gate, so the guard is the sole
 	// gate. Their allowed set must therefore be FIXED (independent of the frozen
 	// stage/step); otherwise a step-scoped tool could leak into a state where
-	// nothing checks it against stage behavior. We pin that the set is identical
-	// across every stage/step for each special flag.
+	// nothing checks it against stage behavior. One sanctioned exception: at
+	// recovery/repair_or_resume the guard itself scopes in planner_elenchus_check
+	// (a pure-diagnosis tool for proving the repair decision), so the step IS
+	// checked — by the guard, which is the sole gate here.
 	for (const flags of [
 		{ name: "broken", broken: true, requiresUserDecision: false },
 		{ name: "requiresUserDecision", broken: false, requiresUserDecision: true },
 	] as const) {
 		it(`guard set is fixed (step-independent) when ${flags.name}`, () => {
-			const sets = STEPS.flatMap(([stage, stepList]) =>
-				stepList.map((step) =>
-					[
-						...getAllowedPlannerWrapperTools({
-							stage,
-							step,
-							broken: flags.broken,
-							requiresUserDecision: flags.requiresUserDecision,
-							requiresCompact: false,
-							debugArtifactsDir: "/tmp/planner-debug",
-						}),
-					].sort(),
-				),
-			);
-			const first = JSON.stringify(sets[0]);
-			for (const set of sets) {
-				expect(JSON.stringify(set)).toEqual(first);
+			const setFor = (stage: PlannerStage, step: PlannerStep) =>
+				[
+					...getAllowedPlannerWrapperTools({
+						stage,
+						step,
+						broken: flags.broken,
+						requiresUserDecision: flags.requiresUserDecision,
+						requiresCompact: false,
+						debugArtifactsDir: "/tmp/planner-debug",
+					}),
+				].sort();
+			const baseline = JSON.stringify(setFor("recovery", "read_state"));
+			for (const [stage, stepList] of STEPS) {
+				for (const step of stepList) {
+					const set = setFor(stage, step);
+					if (stage === "recovery" && step === "repair_or_resume") {
+						expect(set).toContain("planner_elenchus_check");
+						expect(
+							JSON.stringify(
+								set.filter((tool) => tool !== "planner_elenchus_check"),
+							),
+						).toEqual(baseline);
+						continue;
+					}
+					expect(JSON.stringify(set)).toEqual(baseline);
+				}
 			}
 		});
 	}

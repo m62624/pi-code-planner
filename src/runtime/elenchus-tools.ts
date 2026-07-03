@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { errorMessage } from "../errors";
 import { isPathInsideOrEqual } from "../path-utils";
+import { syncVrfTemplatesToPlan } from "../vrf/manager";
 import { runElenchusCheck } from "./elenchus-engine";
 import {
 	checkPlannerOrchestratorToolAllowed,
@@ -35,6 +36,7 @@ type ElenchusParams =
 			name: string;
 			program: string;
 			format: "json" | "human";
+			values: Record<string, boolean> | undefined;
 	  }
 	| { resolution: "not_applicable"; name: string; reason: string };
 
@@ -46,6 +48,54 @@ const VERDICTS = [
 ] as const;
 
 /**
+ * The last elenchus outcome, recorded per plan so the workflow guard can
+ * refuse to finish a step whose latest check proved a CONFLICT. Every tool
+ * call overwrites it: a later CONSISTENT/WARNING/not_applicable clears a
+ * previous CONFLICT.
+ */
+export interface ElenchusLastCheckRecord {
+	name: string;
+	stage: string;
+	step: string;
+	outcome:
+		| "CONSISTENT"
+		| "WARNING"
+		| "UNDERDETERMINED"
+		| "CONFLICT"
+		| "not_applicable"
+		| "unknown";
+	recordedAt: string;
+}
+
+const LAST_CHECK_FILE = "last-check.json";
+
+export async function readElenchusLastCheck(
+	fs: PlannerToolContext["fs"],
+	elenchusDir: string,
+): Promise<ElenchusLastCheckRecord | null> {
+	const path = join(elenchusDir, LAST_CHECK_FILE);
+	if (!(await fs.exists(path))) return null;
+	try {
+		const parsed = JSON.parse(await fs.readText(path)) as unknown;
+		if (!parsed || typeof parsed !== "object") return null;
+		return parsed as ElenchusLastCheckRecord;
+	} catch {
+		return null;
+	}
+}
+
+async function writeElenchusLastCheck(
+	fs: PlannerToolContext["fs"],
+	elenchusDir: string,
+	record: ElenchusLastCheckRecord,
+): Promise<void> {
+	await fs.writeTextAtomic(
+		join(elenchusDir, LAST_CHECK_FILE),
+		`${JSON.stringify(record, null, "\t")}\n`,
+	);
+}
+
+/**
  * Run the bundled elenchus engine on a model-authored `.vrf` program, or record
  * a terminal `not_applicable` escape. The escape — mirroring doubt_review's
  * `not_a_bug` — is what keeps any step that nudges toward elenchus from ever
@@ -53,8 +103,9 @@ const VERDICTS = [
  * one call with a reason, without running the engine.
  *
  * Gating is generic: the orchestrator allows this tool only at the steps where
- * both guard/tool-policy and stage-behavior list it (consistency_check, the
- * discovery scan, doubt_review, and recovery repair).
+ * both guard/tool-policy and stage-behavior list it (the discovery scan,
+ * planning/consistency_check, execution/write_tdd_plan, execution/contract_check,
+ * finalize/doubt_review, and recovery/repair_or_resume).
  */
 export async function executePlannerElenchusTool(
 	input: PlannerElenchusToolInput,
@@ -74,14 +125,22 @@ export async function executePlannerElenchusTool(
 			);
 		}
 
-		const { planPaths } = orchestrator.preflight.context;
+		const { planPaths, state } = orchestrator.preflight.context;
 		const elenchusDir = planPaths.elenchusDir;
+		const position = { stage: state.stage, step: state.step };
 		const params = parseElenchusParams(input.params);
 
 		if (params.resolution === "not_applicable") {
-			return await recordNotApplicable(input, elenchusDir, params);
+			return await recordNotApplicable(input, elenchusDir, position, params);
 		}
-		return await runCheck(input, elenchusDir, params);
+		// Materialize the premise-template library before every check so a
+		// program's `IMPORT "templates/<name>.vrf"` always resolves, stays inside
+		// the sandbox, and picks up project overrides. Hash-compared: idempotent.
+		await syncVrfTemplatesToPlan(input.fs, {
+			projectPaths: input.projectPaths,
+			planPaths,
+		});
+		return await runCheck(input, elenchusDir, position, params);
 	} catch (error) {
 		return blocked(errorMessage(error));
 	}
@@ -90,6 +149,7 @@ export async function executePlannerElenchusTool(
 async function runCheck(
 	input: PlannerElenchusToolInput,
 	elenchusDir: string,
+	position: { stage: string; step: string },
 	params: Extract<ElenchusParams, { resolution: "checked" }>,
 ): Promise<PlannerElenchusToolResult> {
 	const sourceName = `${params.name}.vrf`;
@@ -111,6 +171,7 @@ async function runCheck(
 		root: sourceName,
 		read,
 		format: params.format,
+		values: params.values,
 	});
 	if (!run.ok) {
 		return blocked(run.reason);
@@ -125,6 +186,13 @@ async function runCheck(
 
 	const verdict = detectVerdict(run.output);
 	const consistent = verdict === "CONSISTENT";
+	await writeElenchusLastCheck(input.fs, elenchusDir, {
+		name: params.name,
+		stage: position.stage,
+		step: position.step,
+		outcome: (verdict as ElenchusLastCheckRecord["outcome"]) ?? "unknown",
+		recordedAt: new Date().toISOString(),
+	});
 	return {
 		status: "applied",
 		toolName: PLANNER_ELENCHUS_TOOL_NAME,
@@ -138,7 +206,9 @@ async function runCheck(
 			"",
 			consistent
 				? "CONSISTENT (exit 0): the modeled constraints hold. Record the conclusion in decisions.md, then call planner_finish_step."
-				: "Not CONSISTENT yet. Read the verdict: add the FACT/NOT it names, pin down an UNDERDETERMINED model, or fix the wrong fact / conflicting premise — then call planner_elenchus_check again. The target before advancing is CONSISTENT; if a contradiction is real, fix the plan/tasks first.",
+				: verdict === "CONFLICT"
+					? "CONFLICT: a proven contradiction. planner_finish_step is blocked for this step until a re-run improves the verdict (or records not_applicable). Apply the drop/flip repair the CORE/RETRACT names — fix the plan or the wrong fact, never delete a valid premise to force green — then call planner_elenchus_check again."
+					: "Not CONSISTENT yet. Read the verdict: add the FACT/NOT it names, pin down an UNDERDETERMINED model, or fix the wrong fact / conflicting premise — then call planner_elenchus_check again. The target before advancing is CONSISTENT; if a contradiction is real, fix the plan/tasks first.",
 			"Call planner_status before choosing the next planner action.",
 		].join("\n"),
 		details: {
@@ -154,6 +224,7 @@ async function runCheck(
 async function recordNotApplicable(
 	input: PlannerElenchusToolInput,
 	elenchusDir: string,
+	position: { stage: string; step: string },
 	params: Extract<ElenchusParams, { resolution: "not_applicable" }>,
 ): Promise<PlannerElenchusToolResult> {
 	const recordPath = join(elenchusDir, `${params.name}.not-applicable.md`);
@@ -164,6 +235,13 @@ async function recordNotApplicable(
 		"",
 	].join("\n");
 	await input.fs.writeTextAtomic(recordPath, content);
+	await writeElenchusLastCheck(input.fs, elenchusDir, {
+		name: params.name,
+		stage: position.stage,
+		step: position.step,
+		outcome: "not_applicable",
+		recordedAt: new Date().toISOString(),
+	});
 	return {
 		status: "applied",
 		toolName: PLANNER_ELENCHUS_TOOL_NAME,
@@ -219,6 +297,7 @@ function parseElenchusParams(value: unknown): ElenchusParams {
 			name,
 			program: requiredString(record, "program"),
 			format: (format as "json" | "human" | undefined) ?? "json",
+			values: optionalValues(record, "values"),
 		};
 	}
 	throw new TypeError(
@@ -239,6 +318,29 @@ function sanitizeName(value: string): string {
 		);
 	}
 	return slug;
+}
+
+function optionalValues(
+	record: Record<string, unknown>,
+	key: string,
+): Record<string, boolean> | undefined {
+	const value = record[key];
+	if (value === undefined || value === null) return undefined;
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		throw new TypeError(
+			`planner_elenchus_check.${key} must be an object of { "port name": true|false }.`,
+		);
+	}
+	const out: Record<string, boolean> = {};
+	for (const [port, bool] of Object.entries(value)) {
+		if (typeof bool !== "boolean") {
+			throw new TypeError(
+				`planner_elenchus_check.${key}["${port}"] must be true or false.`,
+			);
+		}
+		out[port] = bool;
+	}
+	return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function requiredString(record: Record<string, unknown>, key: string): string {

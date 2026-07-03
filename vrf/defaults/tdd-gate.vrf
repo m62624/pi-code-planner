@@ -1,0 +1,83 @@
+// tdd-gate — premise library for execution/write_tdd_plan.
+//
+// WHEN TO USE: before writing tests for a task, prove the TDD plan is complete:
+// every observable behavior has a test, the red step is specified, and special
+// task kinds discharge their extra duties. Skip (not_applicable) only for a
+// task with no testable runtime surface (pure docs/comments/renames).
+//
+// HOW TO USE (your program):
+//   DOMAIN check
+//   IMPORT "templates/tdd-gate.vrf"
+//   FACT tdd_gate.task tdd_ready               // the claim under test
+//   FACT tdd_gate.task tests_written_first     // the TDD commitment
+//   // account for EVERY task kind explicitly — FACT or NOT, never omit:
+//   FACT tdd_gate.task is bugfix
+//   NOT  tdd_gate.task touches_edge_cases
+//   NOT  tdd_gate.task touches_concurrency
+//   CHECK BIDIRECTIONAL
+// Bind ports via `values`: {"behaviors_enumerated": true, ...}. If a duty
+// atom stays blocked (e.g. `task has_repro_test`), assert the matching FACT
+// only once it is really true — the WARNING is the to-do list.
+DOMAIN tdd_gate
+
+// -- external ports (bind via `values`) --
+VAR behaviors_enumerated     // observable behaviors listed in tdd.md
+VAR every_behavior_has_test  // each behavior maps to a named concrete test
+VAR red_step_specified       // how each test fails BEFORE the implementation
+VAR tests_use_public_surface // tests drive the public contract, not internals
+
+// -- the readiness claim --
+PREMISE tdd_needs_behaviors:
+    WHEN task tdd_ready
+    THEN behaviors_enumerated
+PREMISE tdd_needs_test_mapping:
+    WHEN task tdd_ready
+    THEN every_behavior_has_test
+PREMISE tdd_needs_red_step:
+    WHEN task tdd_ready
+    THEN red_step_specified
+PREMISE tdd_needs_public_surface:
+    WHEN task tdd_ready
+    THEN tests_use_public_surface
+
+// -- task kinds create extra duties; closing rules discharge absent kinds --
+RULE bugfix_needs_repro:
+    WHEN task is bugfix
+    THEN task needs_repro_test
+RULE non_bugfix_no_repro:
+    WHEN NOT task is bugfix
+    THEN NOT task needs_repro_test
+PREMISE repro_gate:
+    WHEN task needs_repro_test
+    THEN task has_repro_test
+
+RULE edge_cases_need_tests:
+    WHEN task touches_edge_cases
+    THEN task needs_edge_tests
+RULE no_edge_cases_no_tests:
+    WHEN NOT task touches_edge_cases
+    THEN NOT task needs_edge_tests
+PREMISE edge_test_gate:
+    WHEN task needs_edge_tests
+    THEN task has_edge_tests
+
+RULE concurrency_needs_race_test:
+    WHEN task touches_concurrency
+    THEN task needs_race_coverage
+RULE no_concurrency_no_race_test:
+    WHEN NOT task touches_concurrency
+    THEN NOT task needs_race_coverage
+PREMISE race_gate:
+    WHEN task needs_race_coverage
+    THEN task has_race_coverage
+
+// -- a test either precedes the implementation or it is not TDD --
+RULE test_first_excludes_after:
+    WHEN task tests_written_first
+    THEN NOT task tests_written_after
+RULE test_after_excludes_first:
+    WHEN task tests_written_after
+    THEN NOT task tests_written_first
+PREMISE tdd_means_test_first:
+    WHEN task tdd_ready
+    THEN task tests_written_first

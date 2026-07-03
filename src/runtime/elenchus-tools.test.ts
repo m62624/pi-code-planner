@@ -127,7 +127,7 @@ describe("planner elenchus tool", () => {
 
 		expect(result.status).toBe("applied");
 		expect(result.details?.verdict).toBe("CONFLICT");
-		expect(result.text).toContain("Not CONSISTENT yet");
+		expect(result.text).toContain("planner_finish_step is blocked");
 		// Source and verdict are persisted under the plan's elenchus dir.
 		const source = await setup.fs.readText(
 			join(setup.planPaths.elenchusDir, "owner-check.vrf"),
@@ -189,6 +189,97 @@ describe("planner elenchus tool", () => {
 		});
 		expect(result.status).toBe("applied");
 		expect(result.details?.verdict).toBe("CONFLICT");
+	});
+
+	it("binds VAR ports through the values parameter", async () => {
+		const setup = await createSetup();
+		const program = [
+			"DOMAIN deploy",
+			"VAR tests_green",
+			"VAR db_migrated DEFAULT false",
+			"PREMISE gate:",
+			"    WHEN tests_green",
+			"    AND  db_migrated",
+			"    THEN ship a",
+			"NOT ship a",
+			"CHECK",
+		].join("\n");
+		// Ports unset: the gate cannot fire, so the deny stands (no conflict).
+		const open = await executePlannerElenchusTool({
+			fs: setup.fs,
+			git,
+			projectPaths: setup.projectPaths,
+			params: { name: "gate-open", resolution: "checked", program },
+		});
+		expect(open.status).toBe("applied");
+		expect(open.details?.verdict).not.toBe("CONFLICT");
+
+		// Both ports supplied true: the gate fires and clashes with `NOT ship a`.
+		const fired = await executePlannerElenchusTool({
+			fs: setup.fs,
+			git,
+			projectPaths: setup.projectPaths,
+			params: {
+				name: "gate-fired",
+				resolution: "checked",
+				program,
+				values: { tests_green: true, db_migrated: true },
+			},
+		});
+		expect(fired.status).toBe("applied");
+		expect(fired.details?.verdict).toBe("CONFLICT");
+	});
+
+	it("blocks a non-boolean values entry", async () => {
+		const setup = await createSetup();
+		const result = await executePlannerElenchusTool({
+			fs: setup.fs,
+			git,
+			projectPaths: setup.projectPaths,
+			params: {
+				name: "bad-values",
+				resolution: "checked",
+				program: "DOMAIN d\nVAR p\nFACT x a\nCHECK x",
+				values: { p: "yes" },
+			},
+		});
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("values");
+	});
+
+	it("auto-syncs the template library so IMPORT templates/... resolves", async () => {
+		const setup = await createSetup();
+		const result = await executePlannerElenchusTool({
+			fs: setup.fs,
+			git,
+			projectPaths: setup.projectPaths,
+			params: {
+				name: "plan-gate",
+				resolution: "checked",
+				program: [
+					"DOMAIN check",
+					'IMPORT "templates/plan-consistency.vrf"',
+					"FACT plan_consistency.plan is_ready",
+					"NOT  plan_consistency.plan has_dependencies",
+					"NOT  plan_consistency.plan touches_public_api",
+					"CHECK",
+				].join("\n"),
+				values: {
+					goal_approved: true,
+					tasks_cover_goal: true,
+					every_task_has_file: true,
+					no_open_questions: true,
+				},
+			},
+		});
+		expect(result.status).toBe("applied");
+		expect(result.details?.verdict).toBe("CONSISTENT");
+		// The library landed inside the plan's elenchus dir (sandbox intact).
+		expect(
+			await setup.fs.exists(
+				join(setup.planPaths.elenchusDir, "templates", "plan-consistency.vrf"),
+			),
+		).toBe(true);
 	});
 
 	it("records the not_applicable escape without running the engine", async () => {

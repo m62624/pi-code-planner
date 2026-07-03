@@ -1,0 +1,70 @@
+// ship-gate — premise library for the finalize stage (doubt_review /
+// verify_plan_branch): is this plan branch actually deliverable?
+//
+// WHEN TO USE: before declaring the plan done — the aggregated branch is about
+// to be presented or merged. Skip (not_applicable) only if the plan was
+// abandoned and nothing ships.
+//
+// HOW TO USE (your program):
+//   DOMAIN check
+//   IMPORT "templates/ship-gate.vrf"
+//   FACT ship_gate.plan deliverable            // the claim under test
+//   // account for EVERY hazard explicitly — FACT or NOT, never omit:
+//   NOT  ship_gate.plan has_schema_migration
+//   FACT ship_gate.plan touched_public_api
+//   FACT ship_gate.plan changed_dependencies
+//   CHECK BIDIRECTIONAL
+// Bind ports via `values`: {"all_tasks_merged": true, ...}. A port you cannot
+// honestly set true IS the finding — fix the branch, not the program.
+DOMAIN ship_gate
+
+// -- external ports (bind via `values`) --
+VAR all_tasks_merged     // every task branch landed on the plan branch
+VAR final_tests_green    // the full suite passed on the aggregated branch
+VAR worktree_clean       // no uncommitted changes in the plan worktree
+VAR summary_written      // the final summary reflects what was really done
+
+// -- the claim: the plan is deliverable --
+PREMISE ship_needs_merges:
+    WHEN plan deliverable
+    THEN all_tasks_merged
+PREMISE ship_needs_green_tests:
+    WHEN plan deliverable
+    THEN final_tests_green
+PREMISE ship_needs_clean_tree:
+    WHEN plan deliverable
+    THEN worktree_clean
+PREMISE ship_needs_summary:
+    WHEN plan deliverable
+    THEN summary_written
+
+// -- hazards create duties; closing rules discharge absent hazards --
+RULE migration_needs_note:
+    WHEN plan has_schema_migration
+    THEN plan needs_migration_note
+RULE no_migration_no_note:
+    WHEN NOT plan has_schema_migration
+    THEN NOT plan needs_migration_note
+PREMISE migration_note_gate:
+    WHEN plan needs_migration_note
+    THEN plan migration_note_written
+
+RULE api_change_needs_record:
+    WHEN plan touched_public_api
+    THEN plan needs_api_record
+RULE no_api_change_no_record:
+    WHEN NOT plan touched_public_api
+    THEN NOT plan needs_api_record
+PREMISE api_record_gate:
+    WHEN plan needs_api_record
+    THEN plan api_change_recorded
+
+RULE deps_change_needs_lockfile:
+    WHEN plan changed_dependencies
+    THEN plan needs_lockfile_commit
+RULE no_deps_change_no_lockfile:
+    WHEN NOT plan changed_dependencies
+    THEN NOT plan needs_lockfile_commit
+PREMISE lockfile_gate:
+    WHEN plan needs_lockfile_commit
+    THEN plan lockfile_committed

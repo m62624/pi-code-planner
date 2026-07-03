@@ -182,6 +182,58 @@ describe("renderTranscript", () => {
 		}
 	});
 
+	it("never truncates a long non-collapsible assistant message", () => {
+		// A streaming answer far past the old 40-wrapped-line cap: every line
+		// must exist in the transcript so tail-following keeps showing new text.
+		const lineCount = 120;
+		const text = Array.from(
+			{ length: lineCount },
+			(_, i) => `answer line ${i}`,
+		).join("\n");
+		const long: ChatRow[] = [
+			{ role: "assistant", text, collapsible: false, key: "a1" },
+		];
+		const result = renderTranscript(
+			long,
+			baseOptions({ height: 5, atBottom: true }),
+			palette,
+		);
+		expect(result.totalLines).toBe(lineCount);
+		// Tail-following shows the newest lines, not a frozen first chunk.
+		const tail = result.lines.join("\n");
+		expect(tail).toContain(`answer line ${lineCount - 1}`);
+
+		// The full content is reachable by scrolling.
+		const middle = renderTranscript(
+			long,
+			baseOptions({ height: 5, atBottom: false, topLine: 60 }),
+			palette,
+		);
+		expect(middle.lines.join("\n")).toContain("answer line 60");
+	});
+
+	it("still caps expanded collapsible rows at the expanded limit", () => {
+		const text = Array.from({ length: 80 }, (_, i) => `tool line ${i}`).join(
+			"\n",
+		);
+		const rows: ChatRow[] = [
+			{
+				role: "tool",
+				label: "planner_status",
+				text,
+				collapsible: true,
+				key: "t1",
+			},
+		];
+		const expanded = renderTranscript(
+			rows,
+			baseOptions({ height: 100, expanded: new Set(["t1"]) }),
+			palette,
+		);
+		// 40 wrapped lines max for an expanded collapsible row.
+		expect(expanded.totalLines).toBe(40);
+	});
+
 	it("shows an empty-state hint when there are no rows", () => {
 		const result = renderTranscript([], baseOptions(), palette);
 		expect(result.lines.join("\n")).toContain("No conversation yet");

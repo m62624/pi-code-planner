@@ -20,6 +20,7 @@ import {
 	validateDiscoveryContractRouting,
 } from "./contracts";
 import { validateDoubtReviewMarkdown } from "./doubt-review";
+import { readElenchusLastCheck } from "./elenchus-tools";
 import type { PlannerGitReality } from "./git-state-sync";
 import {
 	decidePlannerLifecycleNext,
@@ -259,6 +260,24 @@ async function validateWorkflowExit(input: {
 		return null;
 	}
 	const { state } = input.orchestrator.preflight.context;
+	{
+		// An elenchus CONFLICT is a proven contradiction: the step may not finish
+		// on it. Every planner_elenchus_check call overwrites the record, so
+		// re-running to CONSISTENT/WARNING — or recording not_applicable — clears
+		// the block. Checks from earlier steps never block a later step.
+		const lastCheck = await readElenchusLastCheck(
+			input.fs,
+			input.orchestrator.preflight.context.planPaths.elenchusDir,
+		);
+		if (
+			lastCheck &&
+			lastCheck.stage === state.stage &&
+			lastCheck.step === state.step &&
+			lastCheck.outcome === "CONFLICT"
+		) {
+			return `The latest elenchus check "${lastCheck.name}" for this step ended in CONFLICT — a proven contradiction in the modeled facts/premises. Apply the drop/flip repair its CORE/RETRACT names (fix the plan or the wrong fact, not the check), re-run planner_elenchus_check until the verdict improves, then finish the step. If the check itself modeled the wrong thing, re-run it as not_applicable with a reason.`;
+		}
+	}
 	if (state.stage === "finalize" || state.stage === "done") {
 		const cleanBlock = validateCleanWorktreeForFinalizeOrDone(
 			input.orchestrator.preflight.gitReality,

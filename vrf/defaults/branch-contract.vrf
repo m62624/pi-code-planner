@@ -1,0 +1,73 @@
+// branch-contract — premise library for execution/contract_check.
+//
+// WHEN TO USE: the implementation exists and you must prove it honors the
+// task's contract: every branch of the changed logic is covered, error paths
+// are handled, and a contract change was propagated. Skip (not_applicable)
+// only if the task changed no branching logic and no public surface.
+//
+// HOW TO USE (your program):
+//   DOMAIN check
+//   IMPORT "templates/branch-contract.vrf"
+//   FACT branch_contract.impl matches_contract   // the claim under test
+//   // account for the hazard explicitly — FACT or NOT, never omit:
+//   NOT  branch_contract.impl changes_contract
+//   CHECK BIDIRECTIONAL
+// Bind ports via `values`: {"all_branches_tested": true, ...}.
+//
+// INLINE RECIPE — encode the changed branching itself (copy into YOUR file,
+// one pair of rules + one EXCLUSIVE per condition; from the elenchus skill):
+//   FACT input over_limit                  // the condition as a boolean atom
+//   RULE pick_reject:
+//       WHEN input over_limit
+//       THEN input takes reject_path
+//   RULE pick_accept:
+//       WHEN NOT input over_limit
+//       THEN input takes accept_path
+//   PREMISE one_path:
+//       EXCLUSIVE
+//           input takes reject_path
+//           input takes accept_path
+// If both paths can hold at once, or a path is unreachable, the engine says so.
+DOMAIN branch_contract
+
+// -- external ports (bind via `values`) --
+VAR all_branches_tested   // every changed branch has a test that takes it
+VAR error_paths_handled   // failure/timeout/invalid-input paths are handled
+VAR no_dead_branch        // no changed branch is unreachable
+VAR contract_tests_green  // the contract-level tests currently pass
+
+// -- the claim: implementation matches the contract --
+PREMISE contract_needs_branch_tests:
+    WHEN impl matches_contract
+    THEN all_branches_tested
+PREMISE contract_needs_error_paths:
+    WHEN impl matches_contract
+    THEN error_paths_handled
+PREMISE contract_needs_live_branches:
+    WHEN impl matches_contract
+    THEN no_dead_branch
+PREMISE contract_needs_green_tests:
+    WHEN impl matches_contract
+    THEN contract_tests_green
+
+// -- changing the contract creates propagation duties; closing rules
+//    discharge them when the contract did not move --
+RULE contract_change_needs_update:
+    WHEN impl changes_contract
+    THEN impl needs_contract_update
+RULE no_change_no_update:
+    WHEN NOT impl changes_contract
+    THEN NOT impl needs_contract_update
+PREMISE contract_update_gate:
+    WHEN impl needs_contract_update
+    THEN impl contract_files_updated
+
+RULE contract_change_needs_callers:
+    WHEN impl changes_contract
+    THEN impl needs_caller_review
+RULE no_change_no_caller_review:
+    WHEN NOT impl changes_contract
+    THEN NOT impl needs_caller_review
+PREMISE caller_review_gate:
+    WHEN impl needs_caller_review
+    THEN impl callers_updated

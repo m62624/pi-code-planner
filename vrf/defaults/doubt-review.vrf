@@ -1,0 +1,70 @@
+// doubt-review — premise library for finalize/doubt_review.
+//
+// WHEN TO USE: the adversarial pass over the finished plan branch. Model each
+// suspicion explicitly and let the engine keep you honest: a bug is only
+// proven when reproduced, and "reviewed" is a claim with prerequisites.
+// Skip (not_applicable) only if the plan produced no code to doubt.
+//
+// HOW TO USE (your program):
+//   DOMAIN check
+//   IMPORT "templates/doubt-review.vrf"
+//   FACT doubt_review.review is_complete       // the claim under test
+//   // state the outcome of the hunt — exactly one of:
+//   NOT  doubt_review.bug proven               // nothing survived probing
+//   // ...or, when a bug DID survive:
+//   //   FACT doubt_review.bug reproducible
+//   //   FACT doubt_review.bug proven
+//   //   FACT doubt_review.bug fixed_in_branch   // or recorded_as_followup
+//   CHECK BIDIRECTIONAL
+// Bind ports via `values`: {"risky_areas_probed": true, ...}.
+//
+// INLINE RECIPES (copy into YOUR file):
+//   // explore a hypothesis without committing (engine backtracks for you):
+//   ASSUME cache is stale
+//   ASSUME NOT cache invalidated_on_write
+//   // separate "the code claims" from "I verified":
+//   BELIEVES author retries are_bounded     // false belief -> reported, not fatal
+//   KNOWS reviewer tests are_green          // knowing a falsehood -> CONFLICT
+//   // probe a candidate conclusion before writing it as FACT:
+//   TRY leak is_in_worker
+DOMAIN doubt_review
+
+// -- external ports (bind via `values`) --
+VAR risky_areas_probed     // each risky area got a dedicated probe
+VAR claims_cross_checked   // summary claims were checked against the diff
+VAR tests_actually_run     // the final test run happened (not assumed)
+VAR no_unrecorded_doubt    // every remaining doubt is written down
+
+// -- the claim: the review is complete --
+PREMISE review_needs_probes:
+    WHEN review is_complete
+    THEN risky_areas_probed
+PREMISE review_needs_cross_check:
+    WHEN review is_complete
+    THEN claims_cross_checked
+PREMISE review_needs_test_run:
+    WHEN review is_complete
+    THEN tests_actually_run
+PREMISE review_needs_doubts_recorded:
+    WHEN review is_complete
+    THEN no_unrecorded_doubt
+
+// -- epistemic discipline: an unreproduced bug is not a proven bug --
+RULE unreproduced_is_unproven:
+    WHEN NOT bug reproducible
+    THEN NOT bug proven
+PREMISE proven_needs_repro:
+    WHEN bug proven
+    THEN bug reproducible
+
+// -- a found bug creates a duty: fix it or file it, never both dropped --
+RULE proven_bug_needs_disposition:
+    WHEN bug proven
+    THEN bug needs_disposition
+RULE no_bug_no_disposition:
+    WHEN NOT bug proven
+    THEN NOT bug needs_disposition
+PREMISE disposition_gate:
+    WHEN bug needs_disposition
+    THEN bug fixed_in_branch
+    OR   bug recorded_as_followup

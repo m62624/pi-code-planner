@@ -9,6 +9,7 @@ import type {
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerFs } from "../storage/fs";
 import type { PlannerStage, PlannerStep } from "../storage/schema";
+import { describeRecommendedVrfTemplates } from "../vrf/routing";
 import { formatPlannerContractsStatus } from "./contracts";
 import { formatDebugStatusLines } from "./debug-tools";
 import { extractVerificationProtocolCommands } from "./doubt-review";
@@ -201,6 +202,7 @@ export const PLANNER_STEP_RULES = {
 			"If planner_contract_upsert changes AGENTS.md files, commit them through planner_git_commit before finishing discovery/scan_project_structure.",
 			"If commands are missing or the project is empty, record unknowns in ## Verification Protocol for discovery/write_questions.",
 			"Record in discovery.md any rule or invariant the existing code enforces that the change must not break. Default to mechanically verifying it with planner_elenchus_check (see the elenchus skill) rather than trusting your reading; record resolution=not_applicable with a one-line reason only when you found no such rule.",
+			`For the discovery check itself, ${describeRecommendedVrfTemplates("discovery", "scan_project_structure") ?? ""}`,
 		],
 		allowedNow: [
 			"Use planner_contract_scan/route/read, read-only shell commands, focused source reads, discovery.md, and planner_elenchus_check.",
@@ -329,7 +331,9 @@ export const PLANNER_STEP_RULES = {
 			"Mechanically check the plan's interacting constraints with elenchus before execution.",
 		requiredActions: [
 			"Default to modeling the plan's facts and the conditions it depends on as a .vrf program and calling planner_elenchus_check, then iterating until the verdict is CONSISTENT — mechanically verify the plan instead of trusting your own reasoning (see the elenchus skill for how to model it).",
+			describeRecommendedVrfTemplates("planning", "consistency_check") ?? "",
 			"Call planner_elenchus_check with resolution=not_applicable and a one-line reason only when the plan has no conditional logic to verify (purely linear/CRUD work). This is the narrow escape; it never traps the flow.",
+			"A CONFLICT verdict blocks planner_finish_step for this step until a re-run improves it (or records not_applicable): apply the drop/flip repair the CORE/RETRACT names - fix the plan or the wrong fact, never delete a valid premise to force green.",
 		],
 		allowedNow: [
 			"Use planner_elenchus_check (run a check or record not_applicable). Re-read planner artifacts and contract chains.",
@@ -380,6 +384,7 @@ export const PLANNER_STEP_RULES = {
 		requiredActions: [
 			"Read task.md and relevant source files, then write tdd.md with failing test strategy and checks.",
 			"Default to mechanically verifying with planner_elenchus_check that the cases your test plan claims to cover are complete and non-contradictory, before writing tests (see the elenchus skill). Record resolution=not_applicable with a one-line reason only when the task has no conditional behavior to cover.",
+			describeRecommendedVrfTemplates("execution", "write_tdd_plan") ?? "",
 		],
 		allowedNow: [
 			"Write TDD planner artifacts, inspect discovery context/source for test design, and use planner_elenchus_check.",
@@ -449,6 +454,8 @@ export const PLANNER_STEP_RULES = {
 			"If planner_contract_check reports an update is needed, call planner_contract_upsert for the nearest meaningful AGENTS.md domain and commit that change if the worktree becomes dirty.",
 			"Use AGENTS.md as repository-owned routing memory. Add durable domain rules, parent backlinks, child index entries, read-first hints, stable contracts, and domain details that help future agents avoid reading irrelevant code.",
 			"Do not add overly specific task trivia to AGENTS.md. Record one-off task details in tdd.md.",
+			"Default to mechanically checking the implementation against its contract with planner_elenchus_check: model the changed branching, error paths, and contract-propagation duties (see the elenchus skill). Record resolution=not_applicable with a one-line reason only when the task changed no branching logic and no public surface.",
+			describeRecommendedVrfTemplates("execution", "contract_check") ?? "",
 		],
 		allowedNow: [
 			"Inspect the task diff, read/update AGENTS.md through planner_contract tools, and commit contract documentation changes.",
@@ -609,6 +616,7 @@ export const PLANNER_STEP_RULES = {
 			"If a required command/check failed when you ran it, create a proven_bug (reproduced) or needs_probe finding that names that command. If a required command could not be run here (not_run/unknown — e.g. the tool is not installed), name it in a finding and resolve it: not_a_bug with evidence of why it is not actionable locally (e.g. it runs in CI), or needs_probe to defer it. Do not continue to final_summary while such a command is unaddressed.",
 			"Treat each possible error like TDD for a suspected problem: prove it with a focused failing test/command, exact code-path proof, or exact spec contradiction; otherwise disprove it or mark needs_probe.",
 			"As the final logical pass, default to mechanically re-checking the conditions the finished result depends on with planner_elenchus_check, instead of trusting the reasoning chain from earlier steps (see the elenchus skill). Record resolution=not_applicable with a one-line reason only when there is no conditional logic to verify.",
+			describeRecommendedVrfTemplates("finalize", "doubt_review") ?? "",
 			"Use planner_doubt_review to write verify.md. Do not hand-write weak doubt notes.",
 			"Audit AGENTS.md local contracts: check stale guidance, missing parent backlinks, wrong child routing, or missing durable domain details. Use planner_contract_check/upsert when needed.",
 			"Before leaving this step, resolve every needs_probe: run the probe if you can and record the outcome; if it cannot be run in this environment (tool/dependency missing), close it as not_a_bug with evidence of why it is not actionable locally instead of leaving it pending. Never silently drop a probe.",
@@ -824,6 +832,8 @@ export const PLANNER_STEP_RULES = {
 	repair_or_resume: stepRule("recovery", "repair_or_resume", {
 		objective: "Repair safely or resume normal flow.",
 		requiredActions: [
+			"Before applying a repair, default to proving the decision sound with planner_elenchus_check: pin the cause, settle destructive vs non-destructive, and gate destructive actions on real user approval (see the elenchus skill). Record resolution=not_applicable with a one-line reason only when recovery found nothing to repair.",
+			describeRecommendedVrfTemplates("recovery", "repair_or_resume") ?? "",
 			"Apply safe recovery or resume into an explicit valid non-recovery stage/step.",
 		],
 		allowedNow: ["Recovery accept/resume tools and approved repair actions."],
