@@ -1,4 +1,5 @@
 import {
+	DEFAULT_COMPACTION_SETTINGS,
 	type ExtensionAPI,
 	type ExtensionCommandContext,
 	type ExtensionContext,
@@ -6,7 +7,11 @@ import {
 	isToolCallEventType,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import { DEFAULT_LANGUAGE, MS_PER_MINUTE } from "./constants";
+import {
+	DEFAULT_LANGUAGE,
+	MS_PER_MINUTE,
+	PLANNER_COMPACT_RESERVE_MULTIPLIER,
+} from "./constants";
 import { errorMessage, gitErrorMessage } from "./errors";
 import { probeGitAvailability } from "./git/git-availability";
 import { NodeGitRunner } from "./git/node-runner";
@@ -53,13 +58,19 @@ import {
 import {
 	buildPlannerCompactInstructionBundle,
 	buildPlannerPostCompactMessage,
+	clearPlannerCompactionInFlight,
 	clearPlannerControlledCompact,
 	collectAutoCompactInstructionSections,
 	consumePlannerControlledCompact,
 	createPlannerCompactRuntimeState,
+	decidePlannerCompactionRun,
 	enqueuePlannerPostCompactMessage,
 	formatPlannerCompactFailure,
+	formatPlannerCompactSkipped,
+	isPlannerCompactNothingToCompactError,
+	markPlannerCompactionInFlight,
 	markPlannerControlledCompactStarted,
+	type PlannerCompactionSkipReason,
 	type PlannerCompactRuntimeState,
 } from "./runtime/compact";
 import {
@@ -284,8 +295,8 @@ const CREATE_PLAN_TOOL_PARAMETERS = {
 } as const;
 
 const FOLLOW_UP_MESSAGE_OPTIONS = {
-	streamingBehavior: "followUp",
-} as unknown as { deliverAs: "followUp" };
+	deliverAs: "followUp",
+} as const;
 
 const IDLE_WATCHDOG_POLL_MS = 30_000;
 
@@ -1362,7 +1373,7 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 	registerPlannerDashboard(pi);
 	registerPlannerCommands(pi);
 	registerPlannerTools(pi, compactRuntime);
-	registerPlannerIdleWatchdog(pi, idleRuntime);
+	registerPlannerIdleWatchdog(pi, idleRuntime, compactRuntime);
 	registerPlannerRuntimeTimer(pi, timerRuntime);
 	registerPlannerWorkspaceAutoOpen(pi);
 	registerPlannerBuiltinToolGuard(pi);
@@ -3011,6 +3022,7 @@ function registerPlannerTools(
 					params,
 				});
 				const compact = await maybeStartPlannerControlledCompact({
+					pi,
 					ctx,
 					fs,
 					git,
@@ -3201,6 +3213,9 @@ function registerPlannerCompactEvents(
 			clearInterval(compactTimer);
 			compactTimer = null;
 		}
+		// The compaction is no longer running: clear the in-flight flag so the
+		// idle watchdog can rescue the boundary if it never resolved.
+		clearPlannerCompactionInFlight(compactRuntime);
 		try {
 			ctx.ui.setStatus(PLANNER_COMPACT_STATUS_KEY, undefined);
 		} catch {
@@ -3209,6 +3224,10 @@ function registerPlannerCompactEvents(
 	};
 
 	pi.on("session_before_compact", async (_event, ctx) => {
+		// A real compaction is starting (preparation succeeded — this event never
+		// fires for the "nothing to compact" throw), so mark it in-flight to keep
+		// the watchdog from nudging mid-compaction.
+		markPlannerCompactionInFlight(compactRuntime);
 		if (compactTimer) clearInterval(compactTimer);
 		let frame = 0;
 		const renderFrame = () => {
@@ -3278,6 +3297,7 @@ function registerPlannerCompactEvents(
 function registerPlannerIdleWatchdog(
 	pi: ExtensionAPI,
 	runtime: PlannerIdleRuntimeState,
+	compactRuntime: PlannerCompactRuntimeState,
 ): void {
 	pi.on("session_start", async (_event, ctx) => {
 		runtime.latestCwd = ctx.cwd;
@@ -3290,7 +3310,7 @@ function registerPlannerIdleWatchdog(
 		return;
 	}
 	runtime.timer = setInterval(() => {
-		void runPlannerIdleWatchdogTick(pi, runtime);
+		void runPlannerIdleWatchdogTick(pi, runtime, compactRuntime);
 	}, IDLE_WATCHDOG_POLL_MS);
 	runtime.timer.unref?.();
 }
@@ -3298,6 +3318,7 @@ function registerPlannerIdleWatchdog(
 async function runPlannerIdleWatchdogTick(
 	pi: ExtensionAPI,
 	runtime: PlannerIdleRuntimeState,
+	compactRuntime: PlannerCompactRuntimeState,
 ): Promise<void> {
 	if (!runtime.latestCwd || runtime.checking) {
 		return;
@@ -3319,6 +3340,7 @@ async function runPlannerIdleWatchdogTick(
 			state: context.state,
 			settings: settings.effective.idle,
 			now,
+			compactionInFlight: compactRuntime.compactionInFlight,
 		});
 		if (decision.action === "initialize") {
 			await updatePlanState(fs, context.planPaths, (state) =>
@@ -3470,6 +3492,7 @@ function extractModelId(entry: unknown): string | null {
 }
 
 async function maybeStartPlannerControlledCompact(input: {
+	pi: ExtensionAPI;
 	ctx: ExtensionContext;
 	fs: ReturnType<typeof createNodeFs>;
 	git: NodeGitRunner;
@@ -3483,6 +3506,25 @@ async function maybeStartPlannerControlledCompact(input: {
 		input.transitionStatus !== "applied"
 	) {
 		return null;
+	}
+
+	// A + D: decide whether compaction is worth running at all before touching
+	// the Pi compact API. Skip (and resolve the boundary) when context is below
+	// our reserve-window floor — which sits *below* Pi's own auto-compaction
+	// floor so we never race it — or when Pi would throw "Nothing to compact".
+	const usage = input.ctx.getContextUsage();
+	const decision = decidePlannerCompactionRun({
+		tokens: usage?.tokens ?? null,
+		contextWindow: usage?.contextWindow ?? 0,
+		reserveTokens: DEFAULT_COMPACTION_SETTINGS.reserveTokens ?? 16384,
+		reserveMultiplier: PLANNER_COMPACT_RESERVE_MULTIPLIER,
+	});
+	if (!decision.run) {
+		await resolvePlannerCompactBoundary(input);
+		return {
+			text: formatPlannerCompactSkipped(compactSkipReasonText(decision.reason)),
+			customInstructions: "",
+		};
 	}
 
 	const preflight = await runPlannerPreflight({
@@ -3504,9 +3546,14 @@ async function maybeStartPlannerControlledCompact(input: {
 			onComplete: () => {
 				input.ctx.ui.notify("Planner compact completed.", "info");
 			},
+			// B: the compaction threw (settings drift, or a future SDK error).
+			// Never leave the boundary pending — resolve it so the session cannot
+			// deadlock, and nudge the model to continue. Known "nothing to
+			// compact" is benign (info); anything else surfaces as an error.
 			onError: (error) => {
 				clearPlannerControlledCompact(input.compactRuntime);
-				input.ctx.ui.notify(formatPlannerCompactFailure(error), "error");
+				clearPlannerCompactionInFlight(input.compactRuntime);
+				void handlePlannerCompactError({ ...input, error });
 			},
 		});
 	}, 0);
@@ -3515,6 +3562,71 @@ async function maybeStartPlannerControlledCompact(input: {
 		text: "Planner-controlled compact was requested through the Pi compact API. Do not continue until compaction finishes; then call planner_complete_compact followed by planner_status.",
 		customInstructions: bundle.text,
 	};
+}
+
+function compactSkipReasonText(
+	reason: PlannerCompactionSkipReason | null,
+): string {
+	switch (reason) {
+		case "below_threshold":
+			return "context below the compaction threshold";
+		default:
+			return "not needed";
+	}
+}
+
+/**
+ * Resolve a pending compact boundary through the normal state-machine path,
+ * without running an LLM compaction. Returns true when the boundary is (now)
+ * resolved — including the race where the model already resolved it itself.
+ */
+async function resolvePlannerCompactBoundary(input: {
+	fs: ReturnType<typeof createNodeFs>;
+	git: NodeGitRunner;
+	projectPaths: ProjectStoragePaths;
+}): Promise<boolean> {
+	try {
+		const completion = await executePlannerWorkflowTool({
+			fs: input.fs,
+			git: input.git,
+			projectPaths: input.projectPaths,
+			toolName: "planner_complete_compact",
+			params: {},
+		});
+		if (completion.result.status === "applied") {
+			return true;
+		}
+		return (
+			completion.result.status === "blocked" &&
+			completion.result.stateMachineErrorCode === "compact_not_required"
+		);
+	} catch {
+		return false;
+	}
+}
+
+async function handlePlannerCompactError(input: {
+	pi: ExtensionAPI;
+	ctx: ExtensionContext;
+	fs: ReturnType<typeof createNodeFs>;
+	git: NodeGitRunner;
+	projectPaths: ProjectStoragePaths;
+	error: Error;
+}): Promise<void> {
+	const resolved = await resolvePlannerCompactBoundary(input);
+	const benign = isPlannerCompactNothingToCompactError(input.error);
+	input.ctx.ui.notify(
+		formatPlannerCompactFailure(input.error),
+		benign ? "info" : "error",
+	);
+	if (resolved) {
+		input.pi.sendUserMessage(
+			formatPlannerCompactSkipped(
+				benign ? "session too small to compact" : "compaction failed",
+			),
+			FOLLOW_UP_MESSAGE_OPTIONS,
+		);
+	}
 }
 
 async function maybeStartPlannerStuckCompact(input: {

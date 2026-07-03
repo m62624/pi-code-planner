@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { PLANNER_COMPACT_RESERVE_MULTIPLIER } from "../constants";
 import { syncInstructionFiles } from "../instructions/manager";
 import { createInstructionPaths } from "../instructions/paths";
 import {
@@ -12,13 +13,18 @@ import { MockPlannerFs } from "../test/mock-fs";
 import {
 	buildPlannerCompactInstructionBundle,
 	buildPlannerPostCompactMessage,
+	clearPlannerCompactionInFlight,
 	clearPlannerControlledCompact,
 	collectAutoCompactInstructionSections,
 	consumePlannerControlledCompact,
 	createPlannerCompactRuntimeState,
+	decidePlannerCompactionRun,
 	enqueuePlannerPostCompactMessage,
 	formatPlannerCompactFailure,
+	formatPlannerCompactSkipped,
+	isPlannerCompactNothingToCompactError,
 	isPlannerCompactTimeoutError,
+	markPlannerCompactionInFlight,
 	markPlannerControlledCompactStarted,
 	PLANNER_COMPACT_MARKER,
 	PLANNER_SYSTEM_INSTRUCTIONS_HEADER,
@@ -87,7 +93,7 @@ describe("planner compact runtime", () => {
 	it("queues post-compact instructions behind pending user messages", () => {
 		const calls: Array<{
 			message: string;
-			options?: { streamingBehavior: "followUp" };
+			options?: { deliverAs: "followUp" };
 		}> = [];
 
 		expect(
@@ -103,7 +109,7 @@ describe("planner compact runtime", () => {
 		expect(calls).toEqual([
 			{
 				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
-				options: { streamingBehavior: "followUp" },
+				options: { deliverAs: "followUp" },
 			},
 		]);
 	});
@@ -111,7 +117,7 @@ describe("planner compact runtime", () => {
 	it("queues post-compact instructions even when Pi reports idle", () => {
 		const calls: Array<{
 			message: string;
-			options?: { streamingBehavior: "followUp" };
+			options?: { deliverAs: "followUp" };
 		}> = [];
 
 		expect(
@@ -127,7 +133,7 @@ describe("planner compact runtime", () => {
 		expect(calls).toEqual([
 			{
 				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
-				options: { streamingBehavior: "followUp" },
+				options: { deliverAs: "followUp" },
 			},
 		]);
 	});
@@ -135,7 +141,7 @@ describe("planner compact runtime", () => {
 	it("queues post-compact instructions while Pi is still processing", () => {
 		const calls: Array<{
 			message: string;
-			options?: { streamingBehavior: "followUp" };
+			options?: { deliverAs: "followUp" };
 		}> = [];
 
 		expect(
@@ -151,7 +157,7 @@ describe("planner compact runtime", () => {
 		expect(calls).toEqual([
 			{
 				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
-				options: { streamingBehavior: "followUp" },
+				options: { deliverAs: "followUp" },
 			},
 		]);
 	});
@@ -159,7 +165,7 @@ describe("planner compact runtime", () => {
 	it("falls back to follow-up when idle state races with active processing", () => {
 		const calls: Array<{
 			message: string;
-			options?: { streamingBehavior: "followUp" };
+			options?: { deliverAs: "followUp" };
 		}> = [];
 
 		expect(
@@ -180,7 +186,7 @@ describe("planner compact runtime", () => {
 		expect(calls).toEqual([
 			{
 				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
-				options: { streamingBehavior: "followUp" },
+				options: { deliverAs: "followUp" },
 			},
 		]);
 	});
@@ -196,6 +202,103 @@ describe("planner compact runtime", () => {
 		expect(isPlannerCompactTimeoutError(new Error("model unavailable"))).toBe(
 			false,
 		);
+	});
+
+	it("detects the nothing-to-compact refusal and stops advising a retry", () => {
+		expect(
+			isPlannerCompactNothingToCompactError(
+				new Error("Nothing to compact (session too small)"),
+			),
+		).toBe(true);
+		expect(
+			isPlannerCompactNothingToCompactError(new Error("Already compacted")),
+		).toBe(true);
+		expect(
+			isPlannerCompactNothingToCompactError(new Error("model unavailable")),
+		).toBe(false);
+		expect(
+			isPlannerCompactNothingToCompactError(
+				new Error("request timed out after 300000ms"),
+			),
+		).toBe(false);
+
+		const failure = formatPlannerCompactFailure(
+			new Error("Nothing to compact (session too small)"),
+		);
+		expect(failure).toContain("resolved automatically");
+		expect(failure).not.toContain("planner_request_compact to retry");
+	});
+
+	it("formats a skip message that points the model back to planner_status", () => {
+		const message = formatPlannerCompactSkipped(
+			"context below the compaction threshold",
+		);
+		expect(message).toContain("context below the compaction threshold");
+		expect(message).toContain("planner_status");
+	});
+
+	it("tracks the compaction-in-flight flag", () => {
+		const state = createPlannerCompactRuntimeState();
+		expect(state.compactionInFlight).toBe(false);
+		markPlannerCompactionInFlight(state);
+		expect(state.compactionInFlight).toBe(true);
+		clearPlannerCompactionInFlight(state);
+		expect(state.compactionInFlight).toBe(false);
+	});
+
+	describe("decidePlannerCompactionRun", () => {
+		const base = {
+			contextWindow: 200_000,
+			reserveTokens: 16_384,
+			reserveMultiplier: PLANNER_COMPACT_RESERVE_MULTIPLIER,
+		};
+
+		it("skips below the reserve-window floor", () => {
+			// floor = 200000 - 16384*1.5 = 175424; well below → skip.
+			expect(decidePlannerCompactionRun({ ...base, tokens: 100_000 })).toEqual({
+				run: false,
+				reason: "below_threshold",
+			});
+		});
+
+		it("runs once tokens cross our floor", () => {
+			// 180000 > 175424 → run.
+			expect(decidePlannerCompactionRun({ ...base, tokens: 180_000 })).toEqual({
+				run: true,
+				reason: null,
+			});
+		});
+
+		it("fires earlier than Pi: runs between our floor and Pi's floor", () => {
+			// Pi's floor (multiplier 1) = 183616; between ours (175424) and Pi's we
+			// already compact while Pi would still wait.
+			const between = 180_000;
+			expect(between).toBeGreaterThan(
+				base.contextWindow - base.reserveTokens * base.reserveMultiplier,
+			);
+			expect(between).toBeLessThan(base.contextWindow - base.reserveTokens);
+			expect(decidePlannerCompactionRun({ ...base, tokens: between }).run).toBe(
+				true,
+			);
+		});
+
+		it("scales with a tiny local window (skips a small session)", () => {
+			// 32k window, floor = 32768 - 16384*1.5 = 8192; a 3k session skips.
+			expect(
+				decidePlannerCompactionRun({
+					...base,
+					contextWindow: 32_768,
+					tokens: 3_000,
+				}),
+			).toEqual({ run: false, reason: "below_threshold" });
+		});
+
+		it("runs when tokens are unknown (lets layer B backstop)", () => {
+			expect(decidePlannerCompactionRun({ ...base, tokens: null })).toEqual({
+				run: true,
+				reason: null,
+			});
+		});
 	});
 });
 

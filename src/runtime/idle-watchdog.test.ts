@@ -107,4 +107,70 @@ describe("planner idle watchdog", () => {
 			}),
 		).toMatchObject({ action: "disabled" });
 	});
+
+	// A compact boundary that never completed: requiresCompact is pending and the
+	// step is blocked (not running), which the normal gate would silence forever.
+	const stuckCompact = () =>
+		markPlannerToolActivity(
+			{
+				...createInitialPlanState({
+					baseBranch: "main",
+					planBranch: "plan/plan-a",
+					worktreePath: "/repo/app/.pi/worktrees/plan-a",
+				}),
+				stage: "execution" as const,
+				step: "compact_task" as const,
+				stepStatus: "blocked" as const,
+				requiresCompact: true,
+			},
+			1_000,
+		);
+
+	it("rescues a stuck compact boundary when no compaction is in flight", () => {
+		const wake = evaluatePlannerIdleWake({
+			state: stuckCompact(),
+			settings,
+			now: 601_000,
+			compactionInFlight: false,
+		});
+		expect(wake.action).toBe("wake");
+		const message = wake.action === "wake" ? wake.message : "";
+		expect(message).toContain("[SYSTEM_INSTRUCTIONS]");
+		expect(message).toContain("compact boundary is stuck");
+		expect(message).toContain("planner_complete_compact");
+		expect(message).not.toContain("planner_report_stuck");
+	});
+
+	it("stays silent while a compaction is actually in flight", () => {
+		expect(
+			evaluatePlannerIdleWake({
+				state: stuckCompact(),
+				settings,
+				now: 601_000,
+				compactionInFlight: true,
+			}),
+		).toMatchObject({ action: "disabled" });
+	});
+
+	it("does not rescue a broken state even with a pending compact", () => {
+		expect(
+			evaluatePlannerIdleWake({
+				state: { ...stuckCompact(), broken: true },
+				settings,
+				now: 601_000,
+				compactionInFlight: false,
+			}),
+		).toMatchObject({ action: "disabled" });
+	});
+
+	it("waits for the timeout before rescuing a stuck compact", () => {
+		expect(
+			evaluatePlannerIdleWake({
+				state: stuckCompact(),
+				settings,
+				now: 60_000,
+				compactionInFlight: false,
+			}),
+		).toMatchObject({ action: "wait" });
+	});
 });

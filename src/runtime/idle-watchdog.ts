@@ -29,51 +29,117 @@ export function evaluatePlannerIdleWake(input: {
 	state: PlanStateRecord;
 	settings: PlannerIdleSettings;
 	now: number;
+	/** True while a real compaction is running — suppresses the compact rescue. */
+	compactionInFlight?: boolean;
 }): PlannerIdleWakeDecision {
-	const gate = explainPlannerIdleGate(input.state, input.settings);
-	if (gate) {
-		return { action: "disabled", reason: gate };
-	}
-
-	const lastToolCallAt = input.state.lastPlannerToolCallAt;
-	if (!lastToolCallAt) {
+	if (!input.settings.enabled) {
 		return {
-			action: "initialize",
-			timestamp: input.now,
-			reason: "Planner tool activity timestamp is missing.",
+			action: "disabled",
+			reason: "Planner idle watchdog is disabled in settings.",
 		};
 	}
 
-	const timeoutMs = input.settings.timeoutMinutes * 60 * 1000;
-	const idleMs = input.now - lastToolCallAt;
-	if (idleMs < timeoutMs) {
-		return {
-			action: "wait",
-			reason: "Planner tool activity is still inside the idle timeout.",
-			remainingMs: timeoutMs - idleMs,
-		};
+	// A compact boundary that is pending but not actively compacting is a stall:
+	// the compaction neither completed (session_compact) nor errored (onError),
+	// so the normal gate (which silences on stepStatus !== "running") would leave
+	// the session frozen forever. Bypass the gate and rescue it instead.
+	const compactStall = isStuckCompactBoundary(
+		input.state,
+		Boolean(input.compactionInFlight),
+	);
+	if (!compactStall) {
+		const gate = explainPlannerIdleGate(input.state, input.settings);
+		if (gate) {
+			return { action: "disabled", reason: gate };
+		}
 	}
 
-	if (
-		input.state.lastIdleWakeAt !== null &&
-		input.state.lastIdleWakeAt >= lastToolCallAt
-	) {
-		return {
-			action: "wait",
-			reason: "Planner idle wake was already queued for this idle window.",
-			remainingMs: 0,
-		};
+	const timing = resolveIdleTiming(input.state, input.settings, input.now);
+	if (timing.kind !== "ready") {
+		return timing.decision;
 	}
 
 	return {
 		action: "wake",
 		timestamp: input.now,
-		message: buildPlannerIdleWakeMessage({
-			state: input.state,
-			timeoutMinutes: input.settings.timeoutMinutes,
-			idleMinutes: Math.floor(idleMs / MS_PER_MINUTE),
-		}),
+		message: compactStall
+			? buildPlannerCompactStallWakeMessage({
+					state: input.state,
+					timeoutMinutes: input.settings.timeoutMinutes,
+					idleMinutes: timing.idleMinutes,
+				})
+			: buildPlannerIdleWakeMessage({
+					state: input.state,
+					timeoutMinutes: input.settings.timeoutMinutes,
+					idleMinutes: timing.idleMinutes,
+				}),
 	};
+}
+
+// A pending compact boundary with no compaction in flight, at a normal (not
+// broken / user-decision) position — the exact shape a failed or hung
+// compaction leaves behind.
+function isStuckCompactBoundary(
+	state: PlanStateRecord,
+	compactionInFlight: boolean,
+): boolean {
+	return (
+		state.requiresCompact &&
+		!compactionInFlight &&
+		!state.broken &&
+		!state.requiresUserDecision
+	);
+}
+
+type IdleTiming =
+	| { kind: "ready"; idleMinutes: number }
+	| { kind: "pending"; decision: PlannerIdleWakeDecision };
+
+// Shared idle-timer logic for both the normal wake and the compact rescue:
+// initialize a missing timestamp, wait inside the timeout, dedup an already
+// queued wake, otherwise report ready with the elapsed idle minutes.
+function resolveIdleTiming(
+	state: PlanStateRecord,
+	settings: PlannerIdleSettings,
+	now: number,
+): IdleTiming {
+	const lastToolCallAt = state.lastPlannerToolCallAt;
+	if (!lastToolCallAt) {
+		return {
+			kind: "pending",
+			decision: {
+				action: "initialize",
+				timestamp: now,
+				reason: "Planner tool activity timestamp is missing.",
+			},
+		};
+	}
+
+	const timeoutMs = settings.timeoutMinutes * 60 * 1000;
+	const idleMs = now - lastToolCallAt;
+	if (idleMs < timeoutMs) {
+		return {
+			kind: "pending",
+			decision: {
+				action: "wait",
+				reason: "Planner tool activity is still inside the idle timeout.",
+				remainingMs: timeoutMs - idleMs,
+			},
+		};
+	}
+
+	if (state.lastIdleWakeAt !== null && state.lastIdleWakeAt >= lastToolCallAt) {
+		return {
+			kind: "pending",
+			decision: {
+				action: "wait",
+				reason: "Planner idle wake was already queued for this idle window.",
+				remainingMs: 0,
+			},
+		};
+	}
+
+	return { kind: "ready", idleMinutes: Math.floor(idleMs / MS_PER_MINUTE) };
 }
 
 // Single source of truth for "is it safe to send an idle wake-up right now".
@@ -149,6 +215,29 @@ export function buildPlannerIdleWakeMessage(input: {
 		`- activeTaskId: ${input.state.activeTaskId ?? "(none)"}`,
 		`- idleMinutes: ${input.idleMinutes}`,
 		stuckLine,
+	].join("\n");
+}
+
+export function buildPlannerCompactStallWakeMessage(input: {
+	state: PlanStateRecord;
+	timeoutMinutes: number;
+	idleMinutes: number;
+}): string {
+	return [
+		PLANNER_SYSTEM_INSTRUCTIONS_HEADER,
+		"",
+		"Planner compact boundary is stuck.",
+		`A compaction was requested but did not complete for at least ${input.timeoutMinutes} minutes (it neither finished nor reported an error).`,
+		"The context is already small enough — the boundary's goal is met.",
+		"Call planner_status first, then planner_complete_compact to clear the pending compact boundary and continue from the reported step.",
+		"Do not call planner_request_compact again — retrying will not help.",
+		"",
+		"## Current Stored Position",
+		`- stage: ${input.state.stage}`,
+		`- step: ${input.state.step}`,
+		`- stepStatus: ${input.state.stepStatus}`,
+		`- requiresCompact: ${String(input.state.requiresCompact)}`,
+		`- idleMinutes: ${input.idleMinutes}`,
 	].join("\n");
 }
 
