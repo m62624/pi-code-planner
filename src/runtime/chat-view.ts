@@ -226,11 +226,14 @@ function renderRow(
 	const head = rowHead(row, palette);
 	const bodyWidth = width;
 	const textLines = splitText(row.text);
+	// Non-collapsible rows (user/assistant text) are never truncated: the
+	// transcript window in renderTranscript bounds what is visible, so capping
+	// here would silently freeze a long streaming response mid-message.
 	const limit = row.collapsible
 		? isExpanded
 			? MAX_EXPANDED_LINES
 			: MAX_COLLAPSED_LINES
-		: MAX_EXPANDED_LINES;
+		: Number.POSITIVE_INFINITY;
 
 	const fullWrapped: string[] = [];
 	for (const raw of textLines) {
