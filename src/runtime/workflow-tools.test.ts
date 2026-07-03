@@ -292,6 +292,124 @@ describe("workflowToolTransition", () => {
 		expect(applied.result.status).toBe("applied");
 	});
 
+	it("blocks planner_finish_step while the step's latest elenchus check is a CONFLICT", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await ensureProjectRecord(fs, projectPaths);
+		await initializePlanFiles(
+			fs,
+			planPaths,
+			createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+		);
+		await fs.mkdirp(worktreePath);
+		await initializePlanState(fs, planPaths, {
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "planning",
+			step: "consistency_check",
+			stepStatus: "running",
+			currentBranch: "plan/plan-a",
+		});
+		await setActivePlan(fs, projectPaths, "plan-a");
+
+		const writeLastCheck = async (
+			outcome: string,
+			step = "consistency_check",
+		) =>
+			fs.writeTextAtomic(
+				join(planPaths.elenchusDir, "last-check.json"),
+				JSON.stringify({
+					name: "plan-gate",
+					stage: "planning",
+					step,
+					outcome,
+					recordedAt: "2026-07-03T00:00:00.000Z",
+				}),
+			);
+
+		await writeLastCheck("CONFLICT");
+		const blocked = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(blocked.result.status).toBe("blocked");
+		expect(blocked.text).toContain("CONFLICT");
+		expect(blocked.text).toContain("plan-gate");
+
+		// A re-run that improves the verdict clears the block.
+		await writeLastCheck("CONSISTENT");
+		const finished = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(finished.result.status).toBe("applied");
+	});
+
+	it("ignores an elenchus CONFLICT recorded for a different step", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await ensureProjectRecord(fs, projectPaths);
+		await initializePlanFiles(
+			fs,
+			planPaths,
+			createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+		);
+		await fs.mkdirp(worktreePath);
+		await initializePlanState(fs, planPaths, {
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "planning",
+			step: "verify_plan",
+			stepStatus: "running",
+			currentBranch: "plan/plan-a",
+		});
+		await setActivePlan(fs, projectPaths, "plan-a");
+
+		// A CONFLICT left over from consistency_check must not block verify_plan.
+		await fs.writeTextAtomic(
+			join(planPaths.elenchusDir, "last-check.json"),
+			JSON.stringify({
+				name: "plan-gate",
+				stage: "planning",
+				step: "consistency_check",
+				outcome: "CONFLICT",
+				recordedAt: "2026-07-03T00:00:00.000Z",
+			}),
+		);
+		const finished = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(finished.result.status).toBe("applied");
+	});
+
 	it("marks existing tasks done when returning from a change request to planning", async () => {
 		const fs = new MockPlannerFs();
 		const git = new MockGitRunner();

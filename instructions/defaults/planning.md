@@ -80,17 +80,19 @@ If doubt remains, revise `plan.md` or task artifacts before entering execution. 
 
 ## Consistency Check (elenchus)
 
-At `consistency_check`, decide whether the plan's correctness hinges on a **web of interacting conditions** that a hand-derived argument gets subtly wrong. If so, model the facts and first principles in elenchus's DSL (the `pi-planner-elenchus` skill is the whole language) and call `planner_elenchus_check` with `resolution: "checked"`. Read the verdict and iterate until it is **CONSISTENT** — WARNING/UNDERDETERMINED/CONFLICT each tell you exactly what fact to add or which premise to fix; a real CONFLICT means the plan or task breakdown is wrong, so fix it before execution. Sources and verdicts are stored under the plan's `elenchus/` dir.
+At `consistency_check`, run the check. Start from the bundled premise template: write a small program that begins with `IMPORT "templates/plan-consistency.vrf"`, assert the claim `FACT plan_consistency.plan is_ready`, state every hazard the template header names as `FACT` or `NOT` (dependencies, public-API impact — never omit one), and bind the template's `VAR` ports honestly through the tool's `values` parameter. Add your own facts and premises on top (the template header shows inline recipes for dependency graphs and per-task statuses). Call `planner_elenchus_check` with `resolution: "checked"` and iterate until the verdict is **CONSISTENT** — WARNING/UNDERDETERMINED each tell you exactly what fact to add or which premise to fix. Sources and verdicts are stored under the plan's `elenchus/` dir.
+
+A **CONFLICT is a hard gate**: `planner_finish_step` refuses to finish this step while the latest check is a CONFLICT. Apply the drop/flip repair its CORE/RETRACT names — a real CONFLICT means the plan or task breakdown is wrong, so fix the plan or the wrong fact, never delete a valid premise to force green.
 
 Before you write the program, read the `pi-planner-elenchus` skill — it is the entire DSL; do not guess the grammar from examples, or you will burn turns on parse errors. The engine is a three-valued **SAT** checker over **formal logic only**: it decides which named propositions can jointly hold and has no arithmetic — it cannot add, count, or compare magnitudes. Model quantities as named symbolic states (`is_negative`, `over_threshold`, `mode is Compact`), never as numbers.
 
-Reach for it when the plan depends on, for example:
+It proves things like:
 
 - **Exactly-one / mutual exclusion:** exactly one task owns a given file or responsibility; two states or feature flags that must never both hold.
 - **Coverage of cases:** every branch of an if/else or state machine is handled; a readiness/deploy gate is reachable and its negative path has an escape (so the flow cannot deadlock).
-- **Ordering / dependencies:** task A must land before task B; a migration precedes the code that needs it.
+- **Ordering / dependencies:** task A must land before task B; a migration precedes the code that needs it (`CLOSE depends_on TRANSITIVE` rejects a cycle at compile time).
 
-This is **not** for linear or CRUD work with no interacting constraints. In that case call `planner_elenchus_check` with `resolution: "not_applicable"` and a one-line reason — that escape resolves the step in one call and never traps the flow. Record the conclusion (CONSISTENT or not-applicable) in `decisions.md`, then advance.
+The one narrow escape: if the plan is a single linear task with no dependencies, no exclusive states, and no open questions — nothing for logic to check — call `planner_elenchus_check` with `resolution: "not_applicable"` and a one-line reason. That resolves the step in one call and never traps the flow; it is for genuinely constraint-free work, not for skipping a check that looks tedious. Record the conclusion (CONSISTENT or not-applicable) in `decisions.md`, then advance.
 
 ## Fundamental Rule: Integration vs New Entity
 

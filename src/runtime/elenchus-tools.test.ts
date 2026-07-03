@@ -127,7 +127,7 @@ describe("planner elenchus tool", () => {
 
 		expect(result.status).toBe("applied");
 		expect(result.details?.verdict).toBe("CONFLICT");
-		expect(result.text).toContain("Not CONSISTENT yet");
+		expect(result.text).toContain("planner_finish_step is blocked");
 		// Source and verdict are persisted under the plan's elenchus dir.
 		const source = await setup.fs.readText(
 			join(setup.planPaths.elenchusDir, "owner-check.vrf"),
