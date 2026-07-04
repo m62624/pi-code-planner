@@ -57,7 +57,7 @@
 		"vitest": "^4.1.9"
 	},
 	"dependencies": {
-		"elenchus-wasm": "^0.14.0",
+		"elenchus-wasm": "^0.15.0",
 		"tree-kill": "^1.2.2"
 	}
 }
