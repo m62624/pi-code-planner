@@ -1,0 +1,8 @@
+DOMAIN std
+VAR compute_on_encrypted_needed
+PREMISE sensitivity_level:
+    ONEOF
+        data_sensitivity is_public
+        data_sensitivity is_internal
+        data_sensitivity is_confidential
+        data_sensitivity is_regulated

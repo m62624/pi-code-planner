@@ -1,0 +1,25 @@
+// KIND: brick — the security gradient
+DOMAIN security
+IMPORT "ports.vrf"
+// cumulative ladder: higher sensitivity implies all lower protections
+RULE reg_is_conf:
+    WHEN std.data_sensitivity is_regulated
+    THEN std.data_sensitivity is_confidential_or_up
+RULE conf_up:
+    WHEN std.data_sensitivity is_confidential
+    THEN std.data_sensitivity is_confidential_or_up
+RULE rung_auth:
+    WHEN std.data_sensitivity is_internal
+    THEN control authentication
+RULE rung_encrypt:
+    WHEN std.data_sensitivity is_confidential_or_up
+    THEN control encryption_at_rest
+RULE rung_field:
+    WHEN std.data_sensitivity is_regulated
+    THEN control field_encryption
+RULE rung_homomorphic:
+    WHEN std.compute_on_encrypted_needed
+    THEN control homomorphic
+RULE homomorphic_costs:
+    WHEN std.compute_on_encrypted_needed
+    THEN tradeoff pay_cost_and_latency

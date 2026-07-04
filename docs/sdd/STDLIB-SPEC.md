@@ -234,6 +234,7 @@ Each is `// KIND: brick`, reads shared ports, adds its own.
 | `security-ladder` | `data_sensitivity ONEOF{public,internal,confidential,regulated}`, `untrusted_input`, `insider_threat`, `compute_on_encrypted_needed` | ladder `auth → TLS → encryption_at_rest → field_encryption → shadow_table → homomorphic`; trade-off `homomorphic → cost_heavy, latency_heavy` |
 | `reliability-ladder` | `availability_critical`, `data_loss_intolerable`, `partition_possible` | `replication → backup → failover` |
 | `scaling-ladder` | `scale ONEOF{single,small,large,internet}`, `growth_expected`, `stateless_compute` | `vertical → horizontal → sharding` |
+| `flexibility-guard` | `change_expected`, `requirements_uncertain` | `invest_in_abstraction` vs `do_simplest_now` (premature-generalization guard) |
 
 **Shared canonical port vocabulary** (byte-stable, tagged declared/measured;
 consumed by several bricks + the director): `read_heavy`, `write_heavy`,
@@ -268,6 +269,12 @@ while the security brick stayed dormant until `std.untrusted_input` was also set
   advisory `UNUSED IMPORT` (the rule still fires; the lint checks references, not
   effect). The pi-planner runtime suppresses these when running the std bundle,
   or the director references brick outputs to aggregate them.
+- **Gradient/ladder pattern verified** (`models/ladder/`): a `ONEOF` choice port
+  drives an escalating stack of mechanisms (cumulative via an ordinal derived
+  atom like `is_confidential_or_up`), and the extreme rung fires its trade-off.
+  A **choice/`ONEOF` port is supplied via `--data` / `values`** (a PROVIDE with a
+  multi-word key), **not `--set`** (whitespace-tokenized — cannot carry a
+  multi-word atom); boolean `VAR` ports use `--set` / `values`.
 
 ## 10. Requirements
 
@@ -325,11 +332,18 @@ Settled:
   import-all + dormant-until-triggered; director derives `consider_<brick>` as
   attention signposts, no file assembly.
 
-Still open:
-- **OD-2** — Tiers: is `ONEOF {critical, important, nice}` enough, or add
-  `ignore`?
-- **OD-4** — Brick catalogue: is the §9 set the right minimal spanning set — what
-  to cut/add?
+- ~~**OD-2** — priority tiers~~ → **DECIDED**: three tiers
+  `ONEOF {critical, important, nice}`, **no `ignore`** — `nice` already means
+  minimal-investment / `do_simplest_now`, so `ignore` adds a distinction with no
+  distinct behavior; fewer tiers = less for a small model to get wrong.
+- ~~**OD-4** — brick catalogue~~ → **DECIDED**: ten bricks — the §9 nine plus
+  **`flexibility-guard`** (the one gap: `flexibility` was a first-class goal with
+  no brick). `statelessness` kept despite overlapping `scaling-ladder` (state
+  placement is its own decision, feeds scaling + reliability). Deferred to a later
+  layer, not v1: `concurrency`, `observability`, `coupling`. The gradient/ladder
+  pattern is prototype-verified (§9.1, `models/ladder/`).
+
+**All open decisions resolved — the std VRF library design is complete.**
 - **OD-5** — Where the shared port namespace physically lives (one `std/ports.vrf`
   of `VAR` declarations imported by all, vs each brick declaring its own).
 - **OD-6** — How the director points at bricks mechanically (a `consider_<brick>`
@@ -357,3 +371,8 @@ Still open:
   dormant-until-triggered bricks; director signposts via `consider_<brick>`, no
   file assembly. Found the naming rule (SL-13): brick outputs are multi-word
   atoms, only ports are bare VARs.
+- OD-2 + OD-4 resolved: three priority tiers (no `ignore`); ten bricks (added
+  `flexibility-guard` — the flexibility gap). Gradient/ladder pattern verified in
+  `models/ladder/` (security-ladder: ONEOF choice → escalating mechanisms +
+  extreme-rung trade-off; choice ports supplied via `--data`/`values`, not
+  `--set`). **All STDLIB-SPEC open decisions closed — Spec Two design complete.**
