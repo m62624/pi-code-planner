@@ -1,0 +1,15 @@
+// PROBE 6 — the coverage gate as it really is: quantified over the requirement set.
+// Tasks cover requirements as a declared traceability table (task.json.requirements).
+// `TOTAL` scans it and NAMES any requirement with no covering task.
+// Expect WARNING naming r3 (dropped requirement). Add `FACT r3 covered_by t3` -> clears.
+// (Legacy plan = empty requirements set = no TOTAL emitted = vacuously passes.)
+DOMAIN cover
+SET requirements
+    r1
+    r2
+    r3
+FACT r1 covered_by t1
+FACT r2 covered_by t2
+// r3 has no covering task -> the coverage gap
+TOTAL covered_by ON requirements
+CHECK

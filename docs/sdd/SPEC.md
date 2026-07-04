@@ -344,7 +344,45 @@ the LLM cannot skip detail to reach the next stage.
 - **NG-4** — Not auto-answering the user's design questions: the loop *surfaces*
   gaps and forces detail; the human still decides scope and trade-offs.
 
-## 9. Open decisions — ALL RESOLVED
+## 9. Gate model — mechanically verified (elenchus)
+
+The whole gate/transition system was expressed in VRF and checked with the
+elenchus engine (0.15.0), not by hand. The reproducible models live in
+[`models/`](models/) (`sdd-core.vrf` = the machine; `p1…p6` = scenarios;
+`gate-*` = the freedom-valve proof); [`models/README.md`](models/README.md) has
+the expected-verdict table.
+
+**What the engine established:**
+
+- An **honest path to `done` exists and is consistent** for *both* requirement
+  kinds — expressible → formalize (`p2`, CONSISTENT) and inexpressible →
+  defer-with-rationale (`p1`, CONSISTENT).
+- A **lazy or gaming model is structurally blocked**: an unaddressed requirement
+  cannot pass the spec gate (`p3`, blocked), and a faked `formalized` on an
+  inexpressible requirement is caught as a CONFLICT (`gate-gamed`).
+- **Coverage must be a planning-stage gate, never a spec-stage gate.** Coupling
+  it into spec verification forms a cycle — spec → tasks → planning → spec — that
+  **deadlocks**, because tasks do not exist yet at the spec stage (`p4`,
+  WARNING). This is the mechanical proof behind the §6.2 split.
+- The coverage gate (`TOTAL covered_by ON requirements`) **names any dropped
+  requirement** and clears when a covering task is added (`p6`); a legacy plan
+  (empty requirement set) passes vacuously.
+
+**Placement rules that follow (insert to avoid deadlock):**
+
+1. `spec/verify_spec` gate = spec-consistency + "every in-scope requirement
+   *addressed*" (formalized-and-consistent OR deferred-with-recorded-rationale).
+   It must **not** reference coverage/tasks.
+2. `planning/consistency_check` gate = coverage (`TOTAL`) + no-orphan, evaluated
+   only **after** tasks exist.
+3. The freedom valve is gated on a **recorded rationale** — this is what stops a
+   lazy model from deferring everything (modeled as `req rationale_recorded` in
+   `sdd-core.vrf`).
+4. Any gate whose satisfaction depends on an artifact produced by a *later* stage
+   is a deadlock cycle — keep every gate's inputs from the current or an earlier
+   stage.
+
+## 10. Open decisions — ALL RESOLVED
 
 - ~~**OD-1** — Stage shape~~ → **DECIDED**: dedicated `spec` stage (§6).
 - ~~**OD-2** — `spec.json` schema~~ → **DECIDED**: §5.1.
@@ -361,7 +399,7 @@ the LLM cannot skip detail to reach the next stage.
 Planning of the SDD/VRF layer is complete — ready to move from spec to a build
 plan (tasks tracing to REQ-1…REQ-11).
 
-## 10. Log
+## 11. Log
 
 - `feat/sdd-planning-spec` created; baseline architecture surveyed; boundary
   (§2) and numbers-as-leaves (§2.1) decided; this draft written.
@@ -382,3 +420,8 @@ plan (tasks tracing to REQ-1…REQ-11).
   (structured spec.json, never hand-written VRF), REQ-13 (assumptions carry
   evidence), REQ-14 (no unexplained acceptanceAtom omission), REQ-15
   (BIDIRECTIONAL + MENTIONED to defeat vacuous-CONSISTENT).
+- Expressed the WHOLE gate/transition system in VRF and checked all
+  combinations (models/ + §9): honest path to done consistent for both
+  requirement kinds; laziness/gaming blocked; coverage-in-spec-gate proven a
+  deadlock cycle; coverage gate names dropped requirements. Derived the four
+  placement rules in §9. Committed the reproducible models under models/.

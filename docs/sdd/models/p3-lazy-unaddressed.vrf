@@ -1,0 +1,13 @@
+// PROBE 3 — lazy model: inexpressible, but NO rationale recorded and NOT formalized.
+// The requirement is neither addressed nor validly deferred -> the spec gate must
+// block. Expect WARNING (blocked by req addressed) — laziness cannot reach planning.
+DOMAIN probe
+IMPORT "sdd-core.vrf"
+FACT sdd.flow reached_done
+NOT  sdd.req vrf_expressible
+NOT  sdd.req rationale_recorded     // skipped the price of the valve
+NOT  sdd.req formalized
+FACT sdd.req covered
+FACT sdd.all_tasks passed
+FACT sdd.doubt passed
+CHECK BIDIRECTIONAL

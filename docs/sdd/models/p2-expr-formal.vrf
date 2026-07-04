@@ -1,0 +1,12 @@
+// PROBE 2 — honest: expressible requirement, formalized in VRF. Expect CONSISTENT.
+DOMAIN probe
+IMPORT "sdd-core.vrf"
+FACT sdd.flow reached_done
+FACT sdd.req vrf_expressible
+FACT sdd.req formalized
+NOT  sdd.req rationale_recorded     // no deferral needed; it was formalized
+NOT  sdd.req deferred_to_freedom     // it was formalized, not deferred
+FACT sdd.req covered
+FACT sdd.all_tasks passed
+FACT sdd.doubt passed
+CHECK BIDIRECTIONAL

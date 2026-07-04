@@ -1,0 +1,26 @@
+// Model A — the WEAK design: force EVERY requirement through VRF (no freedom valve).
+// A requirement that cannot be expressed in VRF then deadlocks the gate.
+DOMAIN gate
+
+// one requirement is genuinely inexpressible in VRF (e.g. "the UX feels calm")
+NOT req vrf_expressible
+
+// naive policy: to verify the spec, every requirement must be formalized in VRF
+PREMISE verify_needs_formal:
+    WHEN spec verified
+    THEN req formalized
+
+// you can only formalize what is expressible
+PREMISE formal_needs_expressible:
+    WHEN req formalized
+    THEN req vrf_expressible
+
+// to enter planning you need a verified spec
+PREMISE planning_needs_verify:
+    WHEN plan entered
+    THEN spec verified
+
+// we want to reach planning
+FACT plan entered
+FACT spec verified
+CHECK

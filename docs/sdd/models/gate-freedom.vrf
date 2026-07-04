@@ -1,0 +1,33 @@
+// Model B — the CORRECT design: constrain the expressible, free the inexpressible.
+// The freedom valve routes an inexpressible requirement to human judgment so it
+// is "addressed" without being "formalized" — the gate no longer deadlocks.
+DOMAIN gate
+
+NOT req vrf_expressible
+
+// freedom valve: what VRF can't express is deferred to human judgment, WITH a
+// recorded rationale (deferred_to_freedom), not forced into VRF
+RULE freedom_valve:
+    WHEN NOT req vrf_expressible
+    THEN req deferred_to_freedom
+
+// a requirement is "addressed" either by being formalized OR deferred to freedom
+RULE addressed_via_freedom:
+    WHEN req deferred_to_freedom
+    THEN req addressed
+RULE addressed_via_formal:
+    WHEN req formalized
+    THEN req addressed
+
+// verify needs every requirement ADDRESSED — not necessarily formalized
+PREMISE verify_needs_addressed:
+    WHEN spec verified
+    THEN req addressed
+
+PREMISE planning_needs_verify:
+    WHEN plan entered
+    THEN spec verified
+
+FACT spec verified
+FACT plan entered
+CHECK
