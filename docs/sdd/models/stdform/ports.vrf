@@ -1,0 +1,5 @@
+// KIND: shared vocabulary — DOMAIN std, imported by every brick + the entry
+DOMAIN std
+VAR read_heavy
+VAR latency_sensitive
+VAR untrusted_input

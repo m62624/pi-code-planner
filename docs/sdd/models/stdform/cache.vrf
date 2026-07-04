@@ -1,0 +1,7 @@
+// KIND: brick
+DOMAIN cache
+IMPORT "ports.vrf"
+RULE recommend:
+    WHEN std.read_heavy
+    AND  std.latency_sensitive
+    THEN cache is_needed

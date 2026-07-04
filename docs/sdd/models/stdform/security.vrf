@@ -1,0 +1,6 @@
+// KIND: brick
+DOMAIN security
+IMPORT "ports.vrf"
+RULE validate:
+    WHEN std.untrusted_input
+    THEN input needs_validation

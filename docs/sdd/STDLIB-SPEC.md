@@ -240,6 +240,35 @@ consumed by several bricks + the director): `read_heavy`, `write_heavy`,
 `latency_sensitive`, `untrusted_input`, `growth_expected`, `partition_possible`,
 `consistency`, `data_sensitivity`, `stateless_compute`, …
 
+### 9.1 Physical form (OD-5 + OD-6 resolved, prototype-verified)
+
+Verified with a prototype (engine 0.15.0, `models/stdform/`): answering
+`std.read_heavy` + `std.latency_sensitive` once derived `cache.cache is_needed`,
+while the security brick stayed dormant until `std.untrusted_input` was also set.
+
+- **OD-5 — one shared port namespace.** All external ports live in a single
+  `std/ports.vrf` (`DOMAIN std`). Every brick and the director `IMPORT
+  "ports.vrf"` and reference `std.<port>`. Answering a port once
+  (`--set "std.read_heavy:true"` / `values`) reaches every brick that reads it.
+  Per-brick port declarations are **rejected** — they would fracture the
+  vocabulary (`cache.read_heavy ≠ security.read_heavy`).
+- **Naming rule (prototype finding, SL-13).** A brick's *outputs* are multi-word
+  atoms (`cache is_needed`, `input needs_validation`); only external ports are
+  bare one-word `VAR`s. A bare one-word consequent is a compile error.
+- **OD-6 — import-all, dormant-until-triggered.** pi-planner bundles the whole
+  `std/` and runs it in one compile with the model's answers. A brick whose
+  trigger ports are unset stays silent (antecedent UNKNOWN → no fire, no
+  warning). The small model never assembles files (SL-7) — there is nothing to
+  assemble.
+- **The director signposts, it does not assemble.** From the ranked goals it
+  derives `consider_<brick>` atoms — "you value security → answer the
+  security-ladder ports, read its output." Orchestration = steering *attention*
+  and *which ports to answer*, not selecting files.
+- **Note:** importing a brick the entry never textually references raises an
+  advisory `UNUSED IMPORT` (the rule still fires; the lint checks references, not
+  effect). The pi-planner runtime suppresses these when running the std bundle,
+  or the director references brick outputs to aggregate them.
+
 ## 10. Requirements
 
 - **SL-1** — Two systems only: one abstract `core.vrf` **template** (director) +
@@ -269,6 +298,9 @@ consumed by several bricks + the director): `read_heavy`, `write_heavy`,
   path.
 - **SL-12** — **Any genre** is covered by the base pillars alone (goals /
   constraints / hardware), never by enumerating program classes.
+- **SL-13** — External ports are bare one-word `VAR`s in the single `std`
+  namespace; a brick's outputs are multi-word atoms (`subject predicate`). Bricks
+  never declare their own ports (§9.1).
 
 ## 11. Non-goals
 
@@ -286,6 +318,12 @@ Settled:
   (derivative), `flexibility` kept.
 - ~~**OD-3** — the known trade-off pairs~~ → **DECIDED** (§6.1): 13 pairs with
   mechanism + candidate cost-axes; CAP the one theorem; the two-sinks law.
+
+- ~~**OD-5** — where the shared port namespace lives~~ → **DECIDED** (§9.1): one
+  `std/ports.vrf` (`DOMAIN std`), imported by all; per-brick ports rejected.
+- ~~**OD-6** — how the director points at bricks~~ → **DECIDED** (§9.1):
+  import-all + dormant-until-triggered; director derives `consider_<brick>` as
+  attention signposts, no file assembly.
 
 Still open:
 - **OD-2** — Tiers: is `ONEOF {critical, important, nice}` enough, or add
@@ -314,3 +352,8 @@ Still open:
   `cost_currency ONEOF {time, money, compute}` context port binds the concrete
   currency, so a small model reasons in the right currency (a home dev spends
   time, not dollars). `efficiency` re-emerges as `cost` when currency=compute.
+- OD-5 + OD-6 resolved (§9.1), prototype-verified in `models/stdform/`: one
+  `std/ports.vrf` shared namespace (per-brick ports rejected); import-all +
+  dormant-until-triggered bricks; director signposts via `consider_<brick>`, no
+  file assembly. Found the naming rule (SL-13): brick outputs are multi-word
+  atoms, only ports are bare VARs.
