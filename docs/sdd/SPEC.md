@@ -62,6 +62,33 @@ ordinal bands (`fast < ok < slow < timeout`), bounded cardinality by enumeration
 relations-as-data (`covers(budget, cost)` fed as FACT pairs). Genuine arithmetic
 (unbounded N, `sum = 100%`) stays outside as an asserted boolean.
 
+### 2.2 Constrain the checkable, free the inexpressible (DECIDED — elenchus-verified)
+
+The gate constrains the model's *planning* through elenchus **only for what VRF
+can express**. What is genuinely inexpressible — taste, "the UX feels calm",
+open-ended judgment, real arithmetic — must be routed to human judgment as prose
+in `spec.md` with a recorded rationale (**the freedom valve**), never forced into
+`spec.json`. **Over-formalizing is itself a weak spot**, not diligence.
+
+This is not a preference; it was verified mechanically with elenchus (three
+models in scratchpad):
+
+- **No valve, honest** — force every requirement to be formalized: an
+  inexpressible one leaves the gate at `WARNING` forever (the gate can never be
+  satisfied — a deadlock).
+- **No valve, model games it** — if the model falsely asserts `formalized` to
+  escape, elenchus catches the lie as a `CONFLICT` (`formalized` ∧
+  `NOT vrf_expressible`).
+- **Freedom valve** — an inexpressible requirement becomes
+  `deferred_to_freedom` → `addressed` and the gate reaches `CONSISTENT`.
+
+So the model must **understand what elenchus is for**: the checkable web of
+interacting conditions, not everything. Coverage counts a requirement as
+discharged when it is *either* formalized-and-consistent *or*
+deferred-to-freedom-with-rationale (REQ-15). A legitimate `acceptanceAtom`
+omission is exactly a freedom-valve deferral; an *unexplained* omission is not
+allowed (REQ-14).
+
 ## 3. Baseline — what already exists (do not rebuild)
 
 Established by reading the current source; this is the ground the SDD layer
@@ -166,6 +193,28 @@ Stable IDs; tasks will later trace to these (§7 coverage check).
     hard-blocking a plan that predates the spec artifact. New plans always have
     `spec.json`, so the gate bites for them.
   - The tool-gating invariant matrix and all existing tests stay green (REQ-8).
+
+### Robustness for a local model (weak-spot hardening)
+The gate must survive a *weaker* local model, not just a strong one.
+- **REQ-12** — **The model never hand-writes gate VRF.** It authors the
+  structured `spec.json` (validated: enum priorities, `REQ-n` ids, atom names)
+  and the deterministic compiler (REQ-4) emits guaranteed-valid VRF. This moves
+  the DSL's sharp edges (invented syntax, typo'd atoms, `_`-vs-space) off the
+  model — the single biggest hardening lever.
+- **REQ-13** — Each `assumption` (boolean leaf, §2.1) carries **evidence**: its
+  `statement` must cite the source/command that established the predicate. A leaf
+  with no evidence is flagged at `elicit_gaps` and re-checked at
+  `finalize/doubt_review`. (The checkability ceiling cannot be fully closed —
+  elenchus trusts the leaf — but ungrounded leaves must not pass silently.)
+- **REQ-14** — An omitted `acceptanceAtom` requires a recorded reason. The only
+  legitimate reason is a freedom-valve deferral (§2.2); an unexplained omission
+  is rejected at `verify_spec`, so a lazy model cannot dodge every `PROVE`.
+- **REQ-15** — `verify_spec` runs the spec check with `BIDIRECTIONAL` and the
+  `FOR EACH … MENTIONED` schema, to defeat the **vacuous-`CONSISTENT`** trap: a
+  near-empty spec that is trivially consistent surfaces as `UNDERDETERMINED`
+  (many models fit) rather than false-green, and every requirement subject is
+  reached by the schema. Coverage counts a requirement discharged iff formalized
+  -and-consistent OR deferred-to-freedom-with-rationale.
 
 ## 5. New / changed artifacts
 
@@ -326,3 +375,10 @@ plan (tasks tracing to REQ-1…REQ-11).
   optional `acceptanceAtom`); optional `TaskRecord.requirements` for traceability.
 - Backward compatibility promoted to a hard constraint (REQ-11): old plans /
   `task.json` must not break; coverage degrades gracefully without `spec.json`.
+- Weak-spot hunt with elenchus itself (scratchpad, engine 0.15.0 verified):
+  proved the freedom valve is structurally necessary (no valve → WARNING
+  deadlock; gaming → CONFLICT; valve → CONSISTENT). Added §2.2 (constrain the
+  checkable, free the inexpressible) and local-model hardening REQ-12
+  (structured spec.json, never hand-written VRF), REQ-13 (assumptions carry
+  evidence), REQ-14 (no unexplained acceptanceAtom omission), REQ-15
+  (BIDIRECTIONAL + MENTIONED to defeat vacuous-CONSISTENT).
