@@ -109,6 +109,51 @@ yet), so it never asserts the outcome — it flags the tension and names candida
 - A low-tier (`nice`) quality derives `do_simplest_now_<quality>` — do the simple
   thing, leave an extension point for later.
 
+### 6.1 The two sinks + the trade-off pairs (OD-3 resolved)
+
+**Structural law: every quality is bought from two accounts — `simplicity` and
+`cost`.** Almost every other quality is paid for by draining simplicity and/or
+money. So "can't sit on all chairs" is precise: **you cannot overdraw both
+accounts.** Rank many qualities high → drain both → warnings pile up. This is the
+director's core mechanic.
+
+**Goal set (OD-1 resolved):** seven — `speed`, `security`, `cost`, `simplicity`,
+`scalability`, `reliability`, `flexibility`. `efficiency` was **dropped** as a
+top goal (it is derivative — roughly speed/cost — and re-emerges as a concern
+only under `hardware_constrained`). `flexibility` is **kept** (an independent
+evolvability axis with strong pairs).
+
+**Known trade-off pairs** (first principles: each has a concrete *mechanism* of
+payment, not folklore). When both are ranked high, the brick WARNS and names the
+candidate cost-axes (never a verdict; §6):
+
+| Pair | Mechanism | Candidate cost-axes |
+|---|---|---|
+| speed ↔ security | any check/encryption costs cycles | cpu, latency, cost |
+| speed ↔ cost | speed = buy hardware / cache / CDN | cost |
+| speed ↔ simplicity | optimizations add complexity | complexity, bug-risk |
+| security ↔ simplicity | auth/crypto/isolation/audit = code + surface | complexity, dev-time |
+| **scalability ↔ consistency** | **CAP theorem — under partition pick C or A** | consistency, availability |
+| scalability ↔ simplicity | distribution/sharding ≫ single box | complexity, consistency |
+| reliability ↔ cost | redundancy / replication / backups / failover | cost |
+| reliability ↔ speed | quorum / acks / retries / checkpoints add latency | latency |
+| reliability ↔ simplicity | fault-tolerance (idempotency, consensus) = code | complexity |
+| flexibility ↔ simplicity | abstraction now for change later | complexity, dev-time |
+| flexibility ↔ speed | indirection / plugins / config vs specialized path | speed, complexity |
+| flexibility ↔ security | extensibility widens the attack surface | attack-surface |
+| cost ↔ simplicity | cheap DIY = complex ops; simple managed = pricey | cost vs ops |
+
+**CAP is the one hard theorem**; the rest are strong engineering invariants —
+advisory, so they need not be theorems, only *real* (a genuine payment
+mechanism). The list is authored by hand and is the seed for `laws/` bricks.
+
+**Unifying pattern — "premature X is evil."** `speed↔simplicity`,
+`flexibility↔simplicity` (and the dropped `efficiency↔simplicity`) are one class:
+don't buy a quality's complexity until it is proven needed — premature
+optimization = premature generalization = premature scaling. For a `nice`-ranked
+quality or an unmeasured need, the director derives `do_simplest_now` — the same
+guard as measured ports (§7).
+
 ## 7. declared vs measured ports — the premature-optimization guard (DECIDED)
 
 Every port is tagged `declared` or `measured`.
@@ -126,9 +171,9 @@ recomputes, then asserts.
 
 ## 8. `core.vrf` — the director's variables (draft)
 
-**Goals (ranked, `ONEOF {critical, important, nice}` each):**
-`speed`, `security`, `cost`, `efficiency`, `simplicity`, `scalability`,
-`reliability`, `flexibility`.
+**Goals (ranked, `ONEOF {critical, important, nice}` each) — seven (§6.1):**
+`speed`, `security`, `cost`, `simplicity`, `scalability`, `reliability`,
+`flexibility`. (`simplicity` + `cost` are the two sinks every other goal drains.)
 
 **Constraints (hard limits, `declared` boolean):**
 `budget_tight`, `team_small`, `deadline_hard`, `regulated`, `must_reuse_legacy`,
@@ -212,12 +257,15 @@ consumed by several bricks + the director): `read_heavy`, `write_heavy`,
 
 ## 12. Open decisions
 
-- **OD-1** — Goal set: keep `efficiency` and `flexibility`, or fold `efficiency`
-  into `cost` and drop `flexibility`?
+Settled:
+- ~~**OD-1** — Goal set~~ → **DECIDED** (§6.1): seven goals; `efficiency` dropped
+  (derivative), `flexibility` kept.
+- ~~**OD-3** — the known trade-off pairs~~ → **DECIDED** (§6.1): 13 pairs with
+  mechanism + candidate cost-axes; CAP the one theorem; the two-sinks law.
+
+Still open:
 - **OD-2** — Tiers: is `ONEOF {critical, important, nice}` enough, or add
   `ignore`?
-- **OD-3** — The **known trade-off pairs** must be enumerated by hand (first
-  principles, not heuristics): which pairs, and each one's candidate cost-axes.
 - **OD-4** — Brick catalogue: is the §9 set the right minimal spanning set — what
   to cut/add?
 - **OD-5** — Where the shared port namespace physically lives (one `std/ports.vrf`
@@ -233,3 +281,8 @@ consumed by several bricks + the director): `read_heavy`, `write_heavy`,
   measured ports + premature-optimization guard; flat `std/`, no genre folders;
   feeds the SDD spec stage, advisory not binding. Variable lists (§8) and brick
   catalogue (§9) are first drafts to prune (§12).
+- OD-1 + OD-3 resolved (§6.1): the two-sinks law (`simplicity` + `cost` fund
+  every other quality → can't overdraw both = "can't sit on all chairs"); seven
+  goals (`efficiency` dropped); 13 trade-off pairs with payment mechanism +
+  candidate cost-axes (CAP the one theorem); the "premature X is evil" family →
+  `do_simplest_now`.
