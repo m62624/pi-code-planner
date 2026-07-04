@@ -22,6 +22,13 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # The Pi coding-agent SDK is owned by the dedicated `sdk-watch` workflow
+      # (.github/workflows/sdk-watch.yml) — a single self-rewriting draft PR that
+      # also runs typecheck + tests against the new SDK and updates the
+      # PLANNER_KNOWN_GOOD_PI_VERSIONS constant. Exclude it here so Dependabot
+      # never opens a duplicate, signal-less grouped bump for it.
+      - dependency-name: "@earendil-works/pi-coding-agent"
+      - dependency-name: "@earendil-works/pi-tui"
     # One PR for all allowed (minor + patch) npm updates instead of one each.
     groups:
       npm-minor-patch:
