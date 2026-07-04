@@ -193,7 +193,9 @@ jobs:
       - name: Create Draft Release
         uses: softprops/action-gh-release@v3
         with:
-          name: ${{ env.R_NAME }}
+          # The release title is just the tag (e.g. `v0.9.1`) — like the elenchus
+          # releases — so the Releases list shows the version, not `<name> v…`.
+          name: ${{ needs.prepare.outputs.tag }}
           tag_name: ${{ needs.prepare.outputs.tag }}
           draft: true
           body: |
