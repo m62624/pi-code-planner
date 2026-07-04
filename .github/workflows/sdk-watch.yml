@@ -93,9 +93,32 @@ jobs:
               --comment "Pi SDK ${{ steps.v.outputs.latest }} is within the known-good range again — retiring this watch PR."
           fi
 
-      # --- out of range: prepare the single self-rewriting bump branch -----
-      - name: Prepare Bump Branch
+      # --- out of range: respect a human who has taken over the PR ---------
+      # If an open watch PR exists and its branch tip was authored by a human
+      # (you pushed a fix, or edited a file in the PR), the bot must NOT
+      # force-push over that work. It stands down until you merge or close the
+      # PR — even if a still-newer SDK appears meanwhile. This is the whole
+      # answer to "will it overwrite my changes?": no, your commit freezes it.
+      - name: Guard Against Human Takeover
         if: steps.v.outputs.in_range == 'no'
+        id: guard
+        run: |
+          set -euo pipefail
+          BOT_EMAIL="41898282+github-actions[bot]@users.noreply.github.com"
+          SKIP=no
+          if git ls-remote --exit-code --heads origin "$WATCH_BRANCH" >/dev/null 2>&1; then
+            git fetch --quiet origin "$WATCH_BRANCH"
+            OPEN_PR=$(gh pr list --head "$WATCH_BRANCH" --state open --json number --jq '.[0].number // empty')
+            TIP_EMAIL=$(git log -1 --format='%ae' "origin/$WATCH_BRANCH")
+            if [ -n "$OPEN_PR" ] && [ "$TIP_EMAIL" != "$BOT_EMAIL" ]; then
+              echo "PR #$OPEN_PR: branch tip authored by $TIP_EMAIL (not the bot) — standing down, your work is untouched."
+              SKIP=yes
+            fi
+          fi
+          echo "skip=$SKIP" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare Bump Branch
+        if: steps.v.outputs.in_range == 'no' && steps.guard.outputs.skip == 'no'
         run: |
           set -euo pipefail
           git config user.name  "github-actions[bot]"
@@ -115,7 +138,7 @@ jobs:
           npm install
 
       - name: Validate Against The New SDK
-        if: steps.v.outputs.in_range == 'no'
+        if: steps.v.outputs.in_range == 'no' && steps.guard.outputs.skip == 'no'
         id: check
         run: |
           set -uo pipefail
@@ -128,7 +151,7 @@ jobs:
           fi
 
       - name: Push And Upsert Draft PR
-        if: steps.v.outputs.in_range == 'no'
+        if: steps.v.outputs.in_range == 'no' && steps.guard.outputs.skip == 'no'
         run: |
           set -euo pipefail
           git add package.json package-lock.json src/constants/compat.ts
@@ -159,7 +182,7 @@ jobs:
             "" \
             "**Before merging** review the SDK surface probe in \`src/runtime/sdk-compat.ts\` (\`SDK_REQUIRED_SURFACES\`). If the check above failed, a required \`pi.*\` / \`ctx.*\` surface moved — fix the call sites, not just the pins." \
             "" \
-            "_Self-rewriting: every run force-pushes the \`$WATCH_BRANCH\` branch, so there is only ever this one PR; it closes automatically when the SDK returns to range._" \
+            "_Self-rewriting: while this branch has only bot commits, each run force-pushes it (bumping to the newest SDK), so there is only ever this one PR. **The moment you push a commit here, the watcher stands down and never touches your work** — merge or close the PR to let it resume. It also closes automatically if the SDK returns to the known-good range._" \
             > pr-body.md
 
           NUM=$(gh pr list --head "$WATCH_BRANCH" --base "${{ steps.v.outputs.base }}" --state open --json number --jq '.[0].number // empty')
