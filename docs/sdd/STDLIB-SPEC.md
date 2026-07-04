@@ -112,10 +112,30 @@ yet), so it never asserts the outcome — it flags the tension and names candida
 ### 6.1 The two sinks + the trade-off pairs (OD-3 resolved)
 
 **Structural law: every quality is bought from two accounts — `simplicity` and
-`cost`.** Almost every other quality is paid for by draining simplicity and/or
-money. So "can't sit on all chairs" is precise: **you cannot overdraw both
-accounts.** Rank many qualities high → drain both → warnings pile up. This is the
-director's core mechanic.
+`cost`.** Almost every other quality is paid for by draining one or both. So
+"can't sit on all chairs" is precise: **you cannot overdraw both accounts.** Rank
+many qualities high → drain both → warnings pile up. This is the director's core
+mechanic.
+
+**But `cost` is abstract — bind its currency by context (DECIDED).** `cost` is
+**not money**; it is a *scarce-resource account* whose concrete currency the
+context supplies. A solo hobbyist at home spends **time**, not dollars; a startup
+spends **money** + time-to-market; embedded/mobile spends **compute/energy**. If
+`cost` were hardcoded to money, a small model on a home project would optimize a
+currency it never spends. So one binder port carries the content
+(form-over-content, §2):
+
+```
+VAR cost_currency ONEOF { time, money, compute }   // declared, from context
+```
+
+Every "you'll pay in cost" warning is read through `cost_currency` — "faster
+costs your *hours*" vs "your *cloud bill*" vs "your *CPU/energy*". The trade-off
+*form* is universal; only the currency is contextual. (This is why `efficiency`
+was safely dropped: with `cost_currency = compute`, cost *is* resource
+efficiency — it re-emerges from the same axis, no separate goal.) Likewise the
+`simplicity` account's *budget* scales with `team_small` — one brain affords less
+complexity than a team — but simplicity itself is spent by everyone.
 
 **Goal set (OD-1 resolved):** seven — `speed`, `security`, `cost`, `simplicity`,
 `scalability`, `reliability`, `flexibility`. `efficiency` was **dropped** as a
@@ -174,6 +194,10 @@ recomputes, then asserts.
 **Goals (ranked, `ONEOF {critical, important, nice}` each) — seven (§6.1):**
 `speed`, `security`, `cost`, `simplicity`, `scalability`, `reliability`,
 `flexibility`. (`simplicity` + `cost` are the two sinks every other goal drains.)
+
+**Context (binds abstract axes to concrete currency — declared):**
+`cost_currency ONEOF { time, money, compute }` — what `cost` actually spends
+here (§6.1); read into every cost-axis warning.
 
 **Constraints (hard limits, `declared` boolean):**
 `budget_tight`, `team_small`, `deadline_hard`, `regulated`, `must_reuse_legacy`,
@@ -286,3 +310,7 @@ Still open:
   goals (`efficiency` dropped); 13 trade-off pairs with payment mechanism +
   candidate cost-axes (CAP the one theorem); the "premature X is evil" family →
   `do_simplest_now`.
+- `cost` made abstract (§6.1): it is a scarce-resource account, not money; a
+  `cost_currency ONEOF {time, money, compute}` context port binds the concrete
+  currency, so a small model reasons in the right currency (a home dev spends
+  time, not dollars). `efficiency` re-emerges as `cost` when currency=compute.
