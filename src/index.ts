@@ -3242,14 +3242,22 @@ function registerPlannerCompactEvents(
 		markPlannerCompactionInFlight(compactRuntime);
 		if (compactTimer) clearInterval(compactTimer);
 		let frame = 0;
+		// Compaction is a single streaming LLM call with no known token total, so a
+		// percent progress bar is impossible. An elapsed timer is the honest signal:
+		// it proves the process is alive and lets the user gauge how long it runs.
+		const startedAt = Date.now();
 		const renderFrame = () => {
 			try {
 				const glyph =
 					PLANNER_COMPACT_FRAMES[frame % PLANNER_COMPACT_FRAMES.length];
 				frame += 1;
+				const elapsedSec = Math.floor((Date.now() - startedAt) / 1000);
 				ctx.ui.setStatus(
 					PLANNER_COMPACT_STATUS_KEY,
-					ctx.ui.theme.fg("accent", `${glyph} Compacting context…`),
+					ctx.ui.theme.fg(
+						"accent",
+						`${glyph} Compacting context… ${elapsedSec}s`,
+					),
 				);
 			} catch {
 				// Never let the animation throw out of the interval.
