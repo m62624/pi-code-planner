@@ -82,6 +82,7 @@ import {
 	type CompactEtaEstimate,
 	compactionProgressFraction,
 	estimateCompactionDuration,
+	formatDurationShort,
 	formatEtaLabel,
 	renderProgressBar,
 } from "./runtime/compact-eta";
@@ -3212,8 +3213,16 @@ const PLANNER_COMPACT_STATUS_KEY = "planner-compact";
 // separate spinner glyph is needed, so we never busy-loop the render.
 const PLANNER_COMPACT_REFRESH_MS = 1000;
 // Safety cap so a missing completion event can never leave the indicator
-// running forever.
+// running forever. When compaction *fails*, Pi's built-in auto-compact swallows
+// the error and never emits `session_compact` (only manual `ctx.compact()`
+// rejects into our onError), so the indicator can only learn the run ended from
+// (a) the agent resuming work — handled by the activity handlers below — or
+// (b) this cap for the pure-idle case. With a learned ETA we bound the idle wait
+// to a few times the predicted high end so a failure clears in seconds, not the
+// full two minutes; with no history yet we keep the conservative cap.
 const PLANNER_COMPACT_MAX_MS = 120_000;
+const PLANNER_COMPACT_FAILURE_ETA_MULTIPLE = 3;
+const PLANNER_COMPACT_FAILURE_FLOOR_MS = 15_000;
 
 // Human label for why the compaction fired. The SDK does not stream the summary
 // generation to extensions, so we cannot show a true percent bar — the honest
@@ -3270,6 +3279,18 @@ function registerPlannerCompactEvents(
 			// Stale ctx after a session switch: nothing to clear.
 		}
 	};
+	// A compaction that *succeeded* clears the indicator in `session_compact`
+	// before the agent resumes. If the agent starts a new turn/run while the
+	// indicator is still up, the compaction ended WITHOUT `session_compact` — i.e.
+	// it failed (Pi's auto-compact swallows the error and never emits it). Drop
+	// the abandoned run and hide the indicator at once instead of waiting out the
+	// safety cap. This can never clear a live compaction: summarization blocks the
+	// agent loop, so no turn can start while it is running.
+	const clearStaleCompactIndicator = (ctx: ExtensionContext) => {
+		if (!compactTimer) return;
+		pendingCompact = null;
+		stopCompactIndicator(ctx);
+	};
 
 	pi.on("session_before_compact", async (event, ctx) => {
 		// A real compaction is starting (preparation succeeded — this event never
@@ -3321,7 +3342,7 @@ function registerPlannerCompactEvents(
 		const renderStatus = () => {
 			try {
 				const elapsedMs = Date.now() - startedAt;
-				const elapsedSec = Math.floor(elapsedMs / 1000);
+				const elapsed = formatDurationShort(elapsedMs);
 				let text: string;
 				if (estimate.hasEstimate) {
 					const frac = compactionProgressFraction({
@@ -3331,9 +3352,9 @@ function registerPlannerCompactEvents(
 					});
 					const bar = renderProgressBar(frac);
 					const pct = Math.round(frac * 100);
-					text = `Compacting ${sizeLabel} tok (${reasonLabel}) ${bar} ${pct}% · ${elapsedSec}s / ${formatEtaLabel(estimate)}`;
+					text = `Compacting ${sizeLabel} tok (${reasonLabel}) ${bar} ${pct}% · ${elapsed} / ${formatEtaLabel(estimate)}`;
 				} else {
-					text = `Compacting ${sizeLabel} tok (${reasonLabel})… ${elapsedSec}s`;
+					text = `Compacting ${sizeLabel} tok (${reasonLabel})… ${elapsed}`;
 				}
 				ctx.ui.setStatus(
 					PLANNER_COMPACT_STATUS_KEY,
@@ -3346,11 +3367,24 @@ function registerPlannerCompactEvents(
 		renderStatus();
 		compactTimer = setInterval(renderStatus, PLANNER_COMPACT_REFRESH_MS);
 		compactTimer.unref?.();
+		// Bound the idle-failure wait to a few times the predicted high end when we
+		// have a learned ETA, so a swallowed failure with no follow-up turn still
+		// clears in seconds rather than the full cap; fall back to the cap with no
+		// history. The activity handlers below clear the interactive case instantly.
+		const clearAfterMs = estimate.hasEstimate
+			? Math.min(
+					PLANNER_COMPACT_MAX_MS,
+					Math.max(
+						PLANNER_COMPACT_FAILURE_FLOOR_MS,
+						Math.round(estimate.hiMs * PLANNER_COMPACT_FAILURE_ETA_MULTIPLE),
+					),
+				)
+			: PLANNER_COMPACT_MAX_MS;
 		const safety = setTimeout(() => {
 			// A run that never completed is not a representative sample.
 			pendingCompact = null;
 			stopCompactIndicator(ctx);
-		}, PLANNER_COMPACT_MAX_MS);
+		}, clearAfterMs);
 		safety.unref?.();
 	});
 
@@ -3405,6 +3439,17 @@ function registerPlannerCompactEvents(
 			sendUserMessage: (content, options) =>
 				pi.sendUserMessage(content, options as never),
 		});
+	});
+
+	// The agent resuming work is our only extension-visible signal that a
+	// swallowed auto-compaction failure ended (Pi emits no failure event to
+	// extensions). Clearing here makes the indicator vanish the instant the next
+	// turn/run begins after a failed compaction, without touching a live one.
+	pi.on("agent_start", async (_event, ctx) => {
+		clearStaleCompactIndicator(ctx);
+	});
+	pi.on("turn_start", async (_event, ctx) => {
+		clearStaleCompactIndicator(ctx);
 	});
 
 	// Proactive monitor: at every turn boundary, project the context budget from

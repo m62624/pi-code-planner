@@ -258,7 +258,10 @@ describe("formatDurationShort", () => {
 		expect(formatDurationShort(8_000)).toBe("8s");
 		expect(formatDurationShort(45_400)).toBe("45s");
 		expect(formatDurationShort(90_000)).toBe("1m30s");
-		expect(formatDurationShort(120_000)).toBe("2m");
+		// Past a minute, minutes and seconds always show together (zero-padded);
+		// a whole-minute duration keeps `00s` rather than collapsing to `2m`.
+		expect(formatDurationShort(65_000)).toBe("1m05s");
+		expect(formatDurationShort(120_000)).toBe("2m00s");
 	});
 });
 

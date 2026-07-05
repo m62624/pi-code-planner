@@ -284,13 +284,18 @@ export function renderProgressBar(fraction: number, width = 10): string {
 	return "█".repeat(filled) + "░".repeat(width - filled);
 }
 
-/** Short human duration: `8s`, `45s`, `1m30s`, `2m`. */
+/**
+ * Short human duration. Below a minute it is just seconds (`8s`, `45s`). At or
+ * above a minute it always shows minutes AND seconds together, seconds
+ * zero-padded (`1m05s`, `2m00s`) — never a bare `125s`, and never a `2m` that
+ * silently drops the seconds, so a running timer reads cleanly the whole way.
+ */
 export function formatDurationShort(ms: number): string {
 	const totalSec = Math.max(0, Math.round(ms / 1000));
 	if (totalSec < 60) return `${totalSec}s`;
 	const min = Math.floor(totalSec / 60);
 	const sec = totalSec % 60;
-	return sec === 0 ? `${min}m` : `${min}m${sec}s`;
+	return `${min}m${String(sec).padStart(2, "0")}s`;
 }
 
 /**
