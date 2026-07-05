@@ -3205,21 +3205,14 @@ function registerPlannerTools(
 }
 
 const PLANNER_COMPACT_STATUS_KEY = "planner-compact";
-const PLANNER_COMPACT_FRAMES = [
-	"⠋",
-	"⠙",
-	"⠹",
-	"⠸",
-	"⠼",
-	"⠴",
-	"⠦",
-	"⠧",
-	"⠇",
-	"⠏",
-];
-const PLANNER_COMPACT_FRAME_MS = 150;
+// Refresh cadence for the indicator's live parts (elapsed seconds + filling
+// bar). Deliberately 1 Hz, not a ~150 ms spinner loop: on a machine already
+// pegged by local inference, redrawing the footer ~7×/s is wasted work and can
+// flicker. The ticking seconds and the growing bar are the animation — no
+// separate spinner glyph is needed, so we never busy-loop the render.
+const PLANNER_COMPACT_REFRESH_MS = 1000;
 // Safety cap so a missing completion event can never leave the indicator
-// spinning forever.
+// running forever.
 const PLANNER_COMPACT_MAX_MS = 120_000;
 
 // Human label for why the compaction fired. The SDK does not stream the summary
@@ -3325,12 +3318,8 @@ function registerPlannerCompactEvents(
 			// Keep the no-estimate fallback: the timer still runs.
 		}
 
-		let frame = 0;
-		const renderFrame = () => {
+		const renderStatus = () => {
 			try {
-				const glyph =
-					PLANNER_COMPACT_FRAMES[frame % PLANNER_COMPACT_FRAMES.length];
-				frame += 1;
 				const elapsedMs = Date.now() - startedAt;
 				const elapsedSec = Math.floor(elapsedMs / 1000);
 				let text: string;
@@ -3342,20 +3331,20 @@ function registerPlannerCompactEvents(
 					});
 					const bar = renderProgressBar(frac);
 					const pct = Math.round(frac * 100);
-					text = `${glyph} Compacting ${sizeLabel} tok (${reasonLabel}) ${bar} ${pct}% · ${elapsedSec}s / ${formatEtaLabel(estimate)}`;
+					text = `Compacting ${sizeLabel} tok (${reasonLabel}) ${bar} ${pct}% · ${elapsedSec}s / ${formatEtaLabel(estimate)}`;
 				} else {
-					text = `${glyph} Compacting ${sizeLabel} tok (${reasonLabel})… ${elapsedSec}s`;
+					text = `Compacting ${sizeLabel} tok (${reasonLabel})… ${elapsedSec}s`;
 				}
 				ctx.ui.setStatus(
 					PLANNER_COMPACT_STATUS_KEY,
 					ctx.ui.theme.fg("accent", text),
 				);
 			} catch {
-				// Never let the animation throw out of the interval.
+				// Never let a redraw throw out of the interval.
 			}
 		};
-		renderFrame();
-		compactTimer = setInterval(renderFrame, PLANNER_COMPACT_FRAME_MS);
+		renderStatus();
+		compactTimer = setInterval(renderStatus, PLANNER_COMPACT_REFRESH_MS);
 		compactTimer.unref?.();
 		const safety = setTimeout(() => {
 			// A run that never completed is not a representative sample.
