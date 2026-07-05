@@ -18,6 +18,8 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_goal_decide",
 	"planner_questions_submit",
 	"planner_questions_resolve",
+	"planner_spec_submit",
+	"planner_gate_check",
 	"planner_plan_submit",
 	"planner_discovery_submit",
 	"planner_tdd_submit",
@@ -132,6 +134,21 @@ const STEP_ALLOWED_TOOLS = {
 		],
 		compact_discovery: [],
 		enter_planning: [],
+	},
+	spec: {
+		draft_requirements: [
+			"planner_spec_submit",
+			"planner_contract_route",
+			"planner_contract_read",
+		],
+		elicit_gaps: [
+			"planner_questions_submit",
+			"planner_questions_resolve",
+			"planner_spec_submit",
+		],
+		verify_spec: ["planner_gate_check", "planner_spec_submit"],
+		compact_spec: [],
+		finish_spec: [],
 	},
 	planning: {
 		read_context: ["planner_contract_route", "planner_contract_read"],

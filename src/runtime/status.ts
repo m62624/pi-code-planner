@@ -186,7 +186,7 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition: "User explicitly approves the goal or requests a revision.",
 		nextInstruction:
-			"On approve: normal plans enter discovery/scan_project_structure; creationMethod=improve plans continue to planning/read_context (discovery already ran). Revise returns to intake/draft_goal.",
+			"On approve: normal plans enter discovery/scan_project_structure; creationMethod=improve plans continue to spec/draft_requirements (discovery already ran). Revise returns to intake/draft_goal.",
 	}),
 
 	scan_project_structure: stepRule("discovery", "scan_project_structure", {
@@ -248,15 +248,98 @@ export const PLANNER_STEP_RULES = {
 		nextInstruction: "Complete compact to open enter_planning.",
 	}),
 	enter_planning: stepRule("discovery", "enter_planning", {
-		objective: "Enter planning after verified discovery.",
+		objective: "Enter the spec stage after verified discovery.",
 		requiredActions: [
-			"Persist stage=planning and step=read_context for normal plans.",
+			"Persist stage=spec and step=draft_requirements for normal plans.",
 			"For creationMethod=improve, persist stage=intake and step=draft_goal so goal.md can be written from discovery findings.",
 		],
 		allowedNow: ["State transition only."],
-		forbiddenNow: ["Do not draft tasks until planning/read_context is active."],
+		forbiddenNow: [
+			"Do not draft requirements until spec/draft_requirements is active.",
+		],
 		exitCondition:
-			"State points to planning/read_context, or to intake/draft_goal for creationMethod=improve.",
+			"State points to spec/draft_requirements, or to intake/draft_goal for creationMethod=improve.",
+		nextInstruction: "Continue with the next state reported by planner_status.",
+	}),
+
+	draft_requirements: stepRule("spec", "draft_requirements", {
+		objective:
+			"Author the checkable specification: numbered requirements, non-goals, constraints, and evidence-backed assumptions.",
+		requiredActions: [
+			"Read goal.md, discovery.md, and decisions.md via planner_artifact_read.",
+			"Call planner_spec_submit with the full structured spec (requirements with stable REQ-n ids, nonGoals, constraints, assumptions).",
+			"Formalize each requirement with a lowercase snake_case acceptanceAtom, or defer it with a recorded deferral.rationale (the freedom valve).",
+			"Assert every numeric predicate as an assumption whose statement cites the evidence; numbers never enter the spec logic.",
+		],
+		allowedNow: [
+			"Use planner_spec_submit; read planner artifacts and contract chains.",
+		],
+		forbiddenNow: [
+			"Do not write spec.json, spec.md, or any .vrf by hand.",
+			"Do not invent requirements the user never asked for — unclear scope is a question for elicit_gaps.",
+			"Do not edit production files or write tests.",
+		],
+		exitCondition: "spec.json and spec.md are written and validated.",
+		nextInstruction: "Call planner_finish_step to open elicit_gaps.",
+	}),
+	elicit_gaps: stepRule("spec", "elicit_gaps", {
+		objective:
+			"Turn every spec gap into a concrete user question and fold the answers back into the spec.",
+		requiredActions: [
+			"Submit open questions via planner_questions_submit; resolve answers via planner_questions_resolve.",
+			"After answers arrive, update the spec with another planner_spec_submit call.",
+			"If there are no unresolved gaps, submit an explicit no-questions artifact with hasOpenQuestions=false.",
+		],
+		allowedNow: [
+			"Use planner_questions_submit / planner_questions_resolve / planner_spec_submit.",
+		],
+		forbiddenNow: [
+			"Do not answer scope or trade-off questions on the user's behalf.",
+			"Do not proceed with unresolved questions.",
+		],
+		exitCondition:
+			"All submitted questions are resolved and the spec reflects the decisions.",
+		nextInstruction: "Call planner_finish_step to open verify_spec.",
+	}),
+	verify_spec: stepRule("spec", "verify_spec", {
+		objective:
+			"Mechanically verify the spec with the elenchus engine via the deterministic compiler.",
+		requiredActions: [
+			'Call planner_gate_check with gate: "spec_consistency".',
+			"Iterate until the verdict is CONSISTENT: fix contradictions, formalize or defer unaddressed requirements, route open decisions back to elicit_gaps.",
+		],
+		allowedNow: [
+			"Use planner_gate_check and planner_spec_submit; loop back to elicit_gaps when a gap needs the user.",
+		],
+		forbiddenNow: [
+			"Do not hand-write gate VRF.",
+			"Do not delete a valid requirement to force a green verdict.",
+		],
+		exitCondition:
+			"The latest spec_consistency check reports CONSISTENT and every in-scope requirement is addressed.",
+		nextInstruction: "Call planner_finish_step to open compact_spec.",
+	}),
+	compact_spec: stepRule("spec", "compact_spec", {
+		objective: "Create a compact boundary after the spec stage.",
+		requiredActions: [
+			"Request Pi compact and preserve requirement ids, non-goals, assumption evidence, and the latest gate verdict.",
+		],
+		allowedNow: ["Compact flow only."],
+		forbiddenNow: ["Do not edit code while compact is required/pending."],
+		exitCondition:
+			"Compaction finished and resume context points back to planner_status.",
+		nextInstruction: "Complete compact to open finish_spec.",
+	}),
+	finish_spec: stepRule("spec", "finish_spec", {
+		objective: "Enter planning with a verified spec.",
+		requiredActions: [
+			"Persist stage=planning and step=read_context via planner_finish_step.",
+		],
+		allowedNow: ["State transition only."],
+		forbiddenNow: [
+			"Do not draft the plan until planning/read_context is active.",
+		],
+		exitCondition: "State points to planning/read_context.",
 		nextInstruction: "Continue with the next state reported by planner_status.",
 	}),
 

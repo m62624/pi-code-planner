@@ -164,6 +164,7 @@ const STAGE_ORDER: PlannerStage[] = [
 	"init",
 	"intake",
 	"discovery",
+	"spec",
 	"planning",
 	"execution",
 	"finalize",

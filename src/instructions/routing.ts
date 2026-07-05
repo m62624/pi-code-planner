@@ -52,6 +52,8 @@ export function getInstructionKeysForPlannerStep(input: {
 			break;
 		case "discovery":
 			break;
+		case "spec":
+			break;
 		case "planning":
 			break;
 		case "execution":

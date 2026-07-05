@@ -52,6 +52,7 @@ export type PlannerBehaviorGate =
 	| "plan_record_exists"
 	| "plan_worktree_exists"
 	| "goal_approved"
+	| "spec_verified"
 	| "plan_verified"
 	| "active_task_selected"
 	| "task_branch_ready"
@@ -244,6 +245,55 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		"discovery.md",
 	]),
 	enter_planning: enterBehavior("discovery", "enter_planning", []),
+
+	draft_requirements: behavior("spec", "draft_requirements", {
+		projectAccess: "planner_artifacts",
+		actions: ["write_artifacts"],
+		requiredArtifacts: ["goal.md", "discovery.md"],
+		updatedArtifacts: ["spec.md", "spec.json"],
+		requiredGates: ["goal_approved"],
+		expectedTools: [
+			"planner_spec_submit",
+			"planner_contract_route",
+			"planner_contract_read",
+		],
+		commitPolicy: "forbidden",
+		compactPolicy: "not_allowed",
+	}),
+	elicit_gaps: behavior("spec", "elicit_gaps", {
+		projectAccess: "user_communication",
+		actions: ["ask_user", "write_artifacts"],
+		requiredArtifacts: ["spec.md", "spec.json"],
+		updatedArtifacts: ["questions.md", "decisions.md", "spec.md", "spec.json"],
+		requiredGates: [],
+		expectedTools: [
+			"planner_questions_submit",
+			"planner_questions_resolve",
+			"planner_spec_submit",
+		],
+		commitPolicy: "forbidden",
+		compactPolicy: "not_allowed",
+	}),
+	verify_spec: behavior("spec", "verify_spec", {
+		projectAccess: "planner_artifacts",
+		actions: ["run_checks", "write_artifacts"],
+		requiredArtifacts: ["spec.json"],
+		updatedArtifacts: ["coverage.md", "decisions.md"],
+		requiredGates: [],
+		expectedTools: [
+			"planner_status",
+			"planner_gate_check",
+			"planner_spec_submit",
+		],
+		commitPolicy: "forbidden",
+		compactPolicy: "not_allowed",
+	}),
+	compact_spec: compactBehavior("spec", "compact_spec", [
+		"spec.md",
+		"spec.json",
+		"coverage.md",
+	]),
+	finish_spec: enterBehavior("spec", "finish_spec", ["spec_verified"]),
 
 	read_context: behavior("planning", "read_context", {
 		projectAccess: "planner_artifacts",

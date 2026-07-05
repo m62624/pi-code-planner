@@ -6,6 +6,7 @@ export const INSTRUCTION_KEYS = [
 	"init",
 	"intake",
 	"discovery",
+	"spec",
 	"planning",
 	"execution",
 	"finalize",

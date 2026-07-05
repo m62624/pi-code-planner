@@ -133,7 +133,7 @@ describe("planner goal tools", () => {
 		);
 	});
 
-	it("enters planning (not a second discovery) after approval in the improve flow", async () => {
+	it("enters the spec stage (not a second discovery) after approval in the improve flow", async () => {
 		const setup = await createGoalSetup({
 			stage: "intake",
 			step: "await_goal_approval",
@@ -148,12 +148,12 @@ describe("planner goal tools", () => {
 		});
 
 		expect(result.status).toBe("applied");
-		expect(result.text).toContain("planning");
+		expect(result.text).toContain("spec");
 		await expect(
 			readPlanState(setup.fs, setup.planPaths),
 		).resolves.toMatchObject({
-			stage: "planning",
-			step: "read_context",
+			stage: "spec",
+			step: "draft_requirements",
 			stepStatus: "pending",
 		});
 	});
