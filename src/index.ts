@@ -3211,6 +3211,29 @@ const PLANNER_COMPACT_FRAME_MS = 150;
 // spinning forever.
 const PLANNER_COMPACT_MAX_MS = 120_000;
 
+// Human label for why the compaction fired. The SDK does not stream the summary
+// generation to extensions, so we cannot show a true percent bar — the honest
+// signal is *why* it fired plus the *size* of the job (tokensBefore), which is
+// what actually correlates with how long it will take.
+function plannerCompactReasonLabel(
+	reason: "manual" | "threshold" | "overflow",
+): string {
+	switch (reason) {
+		case "manual":
+			return "/compact";
+		case "threshold":
+			return "context full";
+		case "overflow":
+			return "overflow recovery";
+	}
+}
+
+// Compact a token count to a short footer-friendly form: 118234 -> "118k".
+function plannerFormatTokens(tokens: number): string {
+	if (tokens >= 1000) return `${Math.round(tokens / 1000)}k`;
+	return String(tokens);
+}
+
 function registerPlannerCompactEvents(
 	pi: ExtensionAPI,
 	compactRuntime: PlannerCompactRuntimeState,
@@ -3235,17 +3258,21 @@ function registerPlannerCompactEvents(
 		}
 	};
 
-	pi.on("session_before_compact", async (_event, ctx) => {
+	pi.on("session_before_compact", async (event, ctx) => {
 		// A real compaction is starting (preparation succeeded — this event never
 		// fires for the "nothing to compact" throw), so mark it in-flight to keep
 		// the watchdog from nudging mid-compaction.
 		markPlannerCompactionInFlight(compactRuntime);
 		if (compactTimer) clearInterval(compactTimer);
 		let frame = 0;
-		// Compaction is a single streaming LLM call with no known token total, so a
-		// percent progress bar is impossible. An elapsed timer is the honest signal:
-		// it proves the process is alive and lets the user gauge how long it runs.
+		// Compaction is a single streaming LLM call whose summary generation is not
+		// streamed to extensions, so a percent progress bar is impossible. The honest
+		// signal is the deterministic data the event *does* carry: why it fired
+		// (reason) and the size of the job (tokensBefore), plus a live elapsed timer
+		// to prove it is alive and let the user gauge how long it runs.
 		const startedAt = Date.now();
+		const reasonLabel = plannerCompactReasonLabel(event.reason);
+		const sizeLabel = plannerFormatTokens(event.preparation.tokensBefore);
 		const renderFrame = () => {
 			try {
 				const glyph =
@@ -3256,7 +3283,7 @@ function registerPlannerCompactEvents(
 					PLANNER_COMPACT_STATUS_KEY,
 					ctx.ui.theme.fg(
 						"accent",
-						`${glyph} Compacting context… ${elapsedSec}s`,
+						`${glyph} Compacting ${sizeLabel} tok (${reasonLabel})… ${elapsedSec}s`,
 					),
 				);
 			} catch {
