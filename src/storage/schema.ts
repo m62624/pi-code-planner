@@ -207,6 +207,9 @@ export interface TaskRecord {
 	objective: string;
 	scope: string[];
 	acceptanceCriteria: string[];
+	// Spec traceability (SDD): REQ-n ids from spec.json this task discharges.
+	// Optional and defaulted to [] on read so legacy task.json files parse.
+	requirements?: string[];
 	contractChain?: string[];
 	relevantContracts?: string[];
 	forbiddenAreas?: string[];

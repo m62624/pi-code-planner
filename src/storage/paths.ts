@@ -22,6 +22,10 @@ export interface PlanStoragePaths {
 	stateJson: string;
 	requestMd: string;
 	goalMd: string;
+	specMd: string;
+	specJson: string;
+	specPrevJson: string;
+	coverageMd: string;
 	planMd: string;
 	discoveryMd: string;
 	questionsMd: string;
@@ -82,6 +86,10 @@ export function createPlanStoragePaths(
 		stateJson: join(planDir, "state.json"),
 		requestMd: join(planDir, "request.md"),
 		goalMd: join(planDir, "goal.md"),
+		specMd: join(planDir, "spec.md"),
+		specJson: join(planDir, "spec.json"),
+		specPrevJson: join(planDir, "spec.prev.json"),
+		coverageMd: join(planDir, "coverage.md"),
 		planMd: join(planDir, "plan.md"),
 		discoveryMd: join(planDir, "discovery.md"),
 		questionsMd: join(planDir, "questions.md"),

@@ -15,6 +15,7 @@ export interface UpsertTaskArtifactsInput {
 	objective: string;
 	scope: string[];
 	acceptanceCriteria: string[];
+	requirements?: string[];
 	contractChain?: string[];
 	relevantContracts?: string[];
 	forbiddenAreas?: string[];
@@ -39,6 +40,7 @@ export async function upsertTaskArtifacts(
 			input.acceptanceCriteria,
 			"acceptanceCriteria",
 		),
+		requirements: stringArray(input.requirements ?? [], "requirements"),
 		contractChain: stringArray(input.contractChain ?? [], "contractChain"),
 		relevantContracts: stringArray(
 			input.relevantContracts ?? [],
@@ -60,7 +62,10 @@ export async function readTaskRecord(
 	fs: PlannerFs,
 	paths: TaskStoragePaths,
 ): Promise<TaskRecord> {
-	return await readJson<TaskRecord>(fs, paths.taskJson);
+	const record = await readJson<TaskRecord>(fs, paths.taskJson);
+	// Legacy task.json files predate spec traceability; default the field so
+	// every consumer can rely on it being an array.
+	return { ...record, requirements: record.requirements ?? [] };
 }
 
 export async function updateTaskStatus(
@@ -94,6 +99,10 @@ function formatTaskMarkdown(task: TaskRecord): string {
 		"## Acceptance Criteria",
 		"",
 		...list(task.acceptanceCriteria),
+		"",
+		"## Spec Requirements",
+		"",
+		...list(task.requirements ?? [], "(no spec traceability recorded)"),
 		"",
 		"## TDD Rule",
 		"",
