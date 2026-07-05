@@ -79,6 +79,13 @@ import {
 	shouldProactivelyCompact,
 } from "./runtime/compact";
 import {
+	type CompactEtaEstimate,
+	compactionProgressFraction,
+	estimateCompactionDuration,
+	formatEtaLabel,
+	renderProgressBar,
+} from "./runtime/compact-eta";
+import {
 	applyPlannerContractFinishPolicy,
 	executePlannerContractTool,
 	hasPendingContractFinishDecision,
@@ -229,6 +236,10 @@ import {
 	selectPlannerResumeSessionFile,
 } from "./session/handoff";
 import { loadEffectivePlannerSettings } from "./settings/manager";
+import {
+	readCompactTimingHistory,
+	recordCompactTiming,
+} from "./storage/compact-timing-store";
 import { createNodeFs, type PlannerFs } from "./storage/fs";
 import { migrateLayout } from "./storage/migrate-layout";
 import type { ProjectStoragePaths } from "./storage/paths";
@@ -3243,6 +3254,15 @@ function registerPlannerCompactEvents(
 	// workspace overlay too (reserved rows), so it is visible in both the plain
 	// chat and the custom workspace.
 	let compactTimer: ReturnType<typeof setInterval> | null = null;
+	// The in-flight run, set in `session_before_compact` only while a plan is
+	// active, read in `session_compact` to record its measured duration. Cleared
+	// on completion and discarded by the safety timeout (an abandoned run is not a
+	// representative timing sample).
+	let pendingCompact: {
+		startedAt: number;
+		tokens: number;
+		model: string | null;
+	} | null = null;
 	const stopCompactIndicator = (ctx: ExtensionContext) => {
 		if (compactTimer) {
 			clearInterval(compactTimer);
@@ -3263,28 +3283,72 @@ function registerPlannerCompactEvents(
 		// fires for the "nothing to compact" throw), so mark it in-flight to keep
 		// the watchdog from nudging mid-compaction.
 		markPlannerCompactionInFlight(compactRuntime);
+		// The indicator is a planner-mode affordance: with no active plan (no
+		// /planner-create or /planner-resume, or after leaving the planner) show
+		// nothing and record nothing. Pi's own compaction UX still applies.
+		if (!isPlanActive()) return;
 		if (compactTimer) clearInterval(compactTimer);
-		let frame = 0;
-		// Compaction is a single streaming LLM call whose summary generation is not
-		// streamed to extensions, so a percent progress bar is impossible. The honest
-		// signal is the deterministic data the event *does* carry: why it fired
-		// (reason) and the size of the job (tokensBefore), plus a live elapsed timer
-		// to prove it is alive and let the user gauge how long it runs.
+
 		const startedAt = Date.now();
+		const tokensBefore = event.preparation.tokensBefore;
+		const model = ctx.model?.id ?? null;
 		const reasonLabel = plannerCompactReasonLabel(event.reason);
-		const sizeLabel = plannerFormatTokens(event.preparation.tokensBefore);
+		const sizeLabel = plannerFormatTokens(tokensBefore);
+
+		// Remember this run so session_compact can persist its measured duration
+		// and improve future predictions.
+		pendingCompact = { startedAt, tokens: tokensBefore, model };
+
+		// The SDK never streams summary generation to extensions, so a live percent
+		// is impossible from this compaction alone. Instead we *predict* the ETA from
+		// this project's own recorded history (see runtime/compact-eta.ts) and drive
+		// an honest, asymptotic bar. No history yet → no estimate → a bare timer.
+		let estimate: CompactEtaEstimate = estimateCompactionDuration({
+			samples: [],
+			tokens: tokensBefore,
+			model,
+		});
+		try {
+			const fs = createNodeFs();
+			const projectPaths = await resolveProjectStoragePaths({
+				fs,
+				agentDir: getAgentDir(),
+				cwd: ctx.cwd,
+			});
+			const history = await readCompactTimingHistory(fs, projectPaths);
+			estimate = estimateCompactionDuration({
+				samples: history.samples,
+				tokens: tokensBefore,
+				model,
+			});
+		} catch {
+			// Keep the no-estimate fallback: the timer still runs.
+		}
+
+		let frame = 0;
 		const renderFrame = () => {
 			try {
 				const glyph =
 					PLANNER_COMPACT_FRAMES[frame % PLANNER_COMPACT_FRAMES.length];
 				frame += 1;
-				const elapsedSec = Math.floor((Date.now() - startedAt) / 1000);
+				const elapsedMs = Date.now() - startedAt;
+				const elapsedSec = Math.floor(elapsedMs / 1000);
+				let text: string;
+				if (estimate.hasEstimate) {
+					const frac = compactionProgressFraction({
+						elapsedMs,
+						etaMs: estimate.etaMs,
+						reliability: estimate.reliability,
+					});
+					const bar = renderProgressBar(frac);
+					const pct = Math.round(frac * 100);
+					text = `${glyph} Compacting ${sizeLabel} tok (${reasonLabel}) ${bar} ${pct}% · ${elapsedSec}s / ${formatEtaLabel(estimate)}`;
+				} else {
+					text = `${glyph} Compacting ${sizeLabel} tok (${reasonLabel})… ${elapsedSec}s`;
+				}
 				ctx.ui.setStatus(
 					PLANNER_COMPACT_STATUS_KEY,
-					ctx.ui.theme.fg(
-						"accent",
-						`${glyph} Compacting ${sizeLabel} tok (${reasonLabel})… ${elapsedSec}s`,
-					),
+					ctx.ui.theme.fg("accent", text),
 				);
 			} catch {
 				// Never let the animation throw out of the interval.
@@ -3293,14 +3357,17 @@ function registerPlannerCompactEvents(
 		renderFrame();
 		compactTimer = setInterval(renderFrame, PLANNER_COMPACT_FRAME_MS);
 		compactTimer.unref?.();
-		const safety = setTimeout(
-			() => stopCompactIndicator(ctx),
-			PLANNER_COMPACT_MAX_MS,
-		);
+		const safety = setTimeout(() => {
+			// A run that never completed is not a representative sample.
+			pendingCompact = null;
+			stopCompactIndicator(ctx);
+		}, PLANNER_COMPACT_MAX_MS);
 		safety.unref?.();
 	});
 
 	pi.on("session_compact", async (_event, ctx) => {
+		const rec = pendingCompact;
+		pendingCompact = null;
 		stopCompactIndicator(ctx);
 		consumePlannerControlledCompact(compactRuntime);
 
@@ -3314,6 +3381,17 @@ function registerPlannerCompactEvents(
 			});
 		} catch {
 			return;
+		}
+
+		// Persist this compaction's measured duration so future ETAs sharpen. `rec`
+		// is set only for planner-mode compactions, so history stays scoped.
+		if (rec) {
+			await recordCompactTiming(fs, projectPaths, {
+				tokens: rec.tokens,
+				ms: Date.now() - rec.startedAt,
+				model: rec.model,
+				at: Date.now(),
+			});
 		}
 
 		const preflight = await runPlannerPreflight({
