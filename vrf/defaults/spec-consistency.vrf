@@ -1,0 +1,55 @@
+// spec-consistency — premise library for spec/verify_spec.
+//
+// NOT model-authored: the deterministic spec→VRF compiler (src/vrf/spec-compiler.ts)
+// generates the consuming program from spec.json — the model never hand-writes
+// this gate's facts. The logic mirrors the mechanically verified gate models in
+// docs/sdd/models/ (freedom-valve arc, engine-checked): an in-scope requirement
+// is ADDRESSED iff it is FORMALIZED (has an acceptance atom) or DEFERRED to
+// human judgment with a recorded rationale. A faked `formalized` on an
+// inexpressible requirement is a CONFLICT; an unaddressed requirement blocks
+// the claim as a WARNING that names it.
+//
+// The consuming program feeds qualified facts per requirement subject:
+//   FACT spec_gate.req_1 is_requirement
+//   FACT spec_gate.req_1 formalized          // or the deferred triple
+//   ...
+// and binds the claim port via values: {"spec_gate.spec_verified": true}.
+DOMAIN spec_gate
+
+// -- the claim under test (a bare port, so no subject enters the schemas) --
+VAR spec_verified
+
+// -- freedom valve: inexpressible + recorded rationale => validly deferred --
+RULE valve FOR EACH r MENTIONED:
+    WHEN r is_requirement
+    AND  NOT r vrf_expressible
+    AND  r rationale_recorded
+    THEN r deferred_to_freedom
+
+// -- a requirement is addressed by formalization OR by a valid deferral --
+RULE addr_formal FOR EACH r MENTIONED:
+    WHEN r is_requirement
+    AND  r formalized
+    THEN r addressed
+RULE addr_freedom FOR EACH r MENTIONED:
+    WHEN r is_requirement
+    AND  r deferred_to_freedom
+    THEN r addressed
+
+// -- gaming is caught: you can only formalize what is expressible --
+PREMISE no_fake_formal FOR EACH r MENTIONED:
+    WHEN r is_requirement
+    AND  r formalized
+    THEN r vrf_expressible
+
+// -- a deferral pays its price: no rationale, no valve --
+PREMISE valve_needs_rationale FOR EACH r MENTIONED:
+    WHEN r is_requirement
+    AND  r deferred_to_freedom
+    THEN r rationale_recorded
+
+// -- the gate: the spec is verified only when EVERY requirement is addressed --
+PREMISE spec_needs_addressed FOR EACH r MENTIONED:
+    WHEN spec_verified
+    AND  r is_requirement
+    THEN r addressed

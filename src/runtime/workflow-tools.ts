@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
@@ -239,6 +240,34 @@ function fallbackWorkflowToolTransition(
 	}
 }
 
+/**
+ * The SDD spec gate (SPEC.md §6.2): the latest planner_gate_check run for
+ * spec_consistency must be CONSISTENT and must have been computed from the
+ * spec.json that is on disk right now — an edit after the pass invalidates it.
+ */
+async function validateSpecGatePassed(
+	fs: PlannerFs,
+	planPaths: PlanStoragePaths,
+): Promise<string | null> {
+	const lastCheck = await readElenchusLastCheck(fs, planPaths.elenchusDir);
+	if (lastCheck?.gate !== "spec_consistency") {
+		return 'The spec gate has not run. Call planner_gate_check with gate: "spec_consistency" at spec/verify_spec and reach CONSISTENT before advancing.';
+	}
+	if (lastCheck.outcome !== "CONSISTENT") {
+		return `The latest spec_consistency gate ended in ${lastCheck.outcome} — the spec stage only advances on CONSISTENT. Close the gaps the gate named (planner_spec_submit to fix the spec, or loop back to spec/elicit_gaps for user answers), then re-run planner_gate_check.`;
+	}
+	if (!(await fs.exists(planPaths.specJson))) {
+		return "spec.json is missing although the spec gate passed earlier. Re-author it with planner_spec_submit and re-run planner_gate_check.";
+	}
+	const currentHash = createHash("sha256")
+		.update(await fs.readText(planPaths.specJson))
+		.digest("hex");
+	if (lastCheck.sourceHash && lastCheck.sourceHash !== currentHash) {
+		return "spec.json changed after the last spec_consistency pass — the verdict is stale. Re-run planner_gate_check at spec/verify_spec.";
+	}
+	return null;
+}
+
 const INTERNAL_DONE_STEPS = new Set<string>([
 	"prepare_output_branch",
 	"merge_or_export_result",
@@ -284,6 +313,35 @@ async function validateWorkflowExit(input: {
 		);
 		if (cleanBlock) {
 			return cleanBlock;
+		}
+	}
+	if (state.stage === "spec" && state.step === "elicit_gaps") {
+		return state.questionsResolved
+			? null
+			: "Spec questions are still unresolved. Show them to the user verbatim, wait for answers, and call planner_questions_resolve before finishing spec/elicit_gaps.";
+	}
+	if (
+		state.stage === "spec" &&
+		(state.step === "verify_spec" || state.step === "finish_spec")
+	) {
+		// Looping back from verify_spec to elicit_gaps is always allowed — that
+		// is how gate gaps become user questions. Only the FORWARD transition is
+		// gated on a fresh CONSISTENT spec_consistency run (SPEC.md §6.2 hard
+		// gate: WARNING/UNDERDETERMINED block too, unlike the generic
+		// CONFLICT-only rule above).
+		const target =
+			input.transition.type === "finish_step"
+				? input.transition.next
+				: undefined;
+		const loopBack = target?.stage === "spec" && target.step === "elicit_gaps";
+		if (!loopBack) {
+			const gateBlock = await validateSpecGatePassed(
+				input.fs,
+				input.orchestrator.preflight.context.planPaths,
+			);
+			if (gateBlock) {
+				return gateBlock;
+			}
 		}
 	}
 	if (state.stage === "discovery" && state.step === "scan_project_structure") {

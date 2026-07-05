@@ -15,6 +15,11 @@ export function getRecommendedVrfTemplates(
 	if (stage === "discovery" && step === "scan_project_structure") {
 		return ["discovery-gaps"];
 	}
+	if (stage === "spec" && step === "verify_spec") {
+		// Consumed by planner_gate_check's deterministic compiler, never by a
+		// model-authored program.
+		return ["spec-consistency"];
+	}
 	if (stage === "planning" && step === "consistency_check") {
 		return ["plan-consistency"];
 	}

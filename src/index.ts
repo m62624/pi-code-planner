@@ -129,6 +129,11 @@ import {
 	PLANNER_EXEC_TOOL_NAME,
 } from "./runtime/exec-tools";
 import {
+	executePlannerGateTool,
+	PLANNER_GATE_NAMES,
+	PLANNER_GATE_TOOL_NAME,
+} from "./runtime/gate-tools";
+import {
 	executePlannerGitTool,
 	PLANNER_GIT_TOOL_NAMES,
 	type PlannerGitToolName,
@@ -190,6 +195,10 @@ import {
 	PLANNER_SKILL_SOURCE_KINDS,
 	type PlannerSkillSummary,
 } from "./runtime/skill-library";
+import {
+	executePlannerSpecTool,
+	PLANNER_SPEC_TOOL_NAME,
+} from "./runtime/spec-tools";
 import {
 	buildPlannerStuckCompactInstructions,
 	executePlannerStuckTool,
@@ -2909,6 +2918,150 @@ function registerPlannerTools(
 			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 			await recordPlannerToolActivityForProject({ fs, projectPaths });
 			const result = await executePlannerElenchusTool({
+				fs,
+				git: gitRunner,
+				projectPaths,
+				params,
+			});
+			return plannerToolResponse(result);
+		},
+	});
+
+	pi.registerTool({
+		name: PLANNER_SPEC_TOOL_NAME,
+		label: "Planner Spec Submit",
+		description:
+			"Persist the structured SDD specification (spec.json + rendered spec.md): numbered requirements with stable REQ-n ids and acceptance criteria, non-goals, constraints (optionally with a machine-checkable relation over boolean-leaf atoms), and evidence-backed assumptions. Validated on submit; the deterministic spec→VRF compiler in planner_gate_check consumes the persisted record — never hand-write gate VRF.",
+		promptSnippet:
+			"At spec/draft_requirements (and when folding elicit_gaps answers back in), call planner_spec_submit with the FULL spec. Each requirement: stable id REQ-<n>, statement, acceptance, priority (must|should|could), inScope, and either acceptanceAtom (lowercase snake_case — the requirement is formalized) or deferral.rationale (the freedom valve for genuinely inexpressible requirements). Numbers never enter atoms: compute the predicate and record it as an assumption whose statement cites the evidence. Give constraints a `relation` (implies / exclusive / oneof / atleast over atoms) whenever the invariant is logical — prose-only constraints stay human-checked.",
+		parameters: {
+			type: "object",
+			properties: {
+				requirements: {
+					type: "array",
+					description: "All requirements, in REQ-n order.",
+					items: {
+						type: "object",
+						properties: {
+							id: { type: "string", description: "Stable id, REQ-<n>." },
+							statement: {
+								type: "string",
+								description: "Observable behavior, not implementation.",
+							},
+							acceptance: {
+								type: "string",
+								description: "Human acceptance criterion.",
+							},
+							acceptanceAtom: {
+								type: "string",
+								description:
+									"Optional VRF atom (lowercase snake_case) that later work must prove. Present = formalized.",
+							},
+							priority: { type: "string", enum: ["must", "should", "could"] },
+							inScope: { type: "boolean" },
+							deferral: {
+								type: "object",
+								description:
+									"Freedom valve: required when acceptanceAtom is omitted.",
+								properties: {
+									rationale: {
+										type: "string",
+										description:
+											"Why this requirement is not expressible as a boolean web.",
+									},
+								},
+								required: ["rationale"],
+								additionalProperties: false,
+							},
+						},
+						required: ["id", "statement", "acceptance", "priority", "inScope"],
+						additionalProperties: false,
+					},
+				},
+				nonGoals: {
+					type: "array",
+					items: { type: "string" },
+					description: "Explicit out-of-scope declarations (REQ-3).",
+				},
+				constraints: {
+					type: "array",
+					items: {
+						type: "object",
+						properties: {
+							id: { type: "string", description: "Stable id, CON-<n>." },
+							statement: { type: "string" },
+							kind: { type: "string", enum: ["invariant"] },
+							relation: {
+								type: "object",
+								description:
+									'Optional machine half: {"type":"implies","when":["atom_a","!atom_b"],"then":"atom_c"} or {"type":"exclusive"|"oneof"|"atleast","atoms":["a","b"]}.',
+							},
+						},
+						required: ["id", "statement", "kind"],
+						additionalProperties: false,
+					},
+				},
+				assumptions: {
+					type: "array",
+					items: {
+						type: "object",
+						properties: {
+							id: { type: "string", description: "Stable id, ASM-<n>." },
+							atom: {
+								type: "string",
+								description: "Boolean-leaf VRF atom (lowercase snake_case).",
+							},
+							negated: { type: "boolean" },
+							statement: {
+								type: "string",
+								description:
+									"Evidence: what was measured/run to establish the predicate.",
+							},
+						},
+						required: ["id", "atom", "negated", "statement"],
+						additionalProperties: false,
+					},
+				},
+			},
+			required: ["requirements"],
+			additionalProperties: false,
+		} as never,
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
+			const result = await executePlannerSpecTool({
+				fs,
+				git: gitRunner,
+				projectPaths,
+				params,
+			});
+			return plannerToolResponse(result);
+		},
+	});
+
+	pi.registerTool({
+		name: PLANNER_GATE_TOOL_NAME,
+		label: "Planner Gate Check",
+		description:
+			"Run an SDD gate: load the durable artifacts (spec.json, task files) from disk, compile them into VRF with a deterministic compiler, run the elenchus engine, and report the verdict with every gap turned into a concrete next action or a ready-to-ask user question. Takes NO program — gate VRF is never hand-written.",
+		promptSnippet:
+			'At spec/verify_spec, call planner_gate_check with {"gate": "spec_consistency"} and iterate until CONSISTENT — the step cannot finish otherwise. Each reported gap tells you exactly what to do: fix/defer a requirement via planner_spec_submit, add an evidence-backed assumption, or loop back to spec/elicit_gaps and ask the user.',
+		parameters: {
+			type: "object",
+			properties: {
+				gate: {
+					type: "string",
+					enum: [...PLANNER_GATE_NAMES],
+					description: "Which SDD gate to compile and run.",
+				},
+			},
+			required: ["gate"],
+			additionalProperties: false,
+		} as never,
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
+			const result = await executePlannerGateTool({
 				fs,
 				git: gitRunner,
 				projectPaths,

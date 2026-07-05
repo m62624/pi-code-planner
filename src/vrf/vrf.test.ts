@@ -84,6 +84,22 @@ describe("bundled vrf templates", () => {
 		VrfTemplateName,
 		{ facts: string[]; values: Record<string, boolean> }
 	> = {
+		"spec-consistency": {
+			facts: [
+				// One formalized requirement, fully closed (the compiler's shape),
+				// and one deferred through the freedom valve.
+				"FACT spec_gate.req_1 is_requirement",
+				"FACT spec_gate.req_1 formalized",
+				"FACT spec_gate.req_1 vrf_expressible",
+				"NOT  spec_gate.req_1 rationale_recorded",
+				"NOT  spec_gate.req_1 deferred_to_freedom",
+				"FACT spec_gate.req_2 is_requirement",
+				"NOT  spec_gate.req_2 formalized",
+				"NOT  spec_gate.req_2 vrf_expressible",
+				"FACT spec_gate.req_2 rationale_recorded",
+			],
+			values: { "spec_gate.spec_verified": true },
+		},
 		"plan-consistency": {
 			facts: [
 				"FACT plan_consistency.plan is_ready",

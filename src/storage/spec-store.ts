@@ -35,11 +35,25 @@ export interface SpecRequirement {
 	deferral?: { rationale: string };
 }
 
+/**
+ * Machine half of a constraint (§2.1 structural/relational data): a logical
+ * relation over boolean-leaf atoms. This is what makes the spec-consistency
+ * gate non-vacuous — the engine can only find contradictions and gaps in
+ * relations it can see. An atom referenced here that no assumption or
+ * acceptance establishes surfaces as a WARNING naming it: a concrete gap to
+ * elicit. In `implies.when`, a `!` prefix negates the atom.
+ */
+export type SpecConstraintRelation =
+	| { type: "implies"; when: string[]; then: string }
+	| { type: "exclusive" | "oneof" | "atleast"; atoms: string[] };
+
 export interface SpecConstraint {
 	/** Stable id, strictly `CON-<n>`. */
 	id: string;
 	statement: string;
 	kind: "invariant";
+	/** Optional logical form; prose-only constraints stay human-checked. */
+	relation?: SpecConstraintRelation;
 }
 
 export interface SpecAssumption {
@@ -150,10 +164,15 @@ export function validateSpecRecord(input: SpecRecordInput): SpecRecord {
 		if (con.kind !== "invariant") {
 			throw new TypeError(`${where}.kind must be "invariant".`);
 		}
+		const relation =
+			con.relation === undefined
+				? undefined
+				: validateConstraintRelation(con.relation, `${where}.relation`);
 		return {
 			id,
 			statement: requiredText(con.statement, `${where}.statement`),
 			kind: con.kind,
+			...(relation !== undefined ? { relation } : {}),
 		} satisfies SpecConstraint;
 	});
 
@@ -233,7 +252,10 @@ export function formatSpecMarkdown(record: SpecRecord): string {
 	lines.push("## Constraints", "");
 	lines.push(
 		...bulletList(
-			record.constraints.map((con) => `${con.id} — ${con.statement}`),
+			record.constraints.map(
+				(con) =>
+					`${con.id} — ${con.statement}${formatRelationSuffix(con.relation)}`,
+			),
 			"(none recorded)",
 		),
 		"",
@@ -250,6 +272,22 @@ export function formatSpecMarkdown(record: SpecRecord): string {
 		"",
 	);
 	return lines.join("\n");
+}
+
+function formatRelationSuffix(
+	relation: SpecConstraintRelation | undefined,
+): string {
+	if (!relation) return "";
+	if (relation.type === "implies") {
+		return ` — \`${relation.when.join(" ∧ ")} → ${relation.then}\``;
+	}
+	const label =
+		relation.type === "exclusive"
+			? "at most one of"
+			: relation.type === "oneof"
+				? "exactly one of"
+				: "at least one of";
+	return ` — ${label}: \`${relation.atoms.join("`, `")}\``;
 }
 
 function bulletList(values: readonly string[], empty: string): string[] {
@@ -306,4 +344,69 @@ function requiredAtom(value: string, key: string): string {
 
 function duplicateId(id: string, where: string): TypeError {
 	return new TypeError(`${where}.id "${id}" is declared more than once.`);
+}
+
+/** An atom reference in a relation; `!atom` negates it (implies only). */
+function requiredAtomRef(
+	value: string,
+	key: string,
+	allowNegation: boolean,
+): string {
+	const normalized = requiredText(value, key);
+	const negated = normalized.startsWith("!");
+	if (negated && !allowNegation) {
+		throw new TypeError(
+			`${key}: negation ("!") is only allowed inside an "implies" relation; got "${normalized}".`,
+		);
+	}
+	const bare = negated ? normalized.slice(1) : normalized;
+	if (!VRF_ATOM_PATTERN.test(bare)) {
+		throw new TypeError(
+			`${key} must be a valid VRF atom (lowercase snake_case, optional leading "!"); got "${normalized}".`,
+		);
+	}
+	return normalized;
+}
+
+function validateConstraintRelation(
+	relation: SpecConstraintRelation,
+	where: string,
+): SpecConstraintRelation {
+	if (!relation || typeof relation !== "object") {
+		throw new TypeError(`${where} must be an object.`);
+	}
+	if (relation.type === "implies") {
+		const when = requireArray(relation.when, `${where}.when`).map(
+			(atom, index) => requiredAtomRef(atom, `${where}.when[${index}]`, true),
+		);
+		if (when.length === 0) {
+			throw new TypeError(`${where}.when must contain at least one atom.`);
+		}
+		return {
+			type: "implies",
+			when,
+			then: requiredAtomRef(relation.then, `${where}.then`, true),
+		};
+	}
+	if (
+		relation.type === "exclusive" ||
+		relation.type === "oneof" ||
+		relation.type === "atleast"
+	) {
+		const atoms = requireArray(relation.atoms, `${where}.atoms`).map(
+			(atom, index) => requiredAtomRef(atom, `${where}.atoms[${index}]`, false),
+		);
+		if (atoms.length < 2) {
+			throw new TypeError(
+				`${where}.atoms must contain at least two atoms for "${relation.type}".`,
+			);
+		}
+		if (new Set(atoms).size !== atoms.length) {
+			throw new TypeError(`${where}.atoms must not repeat an atom.`);
+		}
+		return { type: relation.type, atoms };
+	}
+	throw new TypeError(
+		`${where}.type must be "implies", "exclusive", "oneof", or "atleast".`,
+	);
 }

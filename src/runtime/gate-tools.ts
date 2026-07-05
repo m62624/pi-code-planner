@@ -1,0 +1,366 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { errorMessage } from "../errors";
+import type { GitRunner } from "../git/runner";
+import { isPathInsideOrEqual } from "../path-utils";
+import type { PlannerFs } from "../storage/fs";
+import type { PlanStoragePaths, ProjectStoragePaths } from "../storage/paths";
+import { readSpecRecordIfExists } from "../storage/spec-store";
+import { syncVrfTemplatesToPlan } from "../vrf/manager";
+import {
+	compileSpecConsistency,
+	specSubjectToRequirementId,
+} from "../vrf/spec-compiler";
+import { runElenchusCheck } from "./elenchus-engine";
+import { writeElenchusLastCheck } from "./elenchus-tools";
+import {
+	checkPlannerOrchestratorToolAllowed,
+	runPlannerOrchestrator,
+} from "./orchestrator";
+
+export const PLANNER_GATE_TOOL_NAME = "planner_gate_check" as const;
+export type PlannerGateToolName = typeof PLANNER_GATE_TOOL_NAME;
+
+/** Gates grow with the SDD layer: plan_coverage and tdd_coverage follow. */
+export const PLANNER_GATE_NAMES = ["spec_consistency"] as const;
+export type PlannerGateName = (typeof PLANNER_GATE_NAMES)[number];
+
+export interface PlannerGateToolResult {
+	status: "applied" | "blocked";
+	toolName: PlannerGateToolName;
+	text: string;
+	details: {
+		gate: PlannerGateName;
+		verdict: string;
+		sourcePath: string;
+		resultPath: string;
+		gaps: string[];
+	} | null;
+}
+
+/**
+ * The SDD gate runner (REQ-4/REQ-6/REQ-12): loads the durable artifacts from
+ * disk, compiles them into VRF with a deterministic compiler, runs the
+ * elenchus engine, and turns every reported gap into a concrete instruction
+ * or a ready-to-ask user question. The model supplies NO program — trivial
+ * hand-written gate VRF is structurally impossible here.
+ */
+export async function executePlannerGateTool(input: {
+	fs: PlannerFs;
+	git: GitRunner;
+	projectPaths: ProjectStoragePaths;
+	params: unknown;
+}): Promise<PlannerGateToolResult> {
+	try {
+		const orchestrator = await runPlannerOrchestrator(input);
+		if (orchestrator.preflight.context.status !== "ready") {
+			return blocked(orchestrator.preflight.context.reason);
+		}
+		const policy = checkPlannerOrchestratorToolAllowed({
+			orchestrator,
+			toolName: PLANNER_GATE_TOOL_NAME,
+		});
+		if (!policy.allow) {
+			return blocked(
+				policy.reason ?? "planner_gate_check is blocked by planner state.",
+			);
+		}
+		const gate = parseGateName(input.params);
+		const { planPaths, state } = orchestrator.preflight.context;
+		await syncVrfTemplatesToPlan(input.fs, {
+			projectPaths: input.projectPaths,
+			planPaths,
+		});
+		switch (gate) {
+			case "spec_consistency":
+				return await runSpecConsistencyGate({
+					fs: input.fs,
+					planPaths,
+					position: { stage: state.stage, step: state.step },
+				});
+		}
+	} catch (error) {
+		return blocked(errorMessage(error));
+	}
+}
+
+async function runSpecConsistencyGate(input: {
+	fs: PlannerFs;
+	planPaths: PlanStoragePaths;
+	position: { stage: string; step: string };
+}): Promise<PlannerGateToolResult> {
+	const spec = await readSpecRecordIfExists(input.fs, input.planPaths);
+	if (!spec) {
+		return blocked(
+			"spec.json does not exist for this plan. Author the spec first with planner_spec_submit at spec/draft_requirements.",
+		);
+	}
+	const compiled = compileSpecConsistency(spec);
+	const run = await runGateProgram({
+		fs: input.fs,
+		planPaths: input.planPaths,
+		gate: "spec_consistency",
+		fileStem: "spec-consistency",
+		program: compiled.program,
+		values: compiled.values,
+		position: input.position,
+		sourceHash: sha256(await input.fs.readText(input.planPaths.specJson)),
+	});
+	if (!run.ok) return blocked(run.reason);
+
+	const gaps = describeSpecGaps(run.report);
+	const consistent = run.verdict === "CONSISTENT";
+	await writeCoverageSection(input.fs, input.planPaths, {
+		heading: "## Spec Consistency",
+		lines: [
+			`Verdict: **${run.verdict}** (engine ${run.engineVersion}, ${new Date().toISOString()})`,
+			`Requirements compiled: ${compiled.requirementCount}`,
+			"",
+			...(gaps.length > 0
+				? ["Gaps:", ...gaps.map((gap) => `- ${gap}`)]
+				: [
+						"No gaps — every in-scope requirement is addressed and the constraint web is consistent.",
+					]),
+		],
+	});
+
+	return {
+		status: "applied",
+		toolName: PLANNER_GATE_TOOL_NAME,
+		text: [
+			`spec_consistency gate: **${run.verdict}** (engine ${run.engineVersion}).`,
+			`Compiled program: ${run.sourcePath}`,
+			`Raw verdict: ${run.resultPath}`,
+			`Coverage report: ${input.planPaths.coverageMd}`,
+			"",
+			...(gaps.length > 0
+				? ["Gaps to close:", ...gaps.map((gap) => `- ${gap}`), ""]
+				: []),
+			consistent
+				? "CONSISTENT: the spec's requirement web holds. Record the conclusion in decisions.md, then call planner_finish_step."
+				: "Not CONSISTENT: spec/verify_spec cannot finish yet. Close each gap above — update the spec via planner_spec_submit, or route a question to the user via spec/elicit_gaps — then re-run planner_gate_check.",
+		].join("\n"),
+		details: {
+			gate: "spec_consistency",
+			verdict: run.verdict,
+			sourcePath: run.sourcePath,
+			resultPath: run.resultPath,
+			gaps,
+		},
+	};
+}
+
+// ---------------------------------------------------------------------------
+// shared gate plumbing
+// ---------------------------------------------------------------------------
+
+interface ElenchusJsonReport {
+	status?: string;
+	warnings?: Array<{
+		premise?: string;
+		blocked_by?: string[];
+		hint?: string;
+	}>;
+	conflicts?: Array<{
+		atoms?: string[];
+		premise?: string;
+		origin?: { premise?: string };
+	}>;
+	underdetermined?: string | null;
+	goals?: Array<{ label?: string; outcome?: string }>;
+}
+
+type GateRun =
+	| {
+			ok: true;
+			verdict: string;
+			report: ElenchusJsonReport;
+			sourcePath: string;
+			resultPath: string;
+			engineVersion: string;
+	  }
+	| { ok: false; reason: string };
+
+async function runGateProgram(input: {
+	fs: PlannerFs;
+	planPaths: PlanStoragePaths;
+	gate: PlannerGateName;
+	fileStem: string;
+	program: string;
+	values: Record<string, boolean>;
+	position: { stage: string; step: string };
+	sourceHash: string;
+}): Promise<GateRun> {
+	const elenchusDir = input.planPaths.elenchusDir;
+	const sourceName = `${input.fileStem}.vrf`;
+	const sourcePath = join(elenchusDir, sourceName);
+	await input.fs.writeTextAtomic(sourcePath, input.program);
+
+	const read = (path: string): string => {
+		const target = resolve(elenchusDir, path);
+		if (!isPathInsideOrEqual(target, elenchusDir)) {
+			throw new Error(`elenchus import escapes the plan dir: ${path}`);
+		}
+		return readFileSync(target, "utf8");
+	};
+	const run = await runElenchusCheck({
+		root: sourceName,
+		read,
+		format: "json",
+		values: input.values,
+	});
+	if (!run.ok) return { ok: false, reason: run.reason };
+
+	let report: ElenchusJsonReport;
+	try {
+		report = JSON.parse(run.output) as ElenchusJsonReport;
+	} catch {
+		// Parse/compile errors and budget aborts come back as a plain error
+		// string instead of a JSON verdict. A deterministic compiler should
+		// never produce one — surface it verbatim as a bug signal.
+		return {
+			ok: false,
+			reason: `The compiled gate program did not produce a verdict (this is a compiler bug, not a spec problem): ${run.output.trim()}`,
+		};
+	}
+	const verdict = report.status ?? "unknown";
+	const resultPath = join(elenchusDir, `${input.fileStem}.result.json`);
+	await input.fs.writeTextAtomic(resultPath, `${run.output.trim()}\n`);
+	await writeElenchusLastCheck(input.fs, elenchusDir, {
+		name: input.fileStem,
+		stage: input.position.stage,
+		step: input.position.step,
+		outcome: normalizeVerdict(verdict),
+		recordedAt: new Date().toISOString(),
+		gate: input.gate,
+		sourceHash: input.sourceHash,
+	});
+	return {
+		ok: true,
+		verdict,
+		report,
+		sourcePath,
+		resultPath,
+		engineVersion: run.engineVersion,
+	};
+}
+
+function normalizeVerdict(
+	verdict: string,
+): "CONSISTENT" | "WARNING" | "UNDERDETERMINED" | "CONFLICT" | "unknown" {
+	switch (verdict) {
+		case "CONSISTENT":
+		case "WARNING":
+		case "UNDERDETERMINED":
+		case "CONFLICT":
+			return verdict;
+		default:
+			return "unknown";
+	}
+}
+
+/** Turn the engine's machine-readable gaps into concrete next actions. */
+function describeSpecGaps(report: ElenchusJsonReport): string[] {
+	const gaps: string[] = [];
+	for (const conflict of report.conflicts ?? []) {
+		const atoms = conflict.atoms ?? [];
+		const premise = conflict.premise ?? conflict.origin?.premise ?? "";
+		const requirement = atoms
+			.map(atomSubject)
+			.map(specSubjectToRequirementId)
+			.find((id) => id.startsWith("REQ-"));
+		if (premise === "no_fake_formal" && requirement) {
+			gaps.push(
+				`CONFLICT: ${requirement} is marked formalized but is not VRF-expressible — a formalized requirement must be genuinely checkable. Either give it a real acceptanceAtom or defer it with deferral.rationale.`,
+			);
+		} else {
+			gaps.push(
+				`CONFLICT (${premise || "constraint"}): ${atoms.join(", ")} — these facts contradict each other. Fix the spec (a requirement, constraint relation, or assumption is wrong); never delete a valid premise to force green.`,
+			);
+		}
+	}
+	for (const warning of report.warnings ?? []) {
+		for (const blocked of warning.blocked_by ?? []) {
+			const subject = atomSubject(blocked);
+			const requirement = specSubjectToRequirementId(subject);
+			if (blocked.endsWith(" addressed") && requirement.startsWith("REQ-")) {
+				gaps.push(
+					`${requirement} is not addressed — formalize it (acceptanceAtom) or defer it with deferral.rationale via planner_spec_submit.`,
+				);
+			} else if (blocked.endsWith(" holds")) {
+				gaps.push(
+					`Constraint "${warning.premise ?? "?"}" needs \`${subject}\`, but nothing establishes it. Add an evidence-backed assumption for it, or ask the user (draft question: "Should \`${subject}\` hold in this plan? What establishes it?").`,
+				);
+			} else {
+				gaps.push(
+					`"${warning.premise ?? "?"}" is blocked by \`${blocked}\`${warning.hint ? ` — ${warning.hint}` : ""}.`,
+				);
+			}
+		}
+	}
+	if (report.underdetermined) {
+		gaps.push(
+			`Underdetermined on \`${report.underdetermined}\`: more than one model fits the spec. Assert the atom (assumption or constraint) or remove the ambiguity — do not leave it to interpretation.`,
+		);
+	}
+	return gaps;
+}
+
+function atomSubject(atom: string): string {
+	const unqualified = atom.replace(/^[a-z0-9_]+\./, "");
+	return unqualified.split(" ")[0] ?? unqualified;
+}
+
+function sha256(content: string): string {
+	return createHash("sha256").update(content).digest("hex");
+}
+
+/** Rewrite one `## …` section of coverage.md, preserving the others. */
+export async function writeCoverageSection(
+	fs: PlannerFs,
+	planPaths: PlanStoragePaths,
+	section: { heading: string; lines: string[] },
+): Promise<void> {
+	const existing = (await fs.exists(planPaths.coverageMd))
+		? await fs.readText(planPaths.coverageMd)
+		: "# Coverage\n";
+	const block = [section.heading, "", ...section.lines, ""].join("\n");
+	const pattern = new RegExp(
+		`${escapeRegExp(section.heading)}\\n[\\s\\S]*?(?=\\n## |$)`,
+		"u",
+	);
+	const next = pattern.test(existing)
+		? existing.replace(pattern, `${block}`)
+		: `${existing.trimEnd()}\n\n${block}`;
+	await fs.writeTextAtomic(planPaths.coverageMd, `${next.trimEnd()}\n`);
+}
+
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function parseGateName(params: unknown): PlannerGateName {
+	if (!params || typeof params !== "object" || Array.isArray(params)) {
+		throw new TypeError("planner_gate_check parameters must be an object.");
+	}
+	const gate = (params as Record<string, unknown>).gate;
+	if (
+		typeof gate !== "string" ||
+		!(PLANNER_GATE_NAMES as readonly string[]).includes(gate)
+	) {
+		throw new TypeError(
+			`planner_gate_check.gate must be one of: ${PLANNER_GATE_NAMES.join(", ")}.`,
+		);
+	}
+	return gate as PlannerGateName;
+}
+
+function blocked(text: string): PlannerGateToolResult {
+	return {
+		status: "blocked",
+		toolName: PLANNER_GATE_TOOL_NAME,
+		text,
+		details: null,
+	};
+}

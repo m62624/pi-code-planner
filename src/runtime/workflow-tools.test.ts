@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type {
@@ -26,6 +27,7 @@ import {
 } from "../storage/plan-store";
 import { ensureProjectRecord, setActivePlan } from "../storage/project-store";
 import { createInitialPlanState, createPlanRecord } from "../storage/schema";
+import { validateSpecRecord, writeSpecArtifacts } from "../storage/spec-store";
 import { initializePlanState } from "../storage/state-store";
 import { readTaskRecord, upsertTaskArtifacts } from "../storage/task-store";
 import { MockPlannerFs } from "../test/mock-fs";
@@ -406,6 +408,141 @@ describe("workflowToolTransition", () => {
 			projectPaths,
 			toolName: "planner_finish_step",
 			params: {},
+		});
+		expect(finished.result.status).toBe("applied");
+	});
+
+	it("gates spec/verify_spec on a fresh CONSISTENT spec_consistency run", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await ensureProjectRecord(fs, projectPaths);
+		await initializePlanFiles(
+			fs,
+			planPaths,
+			createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+		);
+		await fs.mkdirp(worktreePath);
+		await initializePlanState(fs, planPaths, {
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "spec",
+			step: "verify_spec",
+			stepStatus: "running",
+			currentBranch: "plan/plan-a",
+		});
+		await setActivePlan(fs, projectPaths, "plan-a");
+		await writeSpecArtifacts(
+			fs,
+			planPaths,
+			validateSpecRecord({
+				requirements: [
+					{
+						id: "REQ-1",
+						statement: "Behavior.",
+						acceptance: "Checked.",
+						acceptanceAtom: "req_1_ok",
+						priority: "must",
+						inScope: true,
+					},
+				],
+			}),
+		);
+		const specHash = createHash("sha256")
+			.update(await fs.readText(planPaths.specJson))
+			.digest("hex");
+		const forward = {
+			nextStage: "spec",
+			nextStep: "compact_spec",
+		} as const;
+		const writeGateCheck = async (outcome: string, sourceHash = specHash) =>
+			fs.writeTextAtomic(
+				join(planPaths.elenchusDir, "last-check.json"),
+				JSON.stringify({
+					name: "spec-consistency",
+					stage: "spec",
+					step: "verify_spec",
+					outcome,
+					recordedAt: "2026-07-05T00:00:00.000Z",
+					gate: "spec_consistency",
+					sourceHash,
+				}),
+			);
+
+		// No gate run at all → the forward transition is blocked.
+		const noRun = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: forward,
+		});
+		expect(noRun.result.status).toBe("blocked");
+		expect(noRun.text).toContain("spec_consistency");
+
+		// WARNING blocks too — stricter than the generic CONFLICT-only rule.
+		await writeGateCheck("WARNING");
+		const warned = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: forward,
+		});
+		expect(warned.result.status).toBe("blocked");
+		expect(warned.text).toContain("WARNING");
+
+		// Looping back to elicit_gaps is always allowed — gaps become questions.
+		const loopBack = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: { nextStage: "spec", nextStep: "elicit_gaps" },
+		});
+		expect(loopBack.result.status).toBe("applied");
+
+		// Reset position back to verify_spec for the passing cases.
+		await initializePlanState(fs, planPaths, {
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "spec",
+			step: "verify_spec",
+			stepStatus: "running",
+			currentBranch: "plan/plan-a",
+		});
+
+		// A stale pass (spec.json changed after the check) is invalid.
+		await writeGateCheck("CONSISTENT", "0".repeat(64));
+		const stale = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: forward,
+		});
+		expect(stale.result.status).toBe("blocked");
+		expect(stale.text).toContain("stale");
+
+		// A fresh CONSISTENT pass advances.
+		await writeGateCheck("CONSISTENT");
+		const finished = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: forward,
 		});
 		expect(finished.result.status).toBe("applied");
 	});
