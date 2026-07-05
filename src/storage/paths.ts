@@ -10,6 +10,7 @@ export interface ProjectStoragePaths {
 	displayName: string;
 	projectDir: string;
 	projectJson: string;
+	compactTimingJson: string;
 	plansDir: string;
 	instructionsDir: string;
 	projectLocalDir: string;
@@ -59,6 +60,8 @@ export function createProjectStoragePaths(input: {
 		displayName: basename(projectRoot),
 		projectDir,
 		projectJson: join(projectDir, "project.json"),
+		// Rolling compaction-duration history for the empirical ETA indicator.
+		compactTimingJson: join(projectDir, "compact-timing.json"),
 		// Plans live INSIDE the project dir so everything owned by a project
 		// (project.json, skills, plans) sits under projects/<projectId>/ instead
 		// of a flat extensionDir/plans shared across every project.
