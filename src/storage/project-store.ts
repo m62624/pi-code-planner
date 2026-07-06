@@ -1,3 +1,4 @@
+import { withFileWriteLock } from "./file-lock";
 import type { PlannerFs } from "./fs";
 import { readJson, readJsonIfExists, writeJson } from "./json";
 import type { ProjectStoragePaths } from "./paths";
@@ -53,10 +54,15 @@ export async function updateProjectRecord(
 	paths: ProjectStoragePaths,
 	update: (record: ProjectRecord) => ProjectRecord,
 ): Promise<ProjectRecord> {
-	const current = await ensureProjectRecord(fs, paths);
-	const next = update(current);
-	await saveProjectRecord(fs, paths, next);
-	return next;
+	// Serialized so concurrent updates (e.g. upsertProjectPlanSummary while
+	// setActivePlan runs) do not clobber each other's array append — the same
+	// lost-update class the plan.tasks race exposed. See {@link withFileWriteLock}.
+	return await withFileWriteLock(paths.projectJson, async () => {
+		const current = await ensureProjectRecord(fs, paths);
+		const next = update(current);
+		await saveProjectRecord(fs, paths, next);
+		return next;
+	});
 }
 
 export async function setActivePlan(
