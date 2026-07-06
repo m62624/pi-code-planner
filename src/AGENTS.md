@@ -17,6 +17,7 @@ Source domain for the Pi extension implementation. Route to narrower AGENTS.md f
 - `session/AGENTS.md`: Pi session file creation, handoff between sessions, resume candidate discovery.
 - `worktree/AGENTS.md`: Plan worktree lifecycle, path resolution, gitignore registration.
 - `project-local/AGENTS.md`: Gitignore rule management for planner-owned paths.
+- `vrf/AGENTS.md`: elenchus premise templates, template sync/routing, and the deterministic SDD compilers (spec/coverage/tdd-coverage → VRF).
 
 ### Stable Contracts
 - `src/index.ts` registers commands, tools, events, and Pi integration points; shared behavior should live in focused runtime/storage modules.

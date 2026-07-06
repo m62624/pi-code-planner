@@ -186,7 +186,7 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition: "User explicitly approves the goal or requests a revision.",
 		nextInstruction:
-			"On approve: normal plans enter discovery/scan_project_structure; creationMethod=improve plans continue to planning/read_context (discovery already ran). Revise returns to intake/draft_goal.",
+			"On approve: normal plans enter discovery/scan_project_structure; creationMethod=improve plans continue to spec/draft_requirements (discovery already ran). Revise returns to intake/draft_goal.",
 	}),
 
 	scan_project_structure: stepRule("discovery", "scan_project_structure", {
@@ -248,15 +248,98 @@ export const PLANNER_STEP_RULES = {
 		nextInstruction: "Complete compact to open enter_planning.",
 	}),
 	enter_planning: stepRule("discovery", "enter_planning", {
-		objective: "Enter planning after verified discovery.",
+		objective: "Enter the spec stage after verified discovery.",
 		requiredActions: [
-			"Persist stage=planning and step=read_context for normal plans.",
+			"Persist stage=spec and step=draft_requirements for normal plans.",
 			"For creationMethod=improve, persist stage=intake and step=draft_goal so goal.md can be written from discovery findings.",
 		],
 		allowedNow: ["State transition only."],
-		forbiddenNow: ["Do not draft tasks until planning/read_context is active."],
+		forbiddenNow: [
+			"Do not draft requirements until spec/draft_requirements is active.",
+		],
 		exitCondition:
-			"State points to planning/read_context, or to intake/draft_goal for creationMethod=improve.",
+			"State points to spec/draft_requirements, or to intake/draft_goal for creationMethod=improve.",
+		nextInstruction: "Continue with the next state reported by planner_status.",
+	}),
+
+	draft_requirements: stepRule("spec", "draft_requirements", {
+		objective:
+			"Author the checkable specification: numbered requirements, non-goals, constraints, and evidence-backed assumptions.",
+		requiredActions: [
+			"Read goal.md, discovery.md, and decisions.md via planner_artifact_read.",
+			"Call planner_spec_submit with the full structured spec (requirements with stable REQ-n ids, nonGoals, constraints, assumptions).",
+			"Formalize each requirement with a lowercase snake_case acceptanceAtom, or defer it with a recorded deferral.rationale (the freedom valve).",
+			"Assert every numeric predicate as an assumption whose statement cites the evidence; numbers never enter the spec logic.",
+		],
+		allowedNow: [
+			"Use planner_spec_submit; read planner artifacts and contract chains.",
+		],
+		forbiddenNow: [
+			"Do not write spec.json, spec.md, or any .vrf by hand.",
+			"Do not invent requirements the user never asked for — unclear scope is a question for elicit_gaps.",
+			"Do not edit production files or write tests.",
+		],
+		exitCondition: "spec.json and spec.md are written and validated.",
+		nextInstruction: "Call planner_finish_step to open elicit_gaps.",
+	}),
+	elicit_gaps: stepRule("spec", "elicit_gaps", {
+		objective:
+			"Turn every spec gap into a concrete user question and fold the answers back into the spec.",
+		requiredActions: [
+			"Submit open questions via planner_questions_submit; resolve answers via planner_questions_resolve.",
+			"After answers arrive, update the spec with another planner_spec_submit call.",
+			"If there are no unresolved gaps, submit an explicit no-questions artifact with hasOpenQuestions=false.",
+		],
+		allowedNow: [
+			"Use planner_questions_submit / planner_questions_resolve / planner_spec_submit.",
+		],
+		forbiddenNow: [
+			"Do not answer scope or trade-off questions on the user's behalf.",
+			"Do not proceed with unresolved questions.",
+		],
+		exitCondition:
+			"All submitted questions are resolved and the spec reflects the decisions.",
+		nextInstruction: "Call planner_finish_step to open verify_spec.",
+	}),
+	verify_spec: stepRule("spec", "verify_spec", {
+		objective:
+			"Mechanically verify the spec with the elenchus engine via the deterministic compiler.",
+		requiredActions: [
+			'Call planner_gate_check with gate: "spec_consistency".',
+			"Iterate until the verdict is CONSISTENT: fix contradictions, formalize or defer unaddressed requirements, route open decisions back to elicit_gaps.",
+		],
+		allowedNow: [
+			"Use planner_gate_check and planner_spec_submit; loop back to elicit_gaps when a gap needs the user.",
+		],
+		forbiddenNow: [
+			"Do not hand-write gate VRF.",
+			"Do not delete a valid requirement to force a green verdict.",
+		],
+		exitCondition:
+			"The latest spec_consistency check reports CONSISTENT and every in-scope requirement is addressed.",
+		nextInstruction: "Call planner_finish_step to open compact_spec.",
+	}),
+	compact_spec: stepRule("spec", "compact_spec", {
+		objective: "Create a compact boundary after the spec stage.",
+		requiredActions: [
+			"Request Pi compact and preserve requirement ids, non-goals, assumption evidence, and the latest gate verdict.",
+		],
+		allowedNow: ["Compact flow only."],
+		forbiddenNow: ["Do not edit code while compact is required/pending."],
+		exitCondition:
+			"Compaction finished and resume context points back to planner_status.",
+		nextInstruction: "Complete compact to open finish_spec.",
+	}),
+	finish_spec: stepRule("spec", "finish_spec", {
+		objective: "Enter planning with a verified spec.",
+		requiredActions: [
+			"Persist stage=planning and step=read_context via planner_finish_step.",
+		],
+		allowedNow: ["State transition only."],
+		forbiddenNow: [
+			"Do not draft the plan until planning/read_context is active.",
+		],
+		exitCondition: "State points to planning/read_context.",
 		nextInstruction: "Continue with the next state reported by planner_status.",
 	}),
 
@@ -305,7 +388,7 @@ export const PLANNER_STEP_RULES = {
 	write_task_files: stepRule("planning", "write_task_files", {
 		objective: "Create task artifacts.",
 		requiredActions: [
-			"Call planner_task_upsert for each behavioral task with scope and acceptance criteria.",
+			"Call planner_task_upsert for each behavioral task with scope, acceptance criteria, and `requirements` (the exact REQ-n ids from spec.json this task discharges — the coverage gate at consistency_check names every uncovered requirement and every orphan task).",
 			"When known, include AGENTS.md contract chain paths in the task scope/dependency context so execution can reload them after compact.",
 			"In a change-request planning pass, call planner_task_upsert only for new or still-pending revision tasks. Do not reuse completed task IDs.",
 			"Let the wrapper create task.json, task.md, and empty TDD lifecycle artifacts. Do not write task JSON manually.",
@@ -328,19 +411,21 @@ export const PLANNER_STEP_RULES = {
 	}),
 	consistency_check: stepRule("planning", "consistency_check", {
 		objective:
-			"Mechanically check the plan's interacting constraints with elenchus before execution.",
+			"Prove requirement coverage mechanically, then check any interacting-constraint web with elenchus.",
 		requiredActions: [
-			"Default to modeling the plan's facts and the conditions it depends on as a .vrf program and calling planner_elenchus_check, then iterating until the verdict is CONSISTENT — mechanically verify the plan instead of trusting your own reasoning (see the elenchus skill for how to model it).",
+			'Call planner_gate_check with gate: "plan_coverage" — it compiles spec.json + every task\'s requirements list into VRF deterministically (you write no program) and NAMES every dropped requirement and every orphan task.',
+			"Iterate until plan_coverage is CONSISTENT: fix gaps in place with planner_task_upsert (correct `requirements` ids, or a missing task), or de-scope a requirement through a recorded user decision.",
+			"Default to also modeling the plan's interacting constraints (exclusive owners, ordering chains, mutually exclusive states) with planner_elenchus_check and iterating to CONSISTENT — mechanically verify instead of trusting your own reasoning.",
 			describeRecommendedVrfTemplates("planning", "consistency_check") ?? "",
-			"Call planner_elenchus_check with resolution=not_applicable and a one-line reason only when the plan has no conditional logic to verify (purely linear/CRUD work). This is the narrow escape; it never traps the flow.",
-			"A CONFLICT verdict blocks planner_finish_step for this step until a re-run improves it (or records not_applicable): apply the drop/flip repair the CORE/RETRACT names - fix the plan or the wrong fact, never delete a valid premise to force green.",
+			"Legacy plans only (no spec.json): the coverage gate reports itself skipped; run the plan-consistency check by hand, and record not_applicable with a one-line reason only when the plan has no conditional logic to verify.",
+			"A CONFLICT verdict blocks planner_finish_step for this step until a re-run improves it: apply the drop/flip repair the CORE/RETRACT names - fix the plan or the wrong fact, never delete a valid premise to force green.",
 		],
 		allowedNow: [
-			"Use planner_elenchus_check (run a check or record not_applicable). Re-read planner artifacts and contract chains.",
+			"Use planner_gate_check, planner_elenchus_check, and planner_task_upsert (to close coverage gaps). Re-read planner artifacts and contract chains.",
 		],
-		forbiddenNow: ["Do not edit code or tasks. Do not start execution yet."],
+		forbiddenNow: ["Do not edit code. Do not start execution yet."],
 		exitCondition:
-			"elenchus reports CONSISTENT for the modeled constraints, or the step is recorded not_applicable with a reason.",
+			"plan_coverage is CONSISTENT (or skipped as legacy), and any modeled constraint web reports CONSISTENT or a recorded not_applicable.",
 		nextInstruction: "Call planner_finish_step to open compact_planning.",
 	}),
 	compact_planning: stepRule("planning", "compact_planning", {
@@ -383,6 +468,7 @@ export const PLANNER_STEP_RULES = {
 		objective: "Write the TDD plan before changing behavior.",
 		requiredActions: [
 			"Read task.md and relevant source files, then write tdd.md with failing test strategy and checks.",
+			"Enumerate the task's observable behaviors on the behavior board via planner_behavior_upsert: one BHV-n per behavior (kinds happy/edge/error/concurrency, link REQ-n where known), all with status planned. The tdd_coverage gate will NAME every behavior that later lacks a test.",
 			"Default to mechanically verifying with planner_elenchus_check that the cases your test plan claims to cover are complete and non-contradictory, before writing tests (see the elenchus skill). Record resolution=not_applicable with a one-line reason only when the task has no conditional behavior to cover.",
 			describeRecommendedVrfTemplates("execution", "write_tdd_plan") ?? "",
 		],
@@ -399,12 +485,16 @@ export const PLANNER_STEP_RULES = {
 			"Write failing/mock/contract tests before production implementation.",
 		requiredActions: [
 			"Write tests, fixtures, mocks, and required test harness wiring for the active task.",
+			"As each named failing test lands, flip its behavior planned→red on the board via planner_behavior_upsert (full list, with the test {file, name}).",
+			'Call planner_gate_check with gate: "tdd_coverage" — it NAMES every behavior still without a red witness; the step cannot finish until it is CONSISTENT (when a behavior board exists).',
 			"Append the test intent and changed test files to tdd.md. If project files changed, commit through planner_git_commit before continuing.",
 		],
-		allowedNow: ["Edit test files and necessary test integration files."],
+		allowedNow: [
+			"Edit test files and necessary test integration files; use planner_behavior_upsert and planner_gate_check.",
+		],
 		forbiddenNow: ["Do not implement production behavior."],
 		exitCondition:
-			"tdd.md records the test coverage, project files are committed, and tests are expected to fail or catch missing behavior.",
+			"Every behavior on the board has a red witness (tdd_coverage CONSISTENT), tdd.md records the test coverage, project files are committed.",
 		nextInstruction: "Call planner_finish_step to open run_failing_tests.",
 	}),
 	run_failing_tests: stepRule("execution", "run_failing_tests", {
@@ -496,15 +586,17 @@ export const PLANNER_STEP_RULES = {
 		objective: "Verify the completed task branch.",
 		requiredActions: [
 			"Run final task checks and verify no accidental out-of-scope changes.",
-			"If a check fails and needs a code edit (this step cannot edit project files): call planner_finish_step with target {stage: 'execution', step: 'implement_task'} to fix it, then re-verify. Do NOT use planner_fail_step for this — fail/retry only re-runs the same step.",
+			'Flip each passing behavior red→green on the board via planner_behavior_upsert, then call planner_gate_check with gate: "tdd_coverage" — it NAMES every behavior whose test does not pass yet; the forward transition cannot finish until it is CONSISTENT (when a behavior board exists).',
+			"If a check fails and needs a code edit (this step cannot edit project files): call planner_finish_step with target {stage: 'execution', step: 'implement_task'} to fix it, then re-verify. Do NOT use planner_fail_step for this — fail/retry only re-runs the same step. Going back never requires the gate.",
 		],
 		allowedNow: [
-			"Run checks and inspect the planner diff (no project edits here).",
+			"Run checks and inspect the planner diff (no project edits here); use planner_behavior_upsert and planner_gate_check.",
 		],
 		forbiddenNow: [
 			"Do not merge task to plan while tests fail or project files remain uncommitted.",
 		],
-		exitCondition: "Final checks pass and the worktree is clean.",
+		exitCondition:
+			"Final checks pass, every behavior is green (tdd_coverage CONSISTENT), and the worktree is clean.",
 		nextInstruction:
 			"On success: planner_finish_step with target execution/capture_skill. On a fix that needs edits: planner_finish_step with target execution/implement_task.",
 	}),
@@ -616,6 +708,7 @@ export const PLANNER_STEP_RULES = {
 			"If a required command/check failed when you ran it, create a proven_bug (reproduced) or needs_probe finding that names that command. If a required command could not be run here (not_run/unknown — e.g. the tool is not installed), name it in a finding and resolve it: not_a_bug with evidence of why it is not actionable locally (e.g. it runs in CI), or needs_probe to defer it. Do not continue to final_summary while such a command is unaddressed.",
 			"Treat each possible error like TDD for a suspected problem: prove it with a focused failing test/command, exact code-path proof, or exact spec contradiction; otherwise disprove it or mark needs_probe.",
 			"As the final logical pass, default to mechanically re-checking the conditions the finished result depends on with planner_elenchus_check, instead of trusting the reasoning chain from earlier steps (see the elenchus skill). Record resolution=not_applicable with a one-line reason only when there is no conditional logic to verify.",
+			"If spec.json exists, reread it via planner_artifact_read and re-verify every assumption (ASM-n): each is a boolean leaf the earlier gates TRUSTED, backed only by its recorded evidence. Re-run the cited command/measurement where feasible; an assumption that no longer holds is a proven_bug or needs_probe finding, and a formalized requirement whose acceptanceAtom lacks any witnessing behavior/test deserves a Possible Errors item.",
 			describeRecommendedVrfTemplates("finalize", "doubt_review") ?? "",
 			"Use planner_doubt_review to write verify.md. Do not hand-write weak doubt notes.",
 			"Audit AGENTS.md local contracts: check stale guidance, missing parent backlinks, wrong child routing, or missing durable domain details. Use planner_contract_check/upsert when needed.",
@@ -701,7 +794,8 @@ export const PLANNER_STEP_RULES = {
 			"If the user accepts, ask the user to run /planner-finish. If the user writes feedback, says what is wrong, or requests changes, complete with explicit next target done/handle_change_request.",
 	}),
 	handle_change_request: stepRule("done", "handle_change_request", {
-		objective: "Record requested changes and return to planning.",
+		objective:
+			"Record requested changes, then amend the spec (the source of truth) and replan.",
 		requiredActions: [
 			"Append the user's requested corrections to decisions.md under a Change Request section.",
 			"Append a short Change Request Replan note near the start of plan.md with Completed Work and Remaining Work subsections. Preserve the previous completed plan and do not rewrite it wholesale.",
@@ -714,8 +808,9 @@ export const PLANNER_STEP_RULES = {
 			"Do not create a new root project state.",
 		],
 		exitCondition:
-			"Change request is recorded in decisions.md, plan.md, and discovery.md, and planning can resume.",
-		nextInstruction: "Complete with next target planning/read_context.",
+			"Change request is recorded in decisions.md, plan.md, and discovery.md, and the follow-up pass can start.",
+		nextInstruction:
+			"For a plan with spec.json: complete with next target spec/draft_requirements — amend the spec via planner_spec_submit (the previous version is preserved as spec.prev.json) and re-pass verify_spec plus the planning coverage gate. Legacy plans (no spec.json): next target planning/read_context.",
 	}),
 	prepare_output_branch: stepRule("done", "prepare_output_branch", {
 		objective: "Internal /planner-finish phase: prepare output branch.",

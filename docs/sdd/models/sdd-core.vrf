@@ -1,0 +1,72 @@
+// ================================================================
+//  sdd-core — the SDD planner machine (rules + gates only, no scenario).
+//  Imported by each probe; probes feed qualified `FACT sdd.*` scenarios.
+// ================================================================
+DOMAIN sdd
+
+// ---------- stage ordering: reaching a stage DERIVES all earlier ones ----------
+RULE order_df:
+    WHEN flow reached_done
+    THEN flow reached_finalize
+RULE order_fe:
+    WHEN flow reached_finalize
+    THEN flow reached_execution
+RULE order_ep:
+    WHEN flow reached_execution
+    THEN flow reached_planning
+RULE order_ps:
+    WHEN flow reached_planning
+    THEN flow reached_spec
+
+// ---------- gates that MUST hold to be at each stage (checks) ----------
+PREMISE gate_planning:
+    WHEN flow reached_planning
+    THEN spec verified
+PREMISE gate_execution:
+    WHEN flow reached_execution
+    THEN plan verified
+PREMISE gate_finalize:
+    WHEN flow reached_finalize
+    THEN all_tasks passed
+PREMISE gate_done:
+    WHEN flow reached_done
+    THEN doubt passed
+
+// ---------- spec gate content: verified when every in-scope req addressed ----------
+RULE verify_spec:
+    WHEN req addressed
+    THEN spec verified
+PREMISE spec_needs_addressed:
+    WHEN spec verified
+    THEN req addressed
+
+// freedom valve: inexpressible -> deferred -> addressed, but ONLY with a
+// recorded rationale (REQ-14: a deferral is legitimate, an unexplained skip is not)
+RULE valve:
+    WHEN NOT req vrf_expressible
+    AND  req rationale_recorded
+    THEN req deferred_to_freedom
+RULE addr_freedom:
+    WHEN req deferred_to_freedom
+    THEN req addressed
+RULE addr_formal:
+    WHEN req formalized
+    THEN req addressed
+PREMISE no_fake_formal:
+    WHEN req formalized
+    THEN req vrf_expressible
+
+// ---------- coverage gate content: plan verified needs tasks AND coverage ----------
+RULE tasks_in_planning:
+    WHEN flow reached_planning
+    THEN tasks exist
+RULE verify_plan:
+    WHEN req covered
+    AND  tasks exist
+    THEN plan verified
+PREMISE plan_needs_tasks:
+    WHEN plan verified
+    THEN tasks exist
+PREMISE plan_needs_cover:
+    WHEN plan verified
+    THEN req covered

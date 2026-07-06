@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type {
@@ -12,6 +13,10 @@ import type {
 	GitWorktreeAddInput,
 	GitWorktreeRemoveInput,
 } from "../git/runner";
+import {
+	validateTaskBehaviors,
+	writeTaskBehaviors,
+} from "../storage/behavior-store";
 import type { PlannerFs } from "../storage/fs";
 import {
 	createPlanStoragePaths,
@@ -26,9 +31,11 @@ import {
 } from "../storage/plan-store";
 import { ensureProjectRecord, setActivePlan } from "../storage/project-store";
 import { createInitialPlanState, createPlanRecord } from "../storage/schema";
+import { validateSpecRecord, writeSpecArtifacts } from "../storage/spec-store";
 import { initializePlanState } from "../storage/state-store";
 import { readTaskRecord, upsertTaskArtifacts } from "../storage/task-store";
 import { MockPlannerFs } from "../test/mock-fs";
+import { planCoverageSourceHash } from "./gate-tools";
 import {
 	executePlannerWorkflowTool,
 	workflowToolTransition,
@@ -410,6 +417,382 @@ describe("workflowToolTransition", () => {
 		expect(finished.result.status).toBe("applied");
 	});
 
+	it("gates spec/verify_spec on a fresh CONSISTENT spec_consistency run", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await ensureProjectRecord(fs, projectPaths);
+		await initializePlanFiles(
+			fs,
+			planPaths,
+			createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+		);
+		await fs.mkdirp(worktreePath);
+		await initializePlanState(fs, planPaths, {
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "spec",
+			step: "verify_spec",
+			stepStatus: "running",
+			currentBranch: "plan/plan-a",
+		});
+		await setActivePlan(fs, projectPaths, "plan-a");
+		await writeSpecArtifacts(
+			fs,
+			planPaths,
+			validateSpecRecord({
+				requirements: [
+					{
+						id: "REQ-1",
+						statement: "Behavior.",
+						acceptance: "Checked.",
+						acceptanceAtom: "req_1_ok",
+						priority: "must",
+						inScope: true,
+					},
+				],
+			}),
+		);
+		const specHash = createHash("sha256")
+			.update(await fs.readText(planPaths.specJson))
+			.digest("hex");
+		const forward = {
+			nextStage: "spec",
+			nextStep: "compact_spec",
+		} as const;
+		const writeGateCheck = async (outcome: string, sourceHash = specHash) =>
+			fs.writeTextAtomic(
+				join(planPaths.elenchusDir, "last-check.json"),
+				JSON.stringify({
+					name: "spec-consistency",
+					stage: "spec",
+					step: "verify_spec",
+					outcome,
+					recordedAt: "2026-07-05T00:00:00.000Z",
+					gate: "spec_consistency",
+					sourceHash,
+				}),
+			);
+
+		// No gate run at all → the forward transition is blocked.
+		const noRun = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: forward,
+		});
+		expect(noRun.result.status).toBe("blocked");
+		expect(noRun.text).toContain("spec_consistency");
+
+		// WARNING blocks too — stricter than the generic CONFLICT-only rule.
+		await writeGateCheck("WARNING");
+		const warned = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: forward,
+		});
+		expect(warned.result.status).toBe("blocked");
+		expect(warned.text).toContain("WARNING");
+
+		// Looping back to elicit_gaps is always allowed — gaps become questions.
+		const loopBack = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: { nextStage: "spec", nextStep: "elicit_gaps" },
+		});
+		expect(loopBack.result.status).toBe("applied");
+
+		// Reset position back to verify_spec for the passing cases.
+		await initializePlanState(fs, planPaths, {
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "spec",
+			step: "verify_spec",
+			stepStatus: "running",
+			currentBranch: "plan/plan-a",
+		});
+
+		// A stale pass (spec.json changed after the check) is invalid.
+		await writeGateCheck("CONSISTENT", "0".repeat(64));
+		const stale = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: forward,
+		});
+		expect(stale.result.status).toBe("blocked");
+		expect(stale.text).toContain("stale");
+
+		// A fresh CONSISTENT pass advances.
+		await writeGateCheck("CONSISTENT");
+		const finished = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: forward,
+		});
+		expect(finished.result.status).toBe("applied");
+	});
+
+	it("gates planning/consistency_check on plan_coverage for plans with a spec; legacy plans skip it", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await ensureProjectRecord(fs, projectPaths);
+		await initializePlanFiles(
+			fs,
+			planPaths,
+			createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+		);
+		await fs.mkdirp(worktreePath);
+		const atConsistencyCheck = () => ({
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "planning" as const,
+			step: "consistency_check" as const,
+			stepStatus: "running" as const,
+			currentBranch: "plan/plan-a",
+		});
+		await initializePlanState(fs, planPaths, atConsistencyCheck());
+		await setActivePlan(fs, projectPaths, "plan-a");
+
+		// Legacy plan (no spec.json): no coverage gate, the step finishes freely.
+		const legacy = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(legacy.result.status).toBe("applied");
+
+		// Now a spec + a traced task exist: the gate becomes mandatory.
+		await initializePlanState(fs, planPaths, atConsistencyCheck());
+		await writeSpecArtifacts(
+			fs,
+			planPaths,
+			validateSpecRecord({
+				requirements: [
+					{
+						id: "REQ-1",
+						statement: "Behavior.",
+						acceptance: "Checked.",
+						acceptanceAtom: "req_1_ok",
+						priority: "must",
+						inScope: true,
+					},
+				],
+			}),
+		);
+		const { record: taskRecord } = await upsertTaskArtifacts(fs, planPaths, {
+			taskId: "alpha",
+			title: "Alpha",
+			objective: "Discharges REQ-1.",
+			scope: [],
+			acceptanceCriteria: ["ok"],
+			requirements: ["REQ-1"],
+		});
+		await updatePlanRecord(fs, planPaths, (plan) => ({
+			...plan,
+			tasks: [{ taskId: "alpha", title: "Alpha", status: taskRecord.status }],
+		}));
+
+		const noRun = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(noRun.result.status).toBe("blocked");
+		expect(noRun.text).toContain("plan_coverage");
+
+		const freshHash = await planCoverageSourceHash(fs, planPaths, [
+			await readTaskRecord(fs, createTaskStoragePaths(planPaths, "alpha")),
+		]);
+		const writeGateCheck = async (outcome: string, sourceHash = freshHash) =>
+			fs.writeTextAtomic(
+				join(planPaths.elenchusDir, "last-check.json"),
+				JSON.stringify({
+					name: "plan-coverage",
+					stage: "planning",
+					step: "consistency_check",
+					outcome,
+					recordedAt: "2026-07-06T00:00:00.000Z",
+					gate: "plan_coverage",
+					sourceHash,
+				}),
+			);
+
+		// WARNING (a dropped requirement) blocks.
+		await writeGateCheck("WARNING");
+		const warned = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(warned.result.status).toBe("blocked");
+
+		// A stale pass (task requirements changed after the run) blocks.
+		await writeGateCheck("CONSISTENT", "0".repeat(64));
+		const stale = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(stale.result.status).toBe("blocked");
+		expect(stale.text).toContain("stale");
+
+		// A fresh CONSISTENT pass advances.
+		await writeGateCheck("CONSISTENT");
+		const finished = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(finished.result.status).toBe("applied");
+	});
+
+	it("gates execution/write_tests on red tdd_coverage when a behavior board exists", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await ensureProjectRecord(fs, projectPaths);
+		await initializePlanFiles(
+			fs,
+			planPaths,
+			createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+		);
+		await fs.mkdirp(worktreePath);
+		const atWriteTests = () => ({
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "execution" as const,
+			step: "write_tests" as const,
+			stepStatus: "running" as const,
+			activeTaskId: "alpha",
+			currentBranch: "plan/plan-a",
+		});
+		await initializePlanState(fs, planPaths, atWriteTests());
+		await setActivePlan(fs, projectPaths, "plan-a");
+		await upsertTaskArtifacts(fs, planPaths, {
+			taskId: "alpha",
+			title: "Alpha",
+			objective: "o",
+			scope: [],
+			acceptanceCriteria: ["ok"],
+		});
+		const taskPaths = createTaskStoragePaths(planPaths, "alpha");
+		await fs.writeTextAtomic(
+			taskPaths.tddMd,
+			"## Pre-Implementation Proof Contract\n\ncontent\n",
+		);
+
+		// Legacy task (no behavior board): the gate does not apply.
+		const legacy = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(legacy.result.status).toBe("applied");
+
+		// With a board, the red gate becomes mandatory.
+		await initializePlanState(fs, planPaths, atWriteTests());
+		await writeTaskBehaviors(
+			fs,
+			taskPaths,
+			validateTaskBehaviors({
+				taskId: "alpha",
+				behaviors: [
+					{
+						id: "BHV-1",
+						statement: "Behavior.",
+						kind: "happy",
+						requirement: null,
+						test: { file: "src/x.test.ts", name: "case" },
+						status: "red",
+					},
+				],
+				previous: null,
+			}),
+		);
+		const noRun = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(noRun.result.status).toBe("blocked");
+		expect(noRun.text).toContain("tdd_coverage");
+
+		const boardHash = createHash("sha256")
+			.update(await fs.readText(taskPaths.behaviorsJson))
+			.digest("hex");
+		await fs.writeTextAtomic(
+			join(planPaths.elenchusDir, "last-check.json"),
+			JSON.stringify({
+				name: "tdd-coverage-red",
+				stage: "execution",
+				step: "write_tests",
+				outcome: "CONSISTENT",
+				recordedAt: "2026-07-06T00:00:00.000Z",
+				gate: "tdd_coverage",
+				sourceHash: boardHash,
+			}),
+		);
+		const finished = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(finished.result.status).toBe("applied");
+	});
+
 	it("marks existing tasks done when returning from a change request to planning", async () => {
 		const fs = new MockPlannerFs();
 		const git = new MockGitRunner();
@@ -485,7 +868,9 @@ describe("workflowToolTransition", () => {
 			git,
 			projectPaths,
 			toolName: "planner_finish_step",
-			params: {},
+			// A legacy plan (no spec.json) goes straight back to planning; plans
+			// with a spec pick spec/draft_requirements instead.
+			params: { nextStage: "planning", nextStep: "read_context" },
 		});
 
 		expect(result.result.status).toBe("applied");

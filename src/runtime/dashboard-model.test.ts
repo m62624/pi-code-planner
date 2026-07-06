@@ -228,8 +228,8 @@ describe("renderStageRibbon", () => {
 			context: readyContext({ stage: "execution", step: "implement_task" }),
 			now: 1000,
 		}) as DashboardModel;
-		const [line] = renderStageRibbon(model, 70, identityPalette);
-		expect(line.length).toBe(70);
+		const [line] = renderStageRibbon(model, 90, identityPalette);
+		expect(line.length).toBe(90);
 		expect(line).toContain("INIT");
 		expect(line).toContain("DONE");
 	});
@@ -242,7 +242,7 @@ describe("renderStageRibbon", () => {
 		const [line] = renderStageRibbon(model, 20, identityPalette);
 		expect(line.length).toBe(20);
 		expect(line).toContain("[DISCOVERY]");
-		expect(line).toContain("3/7");
+		expect(line).toContain("3/8");
 	});
 });
 

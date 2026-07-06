@@ -18,6 +18,9 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_goal_decide",
 	"planner_questions_submit",
 	"planner_questions_resolve",
+	"planner_spec_submit",
+	"planner_gate_check",
+	"planner_behavior_upsert",
 	"planner_plan_submit",
 	"planner_discovery_submit",
 	"planner_tdd_submit",
@@ -133,6 +136,21 @@ const STEP_ALLOWED_TOOLS = {
 		compact_discovery: [],
 		enter_planning: [],
 	},
+	spec: {
+		draft_requirements: [
+			"planner_spec_submit",
+			"planner_contract_route",
+			"planner_contract_read",
+		],
+		elicit_gaps: [
+			"planner_questions_submit",
+			"planner_questions_resolve",
+			"planner_spec_submit",
+		],
+		verify_spec: ["planner_gate_check", "planner_spec_submit"],
+		compact_spec: [],
+		finish_spec: [],
+	},
 	planning: {
 		read_context: ["planner_contract_route", "planner_contract_read"],
 		draft_plan: [
@@ -148,7 +166,9 @@ const STEP_ALLOWED_TOOLS = {
 		],
 		verify_plan: [],
 		consistency_check: [
+			"planner_gate_check",
 			"planner_elenchus_check",
+			"planner_task_upsert",
 			"planner_contract_route",
 			"planner_contract_read",
 		],
@@ -160,6 +180,8 @@ const STEP_ALLOWED_TOOLS = {
 		write_tdd_plan: [
 			"planner_git_inspect",
 			"planner_tdd_submit",
+			"planner_behavior_upsert",
+			"planner_gate_check",
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
@@ -173,6 +195,8 @@ const STEP_ALLOWED_TOOLS = {
 		write_tests: [
 			"planner_git_inspect",
 			"planner_tdd_submit",
+			"planner_behavior_upsert",
+			"planner_gate_check",
 			"planner_git_commit",
 			"planner_report_stuck",
 			"planner_skill_create",
@@ -186,6 +210,8 @@ const STEP_ALLOWED_TOOLS = {
 		run_failing_tests: [
 			"planner_git_inspect",
 			"planner_tdd_submit",
+			"planner_behavior_upsert",
+			"planner_gate_check",
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
@@ -247,6 +273,8 @@ const STEP_ALLOWED_TOOLS = {
 		run_final_tests: [
 			"planner_git_inspect",
 			"planner_tdd_submit",
+			"planner_behavior_upsert",
+			"planner_gate_check",
 			"planner_git_commit",
 			"planner_report_stuck",
 			"planner_skill_create",

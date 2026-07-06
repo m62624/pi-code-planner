@@ -31,6 +31,7 @@ Default model-facing instruction files for every planner stage and step. Each fi
   - `init.md` → init stage: initialize planner control before any project work
   - `intake.md` → intake stage: turn raw user request into approved goal; no source reading yet
   - `discovery.md` → discovery stage: AGENTS.md first, then project tree, then targeted file reads
+  - `spec.md` → spec stage: author the checkable specification (REQ-n / non-goals / constraints / evidence-backed assumptions) and pass the deterministic spec_consistency gate; the model never hand-writes gate VRF
   - `planning.md` → planning stage: turn discovery context into ordered atomic tasks; no implementation
   - `execution.md` → execution stage: one task at a time via TDD → implement → contract check → refactor → merge
   - `tdd.md` → TDD step inside execution: failing test required before any production code

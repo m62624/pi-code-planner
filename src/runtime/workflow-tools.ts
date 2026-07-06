@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
@@ -13,14 +14,16 @@ import {
 	type PlannerStage,
 	type PlannerStep,
 	type PlanStateRecord,
+	type TaskRecord,
 } from "../storage/schema";
-import { updateTaskStatus } from "../storage/task-store";
+import { readTaskRecord, updateTaskStatus } from "../storage/task-store";
 import {
 	validateContractCheckCompleted,
 	validateDiscoveryContractRouting,
 } from "./contracts";
 import { validateDoubtReviewMarkdown } from "./doubt-review";
 import { readElenchusLastCheck } from "./elenchus-tools";
+import { planCoverageSourceHash } from "./gate-tools";
 import type { PlannerGitReality } from "./git-state-sync";
 import {
 	decidePlannerLifecycleNext,
@@ -239,6 +242,113 @@ function fallbackWorkflowToolTransition(
 	}
 }
 
+/**
+ * The SDD spec gate (SPEC.md §6.2): the latest planner_gate_check run for
+ * spec_consistency must be CONSISTENT and must have been computed from the
+ * spec.json that is on disk right now — an edit after the pass invalidates it.
+ */
+async function validateSpecGatePassed(
+	fs: PlannerFs,
+	planPaths: PlanStoragePaths,
+): Promise<string | null> {
+	const lastCheck = await readElenchusLastCheck(fs, planPaths.elenchusDir);
+	if (lastCheck?.gate !== "spec_consistency") {
+		return 'The spec gate has not run. Call planner_gate_check with gate: "spec_consistency" at spec/verify_spec and reach CONSISTENT before advancing.';
+	}
+	if (lastCheck.outcome !== "CONSISTENT") {
+		return `The latest spec_consistency gate ended in ${lastCheck.outcome} — the spec stage only advances on CONSISTENT. Close the gaps the gate named (planner_spec_submit to fix the spec, or loop back to spec/elicit_gaps for user answers), then re-run planner_gate_check.`;
+	}
+	if (!(await fs.exists(planPaths.specJson))) {
+		return "spec.json is missing although the spec gate passed earlier. Re-author it with planner_spec_submit and re-run planner_gate_check.";
+	}
+	const currentHash = createHash("sha256")
+		.update(await fs.readText(planPaths.specJson))
+		.digest("hex");
+	if (lastCheck.sourceHash && lastCheck.sourceHash !== currentHash) {
+		return "spec.json changed after the last spec_consistency pass — the verdict is stale. Re-run planner_gate_check at spec/verify_spec.";
+	}
+	return null;
+}
+
+/**
+ * The SDD coverage gate (SPEC.md §6.2): for a plan WITH a spec, the latest
+ * plan_coverage run must be CONSISTENT and fresh against both spec.json and
+ * every task's requirements list. Legacy plans (no spec.json) skip it —
+ * coverage degrades gracefully (REQ-11) and the old plan-consistency flow
+ * (with its CONFLICT-only rule above) still applies.
+ */
+async function validatePlanCoverageGatePassed(
+	fs: PlannerFs,
+	planPaths: PlanStoragePaths,
+): Promise<string | null> {
+	if (!(await fs.exists(planPaths.specJson))) {
+		return null;
+	}
+	const lastCheck = await readElenchusLastCheck(fs, planPaths.elenchusDir);
+	if (lastCheck?.gate !== "plan_coverage") {
+		return 'This plan has a spec, so requirement coverage is a hard gate. Call planner_gate_check with gate: "plan_coverage" at planning/consistency_check and reach CONSISTENT before advancing.';
+	}
+	if (lastCheck.outcome !== "CONSISTENT") {
+		return `The latest plan_coverage gate ended in ${lastCheck.outcome} — a requirement is dropped or a task is orphan work. Fix the tasks' \`requirements\` via planner_task_upsert (or de-scope through a recorded user decision), then re-run planner_gate_check.`;
+	}
+	if (lastCheck.sourceHash) {
+		const plan = await readPlanRecord(fs, planPaths);
+		const tasks: TaskRecord[] = [];
+		for (const summary of plan.tasks) {
+			tasks.push(
+				await readTaskRecord(
+					fs,
+					createTaskStoragePaths(planPaths, summary.taskId),
+				),
+			);
+		}
+		const currentHash = await planCoverageSourceHash(fs, planPaths, tasks);
+		if (lastCheck.sourceHash !== currentHash) {
+			return "spec.json or a task's requirements changed after the last plan_coverage pass — the verdict is stale. Re-run planner_gate_check at planning/consistency_check.";
+		}
+	}
+	return null;
+}
+
+/**
+ * The SDD test-coverage gate (execution phase): when the active task has a
+ * behavior board (behaviors.json), leaving write_tests requires every
+ * behavior to have a RED witness, and leaving run_final_tests forward
+ * requires GREEN — verified by the latest tdd_coverage run, fresh against
+ * the board's current content. Legacy tasks without a board skip the gate.
+ */
+async function validateTddCoverageGatePassed(
+	fs: PlannerFs,
+	planPaths: PlanStoragePaths,
+	state: PlanStateRecord,
+): Promise<string | null> {
+	if (!state.activeTaskId) return null;
+	const taskPaths = createTaskStoragePaths(planPaths, state.activeTaskId);
+	if (!(await fs.exists(taskPaths.behaviorsJson))) {
+		return null;
+	}
+	const phase = state.step === "run_final_tests" ? "green" : "red";
+	const lastCheck = await readElenchusLastCheck(fs, planPaths.elenchusDir);
+	if (
+		lastCheck?.gate !== "tdd_coverage" ||
+		lastCheck.name !== `tdd-coverage-${phase}`
+	) {
+		return `This task has a behavior board, so test coverage is a hard gate. Call planner_gate_check with gate: "tdd_coverage" at this step and reach CONSISTENT (${phase} witnesses) before advancing.`;
+	}
+	if (lastCheck.outcome !== "CONSISTENT") {
+		return `The latest tdd_coverage (${phase}) gate ended in ${lastCheck.outcome} — the machine still counts behaviors as uncovered. Write/fix the named tests, flip the toggles via planner_behavior_upsert, and re-run planner_gate_check.`;
+	}
+	if (lastCheck.sourceHash) {
+		const currentHash = createHash("sha256")
+			.update(await fs.readText(taskPaths.behaviorsJson))
+			.digest("hex");
+		if (lastCheck.sourceHash !== currentHash) {
+			return "behaviors.json changed after the last tdd_coverage pass — the verdict is stale. Re-run planner_gate_check.";
+		}
+	}
+	return null;
+}
+
 const INTERNAL_DONE_STEPS = new Set<string>([
 	"prepare_output_branch",
 	"merge_or_export_result",
@@ -284,6 +394,71 @@ async function validateWorkflowExit(input: {
 		);
 		if (cleanBlock) {
 			return cleanBlock;
+		}
+	}
+	if (state.stage === "spec" && state.step === "elicit_gaps") {
+		return state.questionsResolved
+			? null
+			: "Spec questions are still unresolved. Show them to the user verbatim, wait for answers, and call planner_questions_resolve before finishing spec/elicit_gaps.";
+	}
+	if (
+		state.stage === "spec" &&
+		(state.step === "verify_spec" || state.step === "finish_spec")
+	) {
+		// Looping back from verify_spec to elicit_gaps is always allowed — that
+		// is how gate gaps become user questions. Only the FORWARD transition is
+		// gated on a fresh CONSISTENT spec_consistency run (SPEC.md §6.2 hard
+		// gate: WARNING/UNDERDETERMINED block too, unlike the generic
+		// CONFLICT-only rule above).
+		const target =
+			input.transition.type === "finish_step"
+				? input.transition.next
+				: undefined;
+		const loopBack = target?.stage === "spec" && target.step === "elicit_gaps";
+		if (!loopBack) {
+			const gateBlock = await validateSpecGatePassed(
+				input.fs,
+				input.orchestrator.preflight.context.planPaths,
+			);
+			if (gateBlock) {
+				return gateBlock;
+			}
+		}
+	}
+	if (
+		state.stage === "execution" &&
+		(state.step === "write_tests" || state.step === "run_final_tests")
+	) {
+		// Going back from run_final_tests to implement_task (a late failure
+		// being fixed) is always allowed; only the FORWARD transition demands
+		// the phase's coverage witnesses.
+		const target =
+			input.transition.type === "finish_step"
+				? input.transition.next
+				: undefined;
+		const backToImplement =
+			state.step === "run_final_tests" && target?.step === "implement_task";
+		if (!backToImplement) {
+			const tddBlock = await validateTddCoverageGatePassed(
+				input.fs,
+				input.orchestrator.preflight.context.planPaths,
+				state,
+			);
+			if (tddBlock) {
+				return tddBlock;
+			}
+		}
+	}
+	if (
+		state.stage === "planning" &&
+		(state.step === "consistency_check" || state.step === "enter_execution")
+	) {
+		const coverageBlock = await validatePlanCoverageGatePassed(
+			input.fs,
+			input.orchestrator.preflight.context.planPaths,
+		);
+		if (coverageBlock) {
+			return coverageBlock;
 		}
 	}
 	if (state.stage === "discovery" && state.step === "scan_project_structure") {

@@ -63,6 +63,7 @@ const INIT_STEPS_BEFORE_WORKTREE = new Set<InitStep>([
 
 const COMPACT_STEPS = new Set<PlannerStep>([
 	"compact_discovery",
+	"compact_spec",
 	"compact_planning",
 	"compact_task",
 	"compact_before_doubt",
@@ -80,6 +81,7 @@ export function isPlannerCompactEnabled(state: PlanStateRecord): boolean {
 		case "compact_task":
 			return boundaries.task;
 		case "compact_discovery":
+		case "compact_spec":
 		case "compact_planning":
 		case "compact_finalize":
 			return boundaries.stage;
@@ -117,11 +119,13 @@ export function getAllowedNextPlannerPositions(
 	}
 	if (input.stage === "intake" && input.step === "await_goal_approval") {
 		// The improve flow already ran discovery before drafting the goal, so
-		// approval continues into planning instead of repeating discovery.
+		// approval continues into the spec stage instead of repeating discovery —
+		// every plan authors a spec; the spec is the source of truth without
+		// exceptions.
 		return input.creationMethod === "improve"
 			? [
 					{ stage: "intake", step: "draft_goal" },
-					{ stage: "planning", step: "read_context" },
+					{ stage: "spec", step: "draft_requirements" },
 				]
 			: [
 					{ stage: "intake", step: "draft_goal" },
@@ -129,12 +133,26 @@ export function getAllowedNextPlannerPositions(
 				];
 	}
 	if (input.stage === "discovery" && input.step === "enter_planning") {
+		// Retargeted by the SDD layer: discovery now enters the spec stage. The
+		// step keeps its historical name so persisted legacy state.json stays
+		// valid (REQ-11).
 		return input.creationMethod === "improve"
 			? [
-					{ stage: "planning", step: "read_context" },
+					{ stage: "spec", step: "draft_requirements" },
 					{ stage: "intake", step: "draft_goal" },
 				]
-			: [{ stage: "planning", step: "read_context" }];
+			: [{ stage: "spec", step: "draft_requirements" }];
+	}
+	if (input.stage === "spec" && input.step === "verify_spec") {
+		// Forward to the compact boundary, or loop back to elicit_gaps when the
+		// gate reports gaps that need user answers before the spec can pass.
+		return [
+			{ stage: "spec", step: "compact_spec" },
+			{ stage: "spec", step: "elicit_gaps" },
+		];
+	}
+	if (input.stage === "spec" && input.step === "finish_spec") {
+		return [{ stage: "planning", step: "read_context" }];
 	}
 	if (input.stage === "planning" && input.step === "enter_execution") {
 		return [{ stage: "execution", step: "prepare_task" }];
@@ -169,7 +187,13 @@ export function getAllowedNextPlannerPositions(
 		];
 	}
 	if (input.stage === "done" && input.step === "handle_change_request") {
-		return [{ stage: "planning", step: "read_context" }];
+		// A change request amends the SPEC first (REQ-10): the spec is the
+		// source of truth, so it is re-drafted and re-verified before replanning.
+		// Legacy plans without spec.json keep the direct road to planning.
+		return [
+			{ stage: "spec", step: "draft_requirements" },
+			{ stage: "planning", step: "read_context" },
+		];
 	}
 
 	return nextWithinStage(input);

@@ -21,7 +21,7 @@ Present the verified plan result, wait for an explicit user decision, then eithe
    - Update `plan.md` (via `planner_plan_submit` or edit): add a short `## Change Request Replan` note near the start — the previous implementation is complete, but the user requested follow-up changes — with `### Completed Work` and `### Remaining Work` subsections. Do not rewrite the old plan wholesale or delete prior history.
    - Update `discovery.md` (via `planner_discovery_submit` or edit): add a `## Post-Implementation Snapshot` summarizing what was implemented, current relevant files/branches, known gaps, and why another pass was requested, with `### Completed Work` and `### Remaining Work` subsections.
    - Treat existing task artifacts as completed history. The follow-up planning pass may create new revision tasks for remaining work, but must not reopen completed task IDs.
-   - Return to `planning/read_context` in the same plan worktree and branch.
+   - For a plan with `spec.json`: return to `spec/draft_requirements` — the change request amends the SPEC first (add/adjust `REQ-n` via `planner_spec_submit`; the previous version is preserved automatically as `spec.prev.json`), then `verify_spec` and the planning coverage gate re-run, so a requirement can never be dropped silently across versions. Legacy plans (no `spec.json`): return to `planning/read_context` directly. Same plan worktree and branch in both cases.
 4. `prepare_output_branch` — internal `/planner-finish` phase: prepare the output branch in the original repository.
 5. `merge_or_export_result` — internal `/planner-finish` phase: export the plan branch result.
 6. `cleanup_worktree` — internal `/planner-finish` phase: remove the temporary worktree and safe-to-delete managed child branches.

@@ -1,0 +1,16 @@
+// PROBE 4 — the timing hazard: WRONGLY couple coverage into the spec gate.
+// At the spec stage tasks do not exist yet. If `spec verified` requires tasks,
+// spec verification deadlocks before planning can ever create tasks.
+// Expect WARNING (blocked by tasks exist) — proves coverage must be a PLANNING gate.
+DOMAIN probe
+IMPORT "sdd-core.vrf"
+
+// the bad coupling (the design mistake we are testing)
+PREMISE bad_coverage_in_spec_gate:
+    WHEN sdd.spec verified
+    THEN sdd.tasks exist
+
+// we are authoring the spec: content is fine, but we have NOT reached planning
+FACT sdd.req addressed              // spec content is complete
+NOT  sdd.flow reached_planning      // no tasks authored yet
+CHECK

@@ -68,6 +68,7 @@ const STAGE_THEME_COLOR: Record<PlannerStage, ThemeColor> = {
 	init: "syntaxComment",
 	intake: "syntaxKeyword",
 	discovery: "syntaxFunction",
+	spec: "syntaxOperator",
 	planning: "syntaxType",
 	execution: "syntaxString",
 	finalize: "syntaxNumber",

@@ -10,6 +10,7 @@ export interface ProjectStoragePaths {
 	displayName: string;
 	projectDir: string;
 	projectJson: string;
+	compactTimingJson: string;
 	plansDir: string;
 	instructionsDir: string;
 	projectLocalDir: string;
@@ -21,6 +22,10 @@ export interface PlanStoragePaths {
 	stateJson: string;
 	requestMd: string;
 	goalMd: string;
+	specMd: string;
+	specJson: string;
+	specPrevJson: string;
+	coverageMd: string;
 	planMd: string;
 	discoveryMd: string;
 	questionsMd: string;
@@ -40,6 +45,7 @@ export interface TaskStoragePaths {
 	taskMd: string;
 	tddMd: string;
 	refactorMd: string;
+	behaviorsJson: string;
 }
 
 export function createProjectStoragePaths(input: {
@@ -59,6 +65,8 @@ export function createProjectStoragePaths(input: {
 		displayName: basename(projectRoot),
 		projectDir,
 		projectJson: join(projectDir, "project.json"),
+		// Rolling compaction-duration history for the empirical ETA indicator.
+		compactTimingJson: join(projectDir, "compact-timing.json"),
 		// Plans live INSIDE the project dir so everything owned by a project
 		// (project.json, skills, plans) sits under projects/<projectId>/ instead
 		// of a flat extensionDir/plans shared across every project.
@@ -79,6 +87,10 @@ export function createPlanStoragePaths(
 		stateJson: join(planDir, "state.json"),
 		requestMd: join(planDir, "request.md"),
 		goalMd: join(planDir, "goal.md"),
+		specMd: join(planDir, "spec.md"),
+		specJson: join(planDir, "spec.json"),
+		specPrevJson: join(planDir, "spec.prev.json"),
+		coverageMd: join(planDir, "coverage.md"),
 		planMd: join(planDir, "plan.md"),
 		discoveryMd: join(planDir, "discovery.md"),
 		questionsMd: join(planDir, "questions.md"),
@@ -110,5 +122,6 @@ export function createTaskStoragePaths(
 		taskMd: join(taskDir, "task.md"),
 		tddMd: join(taskDir, "tdd.md"),
 		refactorMd: join(taskDir, "refactor.md"),
+		behaviorsJson: join(taskDir, "behaviors.json"),
 	};
 }

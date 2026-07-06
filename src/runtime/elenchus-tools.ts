@@ -65,6 +65,15 @@ export interface ElenchusLastCheckRecord {
 		| "not_applicable"
 		| "unknown";
 	recordedAt: string;
+	/**
+	 * Set when the check was a planner_gate_check run (compiler-generated
+	 * program). Gate steps require their gate's latest run to be CONSISTENT,
+	 * which is stricter than the generic CONFLICT-only block above.
+	 */
+	gate?: string;
+	/** sha256 of the compiled source artifact (e.g. spec.json), so a gate pass
+	 * is invalidated when the artifact changes after the check. */
+	sourceHash?: string;
 }
 
 const LAST_CHECK_FILE = "last-check.json";
@@ -84,7 +93,7 @@ export async function readElenchusLastCheck(
 	}
 }
 
-async function writeElenchusLastCheck(
+export async function writeElenchusLastCheck(
 	fs: PlannerToolContext["fs"],
 	elenchusDir: string,
 	record: ElenchusLastCheckRecord,

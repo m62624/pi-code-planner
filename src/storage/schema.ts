@@ -10,6 +10,7 @@ export type PlannerStage =
 	| "init"
 	| "intake"
 	| "discovery"
+	| "spec"
 	| "planning"
 	| "execution"
 	| "finalize"
@@ -32,6 +33,18 @@ export type DiscoveryStep =
 	| "write_questions"
 	| "compact_discovery"
 	| "enter_planning";
+
+// SDD spec stage (docs/sdd/SPEC.md §6). Note: the exit step is named
+// finish_spec, NOT enter_planning as SPEC.md §6.1 originally sketched —
+// step names must be globally unique across stages (state-machine.ts
+// buildStepToStageMap throws otherwise) and discovery already owns
+// enter_planning.
+export type SpecStep =
+	| "draft_requirements"
+	| "elicit_gaps"
+	| "verify_spec"
+	| "compact_spec"
+	| "finish_spec";
 
 export type PlanningStep =
 	| "read_context"
@@ -87,6 +100,7 @@ export type PlannerStep =
 	| InitStep
 	| IntakeStep
 	| DiscoveryStep
+	| SpecStep
 	| PlanningStep
 	| ExecutionStep
 	| FinalizeStep
@@ -109,6 +123,13 @@ export const PLANNER_STAGE_STEPS = {
 		"write_questions",
 		"compact_discovery",
 		"enter_planning",
+	],
+	spec: [
+		"draft_requirements",
+		"elicit_gaps",
+		"verify_spec",
+		"compact_spec",
+		"finish_spec",
 	],
 	planning: [
 		"read_context",
@@ -207,6 +228,9 @@ export interface TaskRecord {
 	objective: string;
 	scope: string[];
 	acceptanceCriteria: string[];
+	// Spec traceability (SDD): REQ-n ids from spec.json this task discharges.
+	// Optional and defaulted to [] on read so legacy task.json files parse.
+	requirements?: string[];
 	contractChain?: string[];
 	relevantContracts?: string[];
 	forbiddenAreas?: string[];

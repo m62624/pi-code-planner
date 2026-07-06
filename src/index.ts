@@ -60,6 +60,10 @@ import {
 	type PlannerArtifactToolName,
 } from "./runtime/artifact-tools";
 import {
+	executePlannerBehaviorTool,
+	PLANNER_BEHAVIOR_TOOL_NAME,
+} from "./runtime/behavior-tools";
+import {
 	buildPlannerCompactInstructionBundle,
 	buildPlannerPostCompactMessage,
 	clearPlannerCompactionInFlight,
@@ -78,6 +82,14 @@ import {
 	projectPlannerContextBudget,
 	shouldProactivelyCompact,
 } from "./runtime/compact";
+import {
+	type CompactEtaEstimate,
+	compactionProgressFraction,
+	estimateCompactionDuration,
+	formatDurationShort,
+	formatEtaLabel,
+	renderProgressBar,
+} from "./runtime/compact-eta";
 import {
 	applyPlannerContractFinishPolicy,
 	executePlannerContractTool,
@@ -120,6 +132,11 @@ import {
 	executePlannerExecTool,
 	PLANNER_EXEC_TOOL_NAME,
 } from "./runtime/exec-tools";
+import {
+	executePlannerGateTool,
+	PLANNER_GATE_NAMES,
+	PLANNER_GATE_TOOL_NAME,
+} from "./runtime/gate-tools";
 import {
 	executePlannerGitTool,
 	PLANNER_GIT_TOOL_NAMES,
@@ -183,6 +200,10 @@ import {
 	type PlannerSkillSummary,
 } from "./runtime/skill-library";
 import {
+	executePlannerSpecTool,
+	PLANNER_SPEC_TOOL_NAME,
+} from "./runtime/spec-tools";
+import {
 	buildPlannerStuckCompactInstructions,
 	executePlannerStuckTool,
 	PLANNER_STUCK_TOOL_NAMES,
@@ -229,6 +250,10 @@ import {
 	selectPlannerResumeSessionFile,
 } from "./session/handoff";
 import { loadEffectivePlannerSettings } from "./settings/manager";
+import {
+	readCompactTimingHistory,
+	recordCompactTiming,
+} from "./storage/compact-timing-store";
 import { createNodeFs, type PlannerFs } from "./storage/fs";
 import { migrateLayout } from "./storage/migrate-layout";
 import type { ProjectStoragePaths } from "./storage/paths";
@@ -394,6 +419,12 @@ const TASK_UPSERT_TOOL_PARAMETERS = {
 		objective: { type: "string" },
 		scope: { type: "array", items: { type: "string" } },
 		acceptanceCriteria: { type: "array", items: { type: "string" } },
+		requirements: {
+			type: "array",
+			items: { type: "string" },
+			description:
+				"Spec traceability: the REQ-n ids from spec.json this task discharges. Required in practice for plans with a spec — the plan_coverage gate names every requirement no task covers and every task that traces to nothing.",
+		},
 		contractChain: {
 			type: "array",
 			items: { type: "string" },
@@ -2906,6 +2937,217 @@ function registerPlannerTools(
 		},
 	});
 
+	pi.registerTool({
+		name: PLANNER_SPEC_TOOL_NAME,
+		label: "Planner Spec Submit",
+		description:
+			"Persist the structured SDD specification (spec.json + rendered spec.md): numbered requirements with stable REQ-n ids and acceptance criteria, non-goals, constraints (optionally with a machine-checkable relation over boolean-leaf atoms), and evidence-backed assumptions. Validated on submit; the deterministic spec→VRF compiler in planner_gate_check consumes the persisted record — never hand-write gate VRF.",
+		promptSnippet:
+			"At spec/draft_requirements (and when folding elicit_gaps answers back in), call planner_spec_submit with the FULL spec. Each requirement: stable id REQ-<n>, statement, acceptance, priority (must|should|could), inScope, and either acceptanceAtom (lowercase snake_case — the requirement is formalized) or deferral.rationale (the freedom valve for genuinely inexpressible requirements). Numbers never enter atoms: compute the predicate and record it as an assumption whose statement cites the evidence. Give constraints a `relation` (implies / exclusive / oneof / atleast over atoms) whenever the invariant is logical — prose-only constraints stay human-checked.",
+		parameters: {
+			type: "object",
+			properties: {
+				requirements: {
+					type: "array",
+					description: "All requirements, in REQ-n order.",
+					items: {
+						type: "object",
+						properties: {
+							id: { type: "string", description: "Stable id, REQ-<n>." },
+							statement: {
+								type: "string",
+								description: "Observable behavior, not implementation.",
+							},
+							acceptance: {
+								type: "string",
+								description: "Human acceptance criterion.",
+							},
+							acceptanceAtom: {
+								type: "string",
+								description:
+									"Optional VRF atom (lowercase snake_case) that later work must prove. Present = formalized.",
+							},
+							priority: { type: "string", enum: ["must", "should", "could"] },
+							inScope: { type: "boolean" },
+							deferral: {
+								type: "object",
+								description:
+									"Freedom valve: required when acceptanceAtom is omitted.",
+								properties: {
+									rationale: {
+										type: "string",
+										description:
+											"Why this requirement is not expressible as a boolean web.",
+									},
+								},
+								required: ["rationale"],
+								additionalProperties: false,
+							},
+						},
+						required: ["id", "statement", "acceptance", "priority", "inScope"],
+						additionalProperties: false,
+					},
+				},
+				nonGoals: {
+					type: "array",
+					items: { type: "string" },
+					description: "Explicit out-of-scope declarations (REQ-3).",
+				},
+				constraints: {
+					type: "array",
+					items: {
+						type: "object",
+						properties: {
+							id: { type: "string", description: "Stable id, CON-<n>." },
+							statement: { type: "string" },
+							kind: { type: "string", enum: ["invariant"] },
+							relation: {
+								type: "object",
+								description:
+									'Optional machine half: {"type":"implies","when":["atom_a","!atom_b"],"then":"atom_c"} or {"type":"exclusive"|"oneof"|"atleast","atoms":["a","b"]}.',
+							},
+						},
+						required: ["id", "statement", "kind"],
+						additionalProperties: false,
+					},
+				},
+				assumptions: {
+					type: "array",
+					items: {
+						type: "object",
+						properties: {
+							id: { type: "string", description: "Stable id, ASM-<n>." },
+							atom: {
+								type: "string",
+								description: "Boolean-leaf VRF atom (lowercase snake_case).",
+							},
+							negated: { type: "boolean" },
+							statement: {
+								type: "string",
+								description:
+									"Evidence: what was measured/run to establish the predicate.",
+							},
+						},
+						required: ["id", "atom", "negated", "statement"],
+						additionalProperties: false,
+					},
+				},
+			},
+			required: ["requirements"],
+			additionalProperties: false,
+		} as never,
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
+			const result = await executePlannerSpecTool({
+				fs,
+				git: gitRunner,
+				projectPaths,
+				params,
+			});
+			return plannerToolResponse(result);
+		},
+	});
+
+	pi.registerTool({
+		name: PLANNER_BEHAVIOR_TOOL_NAME,
+		label: "Planner Behavior Upsert",
+		description:
+			"Persist the active task's behavior board (tasks/<id>/behaviors.json): every observable behavior with a status toggle planned → red (a named test exists and FAILS) → green (it passes). The tdd_coverage gate compiles this board and NAMES every behavior still missing the phase's witness — coverage is read off the machine, not believed.",
+		promptSnippet:
+			'At execution/write_tdd_plan, enumerate the task\'s behaviors with planner_behavior_upsert (all `planned`; kinds: happy/edge/error/concurrency; link REQ-n where known). As each failing test lands at write_tests, resubmit the FULL list flipping that behavior to `red` with its {file, name}. After the implementation passes at run_final_tests, flip to `green`. A planned→green jump is rejected — test-first is mechanical. Then planner_gate_check with gate: "tdd_coverage" shows exactly what is still uncovered.',
+		parameters: {
+			type: "object",
+			properties: {
+				taskId: { type: "string", description: "The active task id." },
+				behaviors: {
+					type: "array",
+					description: "The FULL behavior list (not a delta).",
+					items: {
+						type: "object",
+						properties: {
+							id: { type: "string", description: "Stable id, BHV-<n>." },
+							statement: {
+								type: "string",
+								description: "The observable behavior, as a checkable claim.",
+							},
+							kind: {
+								type: "string",
+								enum: ["happy", "edge", "error", "concurrency"],
+							},
+							requirement: {
+								type: ["string", "null"],
+								description: "Optional REQ-n this behavior exercises.",
+							},
+							test: {
+								type: ["object", "null"],
+								description:
+									"The witnessing test; required once status is red/green.",
+								properties: {
+									file: { type: "string" },
+									name: { type: "string" },
+								},
+								required: ["file", "name"],
+								additionalProperties: false,
+							},
+							status: {
+								type: "string",
+								enum: ["planned", "red", "green"],
+							},
+						},
+						required: ["id", "statement", "kind", "status"],
+						additionalProperties: false,
+					},
+				},
+			},
+			required: ["taskId", "behaviors"],
+			additionalProperties: false,
+		} as never,
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
+			const result = await executePlannerBehaviorTool({
+				fs,
+				git: gitRunner,
+				projectPaths,
+				params,
+			});
+			return plannerToolResponse(result);
+		},
+	});
+
+	pi.registerTool({
+		name: PLANNER_GATE_TOOL_NAME,
+		label: "Planner Gate Check",
+		description:
+			"Run an SDD gate: load the durable artifacts (spec.json, task files) from disk, compile them into VRF with a deterministic compiler, run the elenchus engine, and report the verdict with every gap turned into a concrete next action or a ready-to-ask user question. Takes NO program — gate VRF is never hand-written.",
+		promptSnippet:
+			'At spec/verify_spec, call planner_gate_check with {"gate": "spec_consistency"}; at planning/consistency_check, with {"gate": "plan_coverage"}. Iterate until CONSISTENT — the step cannot finish otherwise. Each reported gap tells you exactly what to do: fix/defer a requirement via planner_spec_submit, correct a task\'s `requirements` via planner_task_upsert, add an evidence-backed assumption, or route a question to the user.',
+		parameters: {
+			type: "object",
+			properties: {
+				gate: {
+					type: "string",
+					enum: [...PLANNER_GATE_NAMES],
+					description: "Which SDD gate to compile and run.",
+				},
+			},
+			required: ["gate"],
+			additionalProperties: false,
+		} as never,
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
+			const result = await executePlannerGateTool({
+				fs,
+				git: gitRunner,
+				projectPaths,
+				params,
+			});
+			return plannerToolResponse(result);
+		},
+	});
+
 	for (const toolName of PLANNER_ARTIFACT_TOOL_NAMES) {
 		pi.registerTool({
 			name: toolName,
@@ -3194,22 +3436,46 @@ function registerPlannerTools(
 }
 
 const PLANNER_COMPACT_STATUS_KEY = "planner-compact";
-const PLANNER_COMPACT_FRAMES = [
-	"⠋",
-	"⠙",
-	"⠹",
-	"⠸",
-	"⠼",
-	"⠴",
-	"⠦",
-	"⠧",
-	"⠇",
-	"⠏",
-];
-const PLANNER_COMPACT_FRAME_MS = 150;
+// Refresh cadence for the indicator's live parts (elapsed seconds + filling
+// bar). Deliberately 1 Hz, not a ~150 ms spinner loop: on a machine already
+// pegged by local inference, redrawing the footer ~7×/s is wasted work and can
+// flicker. The ticking seconds and the growing bar are the animation — no
+// separate spinner glyph is needed, so we never busy-loop the render.
+const PLANNER_COMPACT_REFRESH_MS = 1000;
 // Safety cap so a missing completion event can never leave the indicator
-// spinning forever.
+// running forever. When compaction *fails*, Pi's built-in auto-compact swallows
+// the error and never emits `session_compact` (only manual `ctx.compact()`
+// rejects into our onError), so the indicator can only learn the run ended from
+// (a) the agent resuming work — handled by the activity handlers below — or
+// (b) this cap for the pure-idle case. With a learned ETA we bound the idle wait
+// to a few times the predicted high end so a failure clears in seconds, not the
+// full two minutes; with no history yet we keep the conservative cap.
 const PLANNER_COMPACT_MAX_MS = 120_000;
+const PLANNER_COMPACT_FAILURE_ETA_MULTIPLE = 3;
+const PLANNER_COMPACT_FAILURE_FLOOR_MS = 15_000;
+
+// Human label for why the compaction fired. The SDK does not stream the summary
+// generation to extensions, so we cannot show a true percent bar — the honest
+// signal is *why* it fired plus the *size* of the job (tokensBefore), which is
+// what actually correlates with how long it will take.
+function plannerCompactReasonLabel(
+	reason: "manual" | "threshold" | "overflow",
+): string {
+	switch (reason) {
+		case "manual":
+			return "/compact";
+		case "threshold":
+			return "context full";
+		case "overflow":
+			return "overflow recovery";
+	}
+}
+
+// Compact a token count to a short footer-friendly form: 118234 -> "118k".
+function plannerFormatTokens(tokens: number): string {
+	if (tokens >= 1000) return `${Math.round(tokens / 1000)}k`;
+	return String(tokens);
+}
 
 function registerPlannerCompactEvents(
 	pi: ExtensionAPI,
@@ -3220,6 +3486,15 @@ function registerPlannerCompactEvents(
 	// workspace overlay too (reserved rows), so it is visible in both the plain
 	// chat and the custom workspace.
 	let compactTimer: ReturnType<typeof setInterval> | null = null;
+	// The in-flight run, set in `session_before_compact` only while a plan is
+	// active, read in `session_compact` to record its measured duration. Cleared
+	// on completion and discarded by the safety timeout (an abandoned run is not a
+	// representative timing sample).
+	let pendingCompact: {
+		startedAt: number;
+		tokens: number;
+		model: string | null;
+	} | null = null;
 	const stopCompactIndicator = (ctx: ExtensionContext) => {
 		if (compactTimer) {
 			clearInterval(compactTimer);
@@ -3234,38 +3509,118 @@ function registerPlannerCompactEvents(
 			// Stale ctx after a session switch: nothing to clear.
 		}
 	};
+	// A compaction that *succeeded* clears the indicator in `session_compact`
+	// before the agent resumes. If the agent starts a new turn/run while the
+	// indicator is still up, the compaction ended WITHOUT `session_compact` — i.e.
+	// it failed (Pi's auto-compact swallows the error and never emits it). Drop
+	// the abandoned run and hide the indicator at once instead of waiting out the
+	// safety cap. This can never clear a live compaction: summarization blocks the
+	// agent loop, so no turn can start while it is running.
+	const clearStaleCompactIndicator = (ctx: ExtensionContext) => {
+		if (!compactTimer) return;
+		pendingCompact = null;
+		stopCompactIndicator(ctx);
+	};
 
-	pi.on("session_before_compact", async (_event, ctx) => {
+	pi.on("session_before_compact", async (event, ctx) => {
 		// A real compaction is starting (preparation succeeded — this event never
 		// fires for the "nothing to compact" throw), so mark it in-flight to keep
 		// the watchdog from nudging mid-compaction.
 		markPlannerCompactionInFlight(compactRuntime);
+		// The indicator is a planner-mode affordance: with no active plan (no
+		// /planner-create or /planner-resume, or after leaving the planner) show
+		// nothing and record nothing. Pi's own compaction UX still applies.
+		if (!isPlanActive()) return;
 		if (compactTimer) clearInterval(compactTimer);
-		let frame = 0;
-		const renderFrame = () => {
+
+		const startedAt = Date.now();
+		const tokensBefore = event.preparation.tokensBefore;
+		const model = ctx.model?.id ?? null;
+		const reasonLabel = plannerCompactReasonLabel(event.reason);
+		const sizeLabel = plannerFormatTokens(tokensBefore);
+
+		// Remember this run so session_compact can persist its measured duration
+		// and improve future predictions.
+		pendingCompact = { startedAt, tokens: tokensBefore, model };
+
+		// The SDK never streams summary generation to extensions, so a live percent
+		// is impossible from this compaction alone. Instead we *predict* the ETA from
+		// this project's own recorded history (see runtime/compact-eta.ts) and drive
+		// an honest, asymptotic bar. No history yet → no estimate → a bare timer.
+		let estimate: CompactEtaEstimate = estimateCompactionDuration({
+			samples: [],
+			tokens: tokensBefore,
+			model,
+		});
+		try {
+			const fs = createNodeFs();
+			const projectPaths = await resolveProjectStoragePaths({
+				fs,
+				agentDir: getAgentDir(),
+				cwd: ctx.cwd,
+			});
+			const history = await readCompactTimingHistory(fs, projectPaths);
+			estimate = estimateCompactionDuration({
+				samples: history.samples,
+				tokens: tokensBefore,
+				model,
+			});
+		} catch {
+			// Keep the no-estimate fallback: the timer still runs.
+		}
+
+		const renderStatus = () => {
 			try {
-				const glyph =
-					PLANNER_COMPACT_FRAMES[frame % PLANNER_COMPACT_FRAMES.length];
-				frame += 1;
+				const elapsedMs = Date.now() - startedAt;
+				const elapsed = formatDurationShort(elapsedMs);
+				let text: string;
+				if (estimate.hasEstimate) {
+					const frac = compactionProgressFraction({
+						elapsedMs,
+						etaMs: estimate.etaMs,
+						reliability: estimate.reliability,
+					});
+					const bar = renderProgressBar(frac);
+					const pct = Math.round(frac * 100);
+					text = `Compacting ${sizeLabel} tok (${reasonLabel}) ${bar} ${pct}% · ${elapsed} / ${formatEtaLabel(estimate)}`;
+				} else {
+					text = `Compacting ${sizeLabel} tok (${reasonLabel})… ${elapsed}`;
+				}
 				ctx.ui.setStatus(
 					PLANNER_COMPACT_STATUS_KEY,
-					ctx.ui.theme.fg("accent", `${glyph} Compacting context…`),
+					ctx.ui.theme.fg("accent", text),
 				);
 			} catch {
-				// Never let the animation throw out of the interval.
+				// Never let a redraw throw out of the interval.
 			}
 		};
-		renderFrame();
-		compactTimer = setInterval(renderFrame, PLANNER_COMPACT_FRAME_MS);
+		renderStatus();
+		compactTimer = setInterval(renderStatus, PLANNER_COMPACT_REFRESH_MS);
 		compactTimer.unref?.();
-		const safety = setTimeout(
-			() => stopCompactIndicator(ctx),
-			PLANNER_COMPACT_MAX_MS,
-		);
+		// Bound the idle-failure wait to a few times the predicted high end when we
+		// have a learned ETA, so a swallowed failure with no follow-up turn still
+		// clears in seconds rather than the full cap; fall back to the cap with no
+		// history. The activity handlers below clear the interactive case instantly.
+		const clearAfterMs = estimate.hasEstimate
+			? Math.min(
+					PLANNER_COMPACT_MAX_MS,
+					Math.max(
+						PLANNER_COMPACT_FAILURE_FLOOR_MS,
+						Math.round(estimate.hiMs * PLANNER_COMPACT_FAILURE_ETA_MULTIPLE),
+					),
+				)
+			: PLANNER_COMPACT_MAX_MS;
+		const safety = setTimeout(() => {
+			// A run that never completed is not a representative sample.
+			pendingCompact = null;
+			stopCompactIndicator(ctx);
+		}, clearAfterMs);
 		safety.unref?.();
 	});
 
 	pi.on("session_compact", async (_event, ctx) => {
+		const rec = pendingCompact;
+		pendingCompact = null;
 		stopCompactIndicator(ctx);
 		consumePlannerControlledCompact(compactRuntime);
 
@@ -3279,6 +3634,17 @@ function registerPlannerCompactEvents(
 			});
 		} catch {
 			return;
+		}
+
+		// Persist this compaction's measured duration so future ETAs sharpen. `rec`
+		// is set only for planner-mode compactions, so history stays scoped.
+		if (rec) {
+			await recordCompactTiming(fs, projectPaths, {
+				tokens: rec.tokens,
+				ms: Date.now() - rec.startedAt,
+				model: rec.model,
+				at: Date.now(),
+			});
 		}
 
 		const preflight = await runPlannerPreflight({
@@ -3303,6 +3669,17 @@ function registerPlannerCompactEvents(
 			sendUserMessage: (content, options) =>
 				pi.sendUserMessage(content, options as never),
 		});
+	});
+
+	// The agent resuming work is our only extension-visible signal that a
+	// swallowed auto-compaction failure ended (Pi emits no failure event to
+	// extensions). Clearing here makes the indicator vanish the instant the next
+	// turn/run begins after a failed compaction, without touching a live one.
+	pi.on("agent_start", async (_event, ctx) => {
+		clearStaleCompactIndicator(ctx);
+	});
+	pi.on("turn_start", async (_event, ctx) => {
+		clearStaleCompactIndicator(ctx);
 	});
 
 	// Proactive monitor: at every turn boundary, project the context budget from

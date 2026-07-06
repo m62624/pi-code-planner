@@ -29,6 +29,9 @@ export type PlannerBehaviorArtifact =
 	| "state.json"
 	| "request.md"
 	| "goal.md"
+	| "spec.md"
+	| "spec.json"
+	| "coverage.md"
 	| "plan.md"
 	| "discovery.md"
 	| "questions.md"
@@ -49,6 +52,7 @@ export type PlannerBehaviorGate =
 	| "plan_record_exists"
 	| "plan_worktree_exists"
 	| "goal_approved"
+	| "spec_verified"
 	| "plan_verified"
 	| "active_task_selected"
 	| "task_branch_ready"
@@ -242,6 +246,55 @@ export const PLANNER_STAGE_BEHAVIOR = {
 	]),
 	enter_planning: enterBehavior("discovery", "enter_planning", []),
 
+	draft_requirements: behavior("spec", "draft_requirements", {
+		projectAccess: "planner_artifacts",
+		actions: ["write_artifacts"],
+		requiredArtifacts: ["goal.md", "discovery.md"],
+		updatedArtifacts: ["spec.md", "spec.json"],
+		requiredGates: ["goal_approved"],
+		expectedTools: [
+			"planner_spec_submit",
+			"planner_contract_route",
+			"planner_contract_read",
+		],
+		commitPolicy: "forbidden",
+		compactPolicy: "not_allowed",
+	}),
+	elicit_gaps: behavior("spec", "elicit_gaps", {
+		projectAccess: "user_communication",
+		actions: ["ask_user", "write_artifacts"],
+		requiredArtifacts: ["spec.md", "spec.json"],
+		updatedArtifacts: ["questions.md", "decisions.md", "spec.md", "spec.json"],
+		requiredGates: [],
+		expectedTools: [
+			"planner_questions_submit",
+			"planner_questions_resolve",
+			"planner_spec_submit",
+		],
+		commitPolicy: "forbidden",
+		compactPolicy: "not_allowed",
+	}),
+	verify_spec: behavior("spec", "verify_spec", {
+		projectAccess: "planner_artifacts",
+		actions: ["run_checks", "write_artifacts"],
+		requiredArtifacts: ["spec.json"],
+		updatedArtifacts: ["coverage.md", "decisions.md"],
+		requiredGates: [],
+		expectedTools: [
+			"planner_status",
+			"planner_gate_check",
+			"planner_spec_submit",
+		],
+		commitPolicy: "forbidden",
+		compactPolicy: "not_allowed",
+	}),
+	compact_spec: compactBehavior("spec", "compact_spec", [
+		"spec.md",
+		"spec.json",
+		"coverage.md",
+	]),
+	finish_spec: enterBehavior("spec", "finish_spec", ["spec_verified"]),
+
 	read_context: behavior("planning", "read_context", {
 		projectAccess: "planner_artifacts",
 		actions: ["inspect_project"],
@@ -298,11 +351,16 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		projectAccess: "planner_artifacts",
 		actions: ["run_checks", "write_artifacts"],
 		requiredArtifacts: ["plan.md", "task.json", "task.md"],
-		updatedArtifacts: ["decisions.md"],
+		updatedArtifacts: ["decisions.md", "coverage.md", "task.json", "task.md"],
 		requiredGates: [],
+		// planner_task_upsert is allowed here so a coverage gap (dropped
+		// requirement / orphan task) can be fixed in place and the gate re-run
+		// without bouncing the state machine back to write_task_files.
 		expectedTools: [
 			"planner_status",
+			"planner_gate_check",
 			"planner_elenchus_check",
+			"planner_task_upsert",
 			"planner_contract_route",
 			"planner_contract_read",
 		],
@@ -337,6 +395,8 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		expectedTools: [
 			"planner_status",
 			"planner_tdd_submit",
+			"planner_behavior_upsert",
+			"planner_gate_check",
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
@@ -358,6 +418,8 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["tdd_plan_written"],
 		expectedTools: [
 			"planner_tdd_submit",
+			"planner_behavior_upsert",
+			"planner_gate_check",
 			"planner_git_inspect",
 			"planner_git_commit",
 			"planner_report_stuck",
@@ -381,6 +443,8 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		expectedTools: [
 			"planner_status",
 			"planner_tdd_submit",
+			"planner_behavior_upsert",
+			"planner_gate_check",
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
@@ -472,6 +536,8 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["refactor_checked"],
 		expectedTools: [
 			"planner_tdd_submit",
+			"planner_behavior_upsert",
+			"planner_gate_check",
 			"planner_git_commit",
 			"planner_report_stuck",
 			"planner_skill_create",

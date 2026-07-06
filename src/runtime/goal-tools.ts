@@ -114,11 +114,12 @@ export async function executePlannerGoalTool(
 			: `Goal revision requested by user.${feedback ? ` Feedback: ${feedback}` : ""}`,
 	);
 	// In the discovery-first improve flow, discovery already ran before the
-	// goal was drafted, so approval must continue into planning. The normal
+	// goal was drafted, so approval continues into the spec stage (every plan
+	// authors a spec — the source of truth has no exceptions). The normal
 	// create flow drafts the goal first and only then enters discovery.
 	const improve = state.creationMethod === "improve";
 	const approveNext = improve
-		? { stage: "planning" as const, step: "read_context" as const }
+		? { stage: "spec" as const, step: "draft_requirements" as const }
 		: { stage: "discovery" as const, step: "scan_project_structure" as const };
 	const completed = completePlannerStep(state, {
 		next:
@@ -130,7 +131,7 @@ export async function executePlannerGoalTool(
 	const resumed = decision === "revise" ? startPlannerStep(next) : next;
 	await savePlanState(input.fs, planPaths, resumed);
 	const approveMessage = improve
-		? "Planner goal approved. Discovery already ran for this improve plan — planning is now available. Call planner_status, then continue planning/read_context."
+		? "Planner goal approved. Discovery already ran for this improve plan — the spec stage is now available. Call planner_status, then continue spec/draft_requirements."
 		: "Planner goal approved. Discovery is now available. Call planner_status, then start discovery/scan_project_structure.";
 	return applied(
 		input.toolName,

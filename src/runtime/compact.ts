@@ -359,6 +359,7 @@ type PlannerProactiveStage =
 	| "init"
 	| "intake"
 	| "discovery"
+	| "spec"
 	| "planning"
 	| "execution"
 	| "finalize"
@@ -367,6 +368,8 @@ type PlannerProactiveStage =
 
 const PROACTIVE_COMPACT_STAGES = new Set<PlannerProactiveStage>([
 	"discovery",
+	// The spec stage loops (draft → gaps → verify) and accumulates real context.
+	"spec",
 	"planning",
 	"execution",
 	"finalize",

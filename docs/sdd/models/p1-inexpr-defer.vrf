@@ -1,0 +1,11 @@
+// PROBE 1 — honest: inexpressible requirement, deferred with rationale. Expect CONSISTENT.
+DOMAIN probe
+IMPORT "sdd-core.vrf"
+FACT sdd.flow reached_done
+NOT  sdd.req vrf_expressible
+FACT sdd.req rationale_recorded    // the freedom valve's price
+NOT  sdd.req formalized
+FACT sdd.req covered
+FACT sdd.all_tasks passed
+FACT sdd.doubt passed
+CHECK BIDIRECTIONAL

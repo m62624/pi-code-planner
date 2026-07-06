@@ -26,11 +26,11 @@ At `planning/read_context`, load context in this order:
    - Split the plan into small ordered tasks, each independently understandable and small enough for one TDD loop.
    - In a follow-up planning pass, existing completed task artifacts are history. Create new revision task IDs for new work; do not reuse a completed task ID.
 4. `write_task_files`
-   - Call `planner_task_upsert` once per behavioral task with semantic fields only: task id, title, objective, scope, acceptance criteria, and optional Local Contract Context fields. The wrapper creates `task.json`, `task.md`, and empty TDD lifecycle artifacts; do not write task JSON manually.
+   - Call `planner_task_upsert` once per behavioral task with semantic fields only: task id, title, objective, scope, acceptance criteria, `requirements` (the exact `REQ-n` ids from `spec.json` this task discharges — the coverage gate at `consistency_check` names every requirement no task covers and every task that traces to nothing), and optional Local Contract Context fields. The wrapper creates `task.json`, `task.md`, and empty TDD lifecycle artifacts; do not write task JSON manually.
    - Each `task.md` must state scope, acceptance criteria, expected files or symbols, dependency context, checks, and the relevant AGENTS.md chain when known.
    - In a follow-up planning pass, call `planner_task_upsert` only for new or still-pending revision tasks. Completed task IDs are immutable audit history.
 5. `verify_plan` — verify tasks are ordered, bounded, testable, and free of hidden broad work. Record decisions and remaining risks.
-6. `consistency_check` — mechanically check the plan's interacting constraints with `planner_elenchus_check`, or record the escape. See "Consistency Check" below.
+6. `consistency_check` — run the requirement-coverage gate with `planner_gate_check` (gate: `plan_coverage`), plus `planner_elenchus_check` for any interacting-constraint web. See "Consistency Check" below.
 7. `compact_planning` — compact the finished plan and task list.
 8. `enter_execution` — advance to `execution/prepare_task`.
 
@@ -80,19 +80,11 @@ If doubt remains, revise `plan.md` or task artifacts before entering execution. 
 
 ## Consistency Check (elenchus)
 
-At `consistency_check`, run the check. Start from the bundled premise template: write a small program that begins with `IMPORT "templates/plan-consistency.vrf"`, assert the claim `FACT plan_consistency.plan is_ready`, state every hazard the template header names as `FACT` or `NOT` (dependencies, public-API impact — never omit one), and bind the template's `VAR` ports honestly through the tool's `values` parameter. Add your own facts and premises on top (the template header shows inline recipes for dependency graphs and per-task statuses). Call `planner_elenchus_check` with `resolution: "checked"` and iterate until the verdict is **CONSISTENT** — WARNING/UNDERDETERMINED each tell you exactly what fact to add or which premise to fix. Sources and verdicts are stored under the plan's `elenchus/` dir.
+At `consistency_check`, run the requirement-coverage gate: call `planner_gate_check` with `gate: "plan_coverage"`. It reads `spec.json` and every task's `requirements` list, compiles them into VRF deterministically, and runs the engine — you write NO program. The verdict is total: every in-scope requirement must be covered by at least one task (a dropped requirement is **named**), and every task must trace to at least one requirement (orphan work is **named**). Iterate until **CONSISTENT**: fix a gap in place with `planner_task_upsert` (add the missing `requirements` ids or a missing task), or de-scope a requirement through a recorded user decision, then re-run the gate. `planner_finish_step` refuses to advance while the latest plan_coverage run is not CONSISTENT or is stale (spec.json or a task's requirements changed after the pass).
 
-A **CONFLICT is a hard gate**: `planner_finish_step` refuses to finish this step while the latest check is a CONFLICT. Apply the drop/flip repair its CORE/RETRACT names — a real CONFLICT means the plan or task breakdown is wrong, so fix the plan or the wrong fact, never delete a valid premise to force green.
+On top of the mandatory coverage gate, when the plan itself has a web of interacting constraints — exclusive owners, ordering/dependency chains, mutually exclusive states — model it with a free-form `planner_elenchus_check` (`IMPORT "templates/plan-consistency.vrf"`, see the template header and the `pi-planner-elenchus` skill; the engine is a three-valued SAT checker over formal logic, no arithmetic — model quantities as named symbolic states, never numbers). A CONFLICT there is also a hard gate. Record every conclusion in `decisions.md`.
 
-Before you write the program, read the `pi-planner-elenchus` skill — it is the entire DSL; do not guess the grammar from examples, or you will burn turns on parse errors. The engine is a three-valued **SAT** checker over **formal logic only**: it decides which named propositions can jointly hold and has no arithmetic — it cannot add, count, or compare magnitudes. Model quantities as named symbolic states (`is_negative`, `over_threshold`, `mode is Compact`), never as numbers.
-
-It proves things like:
-
-- **Exactly-one / mutual exclusion:** exactly one task owns a given file or responsibility; two states or feature flags that must never both hold.
-- **Coverage of cases:** every branch of an if/else or state machine is handled; a readiness/deploy gate is reachable and its negative path has an escape (so the flow cannot deadlock).
-- **Ordering / dependencies:** task A must land before task B; a migration precedes the code that needs it (`CLOSE depends_on TRANSITIVE` rejects a cycle at compile time).
-
-The one narrow escape: if the plan is a single linear task with no dependencies, no exclusive states, and no open questions — nothing for logic to check — call `planner_elenchus_check` with `resolution: "not_applicable"` and a one-line reason. That resolves the step in one call and never traps the flow; it is for genuinely constraint-free work, not for skipping a check that looks tedious. Record the conclusion (CONSISTENT or not-applicable) in `decisions.md`, then advance.
+**Legacy plans only** (no `spec.json`, created before the spec stage existed): the coverage gate reports itself skipped. Run the plan-consistency check by hand as above, and only if the plan is a single linear task with no dependencies, no exclusive states, and no open questions — nothing for logic to check — call `planner_elenchus_check` with `resolution: "not_applicable"` and a one-line reason. That escape exists so a constraint-free legacy plan is never trapped; for plans with a spec the coverage gate always applies and is never skipped.
 
 ## Fundamental Rule: Integration vs New Entity
 

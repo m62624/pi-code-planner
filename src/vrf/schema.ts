@@ -4,6 +4,7 @@
 // level — the vetted premises come from here.
 
 export const VRF_TEMPLATE_NAMES = [
+	"spec-consistency",
 	"plan-consistency",
 	"tdd-gate",
 	"branch-contract",

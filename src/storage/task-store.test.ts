@@ -42,6 +42,56 @@ describe("planner task store", () => {
 		}
 	});
 
+	it("defaults requirements to [] when reading a legacy task.json", async () => {
+		const fs = new MockPlannerFs();
+		const planPaths = createPlanStoragePaths(
+			createProjectStoragePaths({
+				agentDir: "/agent",
+				projectRoot: "/repo/app",
+			}),
+			"plan-a",
+		);
+		const result = await upsertTaskArtifacts(fs, planPaths, {
+			taskId: "legacy-task",
+			title: "Legacy",
+			objective: "Predates spec traceability.",
+			scope: [],
+			acceptanceCriteria: ["Parses unchanged."],
+		});
+		// Simulate a legacy record written before the requirements field existed.
+		const raw = JSON.parse(await fs.readText(result.paths.taskJson));
+		delete raw.requirements;
+		await fs.writeTextAtomic(result.paths.taskJson, JSON.stringify(raw));
+
+		expect((await readTaskRecord(fs, result.paths)).requirements).toEqual([]);
+	});
+
+	it("persists requirements and renders them into task.md", async () => {
+		const fs = new MockPlannerFs();
+		const planPaths = createPlanStoragePaths(
+			createProjectStoragePaths({
+				agentDir: "/agent",
+				projectRoot: "/repo/app",
+			}),
+			"plan-a",
+		);
+		const result = await upsertTaskArtifacts(fs, planPaths, {
+			taskId: "traced-task",
+			title: "Traced",
+			objective: "Discharges spec requirements.",
+			scope: [],
+			acceptanceCriteria: ["Covered."],
+			requirements: ["REQ-1", "REQ-3"],
+		});
+		expect((await readTaskRecord(fs, result.paths)).requirements).toEqual([
+			"REQ-1",
+			"REQ-3",
+		]);
+		const md = await fs.readText(result.paths.taskMd);
+		expect(md).toContain("## Spec Requirements");
+		expect(md).toContain("- REQ-1");
+	});
+
 	it("rejects unsafe task ids", async () => {
 		const fs = new MockPlannerFs();
 		const planPaths = createPlanStoragePaths(

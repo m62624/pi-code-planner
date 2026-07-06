@@ -1,0 +1,2 @@
+PROVIDE std.data_sensitivity is_regulated: true
+PROVIDE std.compute_on_encrypted_needed: true

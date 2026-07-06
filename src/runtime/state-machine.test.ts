@@ -248,14 +248,24 @@ describe("planner state machine", () => {
 			}),
 		).toMatchObject({ nextStep: "handle_change_request" });
 
+		const changeRequest = state({
+			stage: "done",
+			step: "handle_change_request",
+			stepStatus: "running",
+		});
+		// A change request amends the spec first; legacy plans (no spec.json)
+		// keep the direct road to planning — the caller must pick explicitly.
+		expect(getAllowedNextPlannerPositions(changeRequest)).toEqual([
+			{ stage: "spec", step: "draft_requirements" },
+			{ stage: "planning", step: "read_context" },
+		] satisfies PlannerPosition[]);
+		expect(() => completePlannerStep(changeRequest)).toThrowStateMachine(
+			"ambiguous_next_step",
+		);
 		expect(
-			completePlannerStep(
-				state({
-					stage: "done",
-					step: "handle_change_request",
-					stepStatus: "running",
-				}),
-			),
+			completePlannerStep(changeRequest, {
+				next: { stage: "planning", step: "read_context" },
+			}),
 		).toMatchObject({ nextStep: "read_context" });
 	});
 
@@ -331,7 +341,7 @@ describe("planner state machine", () => {
 		});
 
 		expect(getAllowedNextPlannerPositions(current)).toEqual([
-			{ stage: "planning", step: "read_context" },
+			{ stage: "spec", step: "draft_requirements" },
 			{ stage: "intake", step: "draft_goal" },
 		] satisfies PlannerPosition[]);
 		expect(() => completePlannerStep(current)).toThrowStateMachine(
@@ -346,10 +356,46 @@ describe("planner state machine", () => {
 		});
 	});
 
-	it("keeps normal discovery enter_planning linear for create plans", () => {
+	it("keeps normal discovery enter_planning linear into the spec stage", () => {
 		const current = state({
 			stage: "discovery",
 			step: "enter_planning",
+			stepStatus: "running",
+		});
+
+		expect(getAllowedNextPlannerPositions(current)).toEqual([
+			{ stage: "spec", step: "draft_requirements" },
+		] satisfies PlannerPosition[]);
+		expect(completePlannerStep(current)).toMatchObject({
+			nextStep: "draft_requirements",
+		});
+	});
+
+	it("lets verify_spec loop back to elicit_gaps or continue to compact_spec", () => {
+		const current = state({
+			stage: "spec",
+			step: "verify_spec",
+			stepStatus: "running",
+		});
+
+		expect(getAllowedNextPlannerPositions(current)).toEqual([
+			{ stage: "spec", step: "compact_spec" },
+			{ stage: "spec", step: "elicit_gaps" },
+		] satisfies PlannerPosition[]);
+		expect(() => completePlannerStep(current)).toThrowStateMachine(
+			"ambiguous_next_step",
+		);
+		expect(
+			completePlannerStep(current, {
+				next: { stage: "spec", step: "elicit_gaps" },
+			}),
+		).toMatchObject({ nextStep: "elicit_gaps" });
+	});
+
+	it("exits the spec stage into planning via finish_spec", () => {
+		const current = state({
+			stage: "spec",
+			step: "finish_spec",
 			stepStatus: "running",
 		});
 

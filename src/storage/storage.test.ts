@@ -198,6 +198,13 @@ describe("plan state store", () => {
 				"compact_discovery",
 				"enter_planning",
 			],
+			spec: [
+				"draft_requirements",
+				"elicit_gaps",
+				"verify_spec",
+				"compact_spec",
+				"finish_spec",
+			],
 			planning: [
 				"read_context",
 				"draft_plan",
@@ -263,6 +270,7 @@ describe("plan state store", () => {
 			init: 7,
 			intake: 2,
 			discovery: 4,
+			spec: 5,
 			planning: 8,
 			execution: 12,
 			finalize: 6,
