@@ -27,3 +27,9 @@ export const PLANNER_MIN_OUTPUT_RESERVE = 4096;
 // window) so neither a huge `maxTokens` nor a tiny window drives it out of range.
 export const PLANNER_MIN_FLOOR_RATIO = 0.5;
 export const PLANNER_MAX_FLOOR_RATIO = 0.92;
+
+// EWMA responsiveness for the per-turn context-growth tracker (velocity heuristic).
+// The monitor pre-empts one typical turn before the floor; this weights how fast
+// that estimate tracks recent turns. 0.3 keeps it responsive to a session that
+// starts reading large files without letting one spike dominate the average.
+export const PLANNER_TURN_GROWTH_ALPHA = 0.3;

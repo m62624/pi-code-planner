@@ -93,6 +93,24 @@ let liveStreamListener: (() => void) | null = null;
 let agentBusy = false;
 /** Notifies the open workspace that the agent went idle, so it can flush its queue. */
 let agentIdleListener: (() => void) | null = null;
+/**
+ * Latest compact-indicator line to surface inside the workspace, or null when
+ * cleared. The plain-chat compact banner is an `aboveEditor` widget, which the
+ * full-screen workspace overlay draws over — so the indicator is INVISIBLE in
+ * /planner-dashboard unless we also render it here, as a banner above the
+ * composer. index.ts's compact events push the plain (un-themed) line through
+ * setWorkspaceCompactIndicator; the workspace styles it with its own palette.
+ */
+let compactIndicatorLine: string | null = null;
+/** Notifies the open workspace that the compact indicator changed. */
+let compactIndicatorListener: (() => void) | null = null;
+
+/** Push the current compact-indicator line into the open planner workspace. */
+export function setWorkspaceCompactIndicator(line: string | null): void {
+	if (line === compactIndicatorLine) return;
+	compactIndicatorLine = line;
+	compactIndicatorListener?.();
+}
 
 export function registerPlannerDashboard(pi: ExtensionAPI): void {
 	pi.registerCommand("planner-dashboard", {
@@ -388,6 +406,10 @@ export class PlannerWorkspaceComponent implements Component {
 		liveStreamListener = () => this.onStreamUpdate();
 		// Flush queued messages once the agent goes idle.
 		agentIdleListener = () => this.flushQueue();
+		// Repaint (bumping the version so the render cache is invalidated) when the
+		// compact banner appears, moves, or clears — it lives in the bottom stack,
+		// which the version-guarded render cache would otherwise reuse stale.
+		compactIndicatorListener = () => this.bump();
 	}
 
 	attachHandle(handle: OverlayHandle): void {
@@ -521,7 +543,8 @@ export class PlannerWorkspaceComponent implements Component {
 		// Without it the idle tick keeps the same signature after a resize and
 		// never calls requestRender(), leaving the overlay frozen at the old size.
 		const termSig = `${process.stdout.columns ?? 0}x${process.stdout.rows ?? 0}`;
-		return `${clock}#${rowsSig}#${modelSig}#${uiSig}#${termSig}`;
+		const compactSig = compactIndicatorLine ?? "";
+		return `${clock}#${rowsSig}#${modelSig}#${uiSig}#${termSig}#${compactSig}`;
 	}
 
 	private scheduleRender(signature = this.computeSignature()): void {
@@ -777,7 +800,20 @@ export class PlannerWorkspaceComponent implements Component {
 		// (that produced a doubled line). When a queue is present we add one
 		// divider to separate it from the transcript.
 		const queueLines = this.renderQueue(inner);
+		// Compaction banner, mirrored from the plain-chat `aboveEditor` widget which
+		// the overlay covers. Sits just above the composer so a long compaction is
+		// visible without leaving the dashboard.
+		const compactBanner = compactIndicatorLine
+			? [
+					clipPad(
+						this.palette.accent(compactIndicatorLine),
+						inner,
+						this.palette,
+					),
+				]
+			: [];
 		const bottom: string[] = [
+			...compactBanner,
 			...(queueLines.length > 0
 				? [dashboardDivider(inner, this.palette), ...queueLines]
 				: []),
@@ -918,6 +954,7 @@ export class PlannerWorkspaceComponent implements Component {
 		}
 		liveStreamListener = null;
 		agentIdleListener = null;
+		compactIndicatorListener = null;
 	}
 }
 

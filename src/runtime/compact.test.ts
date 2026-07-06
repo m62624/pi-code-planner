@@ -6,6 +6,7 @@ import {
 	PLANNER_MIN_FLOOR_RATIO,
 	PLANNER_MIN_OUTPUT_RESERVE,
 	PLANNER_TOOL_HEADROOM_RATIO,
+	PLANNER_TURN_GROWTH_ALPHA,
 } from "../constants";
 import { syncInstructionFiles } from "../instructions/manager";
 import { createInstructionPaths } from "../instructions/paths";
@@ -32,6 +33,7 @@ import {
 	isPlannerCompactTimeoutError,
 	markPlannerCompactionInFlight,
 	markPlannerControlledCompactStarted,
+	observeTurnGrowth,
 	PLANNER_COMPACT_MARKER,
 	PLANNER_SYSTEM_INSTRUCTIONS_HEADER,
 	projectPlannerContextBudget,
@@ -351,6 +353,87 @@ describe("planner compact runtime", () => {
 			expect(projectPlannerContextBudget({ ...base, tokens: null }).run).toBe(
 				false,
 			);
+		});
+
+		it("pre-empts one typical turn before the floor (growth margin)", () => {
+			// 88k is under the ≈90.4k floor → no run on its own. But if a typical turn
+			// grows the context by 5k, the next turn would cross it, so compact now.
+			const idle = projectPlannerContextBudget({ ...base, tokens: 88_000 });
+			expect(idle.run).toBe(false);
+			const withGrowth = projectPlannerContextBudget({
+				...base,
+				tokens: 88_000,
+				expectedGrowthTokens: 5_000,
+			});
+			expect(withGrowth.run).toBe(true);
+			expect(withGrowth.reason).toBe("growth_margin");
+			// Still-under-floor: headroom stays positive (we pre-empted, not overran).
+			expect(withGrowth.headroom).toBeGreaterThan(0);
+		});
+
+		it("does not pre-empt when a typical turn stays under the floor", () => {
+			const decision = projectPlannerContextBudget({
+				...base,
+				tokens: 70_000,
+				expectedGrowthTokens: 1_000,
+			});
+			expect(decision.run).toBe(false);
+			expect(decision.reason).toBe("below_threshold");
+		});
+
+		it("prefers output_budget over growth_margin once already over the floor", () => {
+			const decision = projectPlannerContextBudget({
+				...base,
+				tokens: 95_000,
+				expectedGrowthTokens: 5_000,
+			});
+			expect(decision.run).toBe(true);
+			expect(decision.reason).toBe("output_budget");
+		});
+	});
+
+	describe("observeTurnGrowth", () => {
+		it("seeds on the first growth then folds later turns via EWMA", () => {
+			const state = createPlannerCompactRuntimeState();
+			// First observation only baselines (no prior tokens) — no growth yet.
+			expect(observeTurnGrowth(state, 40_000, PLANNER_TURN_GROWTH_ALPHA)).toBe(
+				0,
+			);
+			// First positive delta seeds the EWMA directly (10k).
+			expect(observeTurnGrowth(state, 50_000, PLANNER_TURN_GROWTH_ALPHA)).toBe(
+				10_000,
+			);
+			// Next delta (2k) is blended: 0.3*2000 + 0.7*10000 = 7600.
+			expect(observeTurnGrowth(state, 52_000, PLANNER_TURN_GROWTH_ALPHA)).toBe(
+				7_600,
+			);
+		});
+
+		it("ignores a drop (a compaction reset is not turn growth) and re-baselines", () => {
+			const state = createPlannerCompactRuntimeState();
+			observeTurnGrowth(state, 90_000, PLANNER_TURN_GROWTH_ALPHA);
+			observeTurnGrowth(state, 95_000, PLANNER_TURN_GROWTH_ALPHA); // ewma = 5000
+			// A compaction drops tokens: fold nothing, keep the EWMA, re-baseline.
+			expect(observeTurnGrowth(state, 30_000, PLANNER_TURN_GROWTH_ALPHA)).toBe(
+				5_000,
+			);
+			expect(state.lastContextTokens).toBe(30_000);
+			// Growth measured from the new (compacted) baseline, not the pre-drop peak.
+			expect(observeTurnGrowth(state, 34_000, PLANNER_TURN_GROWTH_ALPHA)).toBe(
+				0.3 * 4_000 + 0.7 * 5_000,
+			);
+		});
+
+		it("is a no-op on unknown tokens", () => {
+			const state = createPlannerCompactRuntimeState();
+			observeTurnGrowth(state, 40_000, PLANNER_TURN_GROWTH_ALPHA);
+			observeTurnGrowth(state, 50_000, PLANNER_TURN_GROWTH_ALPHA);
+			const before = state.turnGrowthEwma;
+			expect(observeTurnGrowth(state, null, PLANNER_TURN_GROWTH_ALPHA)).toBe(
+				before,
+			);
+			// The baseline is untouched, so the next real turn measures from 50k.
+			expect(state.lastContextTokens).toBe(50_000);
 		});
 	});
 

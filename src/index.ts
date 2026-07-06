@@ -15,6 +15,7 @@ import {
 	PLANNER_MIN_FLOOR_RATIO,
 	PLANNER_MIN_OUTPUT_RESERVE,
 	PLANNER_TOOL_HEADROOM_RATIO,
+	PLANNER_TURN_GROWTH_ALPHA,
 } from "./constants";
 import { errorMessage, gitErrorMessage } from "./errors";
 import { probeGitAvailability } from "./git/git-availability";
@@ -77,6 +78,7 @@ import {
 	isPlannerCompactNothingToCompactError,
 	markPlannerCompactionInFlight,
 	markPlannerControlledCompactStarted,
+	observeTurnGrowth,
 	type PlannerCompactRuntimeState,
 	type PlannerContextBudgetDecision,
 	projectPlannerContextBudget,
@@ -98,6 +100,7 @@ import {
 import {
 	openPlannerWorkspace,
 	registerPlannerDashboard,
+	setWorkspaceCompactIndicator,
 } from "./runtime/dashboard";
 import {
 	DEBUG_INSTRUMENTATION_TYPES,
@@ -421,7 +424,7 @@ const TASK_UPSERT_TOOL_PARAMETERS = {
 			type: "array",
 			items: { type: "string" },
 			description:
-				"Spec traceability: the REQ-n ids from spec.json this task discharges. Required in practice for plans with a spec — the plan_coverage gate names every requirement no task covers and every task that traces to nothing.",
+				"Spec traceability: the REQ-n ids from spec.json this task discharges OR enables (a setup/infrastructure task cites the requirement it is a prerequisite for). Required in practice for plans with a spec — the plan_coverage gate names every requirement no task covers and every task that traces to nothing. Upsert REPLACES the whole task record: when editing an existing task, resupply this list or it is wiped back to orphan work.",
 		},
 		contractChain: {
 			type: "array",
@@ -3508,8 +3511,9 @@ function registerPlannerCompactEvents(
 	// Animated indicator while context is compacting, so a long compaction never
 	// looks frozen. It renders as an `aboveEditor` widget (a banner at the top of
 	// the input area) rather than a footer status: the footer was already crowded
-	// with the planner timer line, and the widget shows in both the plain chat and
-	// the /planner-dashboard workspace.
+	// with the planner timer line. In plain chat this `aboveEditor` widget is the
+	// banner; the /planner-dashboard workspace overlay draws OVER it, so the same
+	// line is mirrored into the workspace via setWorkspaceCompactIndicator.
 	// Content dedup: the SDK repaints on every setWidget (no diffing), so we skip
 	// a push when the rendered content is byte-identical to what is already shown.
 	// `null` means the widget is currently cleared. This is what makes the coarse
@@ -3518,7 +3522,12 @@ function registerPlannerCompactEvents(
 	const setCompactWidget = (
 		ctx: ExtensionContext,
 		lines: string[] | undefined,
+		plain?: string,
 	): void => {
+		// The /planner-dashboard overlay covers the `aboveEditor` widget, so mirror
+		// the un-themed line into the workspace, which paints it with its own
+		// palette. `undefined` lines ⇒ cleared ⇒ null. (This dedups internally.)
+		setWorkspaceCompactIndicator(plain ?? null);
 		const key = lines === undefined ? null : lines.join("\n");
 		if (key === lastWidgetKey) return;
 		lastWidgetKey = key;
@@ -3644,7 +3653,7 @@ function registerPlannerCompactEvents(
 					elapsedMs,
 					estimate,
 				});
-				setCompactWidget(ctx, [ctx.ui.theme.fg("accent", text)]);
+				setCompactWidget(ctx, [ctx.ui.theme.fg("accent", text)], text);
 			} catch {
 				// Never let a redraw throw out of the interval.
 			}
@@ -3745,7 +3754,16 @@ function registerPlannerCompactEvents(
 		if (compactRuntime.compactionInFlight || !isPlanActive()) {
 			return;
 		}
-		const decision = evaluatePlannerContextBudget(ctx);
+		// Track this turn's context growth so the budget can pre-empt one typical
+		// turn before the floor (velocity heuristic), then fold that estimate into
+		// the decision. Runs every turn_end — including the ones we do not compact —
+		// so the EWMA stays live.
+		const expectedGrowth = observeTurnGrowth(
+			compactRuntime,
+			ctx.getContextUsage()?.tokens ?? null,
+			PLANNER_TURN_GROWTH_ALPHA,
+		);
+		const decision = evaluatePlannerContextBudget(ctx, 0, expectedGrowth);
 		if (!decision.run) {
 			return;
 		}
@@ -4100,6 +4118,7 @@ function compactSkipReasonText(
 function evaluatePlannerContextBudget(
 	ctx: ExtensionContext,
 	pendingInstructionTokens = 0,
+	expectedGrowthTokens = 0,
 ): PlannerContextBudgetDecision {
 	const usage = ctx.getContextUsage();
 	return projectPlannerContextBudget({
@@ -4107,6 +4126,7 @@ function evaluatePlannerContextBudget(
 		contextWindow: usage?.contextWindow ?? 0,
 		maxOutputTokens: ctx.model?.maxTokens ?? 0,
 		pendingInstructionTokens,
+		expectedGrowthTokens,
 		toolHeadroomRatio: PLANNER_TOOL_HEADROOM_RATIO,
 		maxOutputReserveRatio: PLANNER_MAX_OUTPUT_RESERVE_RATIO,
 		minOutputReserve: PLANNER_MIN_OUTPUT_RESERVE,
@@ -4292,7 +4312,7 @@ function questionToolParameters(toolName: PlannerQuestionToolName) {
 function taskToolDescription(toolName: PlannerTaskToolName): string {
 	switch (toolName) {
 		case "planner_task_upsert":
-			return "Create or replace one behavioral task from semantic fields. The wrapper writes task.json, task.md, and empty TDD lifecycle artifacts.";
+			return "Create or replace one behavioral task from semantic fields, keyed by taskId. Re-calling with an existing taskId REPLACES the whole record (a full overwrite, not a merge) — resupply every field, or an omitted one is wiped. There is no delete tool; retire a task by folding its scope into another. The wrapper writes task.json, task.md, and empty TDD lifecycle artifacts.";
 	}
 }
 
