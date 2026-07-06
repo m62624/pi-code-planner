@@ -113,6 +113,7 @@ describe("spec→VRF compiler through the real engine", () => {
 					relation: {
 						type: "implies",
 						when: ["latency_within_budget"],
+						// biome-ignore lint/suspicious/noThenProperty: DSL data field
 						then: "cache_enabled",
 					},
 				},
@@ -162,6 +163,7 @@ describe("spec→VRF compiler through the real engine", () => {
 					relation: {
 						type: "implies",
 						when: ["input_untrusted"],
+						// biome-ignore lint/suspicious/noThenProperty: DSL data field
 						then: "input_sanitized",
 					},
 				},

@@ -67,6 +67,14 @@ Runtime domain for planner stages, model-facing status, tool wrappers, timers, r
 - `refactor-review.ts` → pure schema/validation for the structured refactor review form (required sections, `REFACTOR_REVIEW_CATEGORIES`, `RefactorDecision`).
 - `refactor-tools.ts` → `planner_refactor_review` tool wrapper around `refactor-review.ts`.
 
+**SDD gates (spec-driven development)** — the deterministic verifier loop: the model authors structured artifacts, compilers in `vrf/` turn them into VRF, the elenchus engine judges, and `workflow-tools.ts` hard-gates on the verdict.
+- `elenchus-engine.ts` → thin lazy loader for the `elenchus-wasm` engine (`runElenchusCheck` with a sandboxed IMPORT resolver); degrades to a typed failure if the wasm is missing.
+- `elenchus-tools.ts` → `planner_elenchus_check` (free-form, model-authored programs) + the shared `last-check.json` record (`ElenchusLastCheckRecord`, extended with `gate`/`sourceHash` for gate runs).
+- `spec-tools.ts` → `planner_spec_submit`: validates and persists `spec.json`/renders `spec.md` via `storage/spec-store.ts`; snapshots the previous version to `spec.prev.json` (change-request audit trail).
+- `gate-tools.ts` → `planner_gate_check` (`spec_consistency` | `plan_coverage` | `tdd_coverage`): loads durable artifacts, runs the matching deterministic compiler from `src/vrf/`, executes the engine, writes `coverage.md` sections + `last-check.json` (verdict + sha256 of the compiled source), and translates every machine gap into a concrete action or a ready-to-ask user question. Takes NO program — gate VRF is never hand-written (REQ-12).
+- `behavior-tools.ts` → `planner_behavior_upsert`: the per-task behavior board (`storage/behavior-store.ts`), the `planned → red → green` test-first toggle ladder.
+- Hard gates live in `workflow-tools.ts` (`validateSpecGatePassed`, `validatePlanCoverageGatePassed`, `validateTddCoverageGatePassed`): a gate step only advances on a CONSISTENT run whose `sourceHash` still matches the artifact on disk; legacy plans/tasks without the artifact degrade gracefully (REQ-11).
+
 **TDD** — the structured pre/post-implementation evidence form.
 - `tdd-evidence.ts` → field/section name constants for the pre-implementation proof contract, post-implementation counterexample review, and merge-scope audit; no logic.
 - `tdd-form.ts` → `TDD_SECTIONS` (canonical order) + `mergeTddMarkdown`/`renderTddSection`, used by `artifact-tools.ts` to assemble/merge the TDD artifact.

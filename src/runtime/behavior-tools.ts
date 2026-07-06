@@ -80,7 +80,7 @@ export async function executePlannerBehaviorTool(input: {
 				const known = spec.requirements.find(
 					(req) => req.id === behavior.requirement,
 				);
-				if (!known || !known.inScope) {
+				if (!known?.inScope) {
 					return blocked(
 						`Behavior ${behavior.id} cites ${behavior.requirement}, which is ${known ? "out of scope" : "not"} in spec.json. Use exact in-scope REQ-n ids or null.`,
 					);

@@ -385,6 +385,7 @@ function validateConstraintRelation(
 		return {
 			type: "implies",
 			when,
+			// biome-ignore lint/suspicious/noThenProperty: pure data field named after the DSL's THEN keyword — never awaited
 			then: requiredAtomRef(relation.then, `${where}.then`, true),
 		};
 	}
