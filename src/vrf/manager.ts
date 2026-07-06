@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { sha256 } from "../hash";
 import type { PlannerFs } from "../storage/fs";
 import type { PlanStoragePaths, ProjectStoragePaths } from "../storage/paths";
 import { loadBundledVrfTemplates } from "./defaults";
@@ -63,13 +63,9 @@ async function writeIfChanged(
 		return "created";
 	}
 	const current = await fs.readText(path);
-	if (hashText(current) === hashText(content)) {
+	if (sha256(current) === sha256(content)) {
 		return "unchanged";
 	}
 	await fs.writeTextAtomic(path, content);
 	return "updated";
-}
-
-function hashText(content: string): string {
-	return createHash("sha256").update(content).digest("hex");
 }

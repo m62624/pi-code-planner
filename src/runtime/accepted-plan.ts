@@ -13,7 +13,10 @@ import {
 	saveProjectRecord,
 } from "../storage/project-store";
 import type { PlanStateRecord, ProjectRecord } from "../storage/schema";
-import { readPlanStateIfExists } from "../storage/state-store";
+import {
+	readPlanStateIfExists,
+	requireWorktreePath,
+} from "../storage/state-store";
 import {
 	createWorktreeProjectIndexPath,
 	readWorktreeProjectIndexIfExists,
@@ -61,7 +64,10 @@ export async function inspectAcceptedPlan(input: {
 		throw new Error(`Planner state is missing: ${planPaths.stateJson}.`);
 	}
 	assertAcceptedPlanReady(state);
-	const worktreePath = requireWorktreePath(state);
+	const worktreePath = requireWorktreePath(
+		state,
+		"Planner finish requires state.worktreePath.",
+	);
 	if (!(await input.fs.exists(worktreePath))) {
 		throw new Error(`Planner worktree is missing: ${worktreePath}.`);
 	}
@@ -384,13 +390,6 @@ function assertAcceptedPlanReady(state: PlanStateRecord): void {
 			"Planner finish requires state.json to point at the plan branch.",
 		);
 	}
-}
-
-function requireWorktreePath(state: PlanStateRecord): string {
-	if (!state.worktreePath) {
-		throw new Error("Planner finish requires state.worktreePath.");
-	}
-	return state.worktreePath;
 }
 
 function managedChildBranches(state: PlanStateRecord): string[] {

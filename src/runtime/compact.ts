@@ -6,6 +6,7 @@ import type {
 } from "../instructions/schema";
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
+import { clamp } from "./num";
 import type { PlannerPreflightResult } from "./preflight";
 
 export const PLANNER_COMPACT_MARKER = "[PI-CODE-PLANNER COMPACT INSTRUCTIONS]";
@@ -298,10 +299,6 @@ export interface PlannerContextBudgetDecision {
 	projected: number;
 	/** Tokens still free below the floor (negative once we are over it). */
 	headroom: number;
-}
-
-function clamp(value: number, min: number, max: number): number {
-	return Math.min(Math.max(value, min), max);
 }
 
 /** Estimate the token cost of text we are about to inject, matching Pi's

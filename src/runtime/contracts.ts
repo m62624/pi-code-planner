@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
 	basename,
 	dirname,
@@ -10,6 +9,7 @@ import {
 } from "node:path";
 import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
+import { sha256 } from "../hash";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerContractsSettings } from "../settings/schema";
 import type { PlannerFs } from "../storage/fs";
@@ -28,7 +28,7 @@ import type {
 	PlannerContractTouchedFile,
 	PlanStateRecord,
 } from "../storage/schema";
-import { updatePlanState } from "../storage/state-store";
+import { requireWorktreePath, updatePlanState } from "../storage/state-store";
 import { ARTIFACT_CANONICAL_SCHEMA, formatArtifactEcho } from "./artifact-echo";
 import { appendPlannerSection } from "./artifact-utils";
 import {
@@ -258,7 +258,10 @@ async function contractScan(
 	const batchSize =
 		positiveIntegerOrUndefined(params.batchSize, "batchSize") ??
 		settings.scanBatchSize;
-	const root = requireWorktreePath(state);
+	const root = requireWorktreePath(
+		state,
+		"Planner contract tools require state.worktreePath.",
+	);
 	const currentQueue = state.contracts.scanComplete
 		? [root]
 		: state.contracts.scanQueue.length > 0
@@ -321,7 +324,10 @@ async function contractRoute(
 		true,
 	);
 	const reason = optionalString(params.reason) ?? "planner contract route";
-	const root = requireWorktreePath(state);
+	const root = requireWorktreePath(
+		state,
+		"Planner contract tools require state.worktreePath.",
+	);
 	const targets = targetPaths.length > 0 ? targetPaths : declaredScope;
 	if (targets.length === 0) {
 		throw new TypeError(
@@ -374,7 +380,10 @@ async function contractRead(
 	}
 	const { planPaths, state } = orchestrator.preflight.context;
 	const params = asObject(input.params);
-	const root = requireWorktreePath(state);
+	const root = requireWorktreePath(
+		state,
+		"Planner contract tools require state.worktreePath.",
+	);
 	const path = resolveContractPath({
 		root,
 		path:
@@ -605,11 +614,17 @@ async function contractCheck(input: {
 			? null
 			: {
 					path: resolveContractPath({
-						root: requireWorktreePath(state),
+						root: requireWorktreePath(
+							state,
+							"Planner contract tools require state.worktreePath.",
+						),
 						path:
 							recommendedPath ??
 							defaultContractPathForChangedFiles({
-								root: requireWorktreePath(state),
+								root: requireWorktreePath(
+									state,
+									"Planner contract tools require state.worktreePath.",
+								),
 								changedFiles,
 							}),
 						writableOnly: true,
@@ -628,7 +643,10 @@ async function contractCheck(input: {
 		evidence,
 		recommendedPath: pendingUpsert?.path ?? null,
 	});
-	const root = requireWorktreePath(state);
+	const root = requireWorktreePath(
+		state,
+		"Planner contract tools require state.worktreePath.",
+	);
 	const coverageEntries = await buildDirCoverageMap({
 		fs: input.fs,
 		git: input.git,
@@ -685,7 +703,10 @@ async function contractUpsert(input: {
 	}
 	const { planPaths, state } = orchestrator.preflight.context;
 	const params = asObject(input.params);
-	const root = requireWorktreePath(state);
+	const root = requireWorktreePath(
+		state,
+		"Planner contract tools require state.worktreePath.",
+	);
 	const path = resolveContractPath({
 		root,
 		path:
@@ -1707,10 +1728,7 @@ function baselinePathForContract(
 	planPaths: PlanStoragePaths,
 	path: string,
 ): string {
-	return join(
-		planPaths.contractsBaselineDir,
-		`${createHash("sha256").update(path).digest("hex")}.md`,
-	);
+	return join(planPaths.contractsBaselineDir, `${sha256(path)}.md`);
 }
 
 async function restoreContractTouches(
@@ -2086,19 +2104,8 @@ function stripBackticks(value: string): string {
 	return value.replace(/^`|`$/g, "").trim();
 }
 
-function sha256(content: string): string {
-	return createHash("sha256").update(content).digest("hex");
-}
-
 function uniqueStrings(values: readonly string[]): string[] {
 	return [...new Set(values.filter(Boolean))];
-}
-
-function requireWorktreePath(state: PlanStateRecord): string {
-	if (!state.worktreePath) {
-		throw new Error("Planner contract tools require state.worktreePath.");
-	}
-	return state.worktreePath;
 }
 
 function optionalString(value: unknown): string | null {

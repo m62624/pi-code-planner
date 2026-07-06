@@ -10,7 +10,7 @@ import type { PlannerFs } from "../storage/fs";
 import { createTaskStoragePaths } from "../storage/paths";
 import { updatePlanRecord } from "../storage/plan-store";
 import type { PlanStateRecord } from "../storage/schema";
-import { savePlanState } from "../storage/state-store";
+import { requireWorktreePath, savePlanState } from "../storage/state-store";
 import { updateTaskStatus } from "../storage/task-store";
 import { assertNoPlannerDebugArtifactsBeforeCommit } from "./debug-tools";
 import {
@@ -422,13 +422,6 @@ async function markTaskDone(
 	if (await fs.exists(taskPaths.taskJson)) {
 		await updateTaskStatus(fs, taskPaths, "done", commitHash);
 	}
-}
-
-function requireWorktreePath(state: PlanStateRecord): string {
-	if (!state.worktreePath) {
-		throw new Error("Plan state has no worktreePath.");
-	}
-	return state.worktreePath;
 }
 
 function requiredString(params: unknown, key: string): string {

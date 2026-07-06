@@ -1,8 +1,8 @@
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
+import { sha256 } from "../hash";
 import { isPathInsideOrEqual } from "../path-utils";
 import { readTaskBehaviorsIfExists } from "../storage/behavior-store";
 import type { PlannerFs } from "../storage/fs";
@@ -676,10 +676,6 @@ function describeSpecGaps(report: ElenchusJsonReport): string[] {
 function atomSubject(atom: string): string {
 	const unqualified = atom.replace(/^[a-z0-9_]+\./, "");
 	return unqualified.split(" ")[0] ?? unqualified;
-}
-
-function sha256(content: string): string {
-	return createHash("sha256").update(content).digest("hex");
 }
 
 /** Rewrite one `## …` section of coverage.md, preserving the others. */

@@ -122,6 +122,21 @@ export async function markPlanBroken(
 	}));
 }
 
+/**
+ * Assert a plan is in a worktree and return its path. An absent `worktreePath`
+ * at a point that needs one is an internal invariant break (a should-never-happen
+ * bug), so this throws; `message` lets a caller name its own context.
+ */
+export function requireWorktreePath(
+	state: PlanStateRecord,
+	message = "Plan state has no worktreePath.",
+): string {
+	if (!state.worktreePath) {
+		throw new Error(message);
+	}
+	return state.worktreePath;
+}
+
 // Backward-compat shim for resuming plans created before a field existed.
 // Adding a field to PlanStateRecord requires updating, together: this
 // function's default, schema.ts's type, createInitialPlanState's default,

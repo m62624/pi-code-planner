@@ -6,7 +6,7 @@ import type { PlannerFs } from "../storage/fs";
 import { safeReaddir } from "../storage/fs";
 import type { PlanStoragePaths, ProjectStoragePaths } from "../storage/paths";
 import type { PlanStateRecord } from "../storage/schema";
-import { updatePlanState } from "../storage/state-store";
+import { requireWorktreePath, updatePlanState } from "../storage/state-store";
 import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
@@ -78,7 +78,10 @@ export async function initializePlannerDebugSession(input: {
 		| "debugCleanupRequired"
 	>;
 }> {
-	const worktreePath = requireWorktreePath(input.state);
+	const worktreePath = requireWorktreePath(
+		input.state,
+		"Planner debug session requires a worktree path.",
+	);
 	const debugSessionId = `${input.attemptId}-${randomUUID().slice(0, 8)}`;
 	const debugArtifactsDir = join(
 		worktreePath,
@@ -475,13 +478,6 @@ function requireDebugArtifactsDir(state: PlanStateRecord): string {
 		throw new Error(gate ?? "Planner debug artifacts directory is missing.");
 	}
 	return state.debugArtifactsDir;
-}
-
-function requireWorktreePath(state: PlanStateRecord): string {
-	if (!state.worktreePath) {
-		throw new Error("Planner debug session requires a worktree path.");
-	}
-	return state.worktreePath;
 }
 
 function applied(

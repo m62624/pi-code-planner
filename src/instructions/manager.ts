@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { sha256 } from "../hash";
 import type { PlannerFs } from "../storage/fs";
 import { instructionFilePath } from "./paths";
 import {
@@ -136,7 +136,7 @@ async function syncDefaultInstruction(
 	}
 
 	const current = await fs.readText(path);
-	if (hashText(current) === hashText(content)) {
+	if (sha256(current) === sha256(content)) {
 		return "unchanged";
 	}
 
@@ -197,10 +197,6 @@ function joinInstructionParts(
 		return defaultContent;
 	}
 	return `${defaultContent.trimEnd()}\n\n${appendContent.trimStart()}`;
-}
-
-function hashText(content: string): string {
-	return createHash("sha256").update(content).digest("hex");
 }
 
 function parseLevelTwoHeading(line: string): string | null {
