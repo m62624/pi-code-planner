@@ -344,10 +344,6 @@ Settled:
   pattern is prototype-verified (§9.1, `models/ladder/`).
 
 **All open decisions resolved — the std VRF library design is complete.**
-- **OD-5** — Where the shared port namespace physically lives (one `std/ports.vrf`
-  of `VAR` declarations imported by all, vs each brick declaring its own).
-- **OD-6** — How the director points at bricks mechanically (a `consider_<brick>`
-  derived atom the orchestrator reads, vs the model choosing from the warnings).
 
 ## 13. Log
 
