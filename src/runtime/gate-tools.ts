@@ -420,13 +420,17 @@ async function runTddCoverageGate(input: {
 	});
 	if (!run.ok) return blocked(run.reason);
 
-	const gaps = describeTddGaps(run.report, compiled.behaviorSubjects);
+	const gaps = describeTddGaps(
+		run.report,
+		compiled.behaviorSubjects,
+		compiled.branchSubjects,
+	);
 	const consistent = run.verdict === "CONSISTENT";
 	await writeCoverageSection(input.fs, input.planPaths, {
 		heading: `## Test Coverage — ${input.activeTaskId}`,
 		lines: [
 			`Phase: ${phase} — Verdict: **${run.verdict}** (engine ${run.engineVersion}, ${new Date().toISOString()})`,
-			`Behaviors: ${compiled.behaviorCount}${compiled.requirementCount > 0 ? `, owned requirements: ${compiled.requirementCount}` : ""}`,
+			`Behaviors: ${compiled.behaviorCount}${compiled.requirementCount > 0 ? `, owned requirements: ${compiled.requirementCount}` : ""}${compiled.branchCount > 0 ? `, branches: ${compiled.branchCount}` : ""}`,
 			"",
 			...(gaps.length > 0
 				? ["Uncovered:", ...gaps.map((gap) => `- ${gap}`)]
@@ -469,6 +473,10 @@ async function runTddCoverageGate(input: {
 function describeTddGaps(
 	report: ElenchusJsonReport,
 	behaviorSubjects: Record<string, string>,
+	branchSubjects: Record<
+		string,
+		{ behaviorId: string; branchId: string; condition: string }
+	>,
 ): string[] {
 	const gaps: string[] = [];
 	for (const warning of report.warnings ?? []) {
@@ -486,6 +494,23 @@ function describeTddGaps(
 			} else {
 				gaps.push(`Blocked by \`${blocked}\`.`);
 			}
+		}
+	}
+	// Per-branch holes come back as CONFLICTs (the compiler states every branch
+	// value explicitly): name each uncovered branch by its behavior + condition.
+	const seenBranches = new Set<string>();
+	for (const conflict of report.conflicts ?? []) {
+		for (const atom of conflict.atoms ?? []) {
+			const subject = atomSubject(atom);
+			const branch = branchSubjects[subject];
+			if (!branch || seenBranches.has(subject)) continue;
+			seenBranches.add(subject);
+			const missing = atom.includes("has_green")
+				? "its test does not pass yet (green)"
+				: "no failing test drives it yet (red)";
+			gaps.push(
+				`${branch.behaviorId}/${branch.branchId} "${branch.condition}": ${missing}.`,
+			);
 		}
 	}
 	return gaps;
