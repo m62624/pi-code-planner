@@ -3,6 +3,7 @@ import {
 	type CompactTimingSample,
 	compactionProgressFraction,
 	estimateCompactionDuration,
+	formatCompactIndicator,
 	formatDurationShort,
 	formatEtaLabel,
 	renderProgressBar,
@@ -16,6 +17,45 @@ function sample(
 ): CompactTimingSample {
 	return { tokens, ms, model, at };
 }
+
+describe("formatCompactIndicator", () => {
+	it("shows a bare running timer when there is no learned estimate", () => {
+		const estimate = estimateCompactionDuration({
+			samples: [],
+			tokens: 118_000,
+			model: "m",
+		});
+		expect(
+			formatCompactIndicator({
+				sizeLabel: "118k",
+				reasonLabel: "/compact",
+				elapsedMs: 12_000,
+				estimate,
+			}),
+		).toBe("Compacting 118k tok (/compact)… 12s");
+	});
+
+	it("shows a filling bar, percent, elapsed and ETA once history exists", () => {
+		const estimate = estimateCompactionDuration({
+			samples: [
+				sample(50_000, 10_000),
+				sample(100_000, 20_000),
+				sample(150_000, 30_000),
+			],
+			tokens: 100_000,
+			model: "m",
+		});
+		const line = formatCompactIndicator({
+			sizeLabel: "100k",
+			reasonLabel: "context full",
+			elapsedMs: 5_000,
+			estimate,
+		});
+		expect(line).toMatch(
+			/^Compacting 100k tok \(context full\) [█░]+ \d+% · 5s \/ ~/,
+		);
+	});
+});
 
 describe("estimateCompactionDuration", () => {
 	it("returns no estimate with empty history", () => {

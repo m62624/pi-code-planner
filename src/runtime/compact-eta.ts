@@ -299,6 +299,32 @@ export function formatDurationShort(ms: number): string {
 }
 
 /**
+ * Compose the one-line compaction indicator. With learned history it shows an
+ * honest, asymptotic bar (`… ██████░░░░ 62% · 18s / ~30s`); with no history yet
+ * it is a bare running timer. Pure so the format is unit-tested without the SDK,
+ * and shared by both the top widget and any other surface that shows the run.
+ */
+export function formatCompactIndicator(input: {
+	sizeLabel: string;
+	reasonLabel: string;
+	elapsedMs: number;
+	estimate: CompactEtaEstimate;
+}): string {
+	const elapsed = formatDurationShort(input.elapsedMs);
+	if (!input.estimate.hasEstimate) {
+		return `Compacting ${input.sizeLabel} tok (${input.reasonLabel})… ${elapsed}`;
+	}
+	const frac = compactionProgressFraction({
+		elapsedMs: input.elapsedMs,
+		etaMs: input.estimate.etaMs,
+		reliability: input.estimate.reliability,
+	});
+	const bar = renderProgressBar(frac);
+	const pct = Math.round(frac * 100);
+	return `Compacting ${input.sizeLabel} tok (${input.reasonLabel}) ${bar} ${pct}% · ${elapsed} / ${formatEtaLabel(input.estimate)}`;
+}
+
+/**
  * Human ETA label. A stable / single estimate shows a point (`~24s`); a noisy
  * one shows the band as a range (`~20–40s`) so the uncertainty is visible.
  */
