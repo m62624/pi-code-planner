@@ -187,7 +187,13 @@ export function getAllowedNextPlannerPositions(
 		];
 	}
 	if (input.stage === "done" && input.step === "handle_change_request") {
-		return [{ stage: "planning", step: "read_context" }];
+		// A change request amends the SPEC first (REQ-10): the spec is the
+		// source of truth, so it is re-drafted and re-verified before replanning.
+		// Legacy plans without spec.json keep the direct road to planning.
+		return [
+			{ stage: "spec", step: "draft_requirements" },
+			{ stage: "planning", step: "read_context" },
+		];
 	}
 
 	return nextWithinStage(input);

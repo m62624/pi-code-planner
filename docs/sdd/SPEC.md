@@ -425,3 +425,40 @@ plan (tasks tracing to REQ-1…REQ-11).
   requirement kinds; laziness/gaming blocked; coverage-in-spec-gate proven a
   deadlock cycle; coverage gate names dropped requirements. Derived the four
   placement rules in §9. Committed the reproducible models under models/.
+- **IMPLEMENTED** (branch `feat/sdd-planning-spec`), with these recorded
+  deviations from the letter of this spec:
+  - §6.1: the spec stage's exit step is **`finish_spec`**, not
+    `enter_planning` — step names are globally unique across stages
+    (`state-machine.ts` `buildStepToStageMap` throws) and discovery already
+    owns `enter_planning`, which REQ-11 forbids renaming.
+  - §6.1: the separate `compile_spec_vrf` step was **folded into the gate
+    tool** (`planner_gate_check`): compilation is deterministic code, not a
+    model step, so a dedicated state-machine position added nothing.
+  - Gates are enforced through the `last-check.json` mechanism
+    (gate + verdict + sha256 of the compiled source artifact, checked in
+    `validateWorkflowExit`), not through the descriptive `requiredGates[]`
+    lists — those were never an enforcement mechanism in the runtime.
+  - `SpecConstraint` gained an optional machine half
+    (`relation: implies | exclusive | oneof | atleast` over boolean-leaf
+    atoms): without it, a validated spec compiled to a vacuously-green
+    program; the relation web is where the engine finds real contradictions
+    (CONFLICT) and unestablished atoms (WARNING → elicit-gaps questions).
+  - The plan-coverage program is self-contained (no bundled template):
+    elenchus `SET`s do not cross files, so the sets + witness pairs + TOTAL
+    lines must live in one generated file.
+- New requirements added during implementation (execution-phase coverage,
+  the "toggle board"):
+  - **REQ-16** — every task carries a behavior registry
+    (`tasks/<id>/behaviors.json`): one `BHV-n` per observable behavior
+    (happy/edge/error/concurrency, optional REQ-n traceability) with the
+    mechanical status ladder `planned → red → green`; `planned → green` is
+    rejected (test-first by data). Maintained via `planner_behavior_upsert`.
+  - **REQ-17** — the `tdd_coverage` gate compiles the registry into
+    `TOTAL … ON behaviors` witness tables and hard-gates execution:
+    leaving `write_tests` requires every behavior red-witnessed, leaving
+    `run_final_tests` forward requires green; the engine NAMES each
+    uncovered behavior. Legacy tasks without a registry skip the gate.
+- Change requests (REQ-10): `done/handle_change_request` now forks to
+  `spec/draft_requirements` for plans with a spec (amend → re-verify →
+  re-cover; `planner_spec_submit` snapshots the prior version to
+  `spec.prev.json`), keeping `planning/read_context` for legacy plans.

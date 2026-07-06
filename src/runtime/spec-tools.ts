@@ -43,6 +43,15 @@ export async function executePlannerSpecTool(input: {
 	try {
 		const record = validateSpecRecord(input.params as SpecRecordInput);
 		const { planPaths } = orchestrator.preflight.context;
+		// Requirement diffs must never silently drop history (REQ-10): the
+		// previous version is kept as spec.prev.json so a change request can be
+		// audited against what the spec said before the amendment.
+		if (await input.fs.exists(planPaths.specJson)) {
+			await input.fs.writeTextAtomic(
+				planPaths.specPrevJson,
+				await input.fs.readText(planPaths.specJson),
+			);
+		}
 		await writeSpecArtifacts(input.fs, planPaths, record);
 		const formalized = record.requirements.filter(
 			(req) => req.acceptanceAtom !== undefined,

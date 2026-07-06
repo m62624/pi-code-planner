@@ -161,3 +161,21 @@ describe("spec store", () => {
 		expect(formatSpecMarkdown(record)).toBe(formatSpecMarkdown(record));
 	});
 });
+
+describe("spec compaction durability (REQ-9)", () => {
+	it("compact_spec anchors the spec artifacts", async () => {
+		const { getPlannerStageStepBehavior } = await import(
+			"../runtime/stage-behavior"
+		);
+		const behavior = getPlannerStageStepBehavior({
+			stage: "spec",
+			step: "compact_spec",
+		});
+		expect(behavior.requiredArtifacts).toEqual([
+			"spec.md",
+			"spec.json",
+			"coverage.md",
+		]);
+		expect(behavior.compactPolicy).toBe("request_required");
+	});
+});

@@ -868,7 +868,9 @@ describe("workflowToolTransition", () => {
 			git,
 			projectPaths,
 			toolName: "planner_finish_step",
-			params: {},
+			// A legacy plan (no spec.json) goes straight back to planning; plans
+			// with a spec pick spec/draft_requirements instead.
+			params: { nextStage: "planning", nextStep: "read_context" },
 		});
 
 		expect(result.result.status).toBe("applied");

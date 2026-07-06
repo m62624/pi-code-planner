@@ -708,6 +708,7 @@ export const PLANNER_STEP_RULES = {
 			"If a required command/check failed when you ran it, create a proven_bug (reproduced) or needs_probe finding that names that command. If a required command could not be run here (not_run/unknown — e.g. the tool is not installed), name it in a finding and resolve it: not_a_bug with evidence of why it is not actionable locally (e.g. it runs in CI), or needs_probe to defer it. Do not continue to final_summary while such a command is unaddressed.",
 			"Treat each possible error like TDD for a suspected problem: prove it with a focused failing test/command, exact code-path proof, or exact spec contradiction; otherwise disprove it or mark needs_probe.",
 			"As the final logical pass, default to mechanically re-checking the conditions the finished result depends on with planner_elenchus_check, instead of trusting the reasoning chain from earlier steps (see the elenchus skill). Record resolution=not_applicable with a one-line reason only when there is no conditional logic to verify.",
+			"If spec.json exists, reread it via planner_artifact_read and re-verify every assumption (ASM-n): each is a boolean leaf the earlier gates TRUSTED, backed only by its recorded evidence. Re-run the cited command/measurement where feasible; an assumption that no longer holds is a proven_bug or needs_probe finding, and a formalized requirement whose acceptanceAtom lacks any witnessing behavior/test deserves a Possible Errors item.",
 			describeRecommendedVrfTemplates("finalize", "doubt_review") ?? "",
 			"Use planner_doubt_review to write verify.md. Do not hand-write weak doubt notes.",
 			"Audit AGENTS.md local contracts: check stale guidance, missing parent backlinks, wrong child routing, or missing durable domain details. Use planner_contract_check/upsert when needed.",
@@ -793,7 +794,8 @@ export const PLANNER_STEP_RULES = {
 			"If the user accepts, ask the user to run /planner-finish. If the user writes feedback, says what is wrong, or requests changes, complete with explicit next target done/handle_change_request.",
 	}),
 	handle_change_request: stepRule("done", "handle_change_request", {
-		objective: "Record requested changes and return to planning.",
+		objective:
+			"Record requested changes, then amend the spec (the source of truth) and replan.",
 		requiredActions: [
 			"Append the user's requested corrections to decisions.md under a Change Request section.",
 			"Append a short Change Request Replan note near the start of plan.md with Completed Work and Remaining Work subsections. Preserve the previous completed plan and do not rewrite it wholesale.",
@@ -806,8 +808,9 @@ export const PLANNER_STEP_RULES = {
 			"Do not create a new root project state.",
 		],
 		exitCondition:
-			"Change request is recorded in decisions.md, plan.md, and discovery.md, and planning can resume.",
-		nextInstruction: "Complete with next target planning/read_context.",
+			"Change request is recorded in decisions.md, plan.md, and discovery.md, and the follow-up pass can start.",
+		nextInstruction:
+			"For a plan with spec.json: complete with next target spec/draft_requirements — amend the spec via planner_spec_submit (the previous version is preserved as spec.prev.json) and re-pass verify_spec plus the planning coverage gate. Legacy plans (no spec.json): next target planning/read_context.",
 	}),
 	prepare_output_branch: stepRule("done", "prepare_output_branch", {
 		objective: "Internal /planner-finish phase: prepare output branch.",

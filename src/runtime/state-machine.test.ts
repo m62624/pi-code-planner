@@ -248,14 +248,24 @@ describe("planner state machine", () => {
 			}),
 		).toMatchObject({ nextStep: "handle_change_request" });
 
+		const changeRequest = state({
+			stage: "done",
+			step: "handle_change_request",
+			stepStatus: "running",
+		});
+		// A change request amends the spec first; legacy plans (no spec.json)
+		// keep the direct road to planning — the caller must pick explicitly.
+		expect(getAllowedNextPlannerPositions(changeRequest)).toEqual([
+			{ stage: "spec", step: "draft_requirements" },
+			{ stage: "planning", step: "read_context" },
+		] satisfies PlannerPosition[]);
+		expect(() => completePlannerStep(changeRequest)).toThrowStateMachine(
+			"ambiguous_next_step",
+		);
 		expect(
-			completePlannerStep(
-				state({
-					stage: "done",
-					step: "handle_change_request",
-					stepStatus: "running",
-				}),
-			),
+			completePlannerStep(changeRequest, {
+				next: { stage: "planning", step: "read_context" },
+			}),
 		).toMatchObject({ nextStep: "read_context" });
 	});
 
