@@ -3,6 +3,7 @@ import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
 import type { ProjectStoragePaths } from "../storage/paths";
 import { readPlanRecord, updatePlanRecord } from "../storage/plan-store";
+import { readSpecRecordIfExists } from "../storage/spec-store";
 import { upsertTaskArtifacts } from "../storage/task-store";
 import { ARTIFACT_CANONICAL_SCHEMA, formatArtifactEcho } from "./artifact-echo";
 import {
@@ -50,6 +51,37 @@ export async function executePlannerTaskTool(input: {
 				`Task ${taskId} is already done. For a follow-up or change request, create a new revision task id instead of reopening completed work.`,
 			);
 		}
+		const requirements = stringArray(params.requirements ?? [], "requirements");
+		// Traceability by identity (REQ-2): every cited id must exist in the
+		// spec and be in scope — a typo'd or de-scoped id would silently satisfy
+		// the coverage gate for nothing.
+		const spec = await readSpecRecordIfExists(
+			input.fs,
+			orchestrator.preflight.context.planPaths,
+		);
+		if (requirements.length > 0 && !spec) {
+			return blocked(
+				input.toolName,
+				"This task cites spec requirements but the plan has no spec.json. Author the spec first (spec/draft_requirements) or omit `requirements` for a legacy plan.",
+			);
+		}
+		if (spec) {
+			for (const requirement of requirements) {
+				const known = spec.requirements.find((req) => req.id === requirement);
+				if (!known) {
+					return blocked(
+						input.toolName,
+						`Task ${taskId} cites ${requirement}, which does not exist in spec.json. Use exact REQ-n ids from the spec (or add the requirement via planner_spec_submit and re-verify the spec).`,
+					);
+				}
+				if (!known.inScope) {
+					return blocked(
+						input.toolName,
+						`Task ${taskId} cites ${requirement}, which the spec marks out of scope. De-scoped requirements must not receive tasks (REQ-3).`,
+					);
+				}
+			}
+		}
 		const result = await upsertTaskArtifacts(
 			input.fs,
 			orchestrator.preflight.context.planPaths,
@@ -62,6 +94,7 @@ export async function executePlannerTaskTool(input: {
 					params.acceptanceCriteria,
 					"acceptanceCriteria",
 				),
+				requirements,
 				contractChain: stringArray(params.contractChain ?? [], "contractChain"),
 				relevantContracts: stringArray(
 					params.relevantContracts ?? [],

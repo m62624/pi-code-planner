@@ -415,6 +415,12 @@ const TASK_UPSERT_TOOL_PARAMETERS = {
 		objective: { type: "string" },
 		scope: { type: "array", items: { type: "string" } },
 		acceptanceCriteria: { type: "array", items: { type: "string" } },
+		requirements: {
+			type: "array",
+			items: { type: "string" },
+			description:
+				"Spec traceability: the REQ-n ids from spec.json this task discharges. Required in practice for plans with a spec — the plan_coverage gate names every requirement no task covers and every task that traces to nothing.",
+		},
 		contractChain: {
 			type: "array",
 			items: { type: "string" },
@@ -3045,7 +3051,7 @@ function registerPlannerTools(
 		description:
 			"Run an SDD gate: load the durable artifacts (spec.json, task files) from disk, compile them into VRF with a deterministic compiler, run the elenchus engine, and report the verdict with every gap turned into a concrete next action or a ready-to-ask user question. Takes NO program — gate VRF is never hand-written.",
 		promptSnippet:
-			'At spec/verify_spec, call planner_gate_check with {"gate": "spec_consistency"} and iterate until CONSISTENT — the step cannot finish otherwise. Each reported gap tells you exactly what to do: fix/defer a requirement via planner_spec_submit, add an evidence-backed assumption, or loop back to spec/elicit_gaps and ask the user.',
+			'At spec/verify_spec, call planner_gate_check with {"gate": "spec_consistency"}; at planning/consistency_check, with {"gate": "plan_coverage"}. Iterate until CONSISTENT — the step cannot finish otherwise. Each reported gap tells you exactly what to do: fix/defer a requirement via planner_spec_submit, correct a task\'s `requirements` via planner_task_upsert, add an evidence-backed assumption, or route a question to the user.',
 		parameters: {
 			type: "object",
 			properties: {

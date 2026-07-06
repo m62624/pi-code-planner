@@ -351,11 +351,16 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		projectAccess: "planner_artifacts",
 		actions: ["run_checks", "write_artifacts"],
 		requiredArtifacts: ["plan.md", "task.json", "task.md"],
-		updatedArtifacts: ["decisions.md"],
+		updatedArtifacts: ["decisions.md", "coverage.md", "task.json", "task.md"],
 		requiredGates: [],
+		// planner_task_upsert is allowed here so a coverage gap (dropped
+		// requirement / orphan task) can be fixed in place and the gate re-run
+		// without bouncing the state machine back to write_task_files.
 		expectedTools: [
 			"planner_status",
+			"planner_gate_check",
 			"planner_elenchus_check",
+			"planner_task_upsert",
 			"planner_contract_route",
 			"planner_contract_read",
 		],

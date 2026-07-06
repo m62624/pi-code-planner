@@ -5,8 +5,16 @@ import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
 import { isPathInsideOrEqual } from "../path-utils";
 import type { PlannerFs } from "../storage/fs";
-import type { PlanStoragePaths, ProjectStoragePaths } from "../storage/paths";
+import {
+	createTaskStoragePaths,
+	type PlanStoragePaths,
+	type ProjectStoragePaths,
+} from "../storage/paths";
+import { readPlanRecord } from "../storage/plan-store";
+import type { TaskRecord } from "../storage/schema";
 import { readSpecRecordIfExists } from "../storage/spec-store";
+import { readTaskRecord } from "../storage/task-store";
+import { compilePlanCoverage } from "../vrf/coverage-compiler";
 import { syncVrfTemplatesToPlan } from "../vrf/manager";
 import {
 	compileSpecConsistency,
@@ -22,8 +30,11 @@ import {
 export const PLANNER_GATE_TOOL_NAME = "planner_gate_check" as const;
 export type PlannerGateToolName = typeof PLANNER_GATE_TOOL_NAME;
 
-/** Gates grow with the SDD layer: plan_coverage and tdd_coverage follow. */
-export const PLANNER_GATE_NAMES = ["spec_consistency"] as const;
+/** Gates grow with the SDD layer: tdd_coverage follows. */
+export const PLANNER_GATE_NAMES = [
+	"spec_consistency",
+	"plan_coverage",
+] as const;
 export type PlannerGateName = (typeof PLANNER_GATE_NAMES)[number];
 
 export interface PlannerGateToolResult {
@@ -75,6 +86,12 @@ export async function executePlannerGateTool(input: {
 		switch (gate) {
 			case "spec_consistency":
 				return await runSpecConsistencyGate({
+					fs: input.fs,
+					planPaths,
+					position: { stage: state.stage, step: state.step },
+				});
+			case "plan_coverage":
+				return await runPlanCoverageGate({
 					fs: input.fs,
 					planPaths,
 					position: { stage: state.stage, step: state.step },
@@ -149,6 +166,172 @@ async function runSpecConsistencyGate(input: {
 			gaps,
 		},
 	};
+}
+
+async function runPlanCoverageGate(input: {
+	fs: PlannerFs;
+	planPaths: PlanStoragePaths;
+	position: { stage: string; step: string };
+}): Promise<PlannerGateToolResult> {
+	const spec = await readSpecRecordIfExists(input.fs, input.planPaths);
+	if (!spec) {
+		// Legacy plan (predates the spec artifact): coverage degrades gracefully
+		// (REQ-11) — the old plan-consistency flow still applies at this step.
+		await writeElenchusLastCheck(input.fs, input.planPaths.elenchusDir, {
+			name: "plan-coverage",
+			stage: input.position.stage,
+			step: input.position.step,
+			outcome: "not_applicable",
+			recordedAt: new Date().toISOString(),
+			gate: "plan_coverage",
+		});
+		await writeCoverageSection(input.fs, input.planPaths, {
+			heading: "## Requirement Coverage",
+			lines: [
+				"Skipped: this plan has no spec.json (it predates the SDD spec layer).",
+				"The legacy plan-consistency check applies instead.",
+			],
+		});
+		return {
+			status: "applied",
+			toolName: PLANNER_GATE_TOOL_NAME,
+			text: "plan_coverage gate skipped: no spec.json (legacy plan). Run the legacy plan-consistency check via planner_elenchus_check instead.",
+			details: {
+				gate: "plan_coverage",
+				verdict: "not_applicable",
+				sourcePath: "",
+				resultPath: "",
+				gaps: [],
+			},
+		};
+	}
+	const tasks = await readAllTaskRecords(input.fs, input.planPaths);
+	if (tasks.length === 0) {
+		return blocked(
+			"No task files exist yet — author them at planning/write_task_files (planner_task_upsert with a `requirements` list per task) before running the plan_coverage gate.",
+		);
+	}
+	const compiled = compilePlanCoverage(spec, tasks);
+	if (compiled.unknownRequirementRefs.length > 0) {
+		return blocked(
+			[
+				"Some tasks cite requirement ids that do not exist in spec.json:",
+				...compiled.unknownRequirementRefs.map(
+					(ref) => `- task ${ref.taskId} → ${ref.requirement}`,
+				),
+				"Fix the task via planner_task_upsert (exact REQ-n ids), or add the requirement to the spec and re-verify it.",
+			].join("\n"),
+		);
+	}
+	const run = await runGateProgram({
+		fs: input.fs,
+		planPaths: input.planPaths,
+		gate: "plan_coverage",
+		fileStem: "plan-coverage",
+		program: compiled.program,
+		values: {},
+		position: input.position,
+		sourceHash: await planCoverageSourceHash(input.fs, input.planPaths, tasks),
+	});
+	if (!run.ok) return blocked(run.reason);
+
+	const gaps = describeCoverageGaps(run.report, compiled.taskSubjects);
+	const consistent = run.verdict === "CONSISTENT";
+	await writeCoverageSection(input.fs, input.planPaths, {
+		heading: "## Requirement Coverage",
+		lines: [
+			`Verdict: **${run.verdict}** (engine ${run.engineVersion}, ${new Date().toISOString()})`,
+			`Coverable requirements: ${compiled.requirementCount}, tasks: ${compiled.taskCount}`,
+			"",
+			...(gaps.length > 0
+				? ["Gaps:", ...gaps.map((gap) => `- ${gap}`)]
+				: [
+						"No gaps — every in-scope requirement is covered by a task and every task traces to a requirement.",
+					]),
+		],
+	});
+	return {
+		status: "applied",
+		toolName: PLANNER_GATE_TOOL_NAME,
+		text: [
+			`plan_coverage gate: **${run.verdict}** (engine ${run.engineVersion}).`,
+			`Compiled program: ${run.sourcePath}`,
+			`Raw verdict: ${run.resultPath}`,
+			`Coverage report: ${input.planPaths.coverageMd}`,
+			"",
+			...(gaps.length > 0
+				? ["Gaps to close:", ...gaps.map((gap) => `- ${gap}`), ""]
+				: []),
+			consistent
+				? "CONSISTENT: every in-scope requirement is discharged and no task is orphan work. Record the conclusion in decisions.md, then call planner_finish_step."
+				: "Not CONSISTENT: the plan drops a requirement or carries orphan work. Fix the tasks (planner_task_upsert with the right `requirements`), or de-scope a requirement through a recorded user decision, then re-run planner_gate_check.",
+		].join("\n"),
+		details: {
+			gate: "plan_coverage",
+			verdict: run.verdict,
+			sourcePath: run.sourcePath,
+			resultPath: run.resultPath,
+			gaps,
+		},
+	};
+}
+
+async function readAllTaskRecords(
+	fs: PlannerFs,
+	planPaths: PlanStoragePaths,
+): Promise<TaskRecord[]> {
+	const plan = await readPlanRecord(fs, planPaths);
+	const records: TaskRecord[] = [];
+	for (const summary of plan.tasks) {
+		records.push(
+			await readTaskRecord(
+				fs,
+				createTaskStoragePaths(planPaths, summary.taskId),
+			),
+		);
+	}
+	return records;
+}
+
+/**
+ * The coverage verdict depends on spec.json AND on every task's requirements
+ * list — editing either after a pass makes the pass stale.
+ */
+export async function planCoverageSourceHash(
+	fs: PlannerFs,
+	planPaths: PlanStoragePaths,
+	tasks: readonly TaskRecord[],
+): Promise<string> {
+	const traceability = [...tasks]
+		.sort((a, b) => a.taskId.localeCompare(b.taskId))
+		.map((task) => [task.taskId, [...(task.requirements ?? [])].sort()]);
+	return sha256(
+		`${await fs.readText(planPaths.specJson)}\n${JSON.stringify(traceability)}`,
+	);
+}
+
+function describeCoverageGaps(
+	report: ElenchusJsonReport,
+	taskSubjects: Record<string, string>,
+): string[] {
+	const gaps: string[] = [];
+	for (const warning of report.warnings ?? []) {
+		for (const blocked of warning.blocked_by ?? []) {
+			const subject = blocked.split(" ")[0] ?? blocked;
+			if (blocked.includes("no covered_by witness")) {
+				gaps.push(
+					`${specSubjectToRequirementId(subject)} is DROPPED — no task discharges it. Add it to a task's \`requirements\` via planner_task_upsert, or de-scope it through a recorded user decision.`,
+				);
+			} else if (blocked.includes("no traces witness")) {
+				gaps.push(
+					`Task "${taskSubjects[subject] ?? subject}" is ORPHAN work — it traces to no requirement. Cite the REQ-n it discharges via planner_task_upsert, or remove/merge the task.`,
+				);
+			} else {
+				gaps.push(`Blocked by \`${blocked}\`.`);
+			}
+		}
+	}
+	return gaps;
 }
 
 // ---------------------------------------------------------------------------

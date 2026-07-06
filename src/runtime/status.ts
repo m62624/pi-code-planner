@@ -388,7 +388,7 @@ export const PLANNER_STEP_RULES = {
 	write_task_files: stepRule("planning", "write_task_files", {
 		objective: "Create task artifacts.",
 		requiredActions: [
-			"Call planner_task_upsert for each behavioral task with scope and acceptance criteria.",
+			"Call planner_task_upsert for each behavioral task with scope, acceptance criteria, and `requirements` (the exact REQ-n ids from spec.json this task discharges — the coverage gate at consistency_check names every uncovered requirement and every orphan task).",
 			"When known, include AGENTS.md contract chain paths in the task scope/dependency context so execution can reload them after compact.",
 			"In a change-request planning pass, call planner_task_upsert only for new or still-pending revision tasks. Do not reuse completed task IDs.",
 			"Let the wrapper create task.json, task.md, and empty TDD lifecycle artifacts. Do not write task JSON manually.",
@@ -411,19 +411,21 @@ export const PLANNER_STEP_RULES = {
 	}),
 	consistency_check: stepRule("planning", "consistency_check", {
 		objective:
-			"Mechanically check the plan's interacting constraints with elenchus before execution.",
+			"Prove requirement coverage mechanically, then check any interacting-constraint web with elenchus.",
 		requiredActions: [
-			"Default to modeling the plan's facts and the conditions it depends on as a .vrf program and calling planner_elenchus_check, then iterating until the verdict is CONSISTENT — mechanically verify the plan instead of trusting your own reasoning (see the elenchus skill for how to model it).",
+			'Call planner_gate_check with gate: "plan_coverage" — it compiles spec.json + every task\'s requirements list into VRF deterministically (you write no program) and NAMES every dropped requirement and every orphan task.',
+			"Iterate until plan_coverage is CONSISTENT: fix gaps in place with planner_task_upsert (correct `requirements` ids, or a missing task), or de-scope a requirement through a recorded user decision.",
+			"Default to also modeling the plan's interacting constraints (exclusive owners, ordering chains, mutually exclusive states) with planner_elenchus_check and iterating to CONSISTENT — mechanically verify instead of trusting your own reasoning.",
 			describeRecommendedVrfTemplates("planning", "consistency_check") ?? "",
-			"Call planner_elenchus_check with resolution=not_applicable and a one-line reason only when the plan has no conditional logic to verify (purely linear/CRUD work). This is the narrow escape; it never traps the flow.",
-			"A CONFLICT verdict blocks planner_finish_step for this step until a re-run improves it (or records not_applicable): apply the drop/flip repair the CORE/RETRACT names - fix the plan or the wrong fact, never delete a valid premise to force green.",
+			"Legacy plans only (no spec.json): the coverage gate reports itself skipped; run the plan-consistency check by hand, and record not_applicable with a one-line reason only when the plan has no conditional logic to verify.",
+			"A CONFLICT verdict blocks planner_finish_step for this step until a re-run improves it: apply the drop/flip repair the CORE/RETRACT names - fix the plan or the wrong fact, never delete a valid premise to force green.",
 		],
 		allowedNow: [
-			"Use planner_elenchus_check (run a check or record not_applicable). Re-read planner artifacts and contract chains.",
+			"Use planner_gate_check, planner_elenchus_check, and planner_task_upsert (to close coverage gaps). Re-read planner artifacts and contract chains.",
 		],
-		forbiddenNow: ["Do not edit code or tasks. Do not start execution yet."],
+		forbiddenNow: ["Do not edit code. Do not start execution yet."],
 		exitCondition:
-			"elenchus reports CONSISTENT for the modeled constraints, or the step is recorded not_applicable with a reason.",
+			"plan_coverage is CONSISTENT (or skipped as legacy), and any modeled constraint web reports CONSISTENT or a recorded not_applicable.",
 		nextInstruction: "Call planner_finish_step to open compact_planning.",
 	}),
 	compact_planning: stepRule("planning", "compact_planning", {

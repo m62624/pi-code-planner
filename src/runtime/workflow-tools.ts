@@ -14,14 +14,16 @@ import {
 	type PlannerStage,
 	type PlannerStep,
 	type PlanStateRecord,
+	type TaskRecord,
 } from "../storage/schema";
-import { updateTaskStatus } from "../storage/task-store";
+import { readTaskRecord, updateTaskStatus } from "../storage/task-store";
 import {
 	validateContractCheckCompleted,
 	validateDiscoveryContractRouting,
 } from "./contracts";
 import { validateDoubtReviewMarkdown } from "./doubt-review";
 import { readElenchusLastCheck } from "./elenchus-tools";
+import { planCoverageSourceHash } from "./gate-tools";
 import type { PlannerGitReality } from "./git-state-sync";
 import {
 	decidePlannerLifecycleNext,
@@ -268,6 +270,46 @@ async function validateSpecGatePassed(
 	return null;
 }
 
+/**
+ * The SDD coverage gate (SPEC.md §6.2): for a plan WITH a spec, the latest
+ * plan_coverage run must be CONSISTENT and fresh against both spec.json and
+ * every task's requirements list. Legacy plans (no spec.json) skip it —
+ * coverage degrades gracefully (REQ-11) and the old plan-consistency flow
+ * (with its CONFLICT-only rule above) still applies.
+ */
+async function validatePlanCoverageGatePassed(
+	fs: PlannerFs,
+	planPaths: PlanStoragePaths,
+): Promise<string | null> {
+	if (!(await fs.exists(planPaths.specJson))) {
+		return null;
+	}
+	const lastCheck = await readElenchusLastCheck(fs, planPaths.elenchusDir);
+	if (lastCheck?.gate !== "plan_coverage") {
+		return 'This plan has a spec, so requirement coverage is a hard gate. Call planner_gate_check with gate: "plan_coverage" at planning/consistency_check and reach CONSISTENT before advancing.';
+	}
+	if (lastCheck.outcome !== "CONSISTENT") {
+		return `The latest plan_coverage gate ended in ${lastCheck.outcome} — a requirement is dropped or a task is orphan work. Fix the tasks' \`requirements\` via planner_task_upsert (or de-scope through a recorded user decision), then re-run planner_gate_check.`;
+	}
+	if (lastCheck.sourceHash) {
+		const plan = await readPlanRecord(fs, planPaths);
+		const tasks: TaskRecord[] = [];
+		for (const summary of plan.tasks) {
+			tasks.push(
+				await readTaskRecord(
+					fs,
+					createTaskStoragePaths(planPaths, summary.taskId),
+				),
+			);
+		}
+		const currentHash = await planCoverageSourceHash(fs, planPaths, tasks);
+		if (lastCheck.sourceHash !== currentHash) {
+			return "spec.json or a task's requirements changed after the last plan_coverage pass — the verdict is stale. Re-run planner_gate_check at planning/consistency_check.";
+		}
+	}
+	return null;
+}
+
 const INTERNAL_DONE_STEPS = new Set<string>([
 	"prepare_output_branch",
 	"merge_or_export_result",
@@ -342,6 +384,18 @@ async function validateWorkflowExit(input: {
 			if (gateBlock) {
 				return gateBlock;
 			}
+		}
+	}
+	if (
+		state.stage === "planning" &&
+		(state.step === "consistency_check" || state.step === "enter_execution")
+	) {
+		const coverageBlock = await validatePlanCoverageGatePassed(
+			input.fs,
+			input.orchestrator.preflight.context.planPaths,
+		);
+		if (coverageBlock) {
+			return coverageBlock;
 		}
 	}
 	if (state.stage === "discovery" && state.step === "scan_project_structure") {

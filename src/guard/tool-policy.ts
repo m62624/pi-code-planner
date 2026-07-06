@@ -165,7 +165,9 @@ const STEP_ALLOWED_TOOLS = {
 		],
 		verify_plan: [],
 		consistency_check: [
+			"planner_gate_check",
 			"planner_elenchus_check",
+			"planner_task_upsert",
 			"planner_contract_route",
 			"planner_contract_read",
 		],

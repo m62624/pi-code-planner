@@ -31,6 +31,7 @@ import { validateSpecRecord, writeSpecArtifacts } from "../storage/spec-store";
 import { initializePlanState } from "../storage/state-store";
 import { readTaskRecord, upsertTaskArtifacts } from "../storage/task-store";
 import { MockPlannerFs } from "../test/mock-fs";
+import { planCoverageSourceHash } from "./gate-tools";
 import {
 	executePlannerWorkflowTool,
 	workflowToolTransition,
@@ -543,6 +544,139 @@ describe("workflowToolTransition", () => {
 			projectPaths,
 			toolName: "planner_finish_step",
 			params: forward,
+		});
+		expect(finished.result.status).toBe("applied");
+	});
+
+	it("gates planning/consistency_check on plan_coverage for plans with a spec; legacy plans skip it", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await ensureProjectRecord(fs, projectPaths);
+		await initializePlanFiles(
+			fs,
+			planPaths,
+			createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+		);
+		await fs.mkdirp(worktreePath);
+		const atConsistencyCheck = () => ({
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "planning" as const,
+			step: "consistency_check" as const,
+			stepStatus: "running" as const,
+			currentBranch: "plan/plan-a",
+		});
+		await initializePlanState(fs, planPaths, atConsistencyCheck());
+		await setActivePlan(fs, projectPaths, "plan-a");
+
+		// Legacy plan (no spec.json): no coverage gate, the step finishes freely.
+		const legacy = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(legacy.result.status).toBe("applied");
+
+		// Now a spec + a traced task exist: the gate becomes mandatory.
+		await initializePlanState(fs, planPaths, atConsistencyCheck());
+		await writeSpecArtifacts(
+			fs,
+			planPaths,
+			validateSpecRecord({
+				requirements: [
+					{
+						id: "REQ-1",
+						statement: "Behavior.",
+						acceptance: "Checked.",
+						acceptanceAtom: "req_1_ok",
+						priority: "must",
+						inScope: true,
+					},
+				],
+			}),
+		);
+		const { record: taskRecord } = await upsertTaskArtifacts(fs, planPaths, {
+			taskId: "alpha",
+			title: "Alpha",
+			objective: "Discharges REQ-1.",
+			scope: [],
+			acceptanceCriteria: ["ok"],
+			requirements: ["REQ-1"],
+		});
+		await updatePlanRecord(fs, planPaths, (plan) => ({
+			...plan,
+			tasks: [{ taskId: "alpha", title: "Alpha", status: taskRecord.status }],
+		}));
+
+		const noRun = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(noRun.result.status).toBe("blocked");
+		expect(noRun.text).toContain("plan_coverage");
+
+		const freshHash = await planCoverageSourceHash(fs, planPaths, [
+			await readTaskRecord(fs, createTaskStoragePaths(planPaths, "alpha")),
+		]);
+		const writeGateCheck = async (outcome: string, sourceHash = freshHash) =>
+			fs.writeTextAtomic(
+				join(planPaths.elenchusDir, "last-check.json"),
+				JSON.stringify({
+					name: "plan-coverage",
+					stage: "planning",
+					step: "consistency_check",
+					outcome,
+					recordedAt: "2026-07-06T00:00:00.000Z",
+					gate: "plan_coverage",
+					sourceHash,
+				}),
+			);
+
+		// WARNING (a dropped requirement) blocks.
+		await writeGateCheck("WARNING");
+		const warned = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(warned.result.status).toBe("blocked");
+
+		// A stale pass (task requirements changed after the run) blocks.
+		await writeGateCheck("CONSISTENT", "0".repeat(64));
+		const stale = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(stale.result.status).toBe("blocked");
+		expect(stale.text).toContain("stale");
+
+		// A fresh CONSISTENT pass advances.
+		await writeGateCheck("CONSISTENT");
+		const finished = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
 		});
 		expect(finished.result.status).toBe("applied");
 	});
