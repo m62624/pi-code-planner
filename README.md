@@ -86,15 +86,15 @@ flowchart TD
 
 ---
 
-## Spec-driven development, verified by a SAT engine
+## Spec and gates
 
-pi-code-planner is not another prompt pipeline: the stochastic model is checked by a deterministic environment at every load-bearing step. The [elenchus](https://github.com/m62624/elenchus) engine (a three-valued SAT checker with an English-like DSL) is embedded as wasm, and three **hard gates** compile durable artifacts into logic programs — the model never hand-writes gate VRF, so it cannot fake or trivialize a check:
+An experiment: the workflow keeps a few structured artifacts and checks them mechanically before moving on. It might keep a small local model honest over a long task, or it might not — that's what this is testing.
 
-1. **Spec gate** (`spec` stage): after discovery the model authors `spec.json` — numbered `REQ-n` requirements with acceptance atoms, non-goals, machine-checkable constraints, and evidence-backed assumptions. A deterministic compiler turns it into VRF; the engine catches contradictions (CONFLICT), unaddressed requirements, and unestablished atoms — and every gap becomes a concrete question to you. Genuinely inexpressible requirements (taste, UX feel) exit through the *freedom valve*: deferred to human judgment with a recorded rationale, never force-formalized.
-2. **Coverage gate** (`planning`): every task cites the `REQ-n` ids it discharges. `TOTAL … ON requirements` names every dropped requirement; `TOTAL … ON tasks` names every orphan task. The plan cannot enter execution while either list is non-empty.
-3. **Test-coverage gate** (`execution`): each task carries a behavior board (`BHV-n`, `planned → red → green`). A behavior turns *red* only with a named failing test and *green* only after red — test-first enforced by data. The engine names every behavior still uncovered before the task may finish.
+- **spec** — after discovery the model writes `spec.json`: numbered `REQ-n` requirements, non-goals, constraints, assumptions. Requirements that don't fit a mechanical check (taste, UX) are deferred to your judgment with a written reason instead of being faked.
+- **planning** — every task cites the `REQ-n` ids it covers. A dropped requirement, or a task that covers nothing, is named and blocks the plan from reaching execution.
+- **execution** — each task keeps a behavior board (`BHV-n`, `planned → red → green`): a behavior only goes red with a named failing test and green only after red, so tests come first. Uncovered behaviors and branches are named before the task can finish.
 
-A verdict is bound to a sha256 of the artifact it was computed from: editing `spec.json`, a task's requirements, or the behavior board silently invalidates the pass. Plans created before this layer keep working — every gate degrades gracefully when the artifact does not exist.
+A pass is tied to a hash of what it checked, so editing the spec, a task's requirements, or the board re-opens the gate. Plans made before this existed keep working — a gate with no artifact to check is skipped.
 
 ---
 
