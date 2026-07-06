@@ -22,6 +22,8 @@ async function makePreflight(overrides: {
 	step: string;
 	stepStatus?: string;
 	pendingFullStatus?: boolean;
+	/** Defaults to the fixture stage ("execution") — i.e. already briefed here. */
+	lastFullStatusStage?: string;
 }): Promise<{ fs: MockPlannerFs; preflight: PlannerPreflightResult }> {
 	const fs = new MockPlannerFs();
 	const projectPaths = createProjectStoragePaths({
@@ -48,6 +50,7 @@ async function makePreflight(overrides: {
 		activeTaskId: "task-1",
 		currentBranch: "task/plan-a/task-1",
 		pendingFullStatus: overrides.pendingFullStatus ?? false,
+		lastFullStatusStage: overrides.lastFullStatusStage ?? "execution",
 	};
 	const entry = {
 		key: "execution",
@@ -105,6 +108,17 @@ describe("buildPlannerStatusText — instruction inlining", () => {
 		const { fs, preflight } = await makePreflight({
 			step: "implement_task",
 			pendingFullStatus: true,
+		});
+		const text = await buildPlannerStatusText({ fs, preflight });
+		expect(text).toContain("## Current Stage Instruction");
+		expect(text).toContain("UNIQUE_STAGE_INSTRUCTION_BODY");
+	});
+
+	it("inlines the full stage instruction on the first status of a new stage", async () => {
+		// Last briefed on a different stage — entering execution shows its job once.
+		const { fs, preflight } = await makePreflight({
+			step: "implement_task",
+			lastFullStatusStage: "planning",
 		});
 		const text = await buildPlannerStatusText({ fs, preflight });
 		expect(text).toContain("## Current Stage Instruction");

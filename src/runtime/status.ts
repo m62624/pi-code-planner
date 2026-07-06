@@ -1000,10 +1000,13 @@ export async function buildPlannerStatusText(
 				projectPaths: preflight.context.projectPaths,
 			})
 		: [];
-	// Right after a compact the model's working memory is gone, so the first
-	// planner_status re-inlines the full stage instruction; otherwise it stays
-	// compact and the model reads the instruction file on demand (see preamble).
-	const inlineStageInstruction = state.pendingFullStatus === true;
+	// Inline the full stage instruction on unfamiliar ground: the first status
+	// on entering a new stage (the model doesn't yet know that stage's job) or
+	// the first status after a compact (its working memory was wiped). Otherwise
+	// stay compact and let the model read the instruction file on demand.
+	const inlineStageInstruction =
+		state.pendingFullStatus === true ||
+		state.lastFullStatusStage !== state.stage;
 	const instructionBundle = inlineStageInstruction
 		? await readCurrentStageInstruction(input.fs, preflight)
 		: [];
