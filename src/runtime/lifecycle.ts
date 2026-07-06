@@ -262,8 +262,10 @@ function stateMachineDecision(
 					reason: `Planner step is running: ${state.stage}/${state.step}.`,
 					modelMessage:
 						"Finish the current step and start the next one in a single call: planner_finish_step. You MUST specify one of these targets: " +
-						branchingTargets.join(", ") +
-						" The response contains the next step name and instruction keys. Load those instruction files while waiting for the response, then call planner_status to verify the state.",
+						branchingTargets
+							.map((p) => `{stage: '${p.stage}', step: '${p.step}'}`)
+							.join(" or ") +
+						". The response contains the next step name and instruction keys. Load those instruction files while waiting for the response, then call planner_status to verify the state.",
 				});
 			}
 			return transitionDecision({

@@ -403,6 +403,11 @@ export interface PlanStateRecord {
 	contracts: PlannerContractsState;
 	execRunning: boolean;
 	requiresCompact: boolean;
+	// One-shot: set true when a compact boundary completes, so the FIRST
+	// planner_status after a compact re-inlines the full stage instruction (the
+	// model's working memory was just wiped). Consumed — cleared — by that first
+	// planner_status; subsequent statuses stay compact.
+	pendingFullStatus?: boolean;
 	requiresUserDecision: boolean;
 	broken: boolean;
 	brokenReason: string | null;
@@ -512,6 +517,7 @@ export function createInitialPlanState(input: {
 		contracts: createDefaultPlannerContractsState(),
 		execRunning: false,
 		requiresCompact: false,
+		pendingFullStatus: false,
 		requiresUserDecision: false,
 		broken: false,
 		brokenReason: null,

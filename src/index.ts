@@ -2627,6 +2627,21 @@ function registerPlannerTools(
 				projectPaths,
 			});
 
+			// The full stage instruction is re-inlined only on the FIRST status
+			// after a compact; consume the one-shot flag so the next status is
+			// compact again.
+			const context = orchestration.preflight.context;
+			if (
+				context.status === "ready" &&
+				context.planPaths &&
+				context.state.pendingFullStatus === true
+			) {
+				await updatePlanState(fs, context.planPaths, (state) => ({
+					...state,
+					pendingFullStatus: false,
+				}));
+			}
+
 			return {
 				content: [{ type: "text", text: orchestration.statusText }],
 				details: orchestration,

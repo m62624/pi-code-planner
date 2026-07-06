@@ -176,6 +176,21 @@ describe("planner state machine", () => {
 		).toMatchObject({ stepStatus: "completed", nextStep: "implement_task" });
 	});
 
+	it("names the allowed fork targets in the ambiguous_next_step error", () => {
+		const current = state({
+			stage: "execution",
+			step: "run_final_tests",
+			stepStatus: "running",
+		});
+		// The model calls finish_step with no target at a fork; the error must
+		// spell out the valid positions so it can retry correctly, not guess again.
+		expect(() => completePlannerStep(current)).toThrow(
+			/multiple allowed next positions/,
+		);
+		expect(() => completePlannerStep(current)).toThrow(/capture_skill/);
+		expect(() => completePlannerStep(current)).toThrow(/implement_task/);
+	});
+
 	it("advances compact_task linearly to select_next_task", () => {
 		const current = state({
 			stage: "execution",
@@ -441,6 +456,8 @@ describe("planner state machine", () => {
 			stepStatus: "running",
 			nextStep: null,
 			requiresCompact: false,
+			// The next planner_status re-inlines the full stage instruction once.
+			pendingFullStatus: true,
 		});
 	});
 

@@ -388,6 +388,9 @@ export function completePlannerCompact(
 			stepStatus: "completed",
 			nextStep: next?.step ?? null,
 			requiresCompact: false,
+			// The compact wiped the model's working memory; re-inline the full
+			// stage instruction on the very next planner_status (consumed there).
+			pendingFullStatus: true,
 			blockedReason: null,
 		}),
 	);
@@ -478,9 +481,12 @@ function selectNextPosition(
 		return allowed[0] ?? null;
 	}
 	if (!requested) {
+		const targets = allowed
+			.map((p) => `{stage: '${p.stage}', step: '${p.step}'}`)
+			.join(" or ");
 		throw new PlannerStateMachineError(
 			"ambiguous_next_step",
-			`Planner step ${state.stage}/${state.step} has multiple allowed next positions.`,
+			`Planner step ${state.stage}/${state.step} has multiple allowed next positions: ${targets}. Specify one via nextStage/nextStep.`,
 		);
 	}
 	const next = allowed.find(
