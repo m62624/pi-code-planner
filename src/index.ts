@@ -98,6 +98,7 @@ import {
 import {
 	openPlannerWorkspace,
 	registerPlannerDashboard,
+	setWorkspaceCompactIndicator,
 } from "./runtime/dashboard";
 import {
 	DEBUG_INSTRUMENTATION_TYPES,
@@ -3508,8 +3509,9 @@ function registerPlannerCompactEvents(
 	// Animated indicator while context is compacting, so a long compaction never
 	// looks frozen. It renders as an `aboveEditor` widget (a banner at the top of
 	// the input area) rather than a footer status: the footer was already crowded
-	// with the planner timer line, and the widget shows in both the plain chat and
-	// the /planner-dashboard workspace.
+	// with the planner timer line. In plain chat this `aboveEditor` widget is the
+	// banner; the /planner-dashboard workspace overlay draws OVER it, so the same
+	// line is mirrored into the workspace via setWorkspaceCompactIndicator.
 	// Content dedup: the SDK repaints on every setWidget (no diffing), so we skip
 	// a push when the rendered content is byte-identical to what is already shown.
 	// `null` means the widget is currently cleared. This is what makes the coarse
@@ -3518,7 +3520,12 @@ function registerPlannerCompactEvents(
 	const setCompactWidget = (
 		ctx: ExtensionContext,
 		lines: string[] | undefined,
+		plain?: string,
 	): void => {
+		// The /planner-dashboard overlay covers the `aboveEditor` widget, so mirror
+		// the un-themed line into the workspace, which paints it with its own
+		// palette. `undefined` lines ⇒ cleared ⇒ null. (This dedups internally.)
+		setWorkspaceCompactIndicator(plain ?? null);
 		const key = lines === undefined ? null : lines.join("\n");
 		if (key === lastWidgetKey) return;
 		lastWidgetKey = key;
@@ -3644,7 +3651,7 @@ function registerPlannerCompactEvents(
 					elapsedMs,
 					estimate,
 				});
-				setCompactWidget(ctx, [ctx.ui.theme.fg("accent", text)]);
+				setCompactWidget(ctx, [ctx.ui.theme.fg("accent", text)], text);
 			} catch {
 				// Never let a redraw throw out of the interval.
 			}

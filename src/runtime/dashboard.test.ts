@@ -1,6 +1,9 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it } from "vitest";
-import { PlannerWorkspaceComponent } from "./dashboard";
+import {
+	PlannerWorkspaceComponent,
+	setWorkspaceCompactIndicator,
+} from "./dashboard";
 
 /**
  * Behavioral tests for the workspace wrapper around Pi's native Editor: the
@@ -209,6 +212,24 @@ describe("PlannerWorkspaceComponent rendering", () => {
 		// Measure visible width (what the TUI checks), ignoring ANSI/cursor markers.
 		for (const line of lines) {
 			expect(visibleWidth(line)).toBeLessThanOrEqual(80);
+		}
+	});
+
+	it("surfaces the compact indicator as a banner and clears it", () => {
+		// The plain-chat `aboveEditor` widget is covered by the overlay, so the
+		// dashboard must mirror the line itself (bug: it was invisible in the
+		// workspace during compaction).
+		const { component } = makeComponent({ busy: false });
+		try {
+			setWorkspaceCompactIndicator("Compacting 68k tok (threshold) ▓▓░░ 40%");
+			expect(component.render(80).join("\n")).toContain("Compacting 68k tok");
+			// Clearing it (compaction ended) drops the banner from the frame.
+			setWorkspaceCompactIndicator(null);
+			expect(component.render(80).join("\n")).not.toContain(
+				"Compacting 68k tok",
+			);
+		} finally {
+			setWorkspaceCompactIndicator(null);
 		}
 	});
 });
