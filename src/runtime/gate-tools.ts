@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
 import { isPathInsideOrEqual } from "../path-utils";
+import { readTaskBehaviorsIfExists } from "../storage/behavior-store";
 import type { PlannerFs } from "../storage/fs";
 import {
 	createTaskStoragePaths,
@@ -20,6 +21,10 @@ import {
 	compileSpecConsistency,
 	specSubjectToRequirementId,
 } from "../vrf/spec-compiler";
+import {
+	compileTddCoverage,
+	type TddCoveragePhase,
+} from "../vrf/tdd-coverage-compiler";
 import { runElenchusCheck } from "./elenchus-engine";
 import { writeElenchusLastCheck } from "./elenchus-tools";
 import {
@@ -30,10 +35,10 @@ import {
 export const PLANNER_GATE_TOOL_NAME = "planner_gate_check" as const;
 export type PlannerGateToolName = typeof PLANNER_GATE_TOOL_NAME;
 
-/** Gates grow with the SDD layer: tdd_coverage follows. */
 export const PLANNER_GATE_NAMES = [
 	"spec_consistency",
 	"plan_coverage",
+	"tdd_coverage",
 ] as const;
 export type PlannerGateName = (typeof PLANNER_GATE_NAMES)[number];
 
@@ -94,6 +99,13 @@ export async function executePlannerGateTool(input: {
 				return await runPlanCoverageGate({
 					fs: input.fs,
 					planPaths,
+					position: { stage: state.stage, step: state.step },
+				});
+			case "tdd_coverage":
+				return await runTddCoverageGate({
+					fs: input.fs,
+					planPaths,
+					activeTaskId: state.activeTaskId,
 					position: { stage: state.stage, step: state.step },
 				});
 		}
@@ -326,6 +338,107 @@ function describeCoverageGaps(
 				gaps.push(
 					`Task "${taskSubjects[subject] ?? subject}" is ORPHAN work — it traces to no requirement. Cite the REQ-n it discharges via planner_task_upsert, or remove/merge the task.`,
 				);
+			} else {
+				gaps.push(`Blocked by \`${blocked}\`.`);
+			}
+		}
+	}
+	return gaps;
+}
+
+async function runTddCoverageGate(input: {
+	fs: PlannerFs;
+	planPaths: PlanStoragePaths;
+	activeTaskId: string | null;
+	position: { stage: string; step: string };
+}): Promise<PlannerGateToolResult> {
+	if (!input.activeTaskId) {
+		return blocked(
+			"No active task — the tdd_coverage gate checks the behavior board of the task being executed. Select a task first (execution/prepare_task).",
+		);
+	}
+	const taskPaths = createTaskStoragePaths(input.planPaths, input.activeTaskId);
+	const behaviors = await readTaskBehaviorsIfExists(input.fs, taskPaths);
+	if (!behaviors) {
+		return blocked(
+			`tasks/${input.activeTaskId}/behaviors.json does not exist. Enumerate the task's behaviors first with planner_behavior_upsert (at execution/write_tdd_plan), then re-run this gate.`,
+		);
+	}
+	// run_final_tests demands green witnesses; every earlier step checks red.
+	const phase: TddCoveragePhase =
+		input.position.step === "run_final_tests" ? "green" : "red";
+	const compiled = compileTddCoverage(behaviors, phase);
+	const run = await runGateProgram({
+		fs: input.fs,
+		planPaths: input.planPaths,
+		gate: "tdd_coverage",
+		fileStem: `tdd-coverage-${phase}`,
+		program: compiled.program,
+		values: {},
+		position: input.position,
+		sourceHash: sha256(await input.fs.readText(taskPaths.behaviorsJson)),
+	});
+	if (!run.ok) return blocked(run.reason);
+
+	const gaps = describeTddGaps(run.report, compiled.behaviorSubjects);
+	const consistent = run.verdict === "CONSISTENT";
+	await writeCoverageSection(input.fs, input.planPaths, {
+		heading: `## Test Coverage — ${input.activeTaskId}`,
+		lines: [
+			`Phase: ${phase} — Verdict: **${run.verdict}** (engine ${run.engineVersion}, ${new Date().toISOString()})`,
+			`Behaviors: ${compiled.behaviorCount}`,
+			"",
+			...(gaps.length > 0
+				? ["Uncovered:", ...gaps.map((gap) => `- ${gap}`)]
+				: [
+						`No holes — every behavior has its ${phase === "green" ? "red AND green" : "red"} witness.`,
+					]),
+		],
+	});
+	return {
+		status: "applied",
+		toolName: PLANNER_GATE_TOOL_NAME,
+		text: [
+			`tdd_coverage gate (${phase}) for ${input.activeTaskId}: **${run.verdict}** (engine ${run.engineVersion}).`,
+			`Compiled program: ${run.sourcePath}`,
+			`Raw verdict: ${run.resultPath}`,
+			"",
+			...(gaps.length > 0
+				? [
+						"The machine counts these behaviors as uncovered:",
+						...gaps.map((gap) => `- ${gap}`),
+						"",
+					]
+				: []),
+			consistent
+				? `CONSISTENT: every behavior has its ${phase} witness. Call planner_finish_step.`
+				: phase === "red"
+					? "Not CONSISTENT: write the missing failing test(s), flip each behavior planned→red via planner_behavior_upsert (with the test file+name), and re-run this gate."
+					: "Not CONSISTENT: make the named tests pass, flip each behavior red→green via planner_behavior_upsert, and re-run this gate.",
+		].join("\n"),
+		details: {
+			gate: "tdd_coverage",
+			verdict: run.verdict,
+			sourcePath: run.sourcePath,
+			resultPath: run.resultPath,
+			gaps,
+		},
+	};
+}
+
+function describeTddGaps(
+	report: ElenchusJsonReport,
+	behaviorSubjects: Record<string, string>,
+): string[] {
+	const gaps: string[] = [];
+	for (const warning of report.warnings ?? []) {
+		for (const blocked of warning.blocked_by ?? []) {
+			const subject = blocked.split(" ")[0] ?? blocked;
+			const id = behaviorSubjects[subject] ?? subject;
+			if (blocked.includes("no has_red_test witness")) {
+				gaps.push(`${id}: no failing test yet (needs a named red witness).`);
+			} else if (blocked.includes("no has_green_test witness")) {
+				gaps.push(`${id}: its test does not pass yet (needs a green witness).`);
 			} else {
 				gaps.push(`Blocked by \`${blocked}\`.`);
 			}

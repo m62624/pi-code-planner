@@ -13,6 +13,10 @@ import type {
 	GitWorktreeAddInput,
 	GitWorktreeRemoveInput,
 } from "../git/runner";
+import {
+	validateTaskBehaviors,
+	writeTaskBehaviors,
+} from "../storage/behavior-store";
 import type { PlannerFs } from "../storage/fs";
 import {
 	createPlanStoragePaths,
@@ -671,6 +675,114 @@ describe("workflowToolTransition", () => {
 
 		// A fresh CONSISTENT pass advances.
 		await writeGateCheck("CONSISTENT");
+		const finished = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(finished.result.status).toBe("applied");
+	});
+
+	it("gates execution/write_tests on red tdd_coverage when a behavior board exists", async () => {
+		const fs = new MockPlannerFs();
+		const git = new MockGitRunner();
+		const projectPaths = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+		const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+		await ensureProjectRecord(fs, projectPaths);
+		await initializePlanFiles(
+			fs,
+			planPaths,
+			createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+		);
+		await fs.mkdirp(worktreePath);
+		const atWriteTests = () => ({
+			...createInitialPlanState({
+				baseBranch: "main",
+				planBranch: "plan/plan-a",
+				worktreePath,
+			}),
+			stage: "execution" as const,
+			step: "write_tests" as const,
+			stepStatus: "running" as const,
+			activeTaskId: "alpha",
+			currentBranch: "plan/plan-a",
+		});
+		await initializePlanState(fs, planPaths, atWriteTests());
+		await setActivePlan(fs, projectPaths, "plan-a");
+		await upsertTaskArtifacts(fs, planPaths, {
+			taskId: "alpha",
+			title: "Alpha",
+			objective: "o",
+			scope: [],
+			acceptanceCriteria: ["ok"],
+		});
+		const taskPaths = createTaskStoragePaths(planPaths, "alpha");
+		await fs.writeTextAtomic(
+			taskPaths.tddMd,
+			"## Pre-Implementation Proof Contract\n\ncontent\n",
+		);
+
+		// Legacy task (no behavior board): the gate does not apply.
+		const legacy = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(legacy.result.status).toBe("applied");
+
+		// With a board, the red gate becomes mandatory.
+		await initializePlanState(fs, planPaths, atWriteTests());
+		await writeTaskBehaviors(
+			fs,
+			taskPaths,
+			validateTaskBehaviors({
+				taskId: "alpha",
+				behaviors: [
+					{
+						id: "BHV-1",
+						statement: "Behavior.",
+						kind: "happy",
+						requirement: null,
+						test: { file: "src/x.test.ts", name: "case" },
+						status: "red",
+					},
+				],
+				previous: null,
+			}),
+		);
+		const noRun = await executePlannerWorkflowTool({
+			fs,
+			git,
+			projectPaths,
+			toolName: "planner_finish_step",
+			params: {},
+		});
+		expect(noRun.result.status).toBe("blocked");
+		expect(noRun.text).toContain("tdd_coverage");
+
+		const boardHash = createHash("sha256")
+			.update(await fs.readText(taskPaths.behaviorsJson))
+			.digest("hex");
+		await fs.writeTextAtomic(
+			join(planPaths.elenchusDir, "last-check.json"),
+			JSON.stringify({
+				name: "tdd-coverage-red",
+				stage: "execution",
+				step: "write_tests",
+				outcome: "CONSISTENT",
+				recordedAt: "2026-07-06T00:00:00.000Z",
+				gate: "tdd_coverage",
+				sourceHash: boardHash,
+			}),
+		);
 		const finished = await executePlannerWorkflowTool({
 			fs,
 			git,

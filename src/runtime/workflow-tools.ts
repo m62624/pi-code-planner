@@ -310,6 +310,45 @@ async function validatePlanCoverageGatePassed(
 	return null;
 }
 
+/**
+ * The SDD test-coverage gate (execution phase): when the active task has a
+ * behavior board (behaviors.json), leaving write_tests requires every
+ * behavior to have a RED witness, and leaving run_final_tests forward
+ * requires GREEN — verified by the latest tdd_coverage run, fresh against
+ * the board's current content. Legacy tasks without a board skip the gate.
+ */
+async function validateTddCoverageGatePassed(
+	fs: PlannerFs,
+	planPaths: PlanStoragePaths,
+	state: PlanStateRecord,
+): Promise<string | null> {
+	if (!state.activeTaskId) return null;
+	const taskPaths = createTaskStoragePaths(planPaths, state.activeTaskId);
+	if (!(await fs.exists(taskPaths.behaviorsJson))) {
+		return null;
+	}
+	const phase = state.step === "run_final_tests" ? "green" : "red";
+	const lastCheck = await readElenchusLastCheck(fs, planPaths.elenchusDir);
+	if (
+		lastCheck?.gate !== "tdd_coverage" ||
+		lastCheck.name !== `tdd-coverage-${phase}`
+	) {
+		return `This task has a behavior board, so test coverage is a hard gate. Call planner_gate_check with gate: "tdd_coverage" at this step and reach CONSISTENT (${phase} witnesses) before advancing.`;
+	}
+	if (lastCheck.outcome !== "CONSISTENT") {
+		return `The latest tdd_coverage (${phase}) gate ended in ${lastCheck.outcome} — the machine still counts behaviors as uncovered. Write/fix the named tests, flip the toggles via planner_behavior_upsert, and re-run planner_gate_check.`;
+	}
+	if (lastCheck.sourceHash) {
+		const currentHash = createHash("sha256")
+			.update(await fs.readText(taskPaths.behaviorsJson))
+			.digest("hex");
+		if (lastCheck.sourceHash !== currentHash) {
+			return "behaviors.json changed after the last tdd_coverage pass — the verdict is stale. Re-run planner_gate_check.";
+		}
+	}
+	return null;
+}
+
 const INTERNAL_DONE_STEPS = new Set<string>([
 	"prepare_output_branch",
 	"merge_or_export_result",
@@ -383,6 +422,30 @@ async function validateWorkflowExit(input: {
 			);
 			if (gateBlock) {
 				return gateBlock;
+			}
+		}
+	}
+	if (
+		state.stage === "execution" &&
+		(state.step === "write_tests" || state.step === "run_final_tests")
+	) {
+		// Going back from run_final_tests to implement_task (a late failure
+		// being fixed) is always allowed; only the FORWARD transition demands
+		// the phase's coverage witnesses.
+		const target =
+			input.transition.type === "finish_step"
+				? input.transition.next
+				: undefined;
+		const backToImplement =
+			state.step === "run_final_tests" && target?.step === "implement_task";
+		if (!backToImplement) {
+			const tddBlock = await validateTddCoverageGatePassed(
+				input.fs,
+				input.orchestrator.preflight.context.planPaths,
+				state,
+			);
+			if (tddBlock) {
+				return tddBlock;
 			}
 		}
 	}

@@ -20,6 +20,7 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_questions_resolve",
 	"planner_spec_submit",
 	"planner_gate_check",
+	"planner_behavior_upsert",
 	"planner_plan_submit",
 	"planner_discovery_submit",
 	"planner_tdd_submit",
@@ -179,6 +180,8 @@ const STEP_ALLOWED_TOOLS = {
 		write_tdd_plan: [
 			"planner_git_inspect",
 			"planner_tdd_submit",
+			"planner_behavior_upsert",
+			"planner_gate_check",
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
@@ -192,6 +195,8 @@ const STEP_ALLOWED_TOOLS = {
 		write_tests: [
 			"planner_git_inspect",
 			"planner_tdd_submit",
+			"planner_behavior_upsert",
+			"planner_gate_check",
 			"planner_git_commit",
 			"planner_report_stuck",
 			"planner_skill_create",
@@ -205,6 +210,8 @@ const STEP_ALLOWED_TOOLS = {
 		run_failing_tests: [
 			"planner_git_inspect",
 			"planner_tdd_submit",
+			"planner_behavior_upsert",
+			"planner_gate_check",
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
@@ -266,6 +273,8 @@ const STEP_ALLOWED_TOOLS = {
 		run_final_tests: [
 			"planner_git_inspect",
 			"planner_tdd_submit",
+			"planner_behavior_upsert",
+			"planner_gate_check",
 			"planner_git_commit",
 			"planner_report_stuck",
 			"planner_skill_create",

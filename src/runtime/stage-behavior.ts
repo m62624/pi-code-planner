@@ -395,6 +395,8 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		expectedTools: [
 			"planner_status",
 			"planner_tdd_submit",
+			"planner_behavior_upsert",
+			"planner_gate_check",
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
@@ -416,6 +418,8 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["tdd_plan_written"],
 		expectedTools: [
 			"planner_tdd_submit",
+			"planner_behavior_upsert",
+			"planner_gate_check",
 			"planner_git_inspect",
 			"planner_git_commit",
 			"planner_report_stuck",
@@ -439,6 +443,8 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		expectedTools: [
 			"planner_status",
 			"planner_tdd_submit",
+			"planner_behavior_upsert",
+			"planner_gate_check",
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
@@ -530,6 +536,8 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		requiredGates: ["refactor_checked"],
 		expectedTools: [
 			"planner_tdd_submit",
+			"planner_behavior_upsert",
+			"planner_gate_check",
 			"planner_git_commit",
 			"planner_report_stuck",
 			"planner_skill_create",

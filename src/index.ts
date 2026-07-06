@@ -60,6 +60,10 @@ import {
 	type PlannerArtifactToolName,
 } from "./runtime/artifact-tools";
 import {
+	executePlannerBehaviorTool,
+	PLANNER_BEHAVIOR_TOOL_NAME,
+} from "./runtime/behavior-tools";
+import {
 	buildPlannerCompactInstructionBundle,
 	buildPlannerPostCompactMessage,
 	clearPlannerCompactionInFlight,
@@ -3036,6 +3040,73 @@ function registerPlannerTools(
 			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 			await recordPlannerToolActivityForProject({ fs, projectPaths });
 			const result = await executePlannerSpecTool({
+				fs,
+				git: gitRunner,
+				projectPaths,
+				params,
+			});
+			return plannerToolResponse(result);
+		},
+	});
+
+	pi.registerTool({
+		name: PLANNER_BEHAVIOR_TOOL_NAME,
+		label: "Planner Behavior Upsert",
+		description:
+			"Persist the active task's behavior board (tasks/<id>/behaviors.json): every observable behavior with a status toggle planned → red (a named test exists and FAILS) → green (it passes). The tdd_coverage gate compiles this board and NAMES every behavior still missing the phase's witness — coverage is read off the machine, not believed.",
+		promptSnippet:
+			'At execution/write_tdd_plan, enumerate the task\'s behaviors with planner_behavior_upsert (all `planned`; kinds: happy/edge/error/concurrency; link REQ-n where known). As each failing test lands at write_tests, resubmit the FULL list flipping that behavior to `red` with its {file, name}. After the implementation passes at run_final_tests, flip to `green`. A planned→green jump is rejected — test-first is mechanical. Then planner_gate_check with gate: "tdd_coverage" shows exactly what is still uncovered.',
+		parameters: {
+			type: "object",
+			properties: {
+				taskId: { type: "string", description: "The active task id." },
+				behaviors: {
+					type: "array",
+					description: "The FULL behavior list (not a delta).",
+					items: {
+						type: "object",
+						properties: {
+							id: { type: "string", description: "Stable id, BHV-<n>." },
+							statement: {
+								type: "string",
+								description: "The observable behavior, as a checkable claim.",
+							},
+							kind: {
+								type: "string",
+								enum: ["happy", "edge", "error", "concurrency"],
+							},
+							requirement: {
+								type: ["string", "null"],
+								description: "Optional REQ-n this behavior exercises.",
+							},
+							test: {
+								type: ["object", "null"],
+								description:
+									"The witnessing test; required once status is red/green.",
+								properties: {
+									file: { type: "string" },
+									name: { type: "string" },
+								},
+								required: ["file", "name"],
+								additionalProperties: false,
+							},
+							status: {
+								type: "string",
+								enum: ["planned", "red", "green"],
+							},
+						},
+						required: ["id", "statement", "kind", "status"],
+						additionalProperties: false,
+					},
+				},
+			},
+			required: ["taskId", "behaviors"],
+			additionalProperties: false,
+		} as never,
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
+			const result = await executePlannerBehaviorTool({
 				fs,
 				git: gitRunner,
 				projectPaths,

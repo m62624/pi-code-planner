@@ -468,6 +468,7 @@ export const PLANNER_STEP_RULES = {
 		objective: "Write the TDD plan before changing behavior.",
 		requiredActions: [
 			"Read task.md and relevant source files, then write tdd.md with failing test strategy and checks.",
+			"Enumerate the task's observable behaviors on the behavior board via planner_behavior_upsert: one BHV-n per behavior (kinds happy/edge/error/concurrency, link REQ-n where known), all with status planned. The tdd_coverage gate will NAME every behavior that later lacks a test.",
 			"Default to mechanically verifying with planner_elenchus_check that the cases your test plan claims to cover are complete and non-contradictory, before writing tests (see the elenchus skill). Record resolution=not_applicable with a one-line reason only when the task has no conditional behavior to cover.",
 			describeRecommendedVrfTemplates("execution", "write_tdd_plan") ?? "",
 		],
@@ -484,12 +485,16 @@ export const PLANNER_STEP_RULES = {
 			"Write failing/mock/contract tests before production implementation.",
 		requiredActions: [
 			"Write tests, fixtures, mocks, and required test harness wiring for the active task.",
+			"As each named failing test lands, flip its behavior planned→red on the board via planner_behavior_upsert (full list, with the test {file, name}).",
+			'Call planner_gate_check with gate: "tdd_coverage" — it NAMES every behavior still without a red witness; the step cannot finish until it is CONSISTENT (when a behavior board exists).',
 			"Append the test intent and changed test files to tdd.md. If project files changed, commit through planner_git_commit before continuing.",
 		],
-		allowedNow: ["Edit test files and necessary test integration files."],
+		allowedNow: [
+			"Edit test files and necessary test integration files; use planner_behavior_upsert and planner_gate_check.",
+		],
 		forbiddenNow: ["Do not implement production behavior."],
 		exitCondition:
-			"tdd.md records the test coverage, project files are committed, and tests are expected to fail or catch missing behavior.",
+			"Every behavior on the board has a red witness (tdd_coverage CONSISTENT), tdd.md records the test coverage, project files are committed.",
 		nextInstruction: "Call planner_finish_step to open run_failing_tests.",
 	}),
 	run_failing_tests: stepRule("execution", "run_failing_tests", {
@@ -581,15 +586,17 @@ export const PLANNER_STEP_RULES = {
 		objective: "Verify the completed task branch.",
 		requiredActions: [
 			"Run final task checks and verify no accidental out-of-scope changes.",
-			"If a check fails and needs a code edit (this step cannot edit project files): call planner_finish_step with target {stage: 'execution', step: 'implement_task'} to fix it, then re-verify. Do NOT use planner_fail_step for this — fail/retry only re-runs the same step.",
+			'Flip each passing behavior red→green on the board via planner_behavior_upsert, then call planner_gate_check with gate: "tdd_coverage" — it NAMES every behavior whose test does not pass yet; the forward transition cannot finish until it is CONSISTENT (when a behavior board exists).',
+			"If a check fails and needs a code edit (this step cannot edit project files): call planner_finish_step with target {stage: 'execution', step: 'implement_task'} to fix it, then re-verify. Do NOT use planner_fail_step for this — fail/retry only re-runs the same step. Going back never requires the gate.",
 		],
 		allowedNow: [
-			"Run checks and inspect the planner diff (no project edits here).",
+			"Run checks and inspect the planner diff (no project edits here); use planner_behavior_upsert and planner_gate_check.",
 		],
 		forbiddenNow: [
 			"Do not merge task to plan while tests fail or project files remain uncommitted.",
 		],
-		exitCondition: "Final checks pass and the worktree is clean.",
+		exitCondition:
+			"Final checks pass, every behavior is green (tdd_coverage CONSISTENT), and the worktree is clean.",
 		nextInstruction:
 			"On success: planner_finish_step with target execution/capture_skill. On a fix that needs edits: planner_finish_step with target execution/implement_task.",
 	}),

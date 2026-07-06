@@ -45,6 +45,7 @@ export interface TaskStoragePaths {
 	taskMd: string;
 	tddMd: string;
 	refactorMd: string;
+	behaviorsJson: string;
 }
 
 export function createProjectStoragePaths(input: {
@@ -121,5 +122,6 @@ export function createTaskStoragePaths(
 		taskMd: join(taskDir, "task.md"),
 		tddMd: join(taskDir, "tdd.md"),
 		refactorMd: join(taskDir, "refactor.md"),
+		behaviorsJson: join(taskDir, "behaviors.json"),
 	};
 }
