@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { EXTENSION_NAME } from "../constants/extension";
+import { EXTENSION_NAME } from "../constants";
 import type { PlannerFs } from "../storage/fs";
 import { loadBundledElenchusSkill } from "./elenchus-engine";
 

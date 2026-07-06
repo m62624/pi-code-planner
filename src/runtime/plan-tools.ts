@@ -37,6 +37,7 @@ import {
 } from "../worktree/paths";
 import type { PlannerGitReality } from "./git-state-sync";
 import { inspectPlannerGitReality } from "./git-state-sync";
+import { asObject } from "./params";
 import {
 	createPlannerPlanDescription,
 	createPlannerPlanTitle,
@@ -49,7 +50,6 @@ import {
 	blockedResult,
 	type PlannerToolResult,
 } from "./tool-result";
-import { asObject } from "./values";
 
 export const PLANNER_PLAN_TOOL_NAMES = ["planner_create_plan"] as const;
 

@@ -18,9 +18,8 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
-import { requiredString } from "./params";
+import { asObject, requiredString } from "./params";
 import { blockedResult } from "./tool-result";
-import { asObject } from "./values";
 
 export const PLANNER_BEHAVIOR_TOOL_NAME = "planner_behavior_upsert" as const;
 export type PlannerBehaviorToolName = typeof PLANNER_BEHAVIOR_TOOL_NAME;

@@ -23,6 +23,7 @@ import {
 	type PlannerOrchestratorResult,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { asObject } from "./params";
 import { validateTaskMergeScopeAudit } from "./tdd-evidence";
 import type { PlannerToolExecutionInput } from "./tool-context";
 import {
@@ -30,7 +31,6 @@ import {
 	blockedResult,
 	type PlannerToolResult,
 } from "./tool-result";
-import { asObject } from "./values";
 
 export const PLANNER_GIT_TOOL_NAMES = [
 	"planner_git_inspect",

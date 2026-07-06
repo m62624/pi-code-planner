@@ -1,4 +1,4 @@
-import { asObject } from "./values";
+import { asObject } from "./params";
 
 /**
  * A tiny polymorphic codec layer for parsing tool arguments.

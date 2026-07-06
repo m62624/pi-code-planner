@@ -8,7 +8,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
-import { requiredString } from "./params";
+import { asObject, requiredString } from "./params";
 import {
 	formatRefactorReviewMarkdown,
 	REFACTOR_REVIEW_CATEGORIES,
@@ -21,7 +21,6 @@ import {
 	validateRefactorReviewMarkdown,
 } from "./refactor-review";
 import { blockedResult } from "./tool-result";
-import { asObject } from "./values";
 
 export const PLANNER_REFACTOR_TOOL_NAMES = ["planner_refactor_review"] as const;
 export type PlannerRefactorToolName =
