@@ -15,6 +15,7 @@ import {
 	PLANNER_MIN_FLOOR_RATIO,
 	PLANNER_MIN_OUTPUT_RESERVE,
 	PLANNER_TOOL_HEADROOM_RATIO,
+	PLANNER_TURN_GROWTH_ALPHA,
 } from "./constants";
 import { errorMessage, gitErrorMessage } from "./errors";
 import { probeGitAvailability } from "./git/git-availability";
@@ -77,6 +78,7 @@ import {
 	isPlannerCompactNothingToCompactError,
 	markPlannerCompactionInFlight,
 	markPlannerControlledCompactStarted,
+	observeTurnGrowth,
 	type PlannerCompactRuntimeState,
 	type PlannerContextBudgetDecision,
 	projectPlannerContextBudget,
@@ -3752,7 +3754,16 @@ function registerPlannerCompactEvents(
 		if (compactRuntime.compactionInFlight || !isPlanActive()) {
 			return;
 		}
-		const decision = evaluatePlannerContextBudget(ctx);
+		// Track this turn's context growth so the budget can pre-empt one typical
+		// turn before the floor (velocity heuristic), then fold that estimate into
+		// the decision. Runs every turn_end — including the ones we do not compact —
+		// so the EWMA stays live.
+		const expectedGrowth = observeTurnGrowth(
+			compactRuntime,
+			ctx.getContextUsage()?.tokens ?? null,
+			PLANNER_TURN_GROWTH_ALPHA,
+		);
+		const decision = evaluatePlannerContextBudget(ctx, 0, expectedGrowth);
 		if (!decision.run) {
 			return;
 		}
@@ -4107,6 +4118,7 @@ function compactSkipReasonText(
 function evaluatePlannerContextBudget(
 	ctx: ExtensionContext,
 	pendingInstructionTokens = 0,
+	expectedGrowthTokens = 0,
 ): PlannerContextBudgetDecision {
 	const usage = ctx.getContextUsage();
 	return projectPlannerContextBudget({
@@ -4114,6 +4126,7 @@ function evaluatePlannerContextBudget(
 		contextWindow: usage?.contextWindow ?? 0,
 		maxOutputTokens: ctx.model?.maxTokens ?? 0,
 		pendingInstructionTokens,
+		expectedGrowthTokens,
 		toolHeadroomRatio: PLANNER_TOOL_HEADROOM_RATIO,
 		maxOutputReserveRatio: PLANNER_MAX_OUTPUT_RESERVE_RATIO,
 		minOutputReserve: PLANNER_MIN_OUTPUT_RESERVE,

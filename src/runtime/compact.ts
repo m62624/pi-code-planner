@@ -19,6 +19,14 @@ export interface PlannerCompactRuntimeState {
 	// watchdog reads it so it never nudges the model mid-compaction, yet can
 	// still rescue a compact boundary that neither completed nor errored.
 	compactionInFlight: boolean;
+	// Velocity tracking for the growth-margin heuristic. `lastContextTokens` is the
+	// context size seen at the previous turn_end; `turnGrowthEwma` is an EWMA of
+	// *positive* per-turn deltas. Together they let the proactive monitor pre-empt
+	// one typical turn before the floor, instead of trusting only the fixed
+	// tool-headroom cushion. A compaction's drop is negative and folds nothing, so
+	// the tracker self-heals across a compaction with no explicit reset.
+	lastContextTokens: number | null;
+	turnGrowthEwma: number;
 }
 
 export interface PlannerCompactInstructionBundleInput {
@@ -45,7 +53,42 @@ export interface PlannerCompactInstructionSection {
 export type PlannerPostCompactDelivery = "followUp";
 
 export function createPlannerCompactRuntimeState(): PlannerCompactRuntimeState {
-	return { plannerControlledCompactInFlight: false, compactionInFlight: false };
+	return {
+		plannerControlledCompactInFlight: false,
+		compactionInFlight: false,
+		lastContextTokens: null,
+		turnGrowthEwma: 0,
+	};
+}
+
+/**
+ * Fold this turn's context growth into the EWMA and return the current expected
+ * per-turn growth (tokens). Pure w.r.t. inputs, mutates only the tracker fields.
+ *
+ * Only a *positive* delta is growth: a drop is a compaction reset (or a branch
+ * switch), not a turn's accumulation, so it folds nothing and just re-baselines
+ * `lastContextTokens`. `alpha` is the EWMA responsiveness (higher tracks recent
+ * turns faster). The first observed growth seeds the EWMA directly so a cold start
+ * is not dragged down from zero.
+ */
+export function observeTurnGrowth(
+	state: PlannerCompactRuntimeState,
+	tokens: number | null,
+	alpha: number,
+): number {
+	if (tokens === null || !Number.isFinite(tokens) || tokens < 0) {
+		return state.turnGrowthEwma;
+	}
+	const prev = state.lastContextTokens;
+	state.lastContextTokens = tokens;
+	if (prev !== null && tokens > prev) {
+		const delta = tokens - prev;
+		state.turnGrowthEwma =
+			state.turnGrowthEwma <= 0
+				? delta
+				: alpha * delta + (1 - alpha) * state.turnGrowthEwma;
+	}
+	return state.turnGrowthEwma;
 }
 
 export function markPlannerCompactionInFlight(
@@ -240,7 +283,10 @@ export function formatPlannerCompactSkipped(reason: string): string {
 
 export type PlannerCompactionSkipReason = "below_threshold";
 
-export type PlannerCompactionRunReason = "output_budget";
+// `output_budget` — already at/over the floor (the reactive catch). `growth_margin`
+// — still under the floor, but one typical turn's growth would cross it, so compact
+// now while a clean boundary is available rather than risk a mid-turn overflow.
+export type PlannerCompactionRunReason = "output_budget" | "growth_margin";
 
 export interface PlannerContextBudgetDecision {
 	/** True when context has reached the point where compaction is worthwhile. */
@@ -284,12 +330,19 @@ export function estimatePlannerInstructionTokens(text: string): number {
  * block we are about to inject so a burst does not slip past the check. When
  * `tokens` is unknown (right after a compaction) we cannot evaluate the floor, so
  * `run` is false and the `onError`/watchdog layers remain the backstop.
+ *
+ * `expectedGrowthTokens` (optional) is the observed EWMA of per-turn growth (see
+ * `observeTurnGrowth`). When the projection is still under the floor but *one more*
+ * typical turn would cross it, we compact now — pre-empting the mid-turn overflow
+ * that the between-turns check would otherwise miss, and adapting the cushion to
+ * the session's real growth rate instead of only the fixed tool-headroom ratio.
  */
 export function projectPlannerContextBudget(input: {
 	tokens: number | null;
 	contextWindow: number;
 	maxOutputTokens: number;
 	pendingInstructionTokens?: number;
+	expectedGrowthTokens?: number;
 	toolHeadroomRatio: number;
 	maxOutputReserveRatio: number;
 	minOutputReserve: number;
@@ -298,6 +351,7 @@ export function projectPlannerContextBudget(input: {
 }): PlannerContextBudgetDecision {
 	const { contextWindow } = input;
 	const pending = input.pendingInstructionTokens ?? 0;
+	const growth = Math.max(0, input.expectedGrowthTokens ?? 0);
 
 	if (input.tokens === null || contextWindow <= 0) {
 		return {
@@ -323,6 +377,12 @@ export function projectPlannerContextBudget(input: {
 
 	const projected = input.tokens + pending;
 	const headroom = floor - projected;
+	// One typical turn ahead would cross the floor: pre-empt while a clean boundary
+	// is available. Only meaningful while still under the floor (else output_budget
+	// already fires below).
+	if (projected <= floor && projected + growth > floor) {
+		return { run: true, reason: "growth_margin", floor, projected, headroom };
+	}
 	if (projected > floor) {
 		return { run: true, reason: "output_budget", floor, projected, headroom };
 	}
