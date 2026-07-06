@@ -33,6 +33,16 @@ export interface ChatRow {
 
 const MAX_COLLAPSED_LINES = 1;
 const MAX_EXPANDED_LINES = 40;
+// Cap the rendered length of a single tool-call argument value. The transcript
+// only ever shows a tool row collapsed (1 line) or expanded (≤ MAX_EXPANDED_LINES),
+// so a value far longer than that band is never visible — but while the model
+// streams a large argument (a big Edit `content`, a long task upsert), the live
+// assistant message is re-projected every frame and `argsToText` would rebuild the
+// whole growing string each time (O(n) per frame → O(n²) over the stream), and the
+// per-row layout cache — keyed on text length — would miss every frame. Capping the
+// value bounds the per-frame work and lets the cache settle once the arg passes the
+// cap. 16 KiB comfortably exceeds any expanded view.
+const MAX_TOOL_ARG_DISPLAY = 16384;
 
 export function projectSessionEntries(entries: SessionEntry[]): ChatRow[] {
 	const rows: ChatRow[] = [];
@@ -268,10 +278,6 @@ function renderRow(
 		: "  ";
 	const head = rowHead(row, palette);
 	const bodyWidth = width;
-	// Split on raw newlines first and sanitize per line inside the lazy wrap
-	// loop below — sanitizing the whole text up front would regex-scan a huge
-	// collapsed tool result just to render its first line.
-	const textLines = row.text.split("\n");
 	// Non-collapsible rows (user/assistant text) are never truncated: the
 	// transcript window in renderTranscript bounds what is visible, so capping
 	// here would silently freeze a long streaming response mid-message.
@@ -280,6 +286,15 @@ function renderRow(
 			? MAX_EXPANDED_LINES
 			: MAX_COLLAPSED_LINES
 		: Number.POSITIVE_INFINITY;
+	// Split on raw newlines first and sanitize per line inside the lazy wrap loop
+	// below. For a bounded row only the first `limit + 1` newline-delimited
+	// segments can ever matter, so slice those out instead of splitting the whole
+	// text — a huge collapsed tool result must not scan its full body to show one
+	// line.
+	const textLines =
+		limit === Number.POSITIVE_INFINITY
+			? row.text.split("\n")
+			: firstSegments(row.text, limit + 1);
 
 	// Wrap lazily: stop as soon as we have one line past the display limit
 	// (enough to know the row is truncated). Without this, every collapsed
@@ -375,6 +390,27 @@ function sanitizeText(text: string): string {
 		.replace(control, "");
 }
 
+/**
+ * The first `n` newline-delimited segments of `text`, found by scanning for the
+ * first `n` newlines rather than splitting the whole string. Bounds the work when
+ * a row only ever shows a handful of lines out of a very long (or still-streaming)
+ * body — `split("\n")` would allocate the entire line array every frame.
+ */
+function firstSegments(text: string, n: number): string[] {
+	const out: string[] = [];
+	let start = 0;
+	while (out.length < n) {
+		const nl = text.indexOf("\n", start);
+		if (nl === -1) {
+			out.push(text.slice(start));
+			break;
+		}
+		out.push(text.slice(start, nl));
+		start = nl + 1;
+	}
+	return out;
+}
+
 function wrapPlain(text: string, width: number): string[] {
 	if (text.length === 0) return [""];
 	const words = text.split(/(\s+)/);
@@ -436,14 +472,26 @@ function argsToText(args: Record<string, unknown> | null): string {
 	if (!args) return "";
 	const keys = Object.keys(args);
 	if (keys.length === 0) return "";
-	return keys.map((key) => `${key}=${stringifyArg(args[key])}`).join(" ");
+	const text = keys.map((key) => `${key}=${stringifyArg(args[key])}`).join(" ");
+	return capForDisplay(text);
 }
 
 function stringifyArg(value: unknown): string {
-	if (typeof value === "string") return value;
+	if (typeof value === "string") return capForDisplay(value);
 	if (value === null || value === undefined) return "";
-	if (typeof value === "object") return JSON.stringify(value);
+	if (typeof value === "object") return capForDisplay(JSON.stringify(value));
 	return String(value);
+}
+
+/**
+ * Bound a tool-argument string to what the transcript can ever display, so a huge
+ * value (or one still streaming in) does not drive per-frame O(n) projection/wrap
+ * cost. `String.slice` returns a cheap view in V8, so this is effectively O(cap).
+ */
+function capForDisplay(value: string): string {
+	return value.length > MAX_TOOL_ARG_DISPLAY
+		? `${value.slice(0, MAX_TOOL_ARG_DISPLAY)}…`
+		: value;
 }
 
 // ---------------------------------------------------------------------------

@@ -86,6 +86,25 @@ describe("projectSessionEntries", () => {
 		expect(result.isError).toBe(false);
 	});
 
+	it("caps a huge streaming tool-call argument so projection stays bounded", () => {
+		// A big Edit-style `content` value: the live message is re-projected every
+		// frame while this streams, so the projected text must not carry the whole
+		// value (O(n) per frame). Capped to 16 KiB + an ellipsis.
+		const huge = "x".repeat(50_000);
+		const rows = projectSessionEntries([
+			messageEntry("a1", {
+				role: "assistant",
+				content: [
+					{ type: "toolCall", name: "edit", arguments: { content: huge } },
+				],
+			}),
+		]);
+		const tool = rows.find((r) => r.role === "tool") as ChatRow;
+		expect(tool.text.length).toBeLessThan(huge.length);
+		expect(tool.text.length).toBeLessThanOrEqual(16384 + "content=".length + 1);
+		expect(tool.text.endsWith("…")).toBe(true);
+	});
+
 	it("marks tool result errors and skips hidden custom messages", () => {
 		const entries: SessionEntry[] = [
 			messageEntry("r1", {
