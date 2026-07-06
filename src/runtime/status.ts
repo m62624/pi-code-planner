@@ -549,7 +549,7 @@ export const PLANNER_STEP_RULES = {
 			"If planner_contract_check reports an update is needed, call planner_contract_upsert for the nearest meaningful AGENTS.md domain and commit that change if the worktree becomes dirty.",
 			"Use AGENTS.md as repository-owned routing memory. Add durable domain rules, parent backlinks, child index entries, read-first hints, stable contracts, and domain details that help future agents avoid reading irrelevant code.",
 			"Do not add overly specific task trivia to AGENTS.md. Record one-off task details in tdd.md.",
-			"Default to mechanically checking the implementation against its contract with planner_elenchus_check: model the changed branching, error paths, and contract-propagation duties (see the elenchus skill). Record resolution=not_applicable with a one-line reason only when the task changed no branching logic and no public surface.",
+			"Default to mechanically checking the implementation against its contract with planner_elenchus_check (resolution=checked): model each branch the task declared on its behavior board as a subject carrying its number (e.g. br_1 for BR-1 — elenchus ids take no hyphen), plus the error paths and contract-propagation duties that must hold across them (see the elenchus skill). The branch-contract and the tdd_coverage gate share one branch set: a task with declared branches CANNOT record resolution=not_applicable and a checked program must mention every declared branch — so resolution=not_applicable is only for a task whose behavior board declares no branches at all.",
 			describeRecommendedVrfTemplates("execution", "contract_check") ?? "",
 		],
 		allowedNow: [
