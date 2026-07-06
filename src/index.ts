@@ -150,6 +150,7 @@ import {
 import {
 	evaluatePlannerIdleWake,
 	initializePlannerToolActivity,
+	isPlannerWaitingOnUser,
 	markPlannerIdleWakeQueued,
 	markPlannerToolActivity,
 } from "./runtime/idle-watchdog";
@@ -3670,6 +3671,14 @@ function registerPlannerCompactEvents(
 			projectPaths,
 		});
 		if (preflight.context.status !== "ready") {
+			return;
+		}
+
+		// At a user-decision gate (done / goal approval / pending questions) the
+		// model must wait passively for the user. A post-compact follow-up would
+		// re-trigger it and land an unwanted [SYSTEM_INSTRUCTIONS] in the queue the
+		// user may have populated with their own decision — so skip the enqueue.
+		if (isPlannerWaitingOnUser(preflight.context.state)) {
 			return;
 		}
 

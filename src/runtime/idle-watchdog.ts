@@ -142,6 +142,36 @@ function resolveIdleTiming(
 	return { kind: "ready", idleMinutes: Math.floor(idleMs / MS_PER_MINUTE) };
 }
 
+/**
+ * True when the next move belongs to the *user*, not the model: a decision gate,
+ * goal approval, unanswered discovery questions, or the terminal done stage.
+ *
+ * At these gates the model must sit passively. Anything that would re-trigger it
+ * — an idle wake, or a post-compact `[SYSTEM_INSTRUCTIONS]` follow-up dropped into
+ * the queue when a compaction happens to complete here — is noise that wakes the
+ * model to re-run planner_status while the user is the one expected to act, and it
+ * pollutes the pending-message queue the user may have populated themselves. Both
+ * the watchdog and the post-compact enqueue consult this before firing.
+ */
+export function isPlannerWaitingOnUser(state: PlanStateRecord): boolean {
+	if (state.requiresUserDecision) return true;
+	// `done` (present_result / await_user_acceptance) does not set
+	// requiresUserDecision, so it must be named explicitly.
+	if (state.stage === "done") return true;
+	if (state.stage === "intake" && state.step === "await_goal_approval") {
+		return true;
+	}
+	if (
+		state.stage === "discovery" &&
+		state.step === "write_questions" &&
+		state.questionsSubmitted &&
+		!state.questionsResolved
+	) {
+		return true;
+	}
+	return false;
+}
+
 // Single source of truth for "is it safe to send an idle wake-up right now".
 // The watchdog only fires while state.step is actively running model work;
 // any blocked/compact/user-decision/done/recovery state must return a reason

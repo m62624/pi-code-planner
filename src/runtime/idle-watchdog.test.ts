@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createInitialPlanState } from "../storage/schema";
 import {
 	evaluatePlannerIdleWake,
+	isPlannerWaitingOnUser,
 	markPlannerIdleWakeQueued,
 	markPlannerToolActivity,
 } from "./idle-watchdog";
@@ -10,6 +11,62 @@ const settings = {
 	enabled: true,
 	timeoutMinutes: 10,
 };
+
+function baseState() {
+	return createInitialPlanState({
+		baseBranch: "main",
+		planBranch: "plan/plan-a",
+		worktreePath: "/repo/app/.pi/worktrees/plan-a",
+	});
+}
+
+describe("isPlannerWaitingOnUser", () => {
+	it("is true at the terminal done gate (which does not set requiresUserDecision)", () => {
+		const state = {
+			...baseState(),
+			stage: "done" as const,
+			step: "await_user_acceptance" as const,
+			requiresUserDecision: false,
+		};
+		expect(isPlannerWaitingOnUser(state)).toBe(true);
+	});
+
+	it("is true whenever a decision is required", () => {
+		expect(
+			isPlannerWaitingOnUser({ ...baseState(), requiresUserDecision: true }),
+		).toBe(true);
+	});
+
+	it("is true at goal approval and at pending discovery questions", () => {
+		expect(
+			isPlannerWaitingOnUser({
+				...baseState(),
+				stage: "intake",
+				step: "await_goal_approval",
+			}),
+		).toBe(true);
+		expect(
+			isPlannerWaitingOnUser({
+				...baseState(),
+				stage: "discovery",
+				step: "write_questions",
+				questionsSubmitted: true,
+				questionsResolved: false,
+			}),
+		).toBe(true);
+	});
+
+	it("is false during active model work", () => {
+		expect(
+			isPlannerWaitingOnUser({
+				...baseState(),
+				stage: "execution",
+				step: "implement_task",
+				stepStatus: "running",
+			}),
+		).toBe(false);
+	});
+});
 
 describe("planner idle watchdog", () => {
 	it("initializes missing activity without waking immediately", () => {
