@@ -217,6 +217,46 @@ describe("estimateCompactionDuration", () => {
 		});
 		expect(e.etaMs).toBeGreaterThanOrEqual(800);
 	});
+
+	it("predicts each size from its local neighbours, not one global line", () => {
+		// A cheap cluster near ~50k (~5s) and one expensive far run at 200k (60s).
+		// The local rate near 50k is ~0.1 ms/tok; near 200k it is ~0.3 ms/tok.
+		const samples = [
+			sample(50_000, 5_000),
+			sample(55_000, 5_000),
+			sample(60_000, 5_500),
+			sample(200_000, 60_000),
+		];
+		const near = estimateCompactionDuration({
+			samples,
+			tokens: 57_000,
+			model: "m",
+		});
+		const far = estimateCompactionDuration({
+			samples,
+			tokens: 190_000,
+			model: "m",
+		});
+		// The near estimate tracks the cheap cluster; the far one tracks the 60s run.
+		expect(near.etaMs).toBeLessThan(13_000);
+		expect(far.etaMs).toBeGreaterThan(44_000);
+		// Decisive locality: a single through-origin rate would force the ratio to
+		// equal the token ratio (190/57 ≈ 3.33). A super-linear ratio can only come
+		// from a per-size rate — proof the kernel localised the fit.
+		expect(far.etaMs / near.etaMs).toBeGreaterThan(190 / 57);
+	});
+
+	it("widens the band for a small effective sample count", () => {
+		// Two neighbours near the queried size (small effective N) → the band is
+		// inflated past a bare ±rmse by the √(1+1/Nₑ) factor, so it is a real range.
+		const e = estimateCompactionDuration({
+			samples: [sample(90_000, 18_000), sample(110_000, 26_000)],
+			tokens: 100_000,
+			model: "m",
+		});
+		expect(e.hiMs).toBeGreaterThan(e.etaMs);
+		expect(e.loMs).toBeLessThan(e.etaMs);
+	});
 });
 
 describe("compactionProgressFraction", () => {
