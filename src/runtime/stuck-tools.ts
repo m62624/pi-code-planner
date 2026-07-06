@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
 import type { PlannerFs } from "../storage/fs";
 import { safeReaddir } from "../storage/fs";
@@ -11,8 +10,18 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
-import { requiredString } from "./params";
-import { asObject } from "./values";
+import {
+	boolean,
+	enumOf,
+	intRange,
+	nonEmptyStringArray,
+	objectOf,
+	optionalString,
+	type ParamSchema,
+	parseParams,
+	stringArray,
+	trimmedString,
+} from "./param-codec";
 
 export const PLANNER_STUCK_TOOL_NAMES = ["planner_report_stuck"] as const;
 export type PlannerStuckToolName = (typeof PLANNER_STUCK_TOOL_NAMES)[number];
@@ -107,12 +116,11 @@ export async function executePlannerStuckTool(input: {
 		return blocked(input.toolName, "planner_report_stuck requires a worktree.");
 	}
 
-	let report: PlannerStuckReportInput;
-	try {
-		report = parseStuckReportParams(asObject(input.params));
-	} catch (error) {
-		return blocked(input.toolName, errorMessage(error));
+	const parsed = parseStuckReportParams(input.params);
+	if (!parsed.ok) {
+		return blocked(input.toolName, parsed.error);
 	}
+	const report = parsed.value;
 	const timestamp = input.now ?? Date.now();
 	const artifacts = await writeStuckAttemptArtifacts({
 		fs: input.fs,
@@ -308,41 +316,54 @@ function blocked(toolName: PlannerStuckToolName, text: string) {
 	return { status: "blocked" as const, toolName, text, details: null };
 }
 
+const STUCK_LOAD_SCHEMA = {
+	failedAttempts: intRange(0, 3),
+	evidenceQuality: intRange(0, 3),
+	hypothesisChurn: intRange(0, 3),
+	contextDrift: intRange(0, 3),
+	verificationGap: intRange(0, 3),
+} satisfies ParamSchema;
+
+const STUCK_REPORT_SCHEMA = {
+	stuckType: enumOf(PLANNER_STUCK_TYPES),
+	observedError: optionalString(),
+	evidence: nonEmptyStringArray(),
+	hypotheses: nonEmptyStringArray(),
+	discardedHypotheses: stringArray(),
+	stuckLoad: objectOf(STUCK_LOAD_SCHEMA),
+	nextProbe: trimmedString(),
+	needsUserInput: boolean(),
+} satisfies ParamSchema;
+
 function parseStuckReportParams(
-	params: Record<string, unknown>,
-): PlannerStuckReportInput {
+	raw: unknown,
+): { ok: true; value: PlannerStuckReportInput } | { ok: false; error: string } {
+	const parsed = parseParams("planner_report_stuck", STUCK_REPORT_SCHEMA, raw);
+	if (!parsed.ok) return parsed;
 	return {
-		stuckType: requiredStuckType(params),
-		observedError: optionalString(params, "observedError"),
-		evidence: requiredStringArray(params.evidence, "evidence"),
-		hypotheses: requiredStringArray(params.hypotheses, "hypotheses"),
-		discardedHypotheses: stringArray(
-			params.discardedHypotheses,
-			"discardedHypotheses",
-		),
-		stuckLoad: requiredStuckLoad(params.stuckLoad),
-		nextProbe: requiredString(params, "nextProbe"),
-		needsUserInput: requiredBoolean(params, "needsUserInput"),
+		ok: true,
+		value: {
+			...parsed.value,
+			stuckLoad: scoreStuckLoad(parsed.value.stuckLoad),
+		},
 	};
 }
 
-function requiredStuckLoad(value: unknown): PlannerStuckLoadScore {
-	const object = asObject(value);
-	const score = {
-		failedAttempts: requiredScore(object, "failedAttempts"),
-		evidenceQuality: requiredScore(object, "evidenceQuality"),
-		hypothesisChurn: requiredScore(object, "hypothesisChurn"),
-		contextDrift: requiredScore(object, "contextDrift"),
-		verificationGap: requiredScore(object, "verificationGap"),
-	};
+function scoreStuckLoad(scores: {
+	failedAttempts: number;
+	evidenceQuality: number;
+	hypothesisChurn: number;
+	contextDrift: number;
+	verificationGap: number;
+}): PlannerStuckLoadScore {
 	const total =
-		score.failedAttempts +
-		score.evidenceQuality +
-		score.hypothesisChurn +
-		score.contextDrift +
-		score.verificationGap;
+		scores.failedAttempts +
+		scores.evidenceQuality +
+		scores.hypothesisChurn +
+		scores.contextDrift +
+		scores.verificationGap;
 	return {
-		...score,
+		...scores,
 		total,
 		level:
 			total <= 3
@@ -353,73 +374,6 @@ function requiredStuckLoad(value: unknown): PlannerStuckLoadScore {
 						? "high"
 						: "critical",
 	};
-}
-
-function requiredScore(params: Record<string, unknown>, key: string): number {
-	const value = params[key];
-	if (
-		typeof value !== "number" ||
-		!Number.isInteger(value) ||
-		value < 0 ||
-		value > 3
-	) {
-		throw new TypeError(`${key} must be an integer from 0 to 3.`);
-	}
-	return value;
-}
-
-function requiredStuckType(params: Record<string, unknown>): PlannerStuckType {
-	const value = params.stuckType;
-	if (!PLANNER_STUCK_TYPES.includes(value as PlannerStuckType)) {
-		throw new TypeError(
-			`stuckType must be one of: ${PLANNER_STUCK_TYPES.join(", ")}.`,
-		);
-	}
-	return value as PlannerStuckType;
-}
-
-function requiredBoolean(
-	params: Record<string, unknown>,
-	key: string,
-): boolean {
-	const value = params[key];
-	if (typeof value !== "boolean") {
-		throw new TypeError(`${key} must be a boolean.`);
-	}
-	return value;
-}
-
-function requiredStringArray(value: unknown, key: string): string[] {
-	const result = stringArray(value, key);
-	if (result.length === 0) {
-		throw new TypeError(`${key} must contain at least one non-empty string.`);
-	}
-	return result;
-}
-
-function stringArray(value: unknown, key: string): string[] {
-	if (!Array.isArray(value)) {
-		throw new TypeError(`${key} must be a string array.`);
-	}
-	const result = value.map((entry) => {
-		if (typeof entry !== "string") {
-			throw new TypeError(`${key} must be a string array.`);
-		}
-		return entry.trim();
-	});
-	return result.filter((entry) => entry.length > 0);
-}
-
-function optionalString(
-	params: Record<string, unknown>,
-	key: string,
-): string | null {
-	const value = params[key];
-	if (value === undefined || value === null) return null;
-	if (typeof value !== "string") {
-		throw new TypeError(`${key} must be a string when provided.`);
-	}
-	return value.trim() || null;
 }
 
 function formatList(values: string[]): string {
