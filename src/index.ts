@@ -424,7 +424,7 @@ const TASK_UPSERT_TOOL_PARAMETERS = {
 			type: "array",
 			items: { type: "string" },
 			description:
-				"Spec traceability: the REQ-n ids from spec.json this task discharges. Required in practice for plans with a spec — the plan_coverage gate names every requirement no task covers and every task that traces to nothing.",
+				"Spec traceability: the REQ-n ids from spec.json this task discharges OR enables (a setup/infrastructure task cites the requirement it is a prerequisite for). Required in practice for plans with a spec — the plan_coverage gate names every requirement no task covers and every task that traces to nothing. Upsert REPLACES the whole task record: when editing an existing task, resupply this list or it is wiped back to orphan work.",
 		},
 		contractChain: {
 			type: "array",
@@ -4312,7 +4312,7 @@ function questionToolParameters(toolName: PlannerQuestionToolName) {
 function taskToolDescription(toolName: PlannerTaskToolName): string {
 	switch (toolName) {
 		case "planner_task_upsert":
-			return "Create or replace one behavioral task from semantic fields. The wrapper writes task.json, task.md, and empty TDD lifecycle artifacts.";
+			return "Create or replace one behavioral task from semantic fields, keyed by taskId. Re-calling with an existing taskId REPLACES the whole record (a full overwrite, not a merge) — resupply every field, or an omitted one is wiped. There is no delete tool; retire a task by folding its scope into another. The wrapper writes task.json, task.md, and empty TDD lifecycle artifacts.";
 	}
 }
 

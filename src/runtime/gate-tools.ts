@@ -344,7 +344,7 @@ export async function planCoverageSourceHash(
 	);
 }
 
-function describeCoverageGaps(
+export function describeCoverageGaps(
 	report: ElenchusJsonReport,
 	taskSubjects: Record<string, string>,
 ): string[] {
@@ -358,7 +358,7 @@ function describeCoverageGaps(
 				);
 			} else if (blocked.includes("no traces witness")) {
 				gaps.push(
-					`Task "${taskSubjects[subject] ?? subject}" is ORPHAN work — it traces to no requirement. Cite the REQ-n it discharges via planner_task_upsert, or remove/merge the task.`,
+					`Task "${taskSubjects[subject] ?? subject}" is ORPHAN work — it traces to no requirement. Re-run planner_task_upsert (same taskId) citing the REQ-n it discharges OR enables — a setup/infrastructure task cites the requirement it is a prerequisite for (e.g. a "cargo init" task cites the REQ whose code it makes buildable). There is no delete tool: to retire a redundant task instead, fold its scope into the task that already covers that REQ. Upsert replaces the whole task, so resupply \`requirements\` every time or it is wiped back to orphan.`,
 				);
 			} else {
 				gaps.push(`Blocked by \`${blocked}\`.`);
