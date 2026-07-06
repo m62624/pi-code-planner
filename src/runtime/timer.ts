@@ -363,7 +363,6 @@ function buildTimerStatusLine(input: {
 			? pauseReason(input.state)
 			: `${input.state.stage} stage ${formatDuration(currentStageActiveMs(input.state, input.displayActiveMs))}`,
 		`${input.state.stage}/${input.state.step}`,
-		theme.fg("dim", "· /planner-dashboard"),
 	];
 	return parts.join(" ");
 }

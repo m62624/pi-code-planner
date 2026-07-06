@@ -84,11 +84,8 @@ import {
 } from "./runtime/compact";
 import {
 	type CompactEtaEstimate,
-	compactionProgressFraction,
 	estimateCompactionDuration,
-	formatDurationShort,
-	formatEtaLabel,
-	renderProgressBar,
+	formatCompactIndicator,
 } from "./runtime/compact-eta";
 import {
 	applyPlannerContractFinishPolicy,
@@ -3453,24 +3450,29 @@ function registerPlannerTools(
 	});
 }
 
-const PLANNER_COMPACT_STATUS_KEY = "planner-compact";
+const PLANNER_COMPACT_WIDGET_KEY = "planner-compact";
 // Refresh cadence for the indicator's live parts (elapsed seconds + filling
 // bar). Deliberately 1 Hz, not a ~150 ms spinner loop: on a machine already
-// pegged by local inference, redrawing the footer ~7×/s is wasted work and can
-// flicker. The ticking seconds and the growing bar are the animation — no
-// separate spinner glyph is needed, so we never busy-loop the render.
+// pegged by local inference, redrawing ~7×/s is wasted work and can flicker.
+// The ticking seconds and the growing bar are the animation — no separate
+// spinner glyph is needed, so we never busy-loop the render.
 const PLANNER_COMPACT_REFRESH_MS = 1000;
-// Safety cap so a missing completion event can never leave the indicator
-// running forever. When compaction *fails*, Pi's built-in auto-compact swallows
-// the error and never emits `session_compact` (only manual `ctx.compact()`
-// rejects into our onError), so the indicator can only learn the run ended from
-// (a) the agent resuming work — handled by the activity handlers below — or
-// (b) this cap for the pure-idle case. With a learned ETA we bound the idle wait
-// to a few times the predicted high end so a failure clears in seconds, not the
-// full two minutes; with no history yet we keep the conservative cap.
-const PLANNER_COMPACT_MAX_MS = 120_000;
+// Safety deadline so a *failed* compaction can never leave the indicator up
+// forever. Pi's built-in /compact swallows a failure and never emits
+// `session_compact` (only manual `ctx.compact()` rejects into our onError), so a
+// failure at a passive gate (done/await_user_acceptance) has no completion event
+// AND no follow-up turn to clear it. The deadline is enforced *inside the render
+// tick itself* (not a separate, easily-lost setTimeout) so the same loop that
+// draws the elapsed seconds tears the indicator down the instant it overruns —
+// this is what prevents the observed "still Compacting… at 124m" hang.
+//
+// The cap is generous (a real local compaction of a large window is slow) because
+// a present user clears it instantly the moment they interact (agent_start /
+// turn_start below); the deadline only matters for the pure-idle, walked-away
+// case, where a few minutes of stale bar is fine and forever is not.
+const PLANNER_COMPACT_MAX_MS = 600_000;
 const PLANNER_COMPACT_FAILURE_ETA_MULTIPLE = 3;
-const PLANNER_COMPACT_FAILURE_FLOOR_MS = 15_000;
+const PLANNER_COMPACT_FAILURE_FLOOR_MS = 60_000;
 
 // Human label for why the compaction fired. The SDK does not stream the summary
 // generation to extensions, so we cannot show a true percent bar — the honest
@@ -3499,10 +3501,23 @@ function registerPlannerCompactEvents(
 	pi: ExtensionAPI,
 	compactRuntime: PlannerCompactRuntimeState,
 ): void {
-	// Animated footer indicator while context is compacting, so a long
-	// compaction never looks frozen. The footer renders below the planner
-	// workspace overlay too (reserved rows), so it is visible in both the plain
-	// chat and the custom workspace.
+	// Animated indicator while context is compacting, so a long compaction never
+	// looks frozen. It renders as an `aboveEditor` widget (a banner at the top of
+	// the input area) rather than a footer status: the footer was already crowded
+	// with the planner timer line, and the widget shows in both the plain chat and
+	// the /planner-dashboard workspace.
+	const setCompactWidget = (
+		ctx: ExtensionContext,
+		lines: string[] | undefined,
+	): void => {
+		try {
+			ctx.ui.setWidget(PLANNER_COMPACT_WIDGET_KEY, lines, {
+				placement: "aboveEditor",
+			});
+		} catch {
+			// Stale ctx after a session switch: nothing to render/clear.
+		}
+	};
 	let compactTimer: ReturnType<typeof setInterval> | null = null;
 	// The in-flight run, set in `session_before_compact` only while a plan is
 	// active, read in `session_compact` to record its measured duration. Cleared
@@ -3521,11 +3536,7 @@ function registerPlannerCompactEvents(
 		// The compaction is no longer running: clear the in-flight flag so the
 		// idle watchdog can rescue the boundary if it never resolved.
 		clearPlannerCompactionInFlight(compactRuntime);
-		try {
-			ctx.ui.setStatus(PLANNER_COMPACT_STATUS_KEY, undefined);
-		} catch {
-			// Stale ctx after a session switch: nothing to clear.
-		}
+		setCompactWidget(ctx, undefined);
 	};
 	// A compaction that *succeeded* clears the indicator in `session_compact`
 	// before the agent resumes. If the agent starts a new turn/run while the
@@ -3587,38 +3598,10 @@ function registerPlannerCompactEvents(
 			// Keep the no-estimate fallback: the timer still runs.
 		}
 
-		const renderStatus = () => {
-			try {
-				const elapsedMs = Date.now() - startedAt;
-				const elapsed = formatDurationShort(elapsedMs);
-				let text: string;
-				if (estimate.hasEstimate) {
-					const frac = compactionProgressFraction({
-						elapsedMs,
-						etaMs: estimate.etaMs,
-						reliability: estimate.reliability,
-					});
-					const bar = renderProgressBar(frac);
-					const pct = Math.round(frac * 100);
-					text = `Compacting ${sizeLabel} tok (${reasonLabel}) ${bar} ${pct}% · ${elapsed} / ${formatEtaLabel(estimate)}`;
-				} else {
-					text = `Compacting ${sizeLabel} tok (${reasonLabel})… ${elapsed}`;
-				}
-				ctx.ui.setStatus(
-					PLANNER_COMPACT_STATUS_KEY,
-					ctx.ui.theme.fg("accent", text),
-				);
-			} catch {
-				// Never let a redraw throw out of the interval.
-			}
-		};
-		renderStatus();
-		compactTimer = setInterval(renderStatus, PLANNER_COMPACT_REFRESH_MS);
-		compactTimer.unref?.();
-		// Bound the idle-failure wait to a few times the predicted high end when we
-		// have a learned ETA, so a swallowed failure with no follow-up turn still
-		// clears in seconds rather than the full cap; fall back to the cap with no
-		// history. The activity handlers below clear the interactive case instantly.
+		// Bound the failure wait to a few times the predicted high end when we have
+		// a learned ETA, so a swallowed failure with no follow-up turn still clears
+		// on its own; fall back to the generous cap with no history. Enforced inside
+		// the tick below, not a separate timer.
 		const clearAfterMs = estimate.hasEstimate
 			? Math.min(
 					PLANNER_COMPACT_MAX_MS,
@@ -3628,12 +3611,35 @@ function registerPlannerCompactEvents(
 					),
 				)
 			: PLANNER_COMPACT_MAX_MS;
-		const safety = setTimeout(() => {
-			// A run that never completed is not a representative sample.
-			pendingCompact = null;
-			stopCompactIndicator(ctx);
-		}, clearAfterMs);
-		safety.unref?.();
+
+		const renderStatus = () => {
+			try {
+				const elapsedMs = Date.now() - startedAt;
+				// Self-terminating deadline: the tick that draws the elapsed seconds
+				// also enforces the cap, so a failed compaction with no completion
+				// event and no follow-up turn cannot hang the indicator (the 124m
+				// "still Compacting…" case). A separate setTimeout could be lost across
+				// suspend/resume; this cannot — if the bar is ticking, the check runs.
+				if (elapsedMs >= clearAfterMs) {
+					// A run that never completed is not a representative timing sample.
+					pendingCompact = null;
+					stopCompactIndicator(ctx);
+					return;
+				}
+				const text = formatCompactIndicator({
+					sizeLabel,
+					reasonLabel,
+					elapsedMs,
+					estimate,
+				});
+				setCompactWidget(ctx, [ctx.ui.theme.fg("accent", text)]);
+			} catch {
+				// Never let a redraw throw out of the interval.
+			}
+		};
+		renderStatus();
+		compactTimer = setInterval(renderStatus, PLANNER_COMPACT_REFRESH_MS);
+		compactTimer.unref?.();
 	});
 
 	pi.on("session_compact", async (_event, ctx) => {
