@@ -36,7 +36,11 @@ import {
 	runPlannerOrchestrator,
 } from "./orchestrator";
 import { requiredString } from "./params";
-import type { PlannerToolResult } from "./tool-result";
+import {
+	appliedResult,
+	blockedResult,
+	type PlannerToolResult,
+} from "./tool-result";
 import { asObject } from "./values";
 
 export const PLANNER_CONTRACT_TOOL_NAMES = [
@@ -2167,12 +2171,12 @@ function applied(
 	text: string,
 	details: unknown,
 ): PlannerContractToolResult {
-	return { status: "applied", toolName, text, details };
+	return appliedResult(toolName, text, details);
 }
 
 function blocked(
 	toolName: PlannerContractToolName,
 	text: string,
 ): PlannerContractToolResult {
-	return { status: "blocked", toolName, text, details: null };
+	return blockedResult(toolName, text);
 }

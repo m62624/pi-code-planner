@@ -31,6 +31,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { blockedResult } from "./tool-result";
 
 export const PLANNER_GATE_TOOL_NAME = "planner_gate_check" as const;
 export type PlannerGateToolName = typeof PLANNER_GATE_TOOL_NAME;
@@ -722,10 +723,5 @@ function parseGateName(params: unknown): PlannerGateName {
 }
 
 function blocked(text: string): PlannerGateToolResult {
-	return {
-		status: "blocked",
-		toolName: PLANNER_GATE_TOOL_NAME,
-		text,
-		details: null,
-	};
+	return blockedResult(PLANNER_GATE_TOOL_NAME, text);
 }

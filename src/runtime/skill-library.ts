@@ -14,6 +14,7 @@ import {
 	runPlannerOrchestrator,
 } from "./orchestrator";
 import type { PlannerToolContext } from "./tool-context";
+import { blockedResult } from "./tool-result";
 
 export const PLANNER_SKILL_TOOL_NAMES = [
 	"planner_skill_create",
@@ -897,10 +898,5 @@ function isPlannerSkillIndexItem(
 }
 
 function blocked(text: string): PlannerSkillCreateResult {
-	return {
-		status: "blocked",
-		toolName: "planner_skill_create",
-		text,
-		details: null,
-	};
+	return blockedResult("planner_skill_create", text);
 }

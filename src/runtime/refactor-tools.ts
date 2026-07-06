@@ -20,6 +20,7 @@ import {
 	validateRefactorCategoryReviews,
 	validateRefactorReviewMarkdown,
 } from "./refactor-review";
+import { blockedResult } from "./tool-result";
 import { asObject } from "./values";
 
 export const PLANNER_REFACTOR_TOOL_NAMES = ["planner_refactor_review"] as const;
@@ -147,7 +148,7 @@ function blocked(
 	toolName: PlannerRefactorToolName,
 	text: string,
 ): PlannerRefactorToolExecutionResult {
-	return { status: "blocked", toolName, text, details: null };
+	return blockedResult(toolName, text);
 }
 
 function optionalString(

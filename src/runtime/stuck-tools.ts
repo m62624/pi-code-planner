@@ -22,6 +22,7 @@ import {
 	stringArray,
 	trimmedString,
 } from "./param-codec";
+import { blockedResult } from "./tool-result";
 
 export const PLANNER_STUCK_TOOL_NAMES = ["planner_report_stuck"] as const;
 export type PlannerStuckToolName = (typeof PLANNER_STUCK_TOOL_NAMES)[number];
@@ -313,7 +314,7 @@ async function readDiffPatch(
 }
 
 function blocked(toolName: PlannerStuckToolName, text: string) {
-	return { status: "blocked" as const, toolName, text, details: null };
+	return blockedResult(toolName, text);
 }
 
 const STUCK_LOAD_SCHEMA = {

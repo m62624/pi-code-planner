@@ -10,3 +10,27 @@ export interface PlannerToolResult<Name extends string> {
 	text: string;
 	details: unknown;
 }
+
+/**
+ * Shared factories for the two wrapper-tool outcomes. Every `*-tools.ts` module
+ * used to hand-roll its own `blocked`/`applied` returning this exact shape; the
+ * factories replace those ~27 copies. `status` is a literal so a result narrows
+ * to the specific outcome, and `Details` is generic so a module with a narrower
+ * `details` type (e.g. an artifacts record instead of `unknown`) stays
+ * assignable to its own result interface.
+ */
+export function blockedResult<Name extends string, Details = null>(
+	toolName: Name,
+	text: string,
+	details: Details = null as Details,
+): { status: "blocked"; toolName: Name; text: string; details: Details } {
+	return { status: "blocked", toolName, text, details };
+}
+
+export function appliedResult<Name extends string, Details = null>(
+	toolName: Name,
+	text: string,
+	details: Details = null as Details,
+): { status: "applied"; toolName: Name; text: string; details: Details } {
+	return { status: "applied", toolName, text, details };
+}

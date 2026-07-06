@@ -21,6 +21,7 @@ import {
 	TDD_SECTIONS,
 	type TddSectionKey,
 } from "./tdd-form";
+import { blockedResult } from "./tool-result";
 import { asObject } from "./values";
 
 export const PLANNER_ARTIFACT_TOOL_NAMES = [
@@ -240,7 +241,7 @@ function blocked(
 	toolName: PlannerArtifactToolName,
 	text: string,
 ): PlannerArtifactToolExecutionResult {
-	return { status: "blocked", toolName, text, details: null };
+	return blockedResult(toolName, text);
 }
 
 function requiredStringArray(

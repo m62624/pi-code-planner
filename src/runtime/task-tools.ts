@@ -17,6 +17,7 @@ import {
 	stringArray,
 	trimmedString,
 } from "./param-codec";
+import { blockedResult } from "./tool-result";
 
 export const PLANNER_TASK_TOOL_NAMES = ["planner_task_upsert"] as const;
 export type PlannerTaskToolName = (typeof PLANNER_TASK_TOOL_NAMES)[number];
@@ -160,5 +161,5 @@ function upsertTaskSummary<T extends { taskId: string }>(
 }
 
 function blocked(toolName: PlannerTaskToolName, text: string) {
-	return { status: "blocked" as const, toolName, text, details: null };
+	return blockedResult(toolName, text);
 }

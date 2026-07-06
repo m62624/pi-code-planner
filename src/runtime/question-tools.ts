@@ -10,7 +10,11 @@ import {
 	runPlannerOrchestrator,
 } from "./orchestrator";
 import type { PlannerToolExecutionInput } from "./tool-context";
-import type { PlannerToolResult } from "./tool-result";
+import {
+	appliedResult,
+	blockedResult,
+	type PlannerToolResult,
+} from "./tool-result";
 import { asObject } from "./values";
 
 export const PLANNER_QUESTION_TOOL_NAMES = [
@@ -185,7 +189,7 @@ function applied(
 	text: string,
 	details: unknown,
 ): PlannerQuestionToolExecutionResult {
-	return { status: "applied", toolName, text, details };
+	return appliedResult(toolName, text, details);
 }
 
 function blocked(
@@ -193,5 +197,5 @@ function blocked(
 	text: string,
 	details: unknown,
 ): PlannerQuestionToolExecutionResult {
-	return { status: "blocked", toolName, text, details };
+	return blockedResult(toolName, text, details);
 }

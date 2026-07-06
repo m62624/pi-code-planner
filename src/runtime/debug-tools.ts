@@ -12,7 +12,11 @@ import {
 	runPlannerOrchestrator,
 } from "./orchestrator";
 import { requiredString } from "./params";
-import type { PlannerToolResult } from "./tool-result";
+import {
+	appliedResult,
+	blockedResult,
+	type PlannerToolResult,
+} from "./tool-result";
 import { asObject } from "./values";
 
 export const PLANNER_DEBUG_TOOL_NAMES = [
@@ -485,14 +489,14 @@ function applied(
 	lines: string[],
 	details: unknown,
 ): PlannerDebugToolExecutionResult {
-	return { status: "applied", toolName, text: lines.join("\n"), details };
+	return appliedResult(toolName, lines.join("\n"), details);
 }
 
 function blocked(
 	toolName: PlannerDebugToolName,
 	text: string,
 ): PlannerDebugToolExecutionResult {
-	return { status: "blocked", toolName, text, details: null };
+	return blockedResult(toolName, text);
 }
 
 function optionalString(

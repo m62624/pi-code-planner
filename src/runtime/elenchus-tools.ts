@@ -13,6 +13,7 @@ import {
 	runPlannerOrchestrator,
 } from "./orchestrator";
 import type { PlannerToolContext } from "./tool-context";
+import { blockedResult } from "./tool-result";
 
 export const PLANNER_ELENCHUS_TOOL_NAME = "planner_elenchus_check" as const;
 export type PlannerElenchusToolName = typeof PLANNER_ELENCHUS_TOOL_NAME;
@@ -473,10 +474,5 @@ function asObject(value: unknown): Record<string, unknown> {
 }
 
 function blocked(text: string): PlannerElenchusToolResult {
-	return {
-		status: "blocked",
-		toolName: PLANNER_ELENCHUS_TOOL_NAME,
-		text,
-		details: null,
-	};
+	return blockedResult(PLANNER_ELENCHUS_TOOL_NAME, text);
 }
