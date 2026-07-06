@@ -11,12 +11,16 @@ function record(behaviors: TaskBehavior[]): TaskBehaviorsRecord {
 	return { schemaVersion: SCHEMA_VERSION, taskId: "alpha", behaviors };
 }
 
-function bhv(n: number, status: TaskBehavior["status"]): TaskBehavior {
+function bhv(
+	n: number,
+	status: TaskBehavior["status"],
+	requirement: string | null = null,
+): TaskBehavior {
 	return {
 		id: `BHV-${n}`,
 		statement: `Behavior ${n}.`,
 		kind: "happy",
-		requirement: null,
+		requirement,
 		test:
 			status === "planned"
 				? null
@@ -80,6 +84,44 @@ describe("tdd-coverage compiler through the real engine", () => {
 		const compiled = compileTddCoverage(record([bhv(1, "green")]), "green");
 		expect(compiled.program).toContain("TOTAL has_red_test ON behaviors");
 		expect(compiled.program).toContain("TOTAL has_green_test ON behaviors");
+	});
+
+	it("NAMES an owned requirement that no behavior exercises", async () => {
+		const partial = compileTddCoverage(
+			record([bhv(1, "red", "REQ-1")]),
+			"red",
+			{ ownedRequirements: ["REQ-1", "REQ-2"] },
+		);
+		const report = await run(partial.program);
+		expect(report.status).toBe("WARNING");
+		expect(
+			report.warnings.flatMap((w) => w.blocked_by ?? []).join(" "),
+		).toContain("req_2 (no covered_by witness)");
+
+		const full = compileTddCoverage(
+			record([bhv(1, "red", "REQ-1"), bhv(2, "red", "REQ-2")]),
+			"red",
+			{ ownedRequirements: ["REQ-1", "REQ-2"] },
+		);
+		expect((await run(full.program)).status).toBe("CONSISTENT");
+	});
+
+	it("flags a behavior citing a requirement the task does not own", () => {
+		const compiled = compileTddCoverage(
+			record([bhv(1, "red", "REQ-9")]),
+			"red",
+			{ ownedRequirements: ["REQ-1"] },
+		);
+		expect(compiled.unknownRequirementRefs).toEqual([
+			{ behaviorId: "BHV-1", requirement: "REQ-9" },
+		]);
+	});
+
+	it("omits the requirement dimension for legacy plans with no owned requirements", () => {
+		const compiled = compileTddCoverage(record([bhv(1, "red")]), "red");
+		expect(compiled.program).not.toContain("SET requirements");
+		expect(compiled.program).not.toContain("TOTAL covered_by ON requirements");
+		expect(compiled.requirementCount).toBe(0);
 	});
 
 	it("is deterministic and sorts behaviors by id", () => {

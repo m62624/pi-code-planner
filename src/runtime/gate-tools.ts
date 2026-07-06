@@ -13,7 +13,7 @@ import {
 } from "../storage/paths";
 import { readPlanRecord } from "../storage/plan-store";
 import type { TaskRecord } from "../storage/schema";
-import { readSpecRecordIfExists } from "../storage/spec-store";
+import { readSpecRecordIfExists, type SpecRecord } from "../storage/spec-store";
 import { readTaskRecord } from "../storage/task-store";
 import { compilePlanCoverage } from "../vrf/coverage-compiler";
 import { syncVrfTemplatesToPlan } from "../vrf/manager";
@@ -288,6 +288,28 @@ async function runPlanCoverageGate(input: {
 	};
 }
 
+/**
+ * The REQ-n ids this task both declares (task.requirements) and the spec still
+ * counts as coverable (in-scope, not deferred through the freedom valve). These
+ * are the requirements a behavior must exercise; anything else the task cites is
+ * out of scope for the coverage totality.
+ */
+async function readOwnedRequirements(
+	fs: PlannerFs,
+	taskPaths: ReturnType<typeof createTaskStoragePaths>,
+	spec: SpecRecord,
+): Promise<string[]> {
+	const task = await readTaskRecord(fs, taskPaths);
+	const coverable = new Set(
+		spec.requirements
+			.filter((req) => req.inScope && req.deferral === undefined)
+			.map((req) => req.id),
+	);
+	return [...new Set(task.requirements ?? [])].filter((id) =>
+		coverable.has(id),
+	);
+}
+
 async function readAllTaskRecords(
 	fs: PlannerFs,
 	planPaths: PlanStoragePaths,
@@ -364,10 +386,28 @@ async function runTddCoverageGate(input: {
 			`tasks/${input.activeTaskId}/behaviors.json does not exist. Enumerate the task's behaviors first with planner_behavior_upsert (at execution/write_tdd_plan), then re-run this gate.`,
 		);
 	}
+	// When the plan has a spec, bind behaviors to the requirements this task
+	// owns so a REQ with no behavior is NAMED (legacy plans without a spec keep
+	// behavior-only coverage — REQ-11 graceful degradation).
+	const spec = await readSpecRecordIfExists(input.fs, input.planPaths);
+	const ownedRequirements = spec
+		? await readOwnedRequirements(input.fs, taskPaths, spec)
+		: [];
 	// run_final_tests demands green witnesses; every earlier step checks red.
 	const phase: TddCoveragePhase =
 		input.position.step === "run_final_tests" ? "green" : "red";
-	const compiled = compileTddCoverage(behaviors, phase);
+	const compiled = compileTddCoverage(behaviors, phase, { ownedRequirements });
+	if (compiled.unknownRequirementRefs.length > 0) {
+		return blocked(
+			[
+				"Some behaviors cite a requirement this task does not own (task.requirements):",
+				...compiled.unknownRequirementRefs.map(
+					(ref) => `- ${ref.behaviorId} → ${ref.requirement}`,
+				),
+				"Cite an owned REQ-n via planner_behavior_upsert, or add the requirement to this task at planning (planner_task_upsert).",
+			].join("\n"),
+		);
+	}
 	const run = await runGateProgram({
 		fs: input.fs,
 		planPaths: input.planPaths,
@@ -386,7 +426,7 @@ async function runTddCoverageGate(input: {
 		heading: `## Test Coverage — ${input.activeTaskId}`,
 		lines: [
 			`Phase: ${phase} — Verdict: **${run.verdict}** (engine ${run.engineVersion}, ${new Date().toISOString()})`,
-			`Behaviors: ${compiled.behaviorCount}`,
+			`Behaviors: ${compiled.behaviorCount}${compiled.requirementCount > 0 ? `, owned requirements: ${compiled.requirementCount}` : ""}`,
 			"",
 			...(gaps.length > 0
 				? ["Uncovered:", ...gaps.map((gap) => `- ${gap}`)]
@@ -439,6 +479,10 @@ function describeTddGaps(
 				gaps.push(`${id}: no failing test yet (needs a named red witness).`);
 			} else if (blocked.includes("no has_green_test witness")) {
 				gaps.push(`${id}: its test does not pass yet (needs a green witness).`);
+			} else if (blocked.includes("no covered_by witness")) {
+				gaps.push(
+					`${specSubjectToRequirementId(subject)} is discharged by this task but NO behavior exercises it — add a behavior citing it via planner_behavior_upsert.`,
+				);
 			} else {
 				gaps.push(`Blocked by \`${blocked}\`.`);
 			}

@@ -13,6 +13,7 @@ import {
 } from "../storage/paths";
 import { readPlanRecord } from "../storage/plan-store";
 import { readSpecRecordIfExists } from "../storage/spec-store";
+import { readTaskRecord } from "../storage/task-store";
 import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
@@ -71,10 +72,13 @@ export async function executePlannerBehaviorTool(input: {
 			behaviors: (params.behaviors ?? []) as TaskBehavior[],
 			previous,
 		});
-		// Spec traceability, when both sides exist: a behavior citing REQ-n
-		// must cite a real, in-scope requirement.
+		// Spec traceability, when both sides exist: a behavior citing REQ-n must
+		// cite a real, in-scope requirement that this task actually owns
+		// (task.requirements) — otherwise the coverage totality binds the wrong set.
 		const spec = await readSpecRecordIfExists(input.fs, planPaths);
 		if (spec) {
+			const task = await readTaskRecord(input.fs, taskPaths);
+			const owned = new Set(task.requirements ?? []);
 			for (const behavior of record.behaviors) {
 				if (!behavior.requirement) continue;
 				const known = spec.requirements.find(
@@ -83,6 +87,11 @@ export async function executePlannerBehaviorTool(input: {
 				if (!known?.inScope) {
 					return blocked(
 						`Behavior ${behavior.id} cites ${behavior.requirement}, which is ${known ? "out of scope" : "not"} in spec.json. Use exact in-scope REQ-n ids or null.`,
+					);
+				}
+				if (!owned.has(behavior.requirement)) {
+					return blocked(
+						`Behavior ${behavior.id} cites ${behavior.requirement}, but task ${taskId} does not own it (task.requirements). Cite a REQ-n this task discharges, or add it to the task via planner_task_upsert.`,
 					);
 				}
 			}
