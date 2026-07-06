@@ -19,23 +19,31 @@ function sample(
 }
 
 describe("formatCompactIndicator", () => {
-	it("shows a bare running timer when there is no learned estimate", () => {
+	it("shows a static label (no ticking seconds) when there is no estimate", () => {
 		const estimate = estimateCompactionDuration({
 			samples: [],
 			tokens: 118_000,
 			model: "m",
 		});
-		expect(
-			formatCompactIndicator({
-				sizeLabel: "118k",
-				reasonLabel: "/compact",
-				elapsedMs: 12_000,
-				estimate,
-			}),
-		).toBe("Compacting 118k tok (/compact)… 12s");
+		// The line must NOT depend on elapsedMs: a per-second counter would push a
+		// full repaint every tick and flicker the widget. Same output at 12s / 40s.
+		const at12 = formatCompactIndicator({
+			sizeLabel: "118k",
+			reasonLabel: "/compact",
+			elapsedMs: 12_000,
+			estimate,
+		});
+		const at40 = formatCompactIndicator({
+			sizeLabel: "118k",
+			reasonLabel: "/compact",
+			elapsedMs: 40_000,
+			estimate,
+		});
+		expect(at12).toBe("Compacting 118k tok (/compact)…");
+		expect(at40).toBe(at12);
 	});
 
-	it("shows a filling bar, percent, elapsed and ETA once history exists", () => {
+	it("shows a filling bar, percent and ETA once history exists — no elapsed", () => {
 		const estimate = estimateCompactionDuration({
 			samples: [
 				sample(50_000, 10_000),
@@ -51,8 +59,9 @@ describe("formatCompactIndicator", () => {
 			elapsedMs: 5_000,
 			estimate,
 		});
+		// bar + percent + ETA, but no `<elapsed> /` segment before the `~`.
 		expect(line).toMatch(
-			/^Compacting 100k tok \(context full\) [█░]+ \d+% · 5s \/ ~/,
+			/^Compacting 100k tok \(context full\) [█░]+ \d+% · ~/,
 		);
 	});
 });

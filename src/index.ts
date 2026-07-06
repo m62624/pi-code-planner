@@ -3451,12 +3451,16 @@ function registerPlannerTools(
 }
 
 const PLANNER_COMPACT_WIDGET_KEY = "planner-compact";
-// Refresh cadence for the indicator's live parts (elapsed seconds + filling
-// bar). Deliberately 1 Hz, not a ~150 ms spinner loop: on a machine already
-// pegged by local inference, redrawing ~7×/s is wasted work and can flicker.
-// The ticking seconds and the growing bar are the animation — no separate
-// spinner glyph is needed, so we never busy-loop the render.
-const PLANNER_COMPACT_REFRESH_MS = 1000;
+// Refresh cadence for the indicator's slow-moving parts (the asymptotic bar,
+// percent, and ETA). The SDK's setWidget has NO diffing — every call disposes
+// the old component and rebuilds it (interactive-mode.js `setExtensionWidget`),
+// so each push is a full teardown+repaint. A 1 Hz push of a live seconds counter
+// therefore flickers the banner every second. We keep the indicator nearly
+// static instead: no per-second elapsed in the rendered line, a coarse refresh,
+// and a content dedup (see `setCompactWidget`) that skips a push when nothing
+// visible changed — so in steady state the widget repaints only when the bar or
+// ETA actually moves, not on a fixed clock.
+const PLANNER_COMPACT_REFRESH_MS = 5000;
 // Safety deadline so a *failed* compaction can never leave the indicator up
 // forever. Pi's built-in /compact swallows a failure and never emits
 // `session_compact` (only manual `ctx.compact()` rejects into our onError), so a
@@ -3506,10 +3510,18 @@ function registerPlannerCompactEvents(
 	// the input area) rather than a footer status: the footer was already crowded
 	// with the planner timer line, and the widget shows in both the plain chat and
 	// the /planner-dashboard workspace.
+	// Content dedup: the SDK repaints on every setWidget (no diffing), so we skip
+	// a push when the rendered content is byte-identical to what is already shown.
+	// `null` means the widget is currently cleared. This is what makes the coarse
+	// refresh flicker-free — a resize storm or an unchanged tick pushes nothing.
+	let lastWidgetKey: string | null = null;
 	const setCompactWidget = (
 		ctx: ExtensionContext,
 		lines: string[] | undefined,
 	): void => {
+		const key = lines === undefined ? null : lines.join("\n");
+		if (key === lastWidgetKey) return;
+		lastWidgetKey = key;
 		try {
 			ctx.ui.setWidget(PLANNER_COMPACT_WIDGET_KEY, lines, {
 				placement: "aboveEditor",
@@ -3711,6 +3723,15 @@ function registerPlannerCompactEvents(
 		clearStaleCompactIndicator(ctx);
 	});
 	pi.on("turn_start", async (_event, ctx) => {
+		clearStaleCompactIndicator(ctx);
+	});
+	// A new message appearing (assistant output or an injected toolResult/
+	// [SYSTEM_INSTRUCTIONS]) is the earliest extension-visible sign the compaction
+	// released the loop: even a *failed* built-in /compact spills text back into
+	// the chat, and no message can stream while summarization blocks the loop. So
+	// the moment one arrives with the indicator still up, the run has ended — hide
+	// it at once rather than waiting for the next agent_start or the safety cap.
+	pi.on("message_start", async (_event, ctx) => {
 		clearStaleCompactIndicator(ctx);
 	});
 

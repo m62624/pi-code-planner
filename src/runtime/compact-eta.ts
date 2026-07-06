@@ -300,9 +300,13 @@ export function formatDurationShort(ms: number): string {
 
 /**
  * Compose the one-line compaction indicator. With learned history it shows an
- * honest, asymptotic bar (`… ██████░░░░ 62% · 18s / ~30s`); with no history yet
- * it is a bare running timer. Pure so the format is unit-tested without the SDK,
- * and shared by both the top widget and any other surface that shows the run.
+ * honest, asymptotic bar (`… ██████░░░░ 62% · ~30s`); with no history yet it is
+ * a bare label. Deliberately carries NO per-second elapsed: the SDK repaints the
+ * whole widget on every push (no diffing), so a ticking seconds counter flickers
+ * the banner every second. The bar/percent advance slowly off `elapsedMs` while
+ * the *rendered* line changes only coarsely, so the dedup in the widget setter
+ * skips most pushes and the banner stays visually still. Pure so the format is
+ * unit-tested without the SDK, and shared by every surface that shows the run.
  */
 export function formatCompactIndicator(input: {
 	sizeLabel: string;
@@ -310,9 +314,8 @@ export function formatCompactIndicator(input: {
 	elapsedMs: number;
 	estimate: CompactEtaEstimate;
 }): string {
-	const elapsed = formatDurationShort(input.elapsedMs);
 	if (!input.estimate.hasEstimate) {
-		return `Compacting ${input.sizeLabel} tok (${input.reasonLabel})… ${elapsed}`;
+		return `Compacting ${input.sizeLabel} tok (${input.reasonLabel})…`;
 	}
 	const frac = compactionProgressFraction({
 		elapsedMs: input.elapsedMs,
@@ -321,7 +324,7 @@ export function formatCompactIndicator(input: {
 	});
 	const bar = renderProgressBar(frac);
 	const pct = Math.round(frac * 100);
-	return `Compacting ${input.sizeLabel} tok (${input.reasonLabel}) ${bar} ${pct}% · ${elapsed} / ${formatEtaLabel(input.estimate)}`;
+	return `Compacting ${input.sizeLabel} tok (${input.reasonLabel}) ${bar} ${pct}% · ${formatEtaLabel(input.estimate)}`;
 }
 
 /**
