@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	ALL_PLANNER_TOOL_NAMES,
+	PLANNER_LIFECYCLE_TRANSITION_TOOLS,
 	PLANNER_WRAPPER_TOOLS,
 } from "./guard/tool-policy";
 import {
@@ -10,6 +11,7 @@ import {
 	persistPlannerToolVisibilityActiveToSession,
 	type RegisteredTool,
 	registerPlannerToolVisibility,
+	setContractGateActive,
 	setPlanActive,
 	setRecoveryReportUnlocked,
 	updateToolVisibility,
@@ -284,6 +286,68 @@ describe("updateToolVisibility", () => {
 			id: "planner-tools-test",
 			parentId: null,
 		});
+	});
+});
+
+describe("contract gate tool visibility", () => {
+	const tools: RegisteredTool[] = [
+		{ name: "bash" },
+		{ name: "read" },
+		{ name: "planner_status" },
+		{ name: "planner_artifact_read" },
+		{ name: "planner_contract_scan" },
+		{ name: "planner_contract_route" },
+		{ name: "planner_contract_read" },
+		{ name: "planner_start_step" },
+		{ name: "planner_finish_step" },
+		{ name: "planner_discovery_submit" },
+	];
+
+	function activeToolsAfterUpdate(): string[] {
+		let captured: string[] = [];
+		const mockPi = {
+			getAllTools: () => tools,
+			setActiveTools: (names: string[]) => {
+				captured = names;
+			},
+		} as unknown as ExtensionAPI;
+		updateToolVisibility(mockPi);
+		return captured;
+	}
+
+	beforeEach(() => {
+		setPlanActive(true);
+		setContractGateActive(false);
+		setRecoveryReportUnlocked(false);
+	});
+
+	afterEach(() => {
+		setContractGateActive(false);
+		setPlanActive(false);
+	});
+
+	it("restricts project reads while allowing contract traversal", () => {
+		setContractGateActive(true);
+		const active = activeToolsAfterUpdate();
+		expect(active).not.toContain("bash");
+		expect(active).not.toContain("read");
+		expect(active).not.toContain("planner_discovery_submit");
+		expect(active).toContain("planner_contract_scan");
+	});
+
+	it("never hides lifecycle transitions, so a pending step cannot deadlock", () => {
+		// Regression: a pending discovery/scan_project_structure step whose
+		// required action is planner_start_step must stay reachable even when the
+		// contract gate is active — otherwise the orchestrator demands a tool the
+		// gate has hidden and the model loops on planner_status forever.
+		setContractGateActive(true);
+		const active = activeToolsAfterUpdate();
+		for (const transition of PLANNER_LIFECYCLE_TRANSITION_TOOLS) {
+			if (tools.some((t) => t.name === transition)) {
+				expect(active).toContain(transition);
+			}
+		}
+		expect(active).toContain("planner_start_step");
 	});
 });
 
