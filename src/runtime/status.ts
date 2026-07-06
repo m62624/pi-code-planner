@@ -8,7 +8,11 @@ import type {
 } from "../instructions/schema";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerFs } from "../storage/fs";
-import type { PlannerStage, PlannerStep } from "../storage/schema";
+import type {
+	PlannerStage,
+	PlannerStep,
+	PlanStateRecord,
+} from "../storage/schema";
 import { describeRecommendedVrfTemplates } from "../vrf/routing";
 import { formatPlannerContractsStatus } from "./contracts";
 import { formatDebugStatusLines } from "./debug-tools";
@@ -24,6 +28,7 @@ import {
 	type PlannerSkillSummary,
 } from "./skill-library";
 import { getPlannerStageStepBehavior } from "./stage-behavior";
+import { getAllowedNextPlannerPositions } from "./state-machine";
 import { getAllowedPlannerStateTransitionTypes } from "./state-transition";
 
 export interface PlannerStepRule {
@@ -989,20 +994,26 @@ export async function buildPlannerStatusText(
 		fs: input.fs,
 		projectPaths: preflight.context.projectPaths,
 	});
-	const instructionBundle = await readCurrentStageInstruction(
-		input.fs,
-		preflight,
-	);
 	const skillSummaries = shouldShowPlannerSkillInventory(behavior)
 		? await listActivePlannerSkillSummaries({
 				fs: input.fs,
 				projectPaths: preflight.context.projectPaths,
 			})
 		: [];
+	// Inline the full stage instruction on unfamiliar ground: the first status
+	// on entering a new stage (the model doesn't yet know that stage's job) or
+	// the first status after a compact (its working memory was wiped). Otherwise
+	// stay compact and let the model read the instruction file on demand.
+	const inlineStageInstruction =
+		state.pendingFullStatus === true ||
+		state.lastFullStatusStage !== state.stage;
+	const instructionBundle = inlineStageInstruction
+		? await readCurrentStageInstruction(input.fs, preflight)
+		: [];
 	lines.push(
 		"",
 		`You are in worktree \`${state.worktreePath ?? "(none)"}\` (branch \`${preflight.gitReality?.branch ?? state.currentBranch ?? "(unknown)"}\`) — work here.`,
-		"Re-read the Current Stage Instruction below before acting.",
+		"If you remember the current stage/step rules, act on them. If you are stuck, unsure of the next action, or resuming after a compact/recovery, read the stage instruction file listed under `## Instruction Files To Read` before acting.",
 		"",
 		"## Position",
 		`- plan: ${preflight.context.activePlanId} — ${preflight.context.plan.title}`,
@@ -1062,6 +1073,7 @@ export async function buildPlannerStatusText(
 		"",
 		"## Next Required Action",
 		formatLifecycleNextAction(lifecycle, rule),
+		...formatForkTargets(state),
 		"",
 		"## Current Step Rule",
 		`- stage: ${rule.stage}`,
@@ -1095,9 +1107,13 @@ export async function buildPlannerStatusText(
 		"## Instruction Files To Read",
 		...formatInstructionRoutes(preflight),
 		"",
-		"## Current Stage Instruction",
-		...formatInstructionBundle(instructionBundle),
-		"",
+		...(inlineStageInstruction
+			? [
+					"## Current Stage Instruction",
+					...formatInstructionBundle(instructionBundle),
+					"",
+				]
+			: []),
 		"## Planner Artifacts",
 		"Read these with planner_artifact_read (artifact: request|goal|discovery|plan|questions|decisions|verify|final_summary|task|tdd|refactor), NOT the built-in read tool — they live outside the worktree and worktree-fencing security extensions will block raw reads. The paths below are for reference only.",
 		...formatPlannerArtifactLinks(preflight),
@@ -1133,6 +1149,34 @@ function stepRule(
 	return { stage, step, ...rule };
 }
 
+/**
+ * When the current running step forks (more than one allowed next position),
+ * name the exact targets so the model passes nextStage/nextStep correctly on the
+ * FIRST planner_finish_step call instead of guessing `{}` and getting bounced by
+ * the ambiguous_next_step error. Empty when the next position is unique.
+ */
+function formatForkTargets(state: PlanStateRecord): string[] {
+	let allowed: { stage: string; step: string }[];
+	try {
+		allowed = getAllowedNextPlannerPositions({
+			stage: state.stage,
+			step: state.step,
+			creationMethod: state.creationMethod,
+		});
+	} catch {
+		return [];
+	}
+	if (allowed.length <= 1) {
+		return [];
+	}
+	const targets = allowed
+		.map((p) => `{stage: '${p.stage}', step: '${p.step}'}`)
+		.join(" or ");
+	return [
+		`This step forks — planner_finish_step REQUIRES one target: nextStage/nextStep = ${targets}.`,
+	];
+}
+
 async function readCurrentStageInstruction(
 	fs: PlannerFs,
 	preflight: PlannerPreflightResult,
@@ -1165,6 +1209,29 @@ async function safeGetInstructionContent(
 			content: `Instruction content is unavailable for ${key}: ${errorMessage(error)}`,
 		};
 	}
+}
+
+function formatInstructionBundle(
+	contents: readonly InstructionContent[],
+): string[] {
+	if (contents.length === 0) {
+		return ["(none)"];
+	}
+	const lines: string[] = [];
+	for (const content of contents) {
+		lines.push(
+			`### ${content.key}`,
+			`default: ${content.defaultPath}`,
+			`append: ${content.appendPath ?? "(none)"}`,
+			`appendSource: ${content.appendSource ?? "(none)"}`,
+			"",
+			"```markdown",
+			content.content.trimEnd(),
+			"```",
+			"",
+		);
+	}
+	return lines;
 }
 
 function formatLifecycleDecision(decision: PlannerLifecycleDecision): string[] {
@@ -1204,29 +1271,6 @@ function formatInstructionRoutes(preflight: PlannerPreflightResult): string[] {
 			`  default: ${entry.defaultPath}`,
 			`  project append: ${entry.projectAppendPath}`,
 			`  global append: ${entry.globalAppendPath}`,
-		);
-	}
-	return lines;
-}
-
-function formatInstructionBundle(
-	contents: readonly InstructionContent[],
-): string[] {
-	if (contents.length === 0) {
-		return ["(none)"];
-	}
-	const lines: string[] = [];
-	for (const content of contents) {
-		lines.push(
-			`### ${content.key}`,
-			`default: ${content.defaultPath}`,
-			`append: ${content.appendPath ?? "(none)"}`,
-			`appendSource: ${content.appendSource ?? "(none)"}`,
-			"",
-			"```markdown",
-			content.content.trimEnd(),
-			"```",
-			"",
 		);
 	}
 	return lines;

@@ -22,6 +22,21 @@ import type { TaskStoragePaths } from "./paths";
 export type TaskBehaviorKind = "happy" | "edge" | "error" | "concurrency";
 export type TaskBehaviorStatus = "planned" | "red" | "green";
 
+/**
+ * One if/else/error branch of a behavior's invariant. `covered` flips true only
+ * once a test drives that branch — the tdd_coverage gate compiles the branch
+ * set into `TOTAL … ON branches` so every untested branch is NAMED, turning
+ * "все if условия" into a machine-checked coverage ledger instead of prose.
+ */
+export interface TaskBehaviorBranch {
+	/** Stable id, strictly `BR-<n>`, unique within its behavior. */
+	id: string;
+	/** The branch condition as a checkable phrase, e.g. "dep already exists → duplicate rejected". */
+	condition: string;
+	/** True once a test exercises this branch (only when the behavior is red/green). */
+	covered: boolean;
+}
+
 export interface TaskBehavior {
 	/** Stable id, strictly `BHV-<n>`, unique within the task. */
 	id: string;
@@ -32,6 +47,8 @@ export interface TaskBehavior {
 	requirement: string | null;
 	/** The concrete test that witnesses the behavior; required once red. */
 	test: { file: string; name: string } | null;
+	/** The invariant's branches; empty for a behavior with no branching. */
+	branches: TaskBehaviorBranch[];
 	status: TaskBehaviorStatus;
 }
 
@@ -126,6 +143,11 @@ export function validateTaskBehaviors(input: {
 				`${where}.requirement must be a REQ-<n> id or null (got "${requirement}").`,
 			);
 		}
+		const branches = normalizeBranches(
+			behavior.branches,
+			behavior.status,
+			where,
+		);
 		return {
 			id,
 			statement,
@@ -135,6 +157,7 @@ export function validateTaskBehaviors(input: {
 				behavior.status !== "planned" && test
 					? { file: test.file.trim(), name: test.name.trim() }
 					: test,
+			branches,
 			status: behavior.status,
 		} satisfies TaskBehavior;
 	});
@@ -152,6 +175,49 @@ export function validateTaskBehaviors(input: {
 		taskId: input.taskId,
 		behaviors,
 	};
+}
+
+function normalizeBranches(
+	value: unknown,
+	status: TaskBehaviorStatus,
+	where: string,
+): TaskBehaviorBranch[] {
+	if (value === undefined || value === null) return [];
+	if (!Array.isArray(value)) {
+		throw new TypeError(`${where}.branches must be an array when present.`);
+	}
+	const seen = new Set<string>();
+	return value.map((raw, index) => {
+		const branch = (raw ?? {}) as Partial<TaskBehaviorBranch>;
+		const id = (branch.id ?? "").trim();
+		if (!/^BR-\d+$/.test(id)) {
+			throw new TypeError(
+				`${where}.branches[${index}].id must match BR-<n> (got "${id}").`,
+			);
+		}
+		if (seen.has(id)) {
+			throw new TypeError(
+				`${where}.branches[${index}].id "${id}" is declared more than once.`,
+			);
+		}
+		seen.add(id);
+		const condition = (branch.condition ?? "").trim();
+		if (!condition) {
+			throw new TypeError(
+				`${where}.branches[${index}].condition must be a non-empty string.`,
+			);
+		}
+		const covered = branch.covered === true;
+		// A branch is "covered" only when a test exercises it, so it cannot be
+		// covered before the behavior itself has a failing test — test-first
+		// enforced mechanically, same as the status ladder.
+		if (covered && status === "planned") {
+			throw new TypeError(
+				`${where}.branches[${index}] (${id}): a branch cannot be covered while the behavior is still planned — write the test first.`,
+			);
+		}
+		return { id, condition, covered } satisfies TaskBehaviorBranch;
+	});
 }
 
 export async function writeTaskBehaviors(

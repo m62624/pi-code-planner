@@ -403,6 +403,17 @@ export interface PlanStateRecord {
 	contracts: PlannerContractsState;
 	execRunning: boolean;
 	requiresCompact: boolean;
+	// One-shot: set true when a compact boundary completes, so the FIRST
+	// planner_status after a compact re-inlines the full stage instruction (the
+	// model's working memory was just wiped). Consumed — cleared — by that first
+	// planner_status; subsequent statuses stay compact.
+	pendingFullStatus?: boolean;
+	// The stage whose full instruction was last inlined into planner_status. The
+	// FIRST status on entering a new stage shows the full instruction (the model
+	// does not know a stage's job until it reads it once); later statuses in the
+	// same stage stay compact. Together with pendingFullStatus this makes the
+	// status respect context yet always brief the model on unfamiliar ground.
+	lastFullStatusStage?: PlannerStage | null;
 	requiresUserDecision: boolean;
 	broken: boolean;
 	brokenReason: string | null;
@@ -512,6 +523,8 @@ export function createInitialPlanState(input: {
 		contracts: createDefaultPlannerContractsState(),
 		execRunning: false,
 		requiresCompact: false,
+		pendingFullStatus: false,
+		lastFullStatusStage: null,
 		requiresUserDecision: false,
 		broken: false,
 		brokenReason: null,

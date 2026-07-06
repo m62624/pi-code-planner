@@ -130,6 +130,15 @@ describe("bundled vrf templates", () => {
 				tests_use_public_surface: true,
 			},
 		},
+		"tdd-coverage": {
+			facts: [
+				// One branch, driven by a test that failed first and now passes.
+				"FACT tdd_cov.br_1 is_branch",
+				"FACT tdd_cov.br_1 had_red",
+				"FACT tdd_cov.br_1 has_green",
+			],
+			values: { "tdd_cov.red_phase": true, "tdd_cov.suite_complete": true },
+		},
 		"branch-contract": {
 			facts: [
 				"FACT branch_contract.impl matches_contract",

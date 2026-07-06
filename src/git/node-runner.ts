@@ -88,6 +88,24 @@ export class NodeGitRunner implements GitRunner {
 		return await runGitCommandOutput(buildGitHeadFilesArgs(input));
 	}
 
+	async checkIgnore(
+		input: GitRepoInput & { paths: string[] },
+	): Promise<Set<string>> {
+		if (input.paths.length === 0) return new Set();
+		// check-ignore exits 0 (some paths ignored, printed to stdout), 1 (none),
+		// or 128 (no .gitignore / not a repo). Only exit 0 is "success" for
+		// execFile; 1 and 128 arrive as thrown errors whose stdout is the (empty)
+		// match list — so parse stdout in both branches and never propagate.
+		const args = buildGitCheckIgnoreArgs(input);
+		try {
+			const result = await execFileAsync("git", args);
+			return parseCheckIgnoreOutput(result.stdout);
+		} catch (error) {
+			const stdout = (error as { stdout?: unknown }).stdout;
+			return parseCheckIgnoreOutput(typeof stdout === "string" ? stdout : "");
+		}
+	}
+
 	async diffRange(
 		input: GitRepoInput & { fromRef: string; toRef: string },
 	): Promise<string> {
@@ -204,6 +222,30 @@ export function buildGitDiffNameOnlyArgs(input: GitRepoInput): string[] {
 
 export function buildGitHeadFilesArgs(input: GitRepoInput): string[] {
 	return ["-C", input.repoRoot, "show", "--name-only", "--format=", "HEAD"];
+}
+
+export function buildGitCheckIgnoreArgs(
+	input: GitRepoInput & { paths: string[] },
+): string[] {
+	// --no-index checks the ignore rules regardless of whether a path is already
+	// tracked, so a build dir committed before .gitignore existed is still caught.
+	return [
+		"-C",
+		input.repoRoot,
+		"check-ignore",
+		"--no-index",
+		"--",
+		...input.paths,
+	];
+}
+
+function parseCheckIgnoreOutput(stdout: string): Set<string> {
+	return new Set(
+		stdout
+			.split("\n")
+			.map((line) => line.trim())
+			.filter((line) => line.length > 0),
+	);
 }
 
 export function buildGitDiffRangeArgs(

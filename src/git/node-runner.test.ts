@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	buildGitBranchExistsArgs,
+	buildGitCheckIgnoreArgs,
 	buildGitCommitArgs,
 	buildGitCreateBranchArgs,
 	buildGitCurrentBranchArgs,
@@ -30,6 +31,23 @@ describe("node git runner command args", () => {
 			"/repo/app",
 			"rev-parse",
 			"--is-inside-work-tree",
+		]);
+	});
+
+	it("builds check-ignore args with --no-index so tracked artifacts are caught", () => {
+		expect(
+			buildGitCheckIgnoreArgs({
+				repoRoot: "/repo/app",
+				paths: ["/repo/app/target/x", "/repo/app/src/lib.rs"],
+			}),
+		).toEqual([
+			"-C",
+			"/repo/app",
+			"check-ignore",
+			"--no-index",
+			"--",
+			"/repo/app/target/x",
+			"/repo/app/src/lib.rs",
 		]);
 	});
 

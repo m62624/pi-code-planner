@@ -7,6 +7,7 @@ export const VRF_TEMPLATE_NAMES = [
 	"spec-consistency",
 	"plan-consistency",
 	"tdd-gate",
+	"tdd-coverage",
 	"branch-contract",
 	"doubt-review",
 	"discovery-gaps",

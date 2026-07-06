@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { SCHEMA_VERSION } from "../constants";
 import { runElenchusCheck } from "../runtime/elenchus-engine";
@@ -5,22 +7,29 @@ import type {
 	TaskBehavior,
 	TaskBehaviorsRecord,
 } from "../storage/behavior-store";
+import { BUNDLED_VRF_DEFAULTS_DIR } from "./defaults";
 import { compileTddCoverage } from "./tdd-coverage-compiler";
 
 function record(behaviors: TaskBehavior[]): TaskBehaviorsRecord {
 	return { schemaVersion: SCHEMA_VERSION, taskId: "alpha", behaviors };
 }
 
-function bhv(n: number, status: TaskBehavior["status"]): TaskBehavior {
+function bhv(
+	n: number,
+	status: TaskBehavior["status"],
+	requirement: string | null = null,
+	branches: TaskBehavior["branches"] = [],
+): TaskBehavior {
 	return {
 		id: `BHV-${n}`,
 		statement: `Behavior ${n}.`,
 		kind: "happy",
-		requirement: null,
+		requirement,
 		test:
 			status === "planned"
 				? null
 				: { file: "src/x.test.ts", name: `case ${n}` },
+		branches,
 		status,
 	};
 }
@@ -28,7 +37,13 @@ function bhv(n: number, status: TaskBehavior["status"]): TaskBehavior {
 async function run(program: string) {
 	const result = await runElenchusCheck({
 		root: "tdd.vrf",
-		read: () => program,
+		read: (path: string) =>
+			path === "tdd.vrf"
+				? program
+				: readFileSync(
+						join(BUNDLED_VRF_DEFAULTS_DIR, path.replace(/^templates\//, "")),
+						"utf8",
+					),
 		format: "json",
 	});
 	expect(result.ok).toBe(true);
@@ -36,6 +51,7 @@ async function run(program: string) {
 	return JSON.parse(result.output) as {
 		status: string;
 		warnings: Array<{ blocked_by?: string[] }>;
+		conflicts: Array<{ atoms?: string[] }>;
 	};
 }
 
@@ -80,6 +96,77 @@ describe("tdd-coverage compiler through the real engine", () => {
 		const compiled = compileTddCoverage(record([bhv(1, "green")]), "green");
 		expect(compiled.program).toContain("TOTAL has_red_test ON behaviors");
 		expect(compiled.program).toContain("TOTAL has_green_test ON behaviors");
+	});
+
+	it("NAMES an owned requirement that no behavior exercises", async () => {
+		const partial = compileTddCoverage(
+			record([bhv(1, "red", "REQ-1")]),
+			"red",
+			{ ownedRequirements: ["REQ-1", "REQ-2"] },
+		);
+		const report = await run(partial.program);
+		expect(report.status).toBe("WARNING");
+		expect(
+			report.warnings.flatMap((w) => w.blocked_by ?? []).join(" "),
+		).toContain("req_2 (no covered_by witness)");
+
+		const full = compileTddCoverage(
+			record([bhv(1, "red", "REQ-1"), bhv(2, "red", "REQ-2")]),
+			"red",
+			{ ownedRequirements: ["REQ-1", "REQ-2"] },
+		);
+		expect((await run(full.program)).status).toBe("CONSISTENT");
+	});
+
+	it("flags a behavior citing a requirement the task does not own", () => {
+		const compiled = compileTddCoverage(
+			record([bhv(1, "red", "REQ-9")]),
+			"red",
+			{ ownedRequirements: ["REQ-1"] },
+		);
+		expect(compiled.unknownRequirementRefs).toEqual([
+			{ behaviorId: "BHV-1", requirement: "REQ-9" },
+		]);
+	});
+
+	it("omits the requirement dimension for legacy plans with no owned requirements", () => {
+		const compiled = compileTddCoverage(record([bhv(1, "red")]), "red");
+		expect(compiled.program).not.toContain("SET requirements");
+		expect(compiled.program).not.toContain("TOTAL covered_by ON requirements");
+		expect(compiled.requirementCount).toBe(0);
+	});
+
+	it("green phase: an uncovered branch is NAMED as a CONFLICT", async () => {
+		const covered = { id: "BR-1", condition: "valid path", covered: true };
+		const uncovered = { id: "BR-2", condition: "cycle path", covered: false };
+		const compiled = compileTddCoverage(
+			record([bhv(1, "green", null, [covered, uncovered])]),
+			"green",
+		);
+		expect(compiled.branchCount).toBe(2);
+		const report = await run(compiled.program);
+		expect(report.status).toBe("CONFLICT");
+		const atoms = report.conflicts.flatMap((c) => c.atoms ?? []).join(" ");
+		expect(atoms).toContain("bhv_1__br_2");
+	});
+
+	it("green phase: every branch covered on a green behavior is CONSISTENT", async () => {
+		const compiled = compileTddCoverage(
+			record([
+				bhv(1, "green", null, [
+					{ id: "BR-1", condition: "a", covered: true },
+					{ id: "BR-2", condition: "b", covered: true },
+				]),
+			]),
+			"green",
+		);
+		expect((await run(compiled.program)).status).toBe("CONSISTENT");
+	});
+
+	it("does not import the branch template when no behavior has branches", () => {
+		const compiled = compileTddCoverage(record([bhv(1, "green")]), "green");
+		expect(compiled.program).not.toContain("templates/tdd-coverage.vrf");
+		expect(compiled.branchCount).toBe(0);
 	});
 
 	it("is deterministic and sorts behaviors by id", () => {

@@ -459,7 +459,7 @@ interface DirectoryCoverageEntry {
 	agentsMdLevel: "exact" | "parent" | "none";
 }
 
-async function buildDirCoverageMap(input: {
+export async function buildDirCoverageMap(input: {
 	fs: PlannerFs;
 	git: GitRunner;
 	root: string;
@@ -467,7 +467,7 @@ async function buildDirCoverageMap(input: {
 	const raw = await input.git
 		.headFiles({ repoRoot: input.root })
 		.catch(() => "");
-	const touched = raw
+	const allTouched = raw
 		.split("\n")
 		.map((l) => l.trim())
 		.filter(
@@ -479,6 +479,14 @@ async function buildDirCoverageMap(input: {
 				!l.startsWith("Merge"),
 		)
 		.map((f) => join(input.root, f));
+	// Drop .gitignored paths (build artifacts committed before a .gitignore
+	// existed, etc.) so the AGENTS.md coverage listing never asks the model to
+	// document target/, node_modules/, and the like. Missing .gitignore or a
+	// runner without checkIgnore → nothing filtered (graceful).
+	const ignored = input.git.checkIgnore
+		? await input.git.checkIgnore({ repoRoot: input.root, paths: allTouched })
+		: new Set<string>();
+	const touched = allTouched.filter((f) => !ignored.has(f));
 
 	const dirMap = new Map<string, string[]>();
 	for (const f of touched) {

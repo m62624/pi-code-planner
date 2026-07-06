@@ -1,0 +1,43 @@
+// tdd-coverage — premise library for the execution-phase per-branch coverage
+// gate (write_tests / run_final_tests).
+//
+// NOT model-authored: the deterministic tdd-coverage compiler
+// (src/vrf/tdd-coverage-compiler.ts) generates the consuming program from a
+// task's behaviors.json — the model never hand-writes this gate's facts. Each
+// if/else/error branch of an invariant is one subject; the compiler feeds it an
+// EXPLICIT value per phase (never UNKNOWN, so verdicts are clean CONFLICTs):
+//
+//   FACT tdd_cov.br_1 is_branch          // it is a branch of the task
+//   FACT tdd_cov.br_1 had_red            // a test drove it and failed first
+//   FACT tdd_cov.br_1 has_green          // ...and now passes
+//   NOT  tdd_cov.br_2 had_red            // an uncovered branch, stated false
+//   NOT  tdd_cov.br_2 has_green
+//
+// and binds the phase toggles via values: {"tdd_cov.red_phase": true} at
+// write_tests, {"tdd_cov.suite_complete": true} at run_final_tests.
+DOMAIN tdd_cov
+
+// -- phase toggles (bound from data, one phase per gate run) --
+VAR red_phase        // write_tests: every branch must have a failing test
+VAR suite_complete   // run_final_tests: every branch must pass
+
+// -- test-first discipline: a green branch was red first. A has_green with a
+//    NOT had_red is a CONFLICT with a why-trace — gaming is caught in the SAT,
+//    not merely in the store's status ladder. --
+PREMISE no_green_without_red FOR EACH b MENTIONED:
+    WHEN b has_green
+    THEN b had_red
+
+// -- the red-phase gate: claiming the red phase demands every branch has a
+//    failing test; an uncovered branch is NAMED as a CONFLICT. --
+PREMISE red_phase_needs_all_red FOR EACH b MENTIONED:
+    WHEN red_phase
+    AND  b is_branch
+    THEN b had_red
+
+// -- the green-phase gate: claiming the suite complete demands every branch
+//    passes; an unpassed branch is NAMED. --
+PREMISE complete_needs_all_green FOR EACH b MENTIONED:
+    WHEN suite_complete
+    AND  b is_branch
+    THEN b has_green

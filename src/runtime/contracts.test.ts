@@ -24,6 +24,7 @@ import { createInitialPlanState, createPlanRecord } from "../storage/schema";
 import { initializePlanState } from "../storage/state-store";
 import { MockPlannerFs } from "../test/mock-fs";
 import {
+	buildDirCoverageMap,
 	executePlannerContractTool,
 	formatPlannerContractBlock,
 	formatPlannerContractsStatus,
@@ -65,6 +66,37 @@ class MockGitRunner implements GitRunner {
 	async worktreeAdd(_input: GitWorktreeAddInput): Promise<void> {}
 	async worktreeRemove(_input: GitWorktreeRemoveInput): Promise<void> {}
 }
+
+describe("buildDirCoverageMap gitignore filtering", () => {
+	const root = "/repo/app";
+	const gitWith = (checkIgnore?: GitRunner["checkIgnore"]): GitRunner =>
+		({
+			headFiles: async () => "src/lib.rs\ntarget/debug/foo",
+			checkIgnore,
+		}) as unknown as GitRunner;
+
+	it("drops .gitignored paths from the touched-directory listing", async () => {
+		const fs = new MockPlannerFs();
+		const entries = await buildDirCoverageMap({
+			fs,
+			root,
+			git: gitWith(async ({ paths }) => {
+				return new Set(paths.filter((p) => p.includes("/target/")));
+			}),
+		});
+		const dirs = entries.map((e) => e.dir);
+		expect(dirs).toContain(join(root, "src"));
+		expect(dirs.some((d) => d.includes("target"))).toBe(false);
+	});
+
+	it("filters nothing when the runner has no checkIgnore (graceful)", async () => {
+		const fs = new MockPlannerFs();
+		const entries = await buildDirCoverageMap({ fs, root, git: gitWith() });
+		const dirs = entries.map((e) => e.dir);
+		expect(dirs).toContain(join(root, "src"));
+		expect(dirs).toContain(join(root, "target/debug"));
+	});
+});
 
 describe("planner local contracts parser", () => {
 	const root = "/repo/app";
