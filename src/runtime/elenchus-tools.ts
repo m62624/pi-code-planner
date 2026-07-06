@@ -2,6 +2,10 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { errorMessage } from "../errors";
 import { isPathInsideOrEqual } from "../path-utils";
+import { readTaskBehaviorsIfExists } from "../storage/behavior-store";
+import type { PlanStoragePaths } from "../storage/paths";
+import { createTaskStoragePaths } from "../storage/paths";
+import type { PlanStateRecord } from "../storage/schema";
 import { syncVrfTemplatesToPlan } from "../vrf/manager";
 import { runElenchusCheck } from "./elenchus-engine";
 import {
@@ -139,8 +143,31 @@ export async function executePlannerElenchusTool(
 		const position = { stage: state.stage, step: state.step };
 		const params = parseElenchusParams(input.params);
 
+		// The branch-contract and the tdd_coverage gate share ONE source of truth:
+		// the active task's declared branches[]. If the task decomposed its logic
+		// into branches for coverage, the logical contract cannot pretend the task
+		// has none — so a not_applicable escape is refused and every declared branch
+		// must be reasoned about in a `checked` program (see loadActiveTaskBranches).
+		const declaredBranches = await loadActiveTaskBranches(
+			input.fs,
+			planPaths,
+			state,
+		);
+
 		if (params.resolution === "not_applicable") {
+			if (declaredBranches) {
+				return blocked(branchyEscapeBlockedMessage(declaredBranches));
+			}
 			return await recordNotApplicable(input, elenchusDir, position, params);
+		}
+
+		if (declaredBranches) {
+			const missing = declaredBranches.branches.filter(
+				(b) => !programMentionsBranch(params.program, b.id),
+			);
+			if (missing.length > 0) {
+				return blocked(missingBranchBlockedMessage(declaredBranches, missing));
+			}
 		}
 		// Materialize the premise-template library before every check so a
 		// program's `IMPORT "templates/<name>.vrf"` always resolves, stays inside
@@ -269,6 +296,82 @@ async function recordNotApplicable(
 			engineVersion: null,
 		},
 	};
+}
+
+interface DeclaredBranches {
+	taskId: string;
+	branches: { id: string; condition: string }[];
+}
+
+/**
+ * The active task's declared branches, flattened across its behaviors, or null
+ * when there is no active task, no behavior board yet, or the board declares no
+ * branches at all. A non-null result means the task mechanically decomposed its
+ * logic into branches for the tdd_coverage gate — so the logical branch-contract
+ * must reason about the SAME branches (it cannot be `not_applicable`, and a
+ * `checked` program must mention each one).
+ */
+async function loadActiveTaskBranches(
+	fs: PlannerToolContext["fs"],
+	planPaths: PlanStoragePaths,
+	state: PlanStateRecord,
+): Promise<DeclaredBranches | null> {
+	const taskId = state.activeTaskId;
+	if (!taskId) return null;
+	const taskPaths = createTaskStoragePaths(planPaths, taskId);
+	const record = await readTaskBehaviorsIfExists(fs, taskPaths);
+	if (!record) return null;
+	const branches = record.behaviors.flatMap((behavior) =>
+		behavior.branches.map((branch) => ({
+			id: branch.id,
+			condition: branch.condition,
+		})),
+	);
+	if (branches.length === 0) return null;
+	return { taskId, branches };
+}
+
+/**
+ * Whether the program reasons about a declared branch. elenchus identifiers
+ * cannot contain a hyphen, so `BR-1` is transliterated in the program (e.g.
+ * `br_1`, `BR_1`, or a domain-prefixed `x.br_1`). We match the branch *number*
+ * after a `br` prefix with an optional `-`/`_`/space separator, bounded so `br_1`
+ * does not falsely match `br_10`. The convention (execution.md) is that each
+ * branch's contract subject carries its number, e.g. `br_1` for `BR-1`.
+ */
+function programMentionsBranch(program: string, branchId: string): boolean {
+	const num = branchId.replace(/^BR-/, "");
+	return new RegExp(`\\bbr[-_ ]?${num}\\b`, "i").test(program);
+}
+
+function branchyEscapeBlockedMessage(declared: DeclaredBranches): string {
+	const list = declared.branches.map((b) => `${b.id} (${b.condition})`);
+	return [
+		`Task ${declared.taskId} declares ${declared.branches.length} branch(es) in its behavior board:`,
+		...list.map((line) => `  - ${line}`),
+		"",
+		"The logical branch-contract cannot be not_applicable — the task's own",
+		"coverage decomposition proves it has branching logic. Run the engine",
+		"instead: resolution=checked, modeling each branch above as a subject",
+		"carrying its number (e.g. br_1 for BR-1 — elenchus ids take no hyphen),",
+		"with the premises that must hold across them.",
+	].join("\n");
+}
+
+function missingBranchBlockedMessage(
+	declared: DeclaredBranches,
+	missing: { id: string; condition: string }[],
+): string {
+	const list = missing.map((b) => `  - ${b.id} (${b.condition})`);
+	return [
+		`Branch-contract for ${declared.taskId} is incomplete: these declared`,
+		"branches are covered for tests but not reasoned about in the program:",
+		...list,
+		"",
+		"Add each missing branch as a subject carrying its number (e.g. br_1 for",
+		"BR-1) so the tdd_coverage board and the logical contract share one branch",
+		"set, then call planner_elenchus_check again.",
+	].join("\n");
 }
 
 function detectVerdict(output: string): string | null {

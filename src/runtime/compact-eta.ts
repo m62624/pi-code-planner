@@ -33,6 +33,21 @@
  * has no stable slope — we fall back to a through-origin rate model `T(x) = b·x`,
  * which is stable from a single observation (`b = ms/tokens`).
  *
+ * ## Locality — predict a size from its own neighbours
+ *
+ * A single global line is a poor fit when cost is not truly affine across the
+ * whole range (a machine that is cheap up to ~70k then falls off a cliff). So on
+ * top of recency and model match we add a **Gaussian proximity kernel** on token
+ * distance: `exp(-½·((xᵢ − x)/h)²)`. Samples near the size we are predicting
+ * dominate, distant ones fade — a locally-weighted regression, so 68k is
+ * predicted from the ~68k runs and 130k from the ~130k runs, not from one line
+ * forced through both. The bandwidth `h` is adaptive (the spread of the history's
+ * own sizes, floored to a fraction of their scale so a lone far sample still
+ * counts). Because the kernel is folded into the same `w[i]` that drives the fit
+ * AND the residual RMSE, the displayed band becomes a **local** prediction
+ * interval for free — its width reflects the scatter *near this size*, widened
+ * for a small effective sample count.
+ *
  * ## Does the time vary a lot? (variance)
  *
  * We do not just emit a point estimate. We compute the weighted RMSE of the fit
@@ -77,6 +92,11 @@ const RECENCY_DECAY = 0.85;
 // A sample from a different model still carries information (overhead is similar)
 // but its throughput is not ours, so it is heavily discounted.
 const MODEL_MISMATCH_WEIGHT = 0.25;
+// Proximity-kernel bandwidth floor, as a fraction of the history's token scale.
+// The bandwidth is the token spread of history, but never below this fraction of
+// the typical size — so a lone sample (zero spread) or a target far from every
+// sample still keeps non-zero weight instead of collapsing to no estimate.
+const TOKEN_BANDWIDTH_FLOOR_FRAC = 0.5;
 // Above this residual coefficient of variation the estimate is "noisy".
 const CV_STABLE = 0.25;
 // A single fit whose slope is this flat (per-token) is treated as degenerate and
@@ -159,7 +179,34 @@ export function estimateCompactionDuration(input: {
 		return noEstimate();
 	}
 
-	const w = computeWeights(clean, input.model);
+	// Base weights: recency × model match. The proximity kernel is layered on top
+	// so the fit and its residual band both localise around the queried size.
+	const wBase = computeWeights(clean, input.model);
+	const wBaseSum = wBase.reduce((acc, wi) => acc + wi, 0);
+	if (wBaseSum <= 0) return noEstimate();
+
+	// Adaptive bandwidth: the base-weighted spread of the history's token sizes,
+	// floored to a fraction of their scale so a single sample (zero spread) or a
+	// distant target never zeroes out the only evidence we have.
+	let tokMean = 0;
+	for (let i = 0; i < clean.length; i++) tokMean += wBase[i] * clean[i].tokens;
+	tokMean /= wBaseSum;
+	let tokVar = 0;
+	for (let i = 0; i < clean.length; i++) {
+		const d = clean[i].tokens - tokMean;
+		tokVar += wBase[i] * d * d;
+	}
+	tokVar /= wBaseSum;
+	const bandwidth = Math.max(
+		Math.sqrt(tokVar),
+		TOKEN_BANDWIDTH_FLOOR_FRAC * tokMean,
+	);
+
+	// Fold the Gaussian proximity kernel into the weights.
+	const w = clean.map((sample, i) => {
+		const z = (sample.tokens - x) / bandwidth;
+		return wBase[i] * Math.exp(-0.5 * z * z);
+	});
 	const W = w.reduce((acc, wi) => acc + wi, 0);
 	if (W <= 0) return noEstimate();
 
@@ -238,8 +285,16 @@ export function estimateCompactionDuration(input: {
 	} else {
 		cv = etaMs > 0 ? rmse / etaMs : 0;
 		reliability = cv > CV_STABLE ? "noisy" : "stable";
-		loMs = Math.max(ETA_FLOOR_MS, etaMs - rmse);
-		hiMs = etaMs + rmse;
+		// Widen the band for a small *effective* sample count. With a proximity
+		// kernel, only the samples near this size really count, so Kish's effective
+		// N — (Σw)² / Σw² — can be well below the raw count; the √(1+1/Nₑ) factor
+		// inflates a two-neighbour interval without touching the plentiful-data one.
+		let sumW2 = 0;
+		for (let i = 0; i < clean.length; i++) sumW2 += w[i] * w[i];
+		const nEff = sumW2 > 0 ? (W * W) / sumW2 : 1;
+		const band = rmse * Math.sqrt(1 + 1 / Math.max(nEff, 1));
+		loMs = Math.max(ETA_FLOOR_MS, etaMs - band);
+		hiMs = etaMs + band;
 	}
 
 	return {
@@ -300,9 +355,13 @@ export function formatDurationShort(ms: number): string {
 
 /**
  * Compose the one-line compaction indicator. With learned history it shows an
- * honest, asymptotic bar (`… ██████░░░░ 62% · 18s / ~30s`); with no history yet
- * it is a bare running timer. Pure so the format is unit-tested without the SDK,
- * and shared by both the top widget and any other surface that shows the run.
+ * honest, asymptotic bar (`… ██████░░░░ 62% · ~30s`); with no history yet it is
+ * a bare label. Deliberately carries NO per-second elapsed: the SDK repaints the
+ * whole widget on every push (no diffing), so a ticking seconds counter flickers
+ * the banner every second. The bar/percent advance slowly off `elapsedMs` while
+ * the *rendered* line changes only coarsely, so the dedup in the widget setter
+ * skips most pushes and the banner stays visually still. Pure so the format is
+ * unit-tested without the SDK, and shared by every surface that shows the run.
  */
 export function formatCompactIndicator(input: {
 	sizeLabel: string;
@@ -310,9 +369,8 @@ export function formatCompactIndicator(input: {
 	elapsedMs: number;
 	estimate: CompactEtaEstimate;
 }): string {
-	const elapsed = formatDurationShort(input.elapsedMs);
 	if (!input.estimate.hasEstimate) {
-		return `Compacting ${input.sizeLabel} tok (${input.reasonLabel})… ${elapsed}`;
+		return `Compacting ${input.sizeLabel} tok (${input.reasonLabel})…`;
 	}
 	const frac = compactionProgressFraction({
 		elapsedMs: input.elapsedMs,
@@ -321,7 +379,7 @@ export function formatCompactIndicator(input: {
 	});
 	const bar = renderProgressBar(frac);
 	const pct = Math.round(frac * 100);
-	return `Compacting ${input.sizeLabel} tok (${input.reasonLabel}) ${bar} ${pct}% · ${elapsed} / ${formatEtaLabel(input.estimate)}`;
+	return `Compacting ${input.sizeLabel} tok (${input.reasonLabel}) ${bar} ${pct}% · ${formatEtaLabel(input.estimate)}`;
 }
 
 /**

@@ -135,6 +135,15 @@ describe("buildPlannerStatusText — fork targets", () => {
 		expect(text).toContain("implement_task");
 	});
 
+	it("states the decision criterion for a known fork", async () => {
+		const { fs, preflight } = await makePreflight({ step: "run_final_tests" });
+		const text = await buildPlannerStatusText({ fs, preflight });
+		// Not just the targets: WHICH one, so the model picks right the first time.
+		expect(text).toContain("Choose:");
+		expect(text).toContain("capture_skill when all final tests");
+		expect(text).toContain("implement_task when a test still fails");
+	});
+
 	it("adds no fork line on a linear step", async () => {
 		const { fs, preflight } = await makePreflight({ step: "compact_task" });
 		const text = await buildPlannerStatusText({ fs, preflight });

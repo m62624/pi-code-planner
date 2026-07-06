@@ -14,10 +14,16 @@ import type {
 	GitWorktreeAddInput,
 	GitWorktreeRemoveInput,
 } from "../git/runner";
+import {
+	type TaskBehavior,
+	validateTaskBehaviors,
+	writeTaskBehaviors,
+} from "../storage/behavior-store";
 import { createNodeFs } from "../storage/fs";
 import {
 	createPlanStoragePaths,
 	createProjectStoragePaths,
+	createTaskStoragePaths,
 } from "../storage/paths";
 import { initializePlanFiles } from "../storage/plan-store";
 import { ensureProjectRecord, setActivePlan } from "../storage/project-store";
@@ -108,6 +114,77 @@ async function createSetup(step: PlannerStep = "consistency_check") {
 		currentBranch: "plan/plan-a",
 	});
 	await setActivePlan(fs, projectPaths, "plan-a");
+	return { fs, projectPaths, planPaths };
+}
+
+/**
+ * An execution/contract_check setup with an active task whose behavior board
+ * declares the given branches — the state that ties the branch-contract to
+ * coverage. `branches: []` (default) exercises the no-branch escape path.
+ */
+async function createExecSetupWithBranches(branchIds: string[] = []): Promise<{
+	fs: ReturnType<typeof createNodeFs>;
+	projectPaths: ReturnType<typeof createProjectStoragePaths>;
+	planPaths: ReturnType<typeof createPlanStoragePaths>;
+}> {
+	const root = await mkdtemp(join(tmpdir(), "elenchus-tools-exec-"));
+	tempDirs.push(root);
+	const fs = createNodeFs();
+	const agentDir = join(root, "agent");
+	const projectRoot = join(root, "repo");
+	const projectPaths = createProjectStoragePaths({ agentDir, projectRoot });
+	const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+	const worktreePath = join(
+		projectRoot,
+		".pi",
+		"pi-code-planner",
+		"worktrees",
+		"plan-a",
+	);
+	await ensureProjectRecord(fs, projectPaths);
+	await initializePlanFiles(
+		fs,
+		planPaths,
+		createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+	);
+	await fs.mkdirp(worktreePath);
+	await initializePlanState(fs, planPaths, {
+		...createInitialPlanState({
+			baseBranch: "main",
+			planBranch: "plan/plan-a",
+			worktreePath,
+		}),
+		stage: "execution",
+		step: "contract_check",
+		stepStatus: "running",
+		currentBranch: "plan/plan-a",
+		activeTaskId: "task-a",
+	});
+	await setActivePlan(fs, projectPaths, "plan-a");
+
+	const behavior: TaskBehavior = {
+		id: "BHV-1",
+		statement: "Adds a dependency with cycle rejection",
+		kind: "error",
+		requirement: null,
+		test: null,
+		branches: branchIds.map((id) => ({
+			id,
+			condition: `${id} condition`,
+			covered: false,
+		})),
+		status: "planned",
+	};
+	const record = validateTaskBehaviors({
+		taskId: "task-a",
+		behaviors: [behavior],
+		previous: null,
+	});
+	await writeTaskBehaviors(
+		fs,
+		createTaskStoragePaths(planPaths, "task-a"),
+		record,
+	);
 	return { fs, projectPaths, planPaths };
 }
 
@@ -300,6 +377,83 @@ describe("planner elenchus tool", () => {
 			join(setup.planPaths.elenchusDir, "linear.not-applicable.md"),
 		);
 		expect(record).toContain("Pure CRUD task");
+	});
+
+	it("refuses the not_applicable escape when the task declares branches", async () => {
+		const setup = await createExecSetupWithBranches(["BR-1", "BR-2"]);
+		const result = await executePlannerElenchusTool({
+			fs: setup.fs,
+			git,
+			projectPaths: setup.projectPaths,
+			params: {
+				name: "branch-contract-task-a",
+				resolution: "not_applicable",
+				reason: "No branching logic.",
+			},
+		});
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("declares 2 branch(es)");
+		expect(result.text).toContain("BR-1");
+		expect(result.text).toContain("BR-2");
+		// The escape record must NOT have been written.
+		expect(
+			await setup.fs.exists(
+				join(
+					setup.planPaths.elenchusDir,
+					"branch-contract-task-a.not-applicable.md",
+				),
+			),
+		).toBe(false);
+	});
+
+	it("allows the escape for a task whose board declares no branches", async () => {
+		const setup = await createExecSetupWithBranches([]);
+		const result = await executePlannerElenchusTool({
+			fs: setup.fs,
+			git,
+			projectPaths: setup.projectPaths,
+			params: {
+				name: "branch-contract-task-a",
+				resolution: "not_applicable",
+				reason: "Pure data model, no branching.",
+			},
+		});
+		expect(result.status).toBe("applied");
+		expect(result.details?.resolution).toBe("not_applicable");
+	});
+
+	it("refuses a checked program that omits a declared branch", async () => {
+		const setup = await createExecSetupWithBranches(["BR-1", "BR-2"]);
+		const result = await executePlannerElenchusTool({
+			fs: setup.fs,
+			git,
+			projectPaths: setup.projectPaths,
+			params: {
+				name: "branch-contract-task-a",
+				resolution: "checked",
+				// Mentions br_1 but not br_2 (elenchus ids take no hyphen).
+				program: "DOMAIN c\nFACT br_1 tested\nCHECK",
+			},
+		});
+		expect(result.status).toBe("blocked");
+		expect(result.text).toContain("BR-2");
+		expect(result.text).not.toContain("engine"); // blocked before running
+	});
+
+	it("runs a checked program that reasons about every declared branch", async () => {
+		const setup = await createExecSetupWithBranches(["BR-1", "BR-2"]);
+		const result = await executePlannerElenchusTool({
+			fs: setup.fs,
+			git,
+			projectPaths: setup.projectPaths,
+			params: {
+				name: "branch-contract-task-a",
+				resolution: "checked",
+				program: "DOMAIN c\nFACT br_1 tested\nFACT br_2 tested\nCHECK",
+			},
+		});
+		expect(result.status).toBe("applied");
+		expect(result.details?.verdict).toBe("CONSISTENT");
 	});
 
 	it("blocks not_applicable without a reason", async () => {
