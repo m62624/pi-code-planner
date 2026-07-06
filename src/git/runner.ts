@@ -66,6 +66,14 @@ export interface GitRunner {
 	diffNameOnly(input: GitRepoInput): Promise<string>;
 	diffPatch(input: GitRepoInput): Promise<string>;
 	headFiles(input: GitRepoInput): Promise<string>;
+	/**
+	 * Which of the given paths match the repo's .gitignore rules (via
+	 * `git check-ignore --no-index`, so tracked-but-ignored build artifacts are
+	 * caught too). Optional: test mocks may omit it, in which case callers skip
+	 * gitignore filtering. Never throws — a missing .gitignore or non-repo yields
+	 * an empty set.
+	 */
+	checkIgnore?(input: GitRepoInput & { paths: string[] }): Promise<Set<string>>;
 	diffRange(
 		input: GitRepoInput & { fromRef: string; toRef: string },
 	): Promise<string>;
