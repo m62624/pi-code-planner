@@ -2,7 +2,10 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { ALL_PLANNER_TOOL_NAMES } from "./guard/tool-policy";
+import {
+	ALL_PLANNER_TOOL_NAMES,
+	PLANNER_LIFECYCLE_TRANSITION_TOOLS,
+} from "./guard/tool-policy";
 import { PLANNER_RECOVERY_REPORT_TOOL_NAME } from "./runtime/recovery-tools";
 import type { PlannerFs } from "./storage/fs";
 
@@ -48,12 +51,16 @@ let planActiveCache: boolean = false;
  */
 let contractGateActive: boolean = false;
 
-const CONTRACT_GATE_ALLOWED: ReadonlySet<string> = new Set([
+const CONTRACT_GATE_ALLOWED: ReadonlySet<string> = new Set<string>([
 	"planner_status",
 	"planner_artifact_read",
 	"planner_contract_scan",
 	"planner_contract_route",
 	"planner_contract_read",
+	// Lifecycle transitions must stay reachable, otherwise a pending step whose
+	// required action is planner_start_step deadlocks: the gate would hide the
+	// very tool the orchestrator demands before contract tools are unblocked.
+	...PLANNER_LIFECYCLE_TRANSITION_TOOLS,
 ]);
 
 export function setContractGateActive(active: boolean): void {

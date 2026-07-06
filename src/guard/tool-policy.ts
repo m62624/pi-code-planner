@@ -73,6 +73,25 @@ export const ALL_PLANNER_TOOL_NAMES = [
 
 export type AllPlannerToolName = (typeof ALL_PLANNER_TOOL_NAMES)[number];
 
+/**
+ * State-machine lifecycle transitions (start/finish/advance/…) as opposed to
+ * the semantic wrapper tools. These only move the planner between steps; each is
+ * independently gated by its exit conditions. They must never be hidden by a
+ * tool-visibility restriction, or the machine can become un-advanceable.
+ */
+export const PLANNER_LIFECYCLE_TRANSITION_TOOLS = [
+	"planner_start_step",
+	"planner_finish_step",
+	"planner_advance_step",
+	"planner_fail_step",
+	"planner_block_step",
+	"planner_retry_step",
+	"planner_request_compact",
+	"planner_complete_compact",
+	"planner_enter_recovery",
+	"planner_resume_after_recovery",
+] as const satisfies readonly AllPlannerToolName[];
+
 const DEBUG_WRAPPER_TOOLS = [
 	"planner_debug_strategy",
 	"planner_debug_probe",
