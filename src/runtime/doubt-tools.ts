@@ -20,6 +20,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { blockedResult } from "./tool-result";
 
 export {
 	DOUBT_FINDING_STATUSES,
@@ -150,5 +151,5 @@ function blocked(
 	toolName: PlannerDoubtReviewToolName,
 	text: string,
 ): PlannerDoubtToolExecutionResult {
-	return { status: "blocked", toolName, text, details: null };
+	return blockedResult(toolName, text);
 }

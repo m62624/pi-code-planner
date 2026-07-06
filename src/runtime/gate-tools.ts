@@ -1,8 +1,8 @@
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { errorMessage } from "../errors";
 import type { GitRunner } from "../git/runner";
+import { sha256 } from "../hash";
 import { isPathInsideOrEqual } from "../path-utils";
 import { readTaskBehaviorsIfExists } from "../storage/behavior-store";
 import type { PlannerFs } from "../storage/fs";
@@ -31,6 +31,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { blockedResult } from "./tool-result";
 
 export const PLANNER_GATE_TOOL_NAME = "planner_gate_check" as const;
 export type PlannerGateToolName = typeof PLANNER_GATE_TOOL_NAME;
@@ -677,10 +678,6 @@ function atomSubject(atom: string): string {
 	return unqualified.split(" ")[0] ?? unqualified;
 }
 
-function sha256(content: string): string {
-	return createHash("sha256").update(content).digest("hex");
-}
-
 /** Rewrite one `## …` section of coverage.md, preserving the others. */
 export async function writeCoverageSection(
 	fs: PlannerFs,
@@ -722,10 +719,5 @@ function parseGateName(params: unknown): PlannerGateName {
 }
 
 function blocked(text: string): PlannerGateToolResult {
-	return {
-		status: "blocked",
-		toolName: PLANNER_GATE_TOOL_NAME,
-		text,
-		details: null,
-	};
+	return blockedResult(PLANNER_GATE_TOOL_NAME, text);
 }

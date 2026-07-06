@@ -37,6 +37,7 @@ import {
 } from "../worktree/paths";
 import type { PlannerGitReality } from "./git-state-sync";
 import { inspectPlannerGitReality } from "./git-state-sync";
+import { asObject } from "./params";
 import {
 	createPlannerPlanDescription,
 	createPlannerPlanTitle,
@@ -44,8 +45,11 @@ import {
 	validatePlannerPlanTitle,
 } from "./plan-naming";
 import type { PlannerToolExecutionInput } from "./tool-context";
-import type { PlannerToolResult } from "./tool-result";
-import { asObject } from "./values";
+import {
+	appliedResult,
+	blockedResult,
+	type PlannerToolResult,
+} from "./tool-result";
 
 export const PLANNER_PLAN_TOOL_NAMES = ["planner_create_plan"] as const;
 
@@ -429,7 +433,7 @@ function applied(
 	text: string,
 	details: unknown,
 ): PlannerPlanToolExecutionResult {
-	return { status: "applied", toolName, text, details };
+	return appliedResult(toolName, text, details);
 }
 
 function blocked(
@@ -437,5 +441,5 @@ function blocked(
 	text: string,
 	details: unknown,
 ): PlannerPlanToolExecutionResult {
-	return { status: "blocked", toolName, text, details };
+	return blockedResult(toolName, text, details);
 }

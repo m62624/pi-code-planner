@@ -18,8 +18,8 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
-import { requiredString } from "./params";
-import { asObject } from "./values";
+import { asObject, requiredString } from "./params";
+import { blockedResult } from "./tool-result";
 
 export const PLANNER_BEHAVIOR_TOOL_NAME = "planner_behavior_upsert" as const;
 export type PlannerBehaviorToolName = typeof PLANNER_BEHAVIOR_TOOL_NAME;
@@ -123,10 +123,5 @@ export async function executePlannerBehaviorTool(input: {
 }
 
 function blocked(text: string) {
-	return {
-		status: "blocked" as const,
-		toolName: PLANNER_BEHAVIOR_TOOL_NAME,
-		text,
-		details: null,
-	};
+	return blockedResult(PLANNER_BEHAVIOR_TOOL_NAME, text);
 }

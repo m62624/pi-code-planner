@@ -10,7 +10,7 @@ import type { PlannerFs } from "../storage/fs";
 import { createTaskStoragePaths } from "../storage/paths";
 import { updatePlanRecord } from "../storage/plan-store";
 import type { PlanStateRecord } from "../storage/schema";
-import { savePlanState } from "../storage/state-store";
+import { requireWorktreePath, savePlanState } from "../storage/state-store";
 import { updateTaskStatus } from "../storage/task-store";
 import { assertNoPlannerDebugArtifactsBeforeCommit } from "./debug-tools";
 import {
@@ -23,10 +23,14 @@ import {
 	type PlannerOrchestratorResult,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { asObject } from "./params";
 import { validateTaskMergeScopeAudit } from "./tdd-evidence";
 import type { PlannerToolExecutionInput } from "./tool-context";
-import type { PlannerToolResult } from "./tool-result";
-import { asObject } from "./values";
+import {
+	appliedResult,
+	blockedResult,
+	type PlannerToolResult,
+} from "./tool-result";
 
 export const PLANNER_GIT_TOOL_NAMES = [
 	"planner_git_inspect",
@@ -420,13 +424,6 @@ async function markTaskDone(
 	}
 }
 
-function requireWorktreePath(state: PlanStateRecord): string {
-	if (!state.worktreePath) {
-		throw new Error("Plan state has no worktreePath.");
-	}
-	return state.worktreePath;
-}
-
 function requiredString(params: unknown, key: string): string {
 	const value = asObject(params)[key];
 	if (typeof value !== "string" || value.trim().length === 0) {
@@ -447,7 +444,7 @@ function applied(
 	text: string,
 	details: unknown,
 ): PlannerGitToolExecutionResult {
-	return { status: "applied", toolName, text, details };
+	return appliedResult(toolName, text, details);
 }
 
 function blocked(
@@ -455,7 +452,7 @@ function blocked(
 	text: string,
 	details: unknown,
 ): PlannerGitToolExecutionResult {
-	return { status: "blocked", toolName, text, details };
+	return blockedResult(toolName, text, details);
 }
 
 function errorMessage(error: unknown): string {

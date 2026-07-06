@@ -11,6 +11,13 @@ import {
 	runPlannerOrchestrator,
 } from "./orchestrator";
 import {
+	enumOf,
+	optionalString,
+	type ParamSchema,
+	parseParams,
+	trimmedString,
+} from "./param-codec";
+import {
 	validatePlannerPlanDescription,
 	validatePlannerPlanTitle,
 } from "./plan-naming";
@@ -20,13 +27,27 @@ import {
 	startPlannerStep,
 } from "./state-machine";
 import type { PlannerToolExecutionInput } from "./tool-context";
-import type { PlannerToolResult } from "./tool-result";
-import { asObject } from "./values";
+import {
+	appliedResult,
+	blockedResult,
+	type PlannerToolResult,
+} from "./tool-result";
 
 export const PLANNER_GOAL_TOOL_NAMES = [
 	"planner_goal_submit",
 	"planner_goal_decide",
 ] as const;
+
+const GOAL_SUBMIT_SCHEMA = {
+	content: trimmedString(),
+	title: trimmedString(),
+	description: trimmedString(),
+} satisfies ParamSchema;
+
+const GOAL_DECIDE_SCHEMA = {
+	decision: enumOf(["approve", "revise"] as const),
+	feedback: optionalString(),
+} satisfies ParamSchema;
 
 export type PlannerGoalToolName = (typeof PLANNER_GOAL_TOOL_NAMES)[number];
 
@@ -58,12 +79,19 @@ export async function executePlannerGoalTool(
 	}
 
 	const { planPaths, state } = orchestrator.preflight.context;
-	const params = asObject(input.params);
 	if (input.toolName === "planner_goal_submit") {
-		const content = requiredString(params, "content");
-		const title = validatePlannerPlanTitle(requiredString(params, "title"));
+		const parsed = parseParams(
+			input.toolName,
+			GOAL_SUBMIT_SCHEMA,
+			input.params,
+		);
+		if (!parsed.ok) {
+			return blocked(input.toolName, parsed.error, { orchestrator });
+		}
+		const content = parsed.value.content;
+		const title = validatePlannerPlanTitle(parsed.value.title);
 		const description = validatePlannerPlanDescription(
-			requiredString(params, "description"),
+			parsed.value.description,
 		);
 		await input.fs.writeTextAtomic(planPaths.goalMd, `${content.trim()}\n`);
 		const plan = await updatePlanRecord(input.fs, planPaths, (record) => ({
@@ -104,8 +132,11 @@ export async function executePlannerGoalTool(
 		);
 	}
 
-	const decision = requiredDecision(params);
-	const feedback = optionalString(params, "feedback");
+	const decided = parseParams(input.toolName, GOAL_DECIDE_SCHEMA, input.params);
+	if (!decided.ok) {
+		return blocked(input.toolName, decided.error, { orchestrator });
+	}
+	const { decision, feedback } = decided.value;
 	await appendDecision(
 		input.fs,
 		planPaths.decisionsMd,
@@ -154,40 +185,12 @@ async function appendDecision(
 	);
 }
 
-function requiredDecision(
-	params: Record<string, unknown>,
-): "approve" | "revise" {
-	const decision = params.decision;
-	if (decision !== "approve" && decision !== "revise") {
-		throw new TypeError("decision must be approve or revise.");
-	}
-	return decision;
-}
-
-function requiredString(params: Record<string, unknown>, key: string): string {
-	const value = params[key];
-	if (typeof value !== "string" || value.trim().length === 0) {
-		throw new TypeError(`${key} must be a non-empty string.`);
-	}
-	return value;
-}
-
-function optionalString(
-	params: Record<string, unknown>,
-	key: string,
-): string | null {
-	const value = params[key];
-	return typeof value === "string" && value.trim().length > 0
-		? value.trim()
-		: null;
-}
-
 function applied(
 	toolName: PlannerGoalToolName,
 	text: string,
 	details: unknown,
 ): PlannerGoalToolExecutionResult {
-	return { status: "applied", toolName, text, details };
+	return appliedResult(toolName, text, details);
 }
 
 function blocked(
@@ -195,5 +198,5 @@ function blocked(
 	text: string,
 	details: unknown,
 ): PlannerGoalToolExecutionResult {
-	return { status: "blocked", toolName, text, details };
+	return blockedResult(toolName, text, details);
 }

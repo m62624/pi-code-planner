@@ -57,6 +57,8 @@
  * (b) lowers the bar's fill target so it is less likely to overrun.
  */
 
+import { clamp } from "./num";
+
 export interface CompactTimingSample {
 	/** `tokensBefore` — the context size that was summarized. */
 	tokens: number;
@@ -118,10 +120,6 @@ const FILL_AT_ETA: Record<Exclude<CompactEtaReliability, "none">, number> = {
 	noisy: 0.8,
 	single: 0.75,
 };
-
-function clamp(value: number, min: number, max: number): number {
-	return Math.min(Math.max(value, min), max);
-}
 
 function noEstimate(): CompactEtaEstimate {
 	return {

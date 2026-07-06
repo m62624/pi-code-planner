@@ -1,4 +1,5 @@
 import { SCHEMA_VERSION } from "../constants";
+import { withFileWriteLock } from "./file-lock";
 import type { PlannerFs } from "./fs";
 import { sanitizeIdPart } from "./ids";
 import { readJson, writeJson } from "./json";
@@ -74,14 +75,18 @@ export async function updateTaskStatus(
 	status: TaskStatus,
 	commitHash?: string,
 ): Promise<TaskRecord> {
-	const current = await readTaskRecord(fs, paths);
-	const next: TaskRecord = {
-		...current,
-		status,
-		...(commitHash ? { commitHash } : {}),
-	};
-	await writeJson(fs, paths.taskJson, next);
-	return next;
+	// Serialized read-modify-write so a status transition never clobbers a
+	// concurrent one on the same task.json. See {@link withFileWriteLock}.
+	return await withFileWriteLock(paths.taskJson, async () => {
+		const current = await readTaskRecord(fs, paths);
+		const next: TaskRecord = {
+			...current,
+			status,
+			...(commitHash ? { commitHash } : {}),
+		};
+		await writeJson(fs, paths.taskJson, next);
+		return next;
+	});
 }
 
 function formatTaskMarkdown(task: TaskRecord): string {

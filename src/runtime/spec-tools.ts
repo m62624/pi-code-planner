@@ -11,6 +11,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { blockedResult } from "./tool-result";
 
 export const PLANNER_SPEC_TOOL_NAME = "planner_spec_submit" as const;
 export type PlannerSpecToolName = typeof PLANNER_SPEC_TOOL_NAME;
@@ -82,10 +83,5 @@ export async function executePlannerSpecTool(input: {
 }
 
 function blocked(text: string) {
-	return {
-		status: "blocked" as const,
-		toolName: PLANNER_SPEC_TOOL_NAME,
-		text,
-		details: null,
-	};
+	return blockedResult(PLANNER_SPEC_TOOL_NAME, text);
 }

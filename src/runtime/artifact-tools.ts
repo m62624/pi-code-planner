@@ -14,14 +14,14 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
-import { requiredString } from "./params";
+import { asObject, requiredString } from "./params";
 import {
 	mergeTddMarkdown,
 	renderTddSection,
 	TDD_SECTIONS,
 	type TddSectionKey,
 } from "./tdd-form";
-import { asObject } from "./values";
+import { blockedResult } from "./tool-result";
 
 export const PLANNER_ARTIFACT_TOOL_NAMES = [
 	"planner_plan_submit",
@@ -240,7 +240,7 @@ function blocked(
 	toolName: PlannerArtifactToolName,
 	text: string,
 ): PlannerArtifactToolExecutionResult {
-	return { status: "blocked", toolName, text, details: null };
+	return blockedResult(toolName, text);
 }
 
 function requiredStringArray(

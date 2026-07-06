@@ -34,6 +34,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { asObject } from "./params";
 import { validateRefactorReviewArtifact } from "./refactor-review";
 import { getAllowedNextPlannerPositions } from "./state-machine";
 import {
@@ -47,7 +48,6 @@ import {
 	validateTaskMergeScopeAudit,
 } from "./tdd-evidence";
 import type { PlannerToolExecutionInput } from "./tool-context";
-import { asObject } from "./values";
 
 export const PLANNER_WORKFLOW_TOOL_NAMES = [
 	"planner_start_step",

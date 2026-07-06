@@ -1,3 +1,4 @@
+import { withFileWriteLock } from "./file-lock";
 import type { PlannerFs } from "./fs";
 import { readJson, readJsonIfExists, writeJson } from "./json";
 import type { PlanStoragePaths } from "./paths";
@@ -9,12 +10,6 @@ import type {
 	StepStatus,
 } from "./schema";
 import { createDefaultPlannerContractsState } from "./schema";
-
-// Per-stateJson-path queue so concurrent updatePlanState calls (e.g. a tool
-// call racing the idle watchdog) read-modify-write in order instead of
-// clobbering each other's update. In-process only — does not protect against
-// a second OS process touching the same state.json.
-const stateWriteLocks = new Map<string, Promise<void>>();
 
 export async function initializePlanState(
 	fs: PlannerFs,
@@ -47,7 +42,7 @@ export async function savePlanState(
 	paths: PlanStoragePaths,
 	state: PlanStateRecord,
 ): Promise<void> {
-	await withStateWriteLock(paths.stateJson, async () => {
+	await withFileWriteLock(paths.stateJson, async () => {
 		await writePlanStateUnlocked(fs, paths, state);
 	});
 }
@@ -66,7 +61,7 @@ export async function updatePlanState(
 	paths: PlanStoragePaths,
 	update: (state: PlanStateRecord) => PlanStateRecord,
 ): Promise<PlanStateRecord> {
-	return await withStateWriteLock(paths.stateJson, async () => {
+	return await withFileWriteLock(paths.stateJson, async () => {
 		const current = normalizePlanState(
 			await readJson<PlanStateRecord>(fs, paths.stateJson),
 		);
@@ -125,6 +120,21 @@ export async function markPlanBroken(
 		requiresUserDecision: true,
 		blockedReason: reason,
 	}));
+}
+
+/**
+ * Assert a plan is in a worktree and return its path. An absent `worktreePath`
+ * at a point that needs one is an internal invariant break (a should-never-happen
+ * bug), so this throws; `message` lets a caller name its own context.
+ */
+export function requireWorktreePath(
+	state: PlanStateRecord,
+	message = "Plan state has no worktreePath.",
+): string {
+	if (!state.worktreePath) {
+		throw new Error(message);
+	}
+	return state.worktreePath;
 }
 
 // Backward-compat shim for resuming plans created before a field existed.
@@ -200,26 +210,4 @@ function normalizePlannerContractsState(
 		lastCheck: value.lastCheck ?? null,
 		touchedFiles: Array.isArray(value.touchedFiles) ? value.touchedFiles : [],
 	};
-}
-
-async function withStateWriteLock<T>(
-	stateJson: string,
-	operation: () => Promise<T>,
-): Promise<T> {
-	const previous = stateWriteLocks.get(stateJson) ?? Promise.resolve();
-	let release!: () => void;
-	const current = new Promise<void>((resolve) => {
-		release = resolve;
-	});
-	const queued = previous.then(() => current);
-	stateWriteLocks.set(stateJson, queued);
-	await previous;
-	try {
-		return await operation();
-	} finally {
-		release();
-		if (stateWriteLocks.get(stateJson) === queued) {
-			stateWriteLocks.delete(stateJson);
-		}
-	}
 }

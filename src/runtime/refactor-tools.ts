@@ -8,7 +8,7 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
-import { requiredString } from "./params";
+import { asObject, requiredString } from "./params";
 import {
 	formatRefactorReviewMarkdown,
 	REFACTOR_REVIEW_CATEGORIES,
@@ -20,7 +20,7 @@ import {
 	validateRefactorCategoryReviews,
 	validateRefactorReviewMarkdown,
 } from "./refactor-review";
-import { asObject } from "./values";
+import { blockedResult } from "./tool-result";
 
 export const PLANNER_REFACTOR_TOOL_NAMES = ["planner_refactor_review"] as const;
 export type PlannerRefactorToolName =
@@ -147,7 +147,7 @@ function blocked(
 	toolName: PlannerRefactorToolName,
 	text: string,
 ): PlannerRefactorToolExecutionResult {
-	return { status: "blocked", toolName, text, details: null };
+	return blockedResult(toolName, text);
 }
 
 function optionalString(

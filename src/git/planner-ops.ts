@@ -2,6 +2,7 @@ import type {
 	ManagedTaskBranchRegistry,
 	PlanStateRecord,
 } from "../storage/schema";
+import { requireWorktreePath } from "../storage/state-store";
 import {
 	outputBranchName,
 	refactorBranchName,
@@ -284,13 +285,6 @@ export async function deleteManagedBranch(input: {
 		branch: input.branch,
 		force: input.force ?? false,
 	});
-}
-
-function requireWorktreePath(state: PlanStateRecord): string {
-	if (!state.worktreePath) {
-		throw new Error("Plan state has no worktreePath.");
-	}
-	return state.worktreePath;
 }
 
 function requireCurrentTaskBranch(state: PlanStateRecord): string {

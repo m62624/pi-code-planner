@@ -9,9 +9,13 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
+import { asObject } from "./params";
 import type { PlannerToolExecutionInput } from "./tool-context";
-import type { PlannerToolResult } from "./tool-result";
-import { asObject } from "./values";
+import {
+	appliedResult,
+	blockedResult,
+	type PlannerToolResult,
+} from "./tool-result";
 
 export const PLANNER_QUESTION_TOOL_NAMES = [
 	"planner_questions_submit",
@@ -185,7 +189,7 @@ function applied(
 	text: string,
 	details: unknown,
 ): PlannerQuestionToolExecutionResult {
-	return { status: "applied", toolName, text, details };
+	return appliedResult(toolName, text, details);
 }
 
 function blocked(
@@ -193,5 +197,5 @@ function blocked(
 	text: string,
 	details: unknown,
 ): PlannerQuestionToolExecutionResult {
-	return { status: "blocked", toolName, text, details };
+	return blockedResult(toolName, text, details);
 }

@@ -1,8 +1,30 @@
-// Barrel for project-wide constants, grouped by category. Existing imports of
-// `../constants` resolve here unchanged after the flat constants.ts became a
-// folder.
+// Project-wide constants, grouped by category. Existing `../constants` imports
+// resolve here unchanged. Compaction budgets keep their own module (larger,
+// self-contained); the small category constants live inline below.
 export * from "./compaction";
-export * from "./compat";
-export * from "./extension";
-export * from "./language";
-export * from "./time";
+
+/** Identity of this extension, used for storage paths and registration. */
+export const EXTENSION_NAME = "pi-code-planner";
+
+/** On-disk schema version for persisted planner records. */
+export const SCHEMA_VERSION = 1;
+
+/** Milliseconds in one second. */
+export const MS_PER_SECOND = 1_000;
+
+/** Milliseconds in one minute. */
+export const MS_PER_MINUTE = 60_000;
+
+// Pi versions the planner has been tested against, as `major.minor` prefixes.
+// Used only for an *advisory* self-check — never to block. A runtime Pi outside
+// this range is flagged as "not validated" (informational), because a newer Pi is
+// usually still compatible; the real compatibility signal is the SDK surface probe
+// in `runtime/sdk-compat.ts`, not the version number.
+export const PLANNER_KNOWN_GOOD_PI_VERSIONS: readonly string[] = ["0.80"];
+
+/**
+ * Default natural language for generated content (goal, title, commit
+ * messages, etc.) when the user has not configured one. Mirrored by the
+ * settings defaults in src/settings/schema.ts.
+ */
+export const DEFAULT_LANGUAGE = "English";

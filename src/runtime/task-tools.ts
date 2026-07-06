@@ -10,11 +10,32 @@ import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
-import { requiredString } from "./params";
-import { asObject } from "./values";
+import {
+	nonEmptyStringArray,
+	type ParamSchema,
+	parseParams,
+	stringArray,
+	trimmedString,
+} from "./param-codec";
+import { blockedResult } from "./tool-result";
 
 export const PLANNER_TASK_TOOL_NAMES = ["planner_task_upsert"] as const;
 export type PlannerTaskToolName = (typeof PLANNER_TASK_TOOL_NAMES)[number];
+
+const TASK_UPSERT_SCHEMA = {
+	taskId: trimmedString(),
+	title: trimmedString(),
+	objective: trimmedString(),
+	scope: stringArray(),
+	acceptanceCriteria: nonEmptyStringArray(
+		"Each criterion is one observable, testable outcome.",
+	),
+	requirements: stringArray("Cite exact REQ-n ids from spec.json."),
+	contractChain: stringArray(),
+	relevantContracts: stringArray(),
+	forbiddenAreas: stringArray(),
+	domainDetails: stringArray(),
+} satisfies ParamSchema;
 
 export async function executePlannerTaskTool(input: {
 	fs: PlannerFs;
@@ -38,8 +59,15 @@ export async function executePlannerTaskTool(input: {
 		);
 	}
 	try {
-		const params = asObject(input.params);
-		const taskId = requiredString(params, "taskId");
+		const parsed = parseParams(
+			input.toolName,
+			TASK_UPSERT_SCHEMA,
+			input.params,
+		);
+		if (!parsed.ok) {
+			return blocked(input.toolName, parsed.error);
+		}
+		const { taskId, requirements } = parsed.value;
 		const plan = await readPlanRecord(
 			input.fs,
 			orchestrator.preflight.context.planPaths,
@@ -51,7 +79,6 @@ export async function executePlannerTaskTool(input: {
 				`Task ${taskId} is already done. For a follow-up or change request, create a new revision task id instead of reopening completed work.`,
 			);
 		}
-		const requirements = stringArray(params.requirements ?? [], "requirements");
 		// Traceability by identity (REQ-2): every cited id must exist in the
 		// spec and be in scope — a typo'd or de-scoped id would silently satisfy
 		// the coverage gate for nothing.
@@ -85,27 +112,7 @@ export async function executePlannerTaskTool(input: {
 		const result = await upsertTaskArtifacts(
 			input.fs,
 			orchestrator.preflight.context.planPaths,
-			{
-				taskId,
-				title: requiredString(params, "title"),
-				objective: requiredString(params, "objective"),
-				scope: stringArray(params.scope, "scope"),
-				acceptanceCriteria: stringArray(
-					params.acceptanceCriteria,
-					"acceptanceCriteria",
-				),
-				requirements,
-				contractChain: stringArray(params.contractChain ?? [], "contractChain"),
-				relevantContracts: stringArray(
-					params.relevantContracts ?? [],
-					"relevantContracts",
-				),
-				forbiddenAreas: stringArray(
-					params.forbiddenAreas ?? [],
-					"forbiddenAreas",
-				),
-				domainDetails: stringArray(params.domainDetails ?? [], "domainDetails"),
-			},
+			parsed.value,
 		);
 		await updatePlanRecord(
 			input.fs,
@@ -154,15 +161,5 @@ function upsertTaskSummary<T extends { taskId: string }>(
 }
 
 function blocked(toolName: PlannerTaskToolName, text: string) {
-	return { status: "blocked" as const, toolName, text, details: null };
-}
-
-function stringArray(value: unknown, key: string): string[] {
-	if (
-		!Array.isArray(value) ||
-		!value.every((entry) => typeof entry === "string")
-	) {
-		throw new TypeError(`${key} must be a string array.`);
-	}
-	return value;
+	return blockedResult(toolName, text);
 }

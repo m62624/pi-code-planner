@@ -179,7 +179,8 @@ describe("planner stuck tools", () => {
 		});
 
 		expect(result.status).toBe("blocked");
-		expect(result.text).toContain("stuckType must be one of");
+		expect(result.text).toContain("`stuckType`");
+		expect(result.text).toContain("one of: test_failure");
 	});
 
 	it("validates stuck load scores", async () => {
@@ -206,9 +207,10 @@ describe("planner stuck tools", () => {
 		});
 
 		expect(result.status).toBe("blocked");
-		expect(result.text).toContain(
-			"failedAttempts must be an integer from 0 to 3",
-		);
+		expect(result.text).toContain("planner_report_stuck: invalid arguments.");
+		expect(result.text).toContain("`stuckLoad`");
+		expect(result.text).toContain("`failedAttempts`");
+		expect(result.text).toContain("an integer from 0 to 3");
 	});
 });
 

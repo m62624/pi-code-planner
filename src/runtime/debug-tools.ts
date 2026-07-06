@@ -6,14 +6,17 @@ import type { PlannerFs } from "../storage/fs";
 import { safeReaddir } from "../storage/fs";
 import type { PlanStoragePaths, ProjectStoragePaths } from "../storage/paths";
 import type { PlanStateRecord } from "../storage/schema";
-import { updatePlanState } from "../storage/state-store";
+import { requireWorktreePath, updatePlanState } from "../storage/state-store";
 import {
 	checkPlannerOrchestratorToolAllowed,
 	runPlannerOrchestrator,
 } from "./orchestrator";
-import { requiredString } from "./params";
-import type { PlannerToolResult } from "./tool-result";
-import { asObject } from "./values";
+import { asObject, requiredString } from "./params";
+import {
+	appliedResult,
+	blockedResult,
+	type PlannerToolResult,
+} from "./tool-result";
 
 export const PLANNER_DEBUG_TOOL_NAMES = [
 	"planner_debug_strategy",
@@ -74,7 +77,10 @@ export async function initializePlannerDebugSession(input: {
 		| "debugCleanupRequired"
 	>;
 }> {
-	const worktreePath = requireWorktreePath(input.state);
+	const worktreePath = requireWorktreePath(
+		input.state,
+		"Planner debug session requires a worktree path.",
+	);
 	const debugSessionId = `${input.attemptId}-${randomUUID().slice(0, 8)}`;
 	const debugArtifactsDir = join(
 		worktreePath,
@@ -473,26 +479,19 @@ function requireDebugArtifactsDir(state: PlanStateRecord): string {
 	return state.debugArtifactsDir;
 }
 
-function requireWorktreePath(state: PlanStateRecord): string {
-	if (!state.worktreePath) {
-		throw new Error("Planner debug session requires a worktree path.");
-	}
-	return state.worktreePath;
-}
-
 function applied(
 	toolName: PlannerDebugToolName,
 	lines: string[],
 	details: unknown,
 ): PlannerDebugToolExecutionResult {
-	return { status: "applied", toolName, text: lines.join("\n"), details };
+	return appliedResult(toolName, lines.join("\n"), details);
 }
 
 function blocked(
 	toolName: PlannerDebugToolName,
 	text: string,
 ): PlannerDebugToolExecutionResult {
-	return { status: "blocked", toolName, text, details: null };
+	return blockedResult(toolName, text);
 }
 
 function optionalString(

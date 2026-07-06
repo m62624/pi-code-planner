@@ -1,3 +1,4 @@
+import { withFileWriteLock } from "./file-lock";
 import type { PlannerFs } from "./fs";
 import { readJson, readJsonIfExists, writeJson } from "./json";
 import type { PlanStoragePaths } from "./paths";
@@ -44,15 +45,27 @@ export async function savePlanRecord(
 	await writeJson(fs, paths.planJson, record);
 }
 
+/**
+ * Serializes read-modify-write on plan.json. Pi executes every tool call in an
+ * assistant message concurrently, so a batch of `planner_task_upsert` calls
+ * (the model authoring all tasks at once) used to interleave their read →
+ * mutate → write: each read the same base, appended only its own task summary,
+ * and the last writer clobbered the rest. Whole task summaries went missing
+ * from `plan.tasks` (a task's task.json was written, but the plan index never
+ * listed it), which made the coverage gate report its requirements permanently
+ * DROPPED and starved execution of that task. See {@link withFileWriteLock}.
+ */
 export async function updatePlanRecord(
 	fs: PlannerFs,
 	paths: PlanStoragePaths,
 	update: (record: PlanRecord) => PlanRecord,
 ): Promise<PlanRecord> {
-	const current = await readPlanRecord(fs, paths);
-	const next = update(current);
-	await savePlanRecord(fs, paths, next);
-	return next;
+	return await withFileWriteLock(paths.planJson, async () => {
+		const current = await readPlanRecord(fs, paths);
+		const next = update(current);
+		await savePlanRecord(fs, paths, next);
+		return next;
+	});
 }
 
 async function ensureTextFile(fs: PlannerFs, path: string): Promise<void> {
