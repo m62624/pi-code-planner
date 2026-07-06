@@ -27,6 +27,7 @@ import type { PlannerStage } from "../storage/schema";
 import { readActivePlanContext } from "./active-plan";
 import {
 	type ChatRow,
+	createTranscriptLayoutCache,
 	projectLiveAssistant,
 	projectSessionEntries,
 	renderTranscript,
@@ -339,6 +340,9 @@ export class PlannerWorkspaceComponent implements Component {
 	// clock-only redraws instead of re-laying-out every row.
 	private cachedTranscriptKey = "";
 	private cachedTranscript: ReturnType<typeof renderTranscript> | null = null;
+	// Per-row wrap cache shared across transcript re-layouts: committed rows
+	// never change, so a streaming frame only re-wraps the live tail row.
+	private readonly transcriptLayoutCache = createTranscriptLayoutCache();
 	// Overlay handle (set once shown). While another overlay is focused above us
 	// we pause repaints so we don't clobber its frame; we resume on refocus.
 	private handle: OverlayHandle | null = null;
@@ -813,6 +817,7 @@ export class PlannerWorkspaceComponent implements Component {
 					expanded: this.expandedKeys(),
 				},
 				this.palette,
+				this.transcriptLayoutCache,
 			);
 			this.cachedTranscriptKey = transcriptKey;
 			this.cachedTranscript = transcript;
@@ -898,6 +903,8 @@ export class PlannerWorkspaceComponent implements Component {
 		this.cachedVersion = -1;
 		this.cachedTranscriptKey = "";
 		this.cachedTranscript = null;
+		this.transcriptLayoutCache.width = -1;
+		this.transcriptLayoutCache.rows.clear();
 	}
 
 	dispose(): void {

@@ -178,13 +178,39 @@ export interface TranscriptResult {
 	topLine: number;
 }
 
+/**
+ * Per-row layout cache. Session entries are append-only and a row's rendered
+ * lines depend only on (width, text, expanded), so committed rows never need
+ * re-wrapping: across streaming frames only the live tail row changes. Owned
+ * by the caller so it survives across renderTranscript calls.
+ */
+export interface TranscriptLayoutCache {
+	width: number;
+	rows: Map<string, { textLen: number; expanded: boolean; lines: string[] }>;
+}
+
+export function createTranscriptLayoutCache(): TranscriptLayoutCache {
+	return { width: -1, rows: new Map() };
+}
+
 export function renderTranscript(
 	rows: ChatRow[],
 	options: TranscriptOptions,
 	palette: DashboardPalette,
+	cache?: TranscriptLayoutCache,
 ): TranscriptResult {
 	const width = Math.max(8, options.width);
 	const height = Math.max(1, options.height);
+	if (cache) {
+		// A width change re-wraps everything; stale keys (e.g. finished live:*
+		// rows) are swept once the map noticeably outgrows the row list.
+		if (cache.width !== width) {
+			cache.width = width;
+			cache.rows.clear();
+		} else if (cache.rows.size > rows.length * 2 + 16) {
+			cache.rows.clear();
+		}
+	}
 	const all: string[] = [];
 	if (rows.length === 0) {
 		all.push(
@@ -192,7 +218,24 @@ export function renderTranscript(
 		);
 	}
 	for (const row of rows) {
-		for (const line of renderRow(row, width, options.expanded, palette)) {
+		const isExpanded = options.expanded.has(row.key);
+		const cached = cache?.rows.get(row.key);
+		let lines: string[];
+		if (
+			cached &&
+			cached.textLen === row.text.length &&
+			cached.expanded === isExpanded
+		) {
+			lines = cached.lines;
+		} else {
+			lines = renderRow(row, width, options.expanded, palette);
+			cache?.rows.set(row.key, {
+				textLen: row.text.length,
+				expanded: isExpanded,
+				lines,
+			});
+		}
+		for (const line of lines) {
 			all.push(line);
 		}
 	}
@@ -225,7 +268,10 @@ function renderRow(
 		: "  ";
 	const head = rowHead(row, palette);
 	const bodyWidth = width;
-	const textLines = splitText(row.text);
+	// Split on raw newlines first and sanitize per line inside the lazy wrap
+	// loop below — sanitizing the whole text up front would regex-scan a huge
+	// collapsed tool result just to render its first line.
+	const textLines = row.text.split("\n");
 	// Non-collapsible rows (user/assistant text) are never truncated: the
 	// transcript window in renderTranscript bounds what is visible, so capping
 	// here would silently freeze a long streaming response mid-message.
@@ -235,10 +281,19 @@ function renderRow(
 			: MAX_COLLAPSED_LINES
 		: Number.POSITIVE_INFINITY;
 
+	// Wrap lazily: stop as soon as we have one line past the display limit
+	// (enough to know the row is truncated). Without this, every collapsed
+	// tool result wraps its FULL text — thousands of lines through the
+	// sanitizer and word-wrap — just to display one.
 	const fullWrapped: string[] = [];
-	for (const raw of textLines) {
-		for (const piece of wrapPlain(raw, Math.max(4, bodyWidth - 2))) {
+	const wrapStop = limit === Number.POSITIVE_INFINITY ? limit : limit + 1;
+	outer: for (const raw of textLines) {
+		for (const piece of wrapPlain(
+			sanitizeText(raw),
+			Math.max(4, bodyWidth - 2),
+		)) {
 			fullWrapped.push(piece);
+			if (fullWrapped.length >= wrapStop) break outer;
 		}
 	}
 	const wrapped = fullWrapped.slice(0, limit);
@@ -301,10 +356,6 @@ function bodyColor(
 // ---------------------------------------------------------------------------
 // Text helpers
 // ---------------------------------------------------------------------------
-
-function splitText(text: string): string[] {
-	return sanitizeText(text).split("\n");
-}
 
 /**
  * Make arbitrary message/tool text safe to lay out by fixed-width math:

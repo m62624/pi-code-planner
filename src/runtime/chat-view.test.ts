@@ -2,6 +2,7 @@ import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import {
 	type ChatRow,
+	createTranscriptLayoutCache,
 	projectSessionEntries,
 	renderTranscript,
 	type TranscriptOptions,
@@ -237,6 +238,91 @@ describe("renderTranscript", () => {
 	it("shows an empty-state hint when there are no rows", () => {
 		const result = renderTranscript([], baseOptions(), palette);
 		expect(result.lines.join("\n")).toContain("No conversation yet");
+	});
+
+	it("produces identical output with and without the layout cache", () => {
+		const cache = createTranscriptLayoutCache();
+		const mixed: ChatRow[] = [
+			...rows,
+			{
+				role: "tool_result",
+				label: "bash ok",
+				text: Array.from({ length: 50 }, (_, i) => `out ${i}`).join("\n"),
+				collapsible: true,
+				key: "r1",
+			},
+		];
+		const options = baseOptions({ expanded: new Set(["t1"]) });
+		const plain = renderTranscript(mixed, options, palette);
+		const first = renderTranscript(mixed, options, palette, cache);
+		const second = renderTranscript(mixed, options, palette, cache);
+		expect(first.lines).toEqual(plain.lines);
+		expect(second.lines).toEqual(plain.lines);
+	});
+
+	it("reuses cached row layouts while only the live tail row changes", () => {
+		const cache = createTranscriptLayoutCache();
+		const base: ChatRow[] = [
+			{ role: "user", text: "question", collapsible: false, key: "u1" },
+		];
+		const frame1 = [
+			...base,
+			{
+				role: "assistant" as const,
+				text: "token",
+				collapsible: false,
+				key: "live:0",
+			},
+		];
+		renderTranscript(frame1, baseOptions(), palette, cache);
+		const committedLines = cache.rows.get("u1")?.lines;
+		const liveLines = cache.rows.get("live:0")?.lines;
+		const frame2 = [
+			...base,
+			{
+				role: "assistant" as const,
+				text: "token token token",
+				collapsible: false,
+				key: "live:0",
+			},
+		];
+		renderTranscript(frame2, baseOptions(), palette, cache);
+		// The committed row's layout is reused by identity; the live row re-wraps.
+		expect(cache.rows.get("u1")?.lines).toBe(committedLines);
+		expect(cache.rows.get("live:0")?.lines).not.toBe(liveLines);
+	});
+
+	it("invalidates the layout cache on width change and expand toggle", () => {
+		const cache = createTranscriptLayoutCache();
+		const tool: ChatRow[] = [
+			{
+				role: "tool",
+				label: "planner_status",
+				text: "line one\nline two\nline three",
+				collapsible: true,
+				key: "t1",
+			},
+		];
+		renderTranscript(tool, baseOptions(), palette, cache);
+		expect(cache.rows.get("t1")?.lines.join("\n")).toContain("…");
+
+		const expanded = renderTranscript(
+			tool,
+			baseOptions({ expanded: new Set(["t1"]) }),
+			palette,
+			cache,
+		);
+		expect(expanded.lines.join("\n")).toContain("line three");
+
+		const narrow = renderTranscript(
+			tool,
+			baseOptions({ width: 24 }),
+			palette,
+			cache,
+		);
+		for (const line of narrow.lines) {
+			expect(line.length).toBe(24);
+		}
 	});
 
 	it("anchors to an absolute top line and stays put as content appends", () => {
