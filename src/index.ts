@@ -987,7 +987,7 @@ const DOUBT_REVIEW_TOOL_PARAMETERS = {
 						type: "string",
 						enum: DOUBT_PROOF_LEVELS,
 						description:
-							"How the finding was proven or dismissed. Use insufficient_evidence until a probe/test/code proof exists.",
+							"How the finding was proven or dismissed — MUST match its status: proven_bug → reproduced_command | code_path_proven | spec_contradiction; disproven → disproven_by_test | disproven_by_code (a code_path_proven does NOT dismiss a finding); needs_probe → insufficient_evidence; not_a_bug → any level with evidence.",
 					},
 					claim: { type: "string" },
 					specReference: {
