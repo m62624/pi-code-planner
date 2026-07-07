@@ -85,6 +85,7 @@ import {
 	type PlannerContextBudgetDecision,
 	projectPlannerContextBudget,
 	shouldCancelOverlappingCompaction,
+	shouldClearStaleCompactIndicator,
 	shouldProactivelyCompact,
 } from "./runtime/compact";
 import {
@@ -101,6 +102,7 @@ import {
 	type PlannerContractToolName,
 } from "./runtime/contracts";
 import {
+	isWorkspaceCompactIndicatorActive,
 	openPlannerWorkspace,
 	registerPlannerDashboard,
 	setWorkspaceCompactIndicator,
@@ -3571,7 +3573,18 @@ function registerPlannerCompactEvents(
 	// safety cap. This can never clear a live compaction: summarization blocks the
 	// agent loop, so no turn can start while it is running.
 	const clearStaleCompactIndicator = (ctx: ExtensionContext) => {
-		if (!compactTimer) return;
+		// The banner (dashboard-mirrored, module-level) can outlive this closure's
+		// interval — e.g. a re-registration on /reload leaves a fresh timer at null
+		// while the "Compacting… 95%" line still shows over the resumed model. Clear
+		// on either signal so the stale banner never lingers past the resume.
+		if (
+			!shouldClearStaleCompactIndicator({
+				timerLive: compactTimer !== null,
+				bannerVisible: isWorkspaceCompactIndicatorActive(),
+			})
+		) {
+			return;
+		}
 		pendingCompact = null;
 		stopCompactIndicator(ctx);
 	};

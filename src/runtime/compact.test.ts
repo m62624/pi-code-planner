@@ -40,6 +40,7 @@ import {
 	PLANNER_SYSTEM_INSTRUCTIONS_HEADER,
 	projectPlannerContextBudget,
 	shouldCancelOverlappingCompaction,
+	shouldClearStaleCompactIndicator,
 	shouldProactivelyCompact,
 } from "./compact";
 import type { PlannerPreflightResult } from "./preflight";
@@ -326,6 +327,38 @@ describe("planner compact runtime", () => {
 				shouldCancelOverlappingCompaction({
 					planActive: false,
 					indicatorLive: true,
+				}),
+			).toBe(false);
+		});
+	});
+
+	describe("shouldClearStaleCompactIndicator", () => {
+		it("clears while the interval is still live", () => {
+			expect(
+				shouldClearStaleCompactIndicator({
+					timerLive: true,
+					bannerVisible: false,
+				}),
+			).toBe(true);
+		});
+
+		it("clears a banner that outlived its timer (the /reload-decoupled case)", () => {
+			// The regression: the closure interval was torn down (or re-created at
+			// null) while the module-level banner line still showed over the resumed
+			// model. Consulting the banner catches it.
+			expect(
+				shouldClearStaleCompactIndicator({
+					timerLive: false,
+					bannerVisible: true,
+				}),
+			).toBe(true);
+		});
+
+		it("does nothing when neither the timer nor the banner is up", () => {
+			expect(
+				shouldClearStaleCompactIndicator({
+					timerLive: false,
+					bannerVisible: false,
 				}),
 			).toBe(false);
 		});

@@ -112,6 +112,17 @@ export function setWorkspaceCompactIndicator(line: string | null): void {
 	compactIndicatorListener?.();
 }
 
+/**
+ * True while a compaction banner is currently showing anywhere. This is the one
+ * durable, module-level record of "an indicator is up" — the per-registration
+ * closure timer in index.ts can be torn down (or re-created on /reload) without
+ * clearing this line, so the resume hooks consult it to catch a banner that
+ * outlived its timer instead of gating solely on the timer.
+ */
+export function isWorkspaceCompactIndicatorActive(): boolean {
+	return compactIndicatorLine !== null;
+}
+
 export function registerPlannerDashboard(pi: ExtensionAPI): void {
 	pi.registerCommand("planner-dashboard", {
 		description:

@@ -136,6 +136,27 @@ export function clearPlannerCompactionInFlight(
 	state.compactionInFlight = false;
 }
 
+/**
+ * Decide whether a resume signal (`agent_start` / `turn_start` / `message_start`)
+ * should tear down the compaction indicator. Summarization blocks the agent loop,
+ * so the loop only runs *between* compactions — any resume signal therefore means
+ * the compaction is over and an indicator still up is stale.
+ *
+ * We clear when EITHER our per-registration interval is live OR the shared,
+ * dashboard-mirrored banner line is still showing. Gating on the timer alone
+ * missed the case where the timer was already torn down (or re-created on
+ * `/reload`) without clearing the module-level banner: the interval was gone yet
+ * the "Compacting… 95%" line lingered over the resumed model. Consulting the
+ * banner line closes that gap for both the plain-chat widget and the
+ * /planner-dashboard mirror.
+ */
+export function shouldClearStaleCompactIndicator(input: {
+	timerLive: boolean;
+	bannerVisible: boolean;
+}): boolean {
+	return input.timerLive || input.bannerVisible;
+}
+
 export function markPlannerControlledCompactStarted(
 	state: PlannerCompactRuntimeState,
 ): void {
