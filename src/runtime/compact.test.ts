@@ -29,6 +29,7 @@ import {
 	estimatePlannerInstructionTokens,
 	formatPlannerCompactFailure,
 	formatPlannerCompactSkipped,
+	isPlannerCompactionInFlight,
 	isPlannerCompactNothingToCompactError,
 	isPlannerCompactTimeoutError,
 	markPlannerCompactionInFlight,
@@ -37,6 +38,7 @@ import {
 	PLANNER_COMPACT_MARKER,
 	PLANNER_SYSTEM_INSTRUCTIONS_HEADER,
 	projectPlannerContextBudget,
+	shouldCancelOverlappingCompaction,
 	shouldProactivelyCompact,
 } from "./compact";
 import type { PlannerPreflightResult } from "./preflight";
@@ -254,6 +256,52 @@ describe("planner compact runtime", () => {
 		expect(state.compactionInFlight).toBe(true);
 		clearPlannerCompactionInFlight(state);
 		expect(state.compactionInFlight).toBe(false);
+	});
+
+	describe("isPlannerCompactionInFlight", () => {
+		it("is true while a compaction runs and clears afterwards", () => {
+			const state = createPlannerCompactRuntimeState();
+			expect(isPlannerCompactionInFlight(state)).toBe(false);
+			markPlannerCompactionInFlight(state);
+			expect(isPlannerCompactionInFlight(state)).toBe(true);
+			// The overlap guard must reopen once the run ends, so a cancel can never
+			// wedge compaction shut for the rest of the session.
+			clearPlannerCompactionInFlight(state);
+			expect(isPlannerCompactionInFlight(state)).toBe(false);
+		});
+
+		it("is true while a planner-controlled compaction is requested", () => {
+			const state = createPlannerCompactRuntimeState();
+			markPlannerControlledCompactStarted(state);
+			expect(isPlannerCompactionInFlight(state)).toBe(true);
+			clearPlannerControlledCompact(state);
+			expect(isPlannerCompactionInFlight(state)).toBe(false);
+		});
+	});
+
+	describe("shouldCancelOverlappingCompaction", () => {
+		it("cancels only when a plan is active and a compaction is already showing", () => {
+			expect(
+				shouldCancelOverlappingCompaction({
+					planActive: true,
+					indicatorLive: true,
+				}),
+			).toBe(true);
+			// First compaction of the plan (nothing live yet) must proceed.
+			expect(
+				shouldCancelOverlappingCompaction({
+					planActive: true,
+					indicatorLive: false,
+				}),
+			).toBe(false);
+			// No plan: the planner indicator is irrelevant, leave Pi's own UX alone.
+			expect(
+				shouldCancelOverlappingCompaction({
+					planActive: false,
+					indicatorLive: true,
+				}),
+			).toBe(false);
+		});
 	});
 
 	describe("estimatePlannerInstructionTokens", () => {

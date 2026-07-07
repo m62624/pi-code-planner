@@ -98,6 +98,38 @@ export function markPlannerCompactionInFlight(
 	state.compactionInFlight = true;
 }
 
+/**
+ * True when a compaction is already running or a planner-controlled one has been
+ * requested but not yet observed starting. Starting another `ctx.compact()` in
+ * this state would overlap the first: the Pi SDK shares one `AbortController`
+ * across manual compactions, so the first's cleanup nulls it while the second is
+ * still awaiting summarization and the second then crashes reading `.signal`.
+ * The planner-controlled start paths consult this to refuse a second compaction.
+ */
+export function isPlannerCompactionInFlight(
+	state: PlannerCompactRuntimeState,
+): boolean {
+	return state.compactionInFlight || state.plannerControlledCompactInFlight;
+}
+
+/**
+ * Decide whether the `session_before_compact` hook should cancel a compaction
+ * that is just starting. We cancel when a plan is active and our compaction
+ * indicator is already live — i.e. a prior compaction's boundary event fired and
+ * has not been cleared by `session_compact` or the failure cap, so this is a
+ * second, overlapping compaction. Cancelling the newcomer (the SDK cleanly ends
+ * it via `{ cancel: true }`) both avoids a redundant second summarization and
+ * stops the running compaction's progress bar from being reset. It is the only
+ * lever the extension has against the SDK's shared-`AbortController` crash when
+ * the overlap originates outside the planner (e.g. a manual `/compact`).
+ */
+export function shouldCancelOverlappingCompaction(input: {
+	planActive: boolean;
+	indicatorLive: boolean;
+}): boolean {
+	return input.planActive && input.indicatorLive;
+}
+
 export function clearPlannerCompactionInFlight(
 	state: PlannerCompactRuntimeState,
 ): void {
