@@ -6,9 +6,9 @@
   <img src="assets/icon.webp" alt="pi-code-planner icon" width="120">
 </p>
 
-An experimental [Pi](https://github.com/badlogic/pi-mono) extension for local coding models. Adds a persisted state machine so long tasks survive context compaction, Git branching, and user approval steps without babysitting the session.
+An experimental [Pi](https://github.com/earendil-works/pi) extension for local coding models — small models that, on their own, lose the thread of a long, multi-step task once the context is compacted. It runs each plan in its own Git worktree and keeps the task on disk as a state machine, so the model always has its next step; an idle watcher wakes it when it stalls or when you step away, and approval steps pause for you where they're needed. A personal experiment, with no promises about output.
 
-> Not a guarantee of better output. In practice, a session implementing a nontrivial feature ran about 3 hours untouched. That is the goal.
+> In practice, a session implementing a nontrivial feature ran about 3 hours untouched. That is the goal.
 
 ---
 
