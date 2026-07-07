@@ -67,9 +67,9 @@ jobs:
           LATEST=$(npm view "$SDK" version)
           LATEST_MM=$(printf '%s' "$LATEST" | grep -oE '^[0-9]+\.[0-9]+')
           # Read the known-good major.minor prefixes straight from the source of
-          # truth (src/constants/compat.ts), so this workflow and the runtime
+          # truth (src/constants/index.ts), so this workflow and the runtime
           # advisory never drift apart.
-          KNOWN=$(node -e "const s=require('fs').readFileSync('src/constants/compat.ts','utf8');const m=s.match(/PLANNER_KNOWN_GOOD_PI_VERSIONS[\s\S]*?=\s*\[([^\]]*)\]/);process.stdout.write(m?[...m[1].matchAll(/\"([^\"]+)\"/g)].map(x=>x[1]).join(' '):'')")
+          KNOWN=$(node -e "const s=require('fs').readFileSync('src/constants/index.ts','utf8');const m=s.match(/PLANNER_KNOWN_GOOD_PI_VERSIONS[\s\S]*?=\s*\[([^\]]*)\]/);process.stdout.write(m?[...m[1].matchAll(/\"([^\"]+)\"/g)].map(x=>x[1]).join(' '):'')")
           IN_RANGE=no
           for mm in $KNOWN; do [ "$mm" = "$LATEST_MM" ] && IN_RANGE=yes; done
           BASE=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
@@ -133,7 +133,7 @@ jobs:
           # rewrite the known-good constant to the new major.minor. Written with
           # tabs + trailing newline to match the repo's Biome formatting.
           node -e "const fs=require('fs');const f='package.json';const p=JSON.parse(fs.readFileSync(f,'utf8'));p.devDependencies['$SDK']='$LATEST';p.devDependencies['$TUI']='$TUI_LATEST';fs.writeFileSync(f,JSON.stringify(p,null,'\t')+'\n')"
-          node -e "const fs=require('fs');const f='src/constants/compat.ts';let s=fs.readFileSync(f,'utf8');s=s.replace(/(PLANNER_KNOWN_GOOD_PI_VERSIONS[\s\S]*?=\s*\[)[^\]]*(\])/,'\$1\"$LATEST_MM\"\$2');fs.writeFileSync(f,s)"
+          node -e "const fs=require('fs');const f='src/constants/index.ts';let s=fs.readFileSync(f,'utf8');s=s.replace(/(PLANNER_KNOWN_GOOD_PI_VERSIONS[\s\S]*?=\s*\[)[^\]]*(\])/,'\$1\"$LATEST_MM\"\$2');fs.writeFileSync(f,s)"
 
           npm install
 
@@ -154,7 +154,7 @@ jobs:
         if: steps.v.outputs.in_range == 'no' && steps.guard.outputs.skip == 'no'
         run: |
           set -euo pipefail
-          git add package.json package-lock.json src/constants/compat.ts
+          git add package.json package-lock.json src/constants/index.ts
           if git diff --cached --quiet; then
             echo "No changes to push (already prepared)."
             exit 0

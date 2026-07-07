@@ -75,6 +75,8 @@ import {
 	enqueuePlannerPostCompactMessage,
 	formatPlannerCompactFailure,
 	formatPlannerCompactSkipped,
+	isPlannerCompactConcurrencyError,
+	isPlannerCompactionInFlight,
 	isPlannerCompactNothingToCompactError,
 	markPlannerCompactionInFlight,
 	markPlannerControlledCompactStarted,
@@ -82,6 +84,7 @@ import {
 	type PlannerCompactRuntimeState,
 	type PlannerContextBudgetDecision,
 	projectPlannerContextBudget,
+	shouldCancelOverlappingCompaction,
 	shouldProactivelyCompact,
 } from "./runtime/compact";
 import {
@@ -2843,6 +2846,7 @@ function registerPlannerTools(
 						ctx,
 						fs,
 						projectPaths,
+						compactRuntime,
 					});
 				}
 				return plannerToolResponse(result);
@@ -3573,6 +3577,23 @@ function registerPlannerCompactEvents(
 	};
 
 	pi.on("session_before_compact", async (event, ctx) => {
+		// Overlap guard: a plan-mode compaction is already running (our indicator is
+		// still live) and a second one is starting. The Pi SDK shares one
+		// AbortController across manual compactions, so letting both run crashes the
+		// first on `.signal` and resets the progress bar. Cancel the newcomer
+		// cleanly; the running compaction achieves the same smaller context.
+		if (
+			shouldCancelOverlappingCompaction({
+				planActive: isPlanActive(),
+				indicatorLive: compactTimer !== null,
+			})
+		) {
+			ctx.ui.notify(
+				"A compaction is already in progress — the overlapping request was cancelled.",
+				"info",
+			);
+			return { cancel: true };
+		}
 		// A real compaction is starting (preparation succeeded — this event never
 		// fires for the "nothing to compact" throw), so mark it in-flight to keep
 		// the watchdog from nudging mid-compaction.
@@ -3824,7 +3845,10 @@ function registerPlannerCompactEvents(
 				clearPlannerCompactionInFlight(compactRuntime);
 				ctx.ui.notify(
 					formatPlannerCompactFailure(error),
-					isPlannerCompactNothingToCompactError(error) ? "info" : "error",
+					isPlannerCompactNothingToCompactError(error) ||
+						isPlannerCompactConcurrencyError(error)
+						? "info"
+						: "error",
 				);
 			},
 		});
@@ -4060,6 +4084,18 @@ async function maybeStartPlannerControlledCompact(input: {
 		};
 	}
 
+	// A compaction is already running (a prior request, or the proactive monitor):
+	// starting a second ctx.compact() would overlap and hit the SDK's shared-
+	// AbortController crash. The running compaction already shrinks the context, so
+	// resolve this boundary without compacting again and let the model continue.
+	if (isPlannerCompactionInFlight(input.compactRuntime)) {
+		await resolvePlannerCompactBoundary(input);
+		return {
+			text: formatPlannerCompactSkipped("a compaction is already in progress"),
+			customInstructions: "",
+		};
+	}
+
 	const preflight = await runPlannerPreflight({
 		fs: input.fs,
 		git: input.git,
@@ -4174,9 +4210,11 @@ async function handlePlannerCompactError(input: {
 	error: Error;
 }): Promise<void> {
 	const resolved = await resolvePlannerCompactBoundary(input);
-	const benign = isPlannerCompactNothingToCompactError(input.error);
+	const benign =
+		isPlannerCompactNothingToCompactError(input.error) ||
+		isPlannerCompactConcurrencyError(input.error);
 	input.ctx.ui.notify(
-		formatPlannerCompactFailure(input.error),
+		formatPlannerCompactFailure(input.error, { boundaryResolved: resolved }),
 		benign ? "info" : "error",
 	);
 	if (resolved) {
@@ -4193,7 +4231,13 @@ async function maybeStartPlannerStuckCompact(input: {
 	ctx: ExtensionContext;
 	fs: ReturnType<typeof createNodeFs>;
 	projectPaths: ProjectStoragePaths;
+	compactRuntime: PlannerCompactRuntimeState;
 }): Promise<void> {
+	// A compaction already in flight would overlap this best-effort stuck compact
+	// and hit the SDK's shared-AbortController crash; skip rather than race it.
+	if (isPlannerCompactionInFlight(input.compactRuntime)) {
+		return;
+	}
 	const instructions = await buildPlannerStuckCompactInstructions({
 		fs: input.fs,
 		projectPaths: input.projectPaths,
@@ -4208,7 +4252,13 @@ async function maybeStartPlannerStuckCompact(input: {
 				input.ctx.ui.notify("Planner stuck compact completed.", "info");
 			},
 			onError: (error) => {
-				input.ctx.ui.notify(formatPlannerCompactFailure(error), "error");
+				input.ctx.ui.notify(
+					formatPlannerCompactFailure(error),
+					isPlannerCompactNothingToCompactError(error) ||
+						isPlannerCompactConcurrencyError(error)
+						? "info"
+						: "error",
+				);
 			},
 		});
 	}, 0);

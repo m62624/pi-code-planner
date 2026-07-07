@@ -127,7 +127,13 @@ export function validateTaskBehaviors(input: {
 				`${where} (${id}): status cannot jump ${from} → ${behavior.status}. Test-first is mechanical: a behavior turns red (a named test exists and fails) before it can turn green.`,
 			);
 		}
-		const test = behavior.test ?? null;
+		// Upsert is a merge, not a replace: a resubmit that omits an optional field
+		// KEEPS the previously stored value, while an explicit value (including
+		// `null` / `[]`) overwrites it. This lets the model flip a status without
+		// re-typing the requirement, test, and branches every time — omitting them
+		// used to silently wipe them (REQ-n → null, coverage → []).
+		const test =
+			"test" in behavior ? (behavior.test ?? null) : (previous?.test ?? null);
 		if (behavior.status !== "planned") {
 			const file = test?.file?.trim() ?? "";
 			const name = test?.name?.trim() ?? "";
@@ -137,14 +143,17 @@ export function validateTaskBehaviors(input: {
 				);
 			}
 		}
-		const requirement = behavior.requirement?.trim() || null;
+		const requirement =
+			"requirement" in behavior
+				? behavior.requirement?.trim() || null
+				: (previous?.requirement ?? null);
 		if (requirement !== null && !/^REQ-\d+$/.test(requirement)) {
 			throw new TypeError(
 				`${where}.requirement must be a REQ-<n> id or null (got "${requirement}").`,
 			);
 		}
 		const branches = normalizeBranches(
-			behavior.branches,
+			"branches" in behavior ? behavior.branches : previous?.branches,
 			behavior.status,
 			where,
 		);

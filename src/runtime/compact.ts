@@ -98,6 +98,38 @@ export function markPlannerCompactionInFlight(
 	state.compactionInFlight = true;
 }
 
+/**
+ * True when a compaction is already running or a planner-controlled one has been
+ * requested but not yet observed starting. Starting another `ctx.compact()` in
+ * this state would overlap the first: the Pi SDK shares one `AbortController`
+ * across manual compactions, so the first's cleanup nulls it while the second is
+ * still awaiting summarization and the second then crashes reading `.signal`.
+ * The planner-controlled start paths consult this to refuse a second compaction.
+ */
+export function isPlannerCompactionInFlight(
+	state: PlannerCompactRuntimeState,
+): boolean {
+	return state.compactionInFlight || state.plannerControlledCompactInFlight;
+}
+
+/**
+ * Decide whether the `session_before_compact` hook should cancel a compaction
+ * that is just starting. We cancel when a plan is active and our compaction
+ * indicator is already live — i.e. a prior compaction's boundary event fired and
+ * has not been cleared by `session_compact` or the failure cap, so this is a
+ * second, overlapping compaction. Cancelling the newcomer (the SDK cleanly ends
+ * it via `{ cancel: true }`) both avoids a redundant second summarization and
+ * stops the running compaction's progress bar from being reset. It is the only
+ * lever the extension has against the SDK's shared-`AbortController` crash when
+ * the overlap originates outside the planner (e.g. a manual `/compact`).
+ */
+export function shouldCancelOverlappingCompaction(input: {
+	planActive: boolean;
+	indicatorLive: boolean;
+}): boolean {
+	return input.planActive && input.indicatorLive;
+}
+
 export function clearPlannerCompactionInFlight(
 	state: PlannerCompactRuntimeState,
 ): void {
@@ -248,17 +280,41 @@ export function enqueuePlannerPostCompactMessage(input: {
 	return "followUp";
 }
 
-export function formatPlannerCompactFailure(error: Error): string {
+export function formatPlannerCompactFailure(
+	error: Error,
+	options: { boundaryResolved?: boolean } = {},
+): string {
 	const guidance = isPlannerCompactNothingToCompactError(error)
 		? " Pi has nothing to compact (the session is below its size threshold), so retrying planner_request_compact can never succeed. The pending compact boundary was resolved automatically — its goal (a small context) is already met."
-		: isPlannerCompactTimeoutError(error)
-			? " The persisted compact boundary is still pending. Call planner_request_compact to retry. If local generation remains slow, open Pi /settings and set HTTP idle timeout to 5 min or disabled."
-			: " The persisted compact boundary is still pending. Call planner_request_compact to retry after resolving the failure.";
+		: options.boundaryResolved
+			? // The caller already resolved the boundary (handlePlannerCompactError),
+				// so telling the model to retry would only earn a compact_not_required
+				// block. Point it forward instead.
+				" The compact boundary was resolved without compacting — call planner_status and continue with the reported step."
+			: isPlannerCompactConcurrencyError(error)
+				? " Two compactions ran at once and the SDK aborted this one. A single planner_request_compact retry is safe once the other finishes."
+				: isPlannerCompactTimeoutError(error)
+					? " The persisted compact boundary is still pending. Call planner_request_compact to retry. If local generation remains slow, open Pi /settings and set HTTP idle timeout to 5 min or disabled."
+					: " The persisted compact boundary is still pending. Call planner_request_compact to retry after resolving the failure.";
 	return `Planner compact failed: ${error.message}.${guidance}`;
 }
 
 export function isPlannerCompactTimeoutError(error: Error): boolean {
 	return /timed?\s*out|timeout|time limit|deadline|exceeded/i.test(
+		error.message,
+	);
+}
+
+/**
+ * The Pi SDK shares one AbortController across manual compactions: when two
+ * overlap, the first's cleanup nulls it and the second throws "Cannot read
+ * properties of undefined (reading 'signal')". This is transient — a single
+ * retry once the other compaction finishes succeeds — so it is treated as
+ * benign (info, not error). F2's overlap guard keeps the planner from being a
+ * party to the overlap; this classifier makes the residual case honest.
+ */
+export function isPlannerCompactConcurrencyError(error: Error): boolean {
+	return /reading '?signal'?|Cannot read properties of undefined/i.test(
 		error.message,
 	);
 }

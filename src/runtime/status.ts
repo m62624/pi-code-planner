@@ -28,7 +28,10 @@ import {
 	type PlannerSkillSummary,
 } from "./skill-library";
 import { getPlannerStageStepBehavior } from "./stage-behavior";
-import { getAllowedNextPlannerPositions } from "./state-machine";
+import {
+	getAllowedNextPlannerPositions,
+	isPlannerCompactEnabled,
+} from "./state-machine";
 import { getAllowedPlannerStateTransitionTypes } from "./state-transition";
 
 export interface PlannerStepRule {
@@ -379,7 +382,7 @@ export const PLANNER_STEP_RULES = {
 	split_tasks: stepRule("planning", "split_tasks", {
 		objective: "Split the plan into atomic tasks.",
 		requiredActions: [
-			"Create an ordered task list with small independent tasks and acceptance criteria.",
+			"List the ordered tasks in plan.md — small, independent, each with acceptance criteria. Task RECORDS are not created here: planner_task_upsert becomes available at planning/write_task_files, the next step. Do not call it yet.",
 			"Keep tests inside each behavioral task as its TDD cycle. Never create standalone tasks for writing tests, mocks, or verification.",
 			"If this is a change-request planning pass, keep completed task IDs as history and create new revision task IDs only for remaining work.",
 		],
@@ -646,10 +649,12 @@ export const PLANNER_STEP_RULES = {
 	compact_task: stepRule("execution", "compact_task", {
 		objective:
 			"Close the completed task boundary and verify no hidden connections were missed.",
+		// The boundary directive (request_compact vs. skip via finish_step) is
+		// resolved from settings by resolveCompactStepRule — this step only owns the
+		// connection check. Do not re-add a classify-first "if ENABLED / if DISABLED"
+		// action here; the model cannot see the setting and guesses wrong.
 		requiredActions: [
 			"Briefly check — did the task change any component called, imported, or depended upon by code outside the task scope? If yes and it was not captured in tdd.md or AGENTS.md, add a note to tdd.md.",
-			"If task compaction is ENABLED: call planner_request_compact, then planner_complete_compact after the boundary finishes.",
-			"If task compaction is DISABLED (the default): do NOT call planner_request_compact — call planner_finish_step with target {stage: 'execution', step: 'select_next_task'} to skip the Pi compact and keep the checkpoint.",
 		],
 		allowedNow: [
 			"Brief connection check, then the compact-or-finish flow only.",
@@ -658,7 +663,7 @@ export const PLANNER_STEP_RULES = {
 		exitCondition:
 			"Compaction finished, or the disabled boundary was skipped via finish_step. Either way state points to select_next_task.",
 		nextInstruction:
-			"Follow planner_status: enabled → request_compact then complete_compact; disabled → planner_finish_step with target execution/select_next_task.",
+			"Follow the resolved compact directive below (the boundary is enabled or disabled per your settings).",
 	}),
 	select_next_task: stepRule("execution", "select_next_task", {
 		objective: "Select the next task or finish execution.",
@@ -982,7 +987,13 @@ export async function buildPlannerStatusText(
 	}
 
 	const state = preflight.context.state;
-	const rule = getPlannerStepRule(state);
+	// Resolve the compact-step boundary directive from the persisted boundaries
+	// (the same source lifecycle uses), so the rendered rule agrees with the
+	// "## Next Required Action" line instead of asking the model to classify.
+	const rule = resolveCompactStepRule(
+		getPlannerStepRule(state),
+		isPlannerCompactEnabled(state),
+	);
 	const behavior = getPlannerStageStepBehavior(state);
 	const allowedWrapperTools = filterPlannerWrapperToolsForLifecycle({
 		preflight,
@@ -1139,6 +1150,57 @@ export function getPlannerStepRule(input: {
 		);
 	}
 	return rule;
+}
+
+// What a compaction summary must preserve at each boundary — surfaced only when
+// the boundary is enabled (a skipped boundary generates no summary to preserve).
+const COMPACT_PRESERVE: Partial<Record<PlannerStep, string>> = {
+	compact_discovery: "the discovery summary and open questions",
+	compact_spec:
+		"requirement ids, non-goals, assumption evidence, and the latest gate verdict",
+	compact_planning: "the plan, task order, decisions, and artifact paths",
+	compact_task: "the task outcome and any cross-scope connection you noted",
+	compact_before_doubt:
+		"the artifacts needed to audit from persisted state, not chat memory",
+	compact_finalize: "the final summary, branch state, checks, and open risks",
+};
+
+/**
+ * Render a compact step's boundary directive as ONE resolved instruction from
+ * the effective settings, instead of a classify-first "if ENABLED / if DISABLED"
+ * the model cannot evaluate (it cannot see the setting and guessed wrong — both
+ * a needless request_compact on a disabled boundary and a wrong skip on an
+ * enabled one showed up in a real run). Non-compact steps pass through unchanged.
+ * Any genuine non-boundary work the step owns (the connection check on
+ * compact_task) is kept ahead of the resolved directive.
+ */
+export function resolveCompactStepRule(
+	rule: PlannerStepRule,
+	compactEnabled: boolean,
+): PlannerStepRule {
+	if (!rule.step.startsWith("compact_")) {
+		return rule;
+	}
+	const preserve = COMPACT_PRESERVE[rule.step];
+	// compact_task's first action is the cross-scope connection check — genuine
+	// work independent of the boundary decision, so keep it as a leading action.
+	const leadingWork =
+		rule.step === "compact_task" ? rule.requiredActions.slice(0, 1) : [];
+	const boundaryAction = compactEnabled
+		? `Create the compact boundary: call planner_request_compact${
+				preserve ? ` (preserve ${preserve})` : ""
+			}, then planner_complete_compact once it finishes.`
+		: 'This compact boundary is disabled in your settings — do NOT call planner_request_compact. Call planner_finish_step with the target shown under "## Next Required Action" to skip it and keep the state-machine checkpoint.';
+	return {
+		...rule,
+		requiredActions: [...leadingWork, boundaryAction],
+		allowedNow: compactEnabled
+			? ["Use planner_request_compact, then planner_complete_compact."]
+			: ["Use planner_finish_step to skip the disabled boundary."],
+		nextInstruction: compactEnabled
+			? "Call planner_request_compact, then planner_complete_compact."
+			: "Call planner_finish_step to skip the disabled boundary — do not call planner_request_compact.",
+	};
 }
 
 function stepRule(
