@@ -29,6 +29,7 @@ import {
 	estimatePlannerInstructionTokens,
 	formatPlannerCompactFailure,
 	formatPlannerCompactSkipped,
+	isPlannerCompactConcurrencyError,
 	isPlannerCompactionInFlight,
 	isPlannerCompactNothingToCompactError,
 	isPlannerCompactTimeoutError,
@@ -238,6 +239,32 @@ describe("planner compact runtime", () => {
 			new Error("Nothing to compact (session too small)"),
 		);
 		expect(failure).toContain("resolved automatically");
+		expect(failure).not.toContain("planner_request_compact to retry");
+	});
+
+	it("detects the concurrency crash and treats it as a safe retry", () => {
+		const error = new Error(
+			"Cannot read properties of undefined (reading 'signal')",
+		);
+		expect(isPlannerCompactConcurrencyError(error)).toBe(true);
+		expect(
+			isPlannerCompactConcurrencyError(new Error("request timed out")),
+		).toBe(false);
+		const failure = formatPlannerCompactFailure(error);
+		expect(failure).toContain("Two compactions ran at once");
+		expect(failure).toContain("A single planner_request_compact retry is safe");
+	});
+
+	it("stops advising a retry once the boundary was resolved", () => {
+		// handlePlannerCompactError resolves the boundary first; advising a retry
+		// then would only earn a compact_not_required block (the session bug where
+		// notify said "still pending… retry" right after resolving it).
+		const failure = formatPlannerCompactFailure(
+			new Error("request timed out after 300000ms"),
+			{ boundaryResolved: true },
+		);
+		expect(failure).toContain("resolved without compacting");
+		expect(failure).toContain("call planner_status");
 		expect(failure).not.toContain("planner_request_compact to retry");
 	});
 

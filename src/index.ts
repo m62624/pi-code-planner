@@ -75,6 +75,7 @@ import {
 	enqueuePlannerPostCompactMessage,
 	formatPlannerCompactFailure,
 	formatPlannerCompactSkipped,
+	isPlannerCompactConcurrencyError,
 	isPlannerCompactionInFlight,
 	isPlannerCompactNothingToCompactError,
 	markPlannerCompactionInFlight,
@@ -3844,7 +3845,10 @@ function registerPlannerCompactEvents(
 				clearPlannerCompactionInFlight(compactRuntime);
 				ctx.ui.notify(
 					formatPlannerCompactFailure(error),
-					isPlannerCompactNothingToCompactError(error) ? "info" : "error",
+					isPlannerCompactNothingToCompactError(error) ||
+						isPlannerCompactConcurrencyError(error)
+						? "info"
+						: "error",
 				);
 			},
 		});
@@ -4206,9 +4210,11 @@ async function handlePlannerCompactError(input: {
 	error: Error;
 }): Promise<void> {
 	const resolved = await resolvePlannerCompactBoundary(input);
-	const benign = isPlannerCompactNothingToCompactError(input.error);
+	const benign =
+		isPlannerCompactNothingToCompactError(input.error) ||
+		isPlannerCompactConcurrencyError(input.error);
 	input.ctx.ui.notify(
-		formatPlannerCompactFailure(input.error),
+		formatPlannerCompactFailure(input.error, { boundaryResolved: resolved }),
 		benign ? "info" : "error",
 	);
 	if (resolved) {
@@ -4246,7 +4252,13 @@ async function maybeStartPlannerStuckCompact(input: {
 				input.ctx.ui.notify("Planner stuck compact completed.", "info");
 			},
 			onError: (error) => {
-				input.ctx.ui.notify(formatPlannerCompactFailure(error), "error");
+				input.ctx.ui.notify(
+					formatPlannerCompactFailure(error),
+					isPlannerCompactNothingToCompactError(error) ||
+						isPlannerCompactConcurrencyError(error)
+						? "info"
+						: "error",
+				);
 			},
 		});
 	}, 0);

@@ -280,17 +280,41 @@ export function enqueuePlannerPostCompactMessage(input: {
 	return "followUp";
 }
 
-export function formatPlannerCompactFailure(error: Error): string {
+export function formatPlannerCompactFailure(
+	error: Error,
+	options: { boundaryResolved?: boolean } = {},
+): string {
 	const guidance = isPlannerCompactNothingToCompactError(error)
 		? " Pi has nothing to compact (the session is below its size threshold), so retrying planner_request_compact can never succeed. The pending compact boundary was resolved automatically — its goal (a small context) is already met."
-		: isPlannerCompactTimeoutError(error)
-			? " The persisted compact boundary is still pending. Call planner_request_compact to retry. If local generation remains slow, open Pi /settings and set HTTP idle timeout to 5 min or disabled."
-			: " The persisted compact boundary is still pending. Call planner_request_compact to retry after resolving the failure.";
+		: options.boundaryResolved
+			? // The caller already resolved the boundary (handlePlannerCompactError),
+				// so telling the model to retry would only earn a compact_not_required
+				// block. Point it forward instead.
+				" The compact boundary was resolved without compacting — call planner_status and continue with the reported step."
+			: isPlannerCompactConcurrencyError(error)
+				? " Two compactions ran at once and the SDK aborted this one. A single planner_request_compact retry is safe once the other finishes."
+				: isPlannerCompactTimeoutError(error)
+					? " The persisted compact boundary is still pending. Call planner_request_compact to retry. If local generation remains slow, open Pi /settings and set HTTP idle timeout to 5 min or disabled."
+					: " The persisted compact boundary is still pending. Call planner_request_compact to retry after resolving the failure.";
 	return `Planner compact failed: ${error.message}.${guidance}`;
 }
 
 export function isPlannerCompactTimeoutError(error: Error): boolean {
 	return /timed?\s*out|timeout|time limit|deadline|exceeded/i.test(
+		error.message,
+	);
+}
+
+/**
+ * The Pi SDK shares one AbortController across manual compactions: when two
+ * overlap, the first's cleanup nulls it and the second throws "Cannot read
+ * properties of undefined (reading 'signal')". This is transient — a single
+ * retry once the other compaction finishes succeeds — so it is treated as
+ * benign (info, not error). F2's overlap guard keeps the planner from being a
+ * party to the overlap; this classifier makes the residual case honest.
+ */
+export function isPlannerCompactConcurrencyError(error: Error): boolean {
+	return /reading '?signal'?|Cannot read properties of undefined/i.test(
 		error.message,
 	);
 }
