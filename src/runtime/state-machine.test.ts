@@ -213,6 +213,34 @@ describe("planner state machine", () => {
 		).toThrowStateMachine("invalid_next_step");
 	});
 
+	it("names the allowed positions in the invalid_next_step error", () => {
+		// A local model guessed non-existent step names four times in one run
+		// because the block did not list what was valid. Both invalid-target paths
+		// must spell out the allowed next positions.
+		const forkedTarget = state({
+			stage: "execution",
+			step: "select_next_task",
+			stepStatus: "running",
+		});
+		expect(() =>
+			completePlannerStep(forkedTarget, {
+				next: { stage: "planning", step: "read_context" },
+			}),
+		).toThrow(/Allowed next: .*prepare_task.*verify_plan_branch/);
+
+		// The advancePlannerStep path (a persisted nextStep that is not allowed).
+		expect(() =>
+			advancePlannerStep(
+				state({
+					stage: "spec",
+					step: "draft_requirements",
+					stepStatus: "completed",
+					nextStep: "verify_spec",
+				}),
+			),
+		).toThrow(/Allowed next: \{stage: '/);
+	});
+
 	it("requires an explicit allowed branch after select_next_task", () => {
 		const current = state({
 			stage: "execution",

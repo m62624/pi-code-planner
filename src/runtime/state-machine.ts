@@ -260,7 +260,7 @@ export function advancePlannerStep(state: PlanStateRecord): PlanStateRecord {
 		}
 		throw new PlannerStateMachineError(
 			"invalid_next_step",
-			`Terminal planner step cannot advance to ${state.nextStep}.`,
+			`Terminal planner step ${state.stage}/${state.step} cannot advance to ${state.nextStep} — no next positions exist.`,
 		);
 	}
 
@@ -268,7 +268,7 @@ export function advancePlannerStep(state: PlanStateRecord): PlanStateRecord {
 	if (!next) {
 		throw new PlannerStateMachineError(
 			"invalid_next_step",
-			`Planner nextStep ${state.nextStep ?? "(none)"} is not allowed from ${state.stage}/${state.step}.`,
+			`Planner nextStep ${state.nextStep ?? "(none)"} is not allowed from ${state.stage}/${state.step}. Allowed next: ${formatAllowedTargets(allowed)}.`,
 		);
 	}
 
@@ -463,6 +463,18 @@ function nextWithinStage(input: PlannerPosition): PlannerPosition[] {
 	return nextStep ? [{ stage: input.stage, step: nextStep }] : [];
 }
 
+/**
+ * Render the allowed next positions as `{stage: 'x', step: 'y'} or …`, so an
+ * invalid/ambiguous-transition error names the exact targets the model may pass
+ * as nextStage/nextStep instead of leaving it to guess step names (which a
+ * local model did four times in one run before landing a valid one).
+ */
+function formatAllowedTargets(allowed: readonly PlannerPosition[]): string {
+	return allowed
+		.map((p) => `{stage: '${p.stage}', step: '${p.step}'}`)
+		.join(" or ");
+}
+
 function selectNextPosition(
 	state: PlanStateRecord,
 	requested?: PlannerPosition,
@@ -472,7 +484,7 @@ function selectNextPosition(
 		if (requested) {
 			throw new PlannerStateMachineError(
 				"invalid_next_step",
-				`Terminal planner step cannot advance to ${requested.stage}/${requested.step}.`,
+				`Terminal planner step ${state.stage}/${state.step} cannot advance to ${requested.stage}/${requested.step} — no next positions exist.`,
 			);
 		}
 		return null;
@@ -481,12 +493,9 @@ function selectNextPosition(
 		return allowed[0] ?? null;
 	}
 	if (!requested) {
-		const targets = allowed
-			.map((p) => `{stage: '${p.stage}', step: '${p.step}'}`)
-			.join(" or ");
 		throw new PlannerStateMachineError(
 			"ambiguous_next_step",
-			`Planner step ${state.stage}/${state.step} has multiple allowed next positions: ${targets}. Specify one via nextStage/nextStep.`,
+			`Planner step ${state.stage}/${state.step} has multiple allowed next positions: ${formatAllowedTargets(allowed)}. Specify one via nextStage/nextStep.`,
 		);
 	}
 	const next = allowed.find(
@@ -496,7 +505,7 @@ function selectNextPosition(
 	if (!next) {
 		throw new PlannerStateMachineError(
 			"invalid_next_step",
-			`Planner step ${requested.stage}/${requested.step} is not allowed after ${state.stage}/${state.step}.`,
+			`Planner step ${requested.stage}/${requested.step} is not allowed after ${state.stage}/${state.step}. Allowed next: ${formatAllowedTargets(allowed)}.`,
 		);
 	}
 	return next;
