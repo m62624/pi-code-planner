@@ -382,7 +382,7 @@ export const PLANNER_STEP_RULES = {
 	split_tasks: stepRule("planning", "split_tasks", {
 		objective: "Split the plan into atomic tasks.",
 		requiredActions: [
-			"Create an ordered task list with small independent tasks and acceptance criteria.",
+			"List the ordered tasks in plan.md — small, independent, each with acceptance criteria. Task RECORDS are not created here: planner_task_upsert becomes available at planning/write_task_files, the next step. Do not call it yet.",
 			"Keep tests inside each behavioral task as its TDD cycle. Never create standalone tasks for writing tests, mocks, or verification.",
 			"If this is a change-request planning pass, keep completed task IDs as history and create new revision task IDs only for remaining work.",
 		],
