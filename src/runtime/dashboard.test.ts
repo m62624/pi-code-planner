@@ -1,6 +1,7 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it } from "vitest";
 import {
+	isWorkspaceCompactIndicatorActive,
 	PlannerWorkspaceComponent,
 	setWorkspaceCompactIndicator,
 } from "./dashboard";
@@ -228,6 +229,20 @@ describe("PlannerWorkspaceComponent rendering", () => {
 			expect(component.render(80).join("\n")).not.toContain(
 				"Compacting 68k tok",
 			);
+		} finally {
+			setWorkspaceCompactIndicator(null);
+		}
+	});
+
+	it("reports whether a compact banner is currently up", () => {
+		// The resume hooks in index.ts read this durable, module-level flag to clear
+		// a banner that outlived its per-registration timer.
+		try {
+			expect(isWorkspaceCompactIndicatorActive()).toBe(false);
+			setWorkspaceCompactIndicator("Compacting 68k tok (threshold) ▓▓░░ 40%");
+			expect(isWorkspaceCompactIndicatorActive()).toBe(true);
+			setWorkspaceCompactIndicator(null);
+			expect(isWorkspaceCompactIndicatorActive()).toBe(false);
 		} finally {
 			setWorkspaceCompactIndicator(null);
 		}
