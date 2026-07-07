@@ -128,6 +128,85 @@ describe("behavior store", () => {
 		).toHaveLength(1);
 	});
 
+	it("resubmit merges: omitting an optional field keeps the stored value", () => {
+		// The session bug: first upsert carries REQ-1 and a branch; the flip-to-red
+		// resubmit omits requirement/branches (the model only re-sent id/status/test)
+		// and used to wipe them to null/[].
+		const first = validateTaskBehaviors({
+			taskId: "alpha",
+			behaviors: [
+				bhv(1, {
+					requirement: "REQ-1",
+					branches: [{ id: "BR-1", condition: "a → b", covered: false }],
+				}),
+			],
+			previous: null,
+		});
+		const flippedToRed = validateTaskBehaviors({
+			taskId: "alpha",
+			behaviors: [
+				{
+					id: "BHV-1",
+					statement: "Behavior 1.",
+					kind: "happy",
+					status: "red",
+					test: { file: "src/x.test.ts", name: "case 1" },
+				} as TaskBehavior,
+			],
+			previous: first,
+		});
+		expect(flippedToRed.behaviors[0].requirement).toBe("REQ-1");
+		expect(flippedToRed.behaviors[0].branches).toEqual([
+			{ id: "BR-1", condition: "a → b", covered: false },
+		]);
+	});
+
+	it("resubmit merges: an explicit null/[] overwrites the stored value", () => {
+		const first = validateTaskBehaviors({
+			taskId: "alpha",
+			behaviors: [
+				bhv(1, {
+					requirement: "REQ-1",
+					branches: [{ id: "BR-1", condition: "a → b", covered: false }],
+				}),
+			],
+			previous: null,
+		});
+		const cleared = validateTaskBehaviors({
+			taskId: "alpha",
+			behaviors: [bhv(1, { requirement: null, branches: [] })],
+			previous: first,
+		});
+		expect(cleared.behaviors[0].requirement).toBe(null);
+		expect(cleared.behaviors[0].branches).toEqual([]);
+	});
+
+	it("resubmit merges: red→green inherits the witnessing test when omitted", () => {
+		const redRecord = validateTaskBehaviors({
+			taskId: "alpha",
+			behaviors: [red(1)],
+			previous: null,
+		});
+		const green = validateTaskBehaviors({
+			taskId: "alpha",
+			// No test re-typed — it must carry over so the green flip is not rejected.
+			behaviors: [
+				{
+					id: "BHV-1",
+					statement: "Behavior 1.",
+					kind: "happy",
+					status: "green",
+				} as TaskBehavior,
+			],
+			previous: redRecord,
+		});
+		expect(green.behaviors[0].status).toBe("green");
+		expect(green.behaviors[0].test).toEqual({
+			file: "src/x.test.ts",
+			name: "case 1",
+		});
+	});
+
 	it("rejects malformed ids, kinds, requirements, and empty lists", () => {
 		expect(() =>
 			validateTaskBehaviors({ taskId: "a", behaviors: [], previous: null }),
