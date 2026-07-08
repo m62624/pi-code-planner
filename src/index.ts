@@ -3172,7 +3172,8 @@ function registerPlannerTools(
 							},
 							requirement: {
 								type: ["string", "null"],
-								description: "Optional REQ-n this behavior exercises.",
+								description:
+									'A SINGLE REQ-n id (a string, e.g. "REQ-1") this behavior exercises, or null — never an array. Every in-scope REQ-n this task owns must be cited by at least one behavior or the tdd_coverage gate BLOCKS; set it on the behavior that verifies that requirement.',
 							},
 							test: {
 								type: ["object", "null"],
