@@ -178,6 +178,10 @@ import {
 	type PlannerQuestionToolName,
 } from "./runtime/question-tools";
 import {
+	executePlannerReasonTool,
+	PLANNER_REASON_TOOL_NAME,
+} from "./runtime/reason-tools";
+import {
 	executePlannerRecoveryReportTool,
 	executePlannerRecoveryTool,
 	PLANNER_RECOVERY_REPORT_TOOL_NAME,
@@ -209,6 +213,7 @@ import {
 	executePlannerSpecTool,
 	PLANNER_SPEC_TOOL_NAME,
 } from "./runtime/spec-tools";
+import { formatTransitionReasoningFuelTail } from "./runtime/status";
 import {
 	buildPlannerStuckCompactInstructions,
 	executePlannerStuckTool,
@@ -2962,6 +2967,72 @@ function registerPlannerTools(
 	});
 
 	pi.registerTool({
+		name: PLANNER_REASON_TOOL_NAME,
+		label: "Planner Reason",
+		description:
+			"Grow and re-check the plan's living logical world with the bundled elenchus engine. Statements accumulate across stages: each assert adds facts, premises, or rules to a domain and re-checks the whole world against everything asserted before. Observations may name a source file to anchor to, so when that file later changes the knowledge demotes to a belief instead of raising a false contradiction. The engine's raw output is returned verbatim (CONSISTENT / WARNING / UNDERDETERMINED / CONFLICT and why); the tool never parses it. A reasoning-fuel line reports how much of the interacting-condition web on the table you have run through the engine.",
+		promptSnippet:
+			'At the reasoning steps, default to building the world with planner_reason instead of trusting a prose chain: mode=assert with a domain and statements (each a .vrf line; add anchor="path" for a file observation), mode=retract with ids to remove a statement, mode=recheck to re-run as-is. A CONFLICT hard-blocks planner_finish_step until a re-run improves it — apply the drop/flip the output names or retract the wrong statement, never delete a valid premise. When the decision genuinely has no interacting-constraint web, the fuel line stays silent and you may skip it. Available at the discovery scan, planning/consistency_check, execution/write_tdd_plan, execution/contract_check, finalize/doubt_review, and recovery/repair_or_resume.',
+		parameters: {
+			type: "object",
+			properties: {
+				mode: {
+					type: "string",
+					enum: ["assert", "retract", "recheck"],
+					description:
+						'"assert" adds statements to a world domain and re-checks; "retract" removes statements by id and re-checks; "recheck" re-runs the world as-is.',
+				},
+				domain: {
+					type: "string",
+					description:
+						'World domain for asserted statements: "discovery", "plan", "scratch", or "task_<slug>". Required when mode=assert.',
+				},
+				statements: {
+					type: "array",
+					items: {
+						type: "object",
+						properties: {
+							vrf: {
+								type: "string",
+								description:
+									"One elenchus statement (FACT/NOT/PREMISE/RULE/BELIEVES/SET/CLOSE/VAR), possibly multi-line. Instruments (PROVE/HENCE/TRY) are not stored.",
+							},
+							anchor: {
+								type: "string",
+								description:
+									"Optional project-root-relative file this observation is read from. The tool hashes it now; only FACT/NOT may carry an anchor.",
+							},
+						},
+						required: ["vrf"],
+						additionalProperties: false,
+					},
+					description:
+						"The statements to assert. Required and non-empty when mode=assert.",
+				},
+				ids: {
+					type: "array",
+					items: { type: "string" },
+					description:
+						'Statement ids to remove, e.g. ["w3","w7"]. Required and non-empty when mode=retract.',
+				},
+			},
+			required: ["mode"],
+			additionalProperties: false,
+		} as never,
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
+			const result = await executePlannerReasonTool({
+				fs,
+				git: gitRunner,
+				projectPaths,
+				params,
+			});
+			return plannerToolResponse(result);
+		},
+	});
+
+	pi.registerTool({
 		name: PLANNER_SPEC_TOOL_NAME,
 		label: "Planner Spec Submit",
 		description:
@@ -3310,11 +3381,27 @@ function registerPlannerTools(
 					transitionStatus: result.result.status,
 				});
 
+				// Ride the reasoning-fuel nudge on the transition tail so the model
+				// sees it in the drive loop (planner_finish_step), not only on a rare
+				// planner_status call. Computed for the step this transition lands on;
+				// self-silences when no interacting-condition web is warranted there.
+				// Presentational only — fuel enters no decision, and this seam calls
+				// the surfacing layer (status), never a fuel module, so the tone-only
+				// invariant holds.
+				const fuelLine = await formatTransitionReasoningFuelTail({
+					fs,
+					status: result.result.status,
+					planPaths: result.planPaths,
+					state: result.result.state,
+				});
+
 				return {
 					content: [
 						{
 							type: "text",
-							text: [result.text, compact?.text].filter(Boolean).join("\n\n"),
+							text: [result.text, compact?.text, fuelLine]
+								.filter(Boolean)
+								.join("\n\n"),
 						},
 					],
 					details: compact ? { ...result, compact } : result,
@@ -3460,15 +3547,13 @@ function registerPlannerTools(
 }
 
 const PLANNER_COMPACT_WIDGET_KEY = "planner-compact";
-// Refresh cadence for the indicator's slow-moving parts (the asymptotic bar,
-// percent, and ETA). The SDK's setWidget has NO diffing — every call disposes
-// the old component and rebuilds it (interactive-mode.js `setExtensionWidget`),
-// so each push is a full teardown+repaint. A 1 Hz push of a live seconds counter
-// therefore flickers the banner every second. We keep the indicator nearly
-// static instead: no per-second elapsed in the rendered line, a coarse refresh,
-// and a content dedup (see `setCompactWidget`) that skips a push when nothing
-// visible changed — so in steady state the widget repaints only when the bar or
-// ETA actually moves, not on a fixed clock.
+// Tick cadence for the safety-deadline check only. The SDK's setWidget has NO
+// diffing — every call disposes the old component and rebuilds it
+// (interactive-mode.js `setExtensionWidget`), so each push is a full
+// teardown+repaint that reflows the editor. So the rendered line is fully STATIC
+// for the run (no elapsed, no moving percent/bar): the content dedup in
+// `setCompactWidget` pushes it once and skips every later tick, and this interval
+// only re-checks the deadline below. Nothing animates, so nothing flickers.
 const PLANNER_COMPACT_REFRESH_MS = 5000;
 // Safety deadline so a *failed* compaction can never leave the indicator up
 // forever. Pi's built-in /compact swallows a failure and never emits
@@ -3667,26 +3752,24 @@ function registerPlannerCompactEvents(
 				)
 			: PLANNER_COMPACT_MAX_MS;
 
+		// The rendered line is static (no elapsed/percent) — the same string every
+		// tick — so the widget setter's dedup pushes it once and never repaints it
+		// mid-run. The interval therefore exists only to enforce the safety
+		// deadline; it does not animate anything.
+		const text = formatCompactIndicator({ sizeLabel, reasonLabel, estimate });
 		const renderStatus = () => {
 			try {
-				const elapsedMs = Date.now() - startedAt;
-				// Self-terminating deadline: the tick that draws the elapsed seconds
-				// also enforces the cap, so a failed compaction with no completion
-				// event and no follow-up turn cannot hang the indicator (the 124m
-				// "still Compacting…" case). A separate setTimeout could be lost across
-				// suspend/resume; this cannot — if the bar is ticking, the check runs.
-				if (elapsedMs >= clearAfterMs) {
+				// Self-terminating deadline: the same tick that keeps the banner up also
+				// enforces the cap, so a failed compaction with no completion event and
+				// no follow-up turn cannot hang the indicator (the 124m "still
+				// Compacting…" case). A separate setTimeout could be lost across
+				// suspend/resume; this cannot — if the interval is live, the check runs.
+				if (Date.now() - startedAt >= clearAfterMs) {
 					// A run that never completed is not a representative timing sample.
 					pendingCompact = null;
 					stopCompactIndicator(ctx);
 					return;
 				}
-				const text = formatCompactIndicator({
-					sizeLabel,
-					reasonLabel,
-					elapsedMs,
-					estimate,
-				});
 				setCompactWidget(ctx, [ctx.ui.theme.fg("accent", text)], text);
 			} catch {
 				// Never let a redraw throw out of the interval.
@@ -3774,7 +3857,16 @@ function registerPlannerCompactEvents(
 	// the chat, and no message can stream while summarization blocks the loop. So
 	// the moment one arrives with the indicator still up, the run has ended — hide
 	// it at once rather than waiting for the next agent_start or the safety cap.
+	// We clear on BOTH message_start and every streaming message_update: a
+	// streaming assistant reply is delivered as message_update tokens (the signal
+	// the dashboard itself tracks), and message_start alone does not fire reliably
+	// for it — so keying only on message_start left the banner sitting over the
+	// model's answer as it streamed. clearStaleCompactIndicator is idempotent (a
+	// no-op once nothing is up), so a per-token call is cheap.
 	pi.on("message_start", async (_event, ctx) => {
+		clearStaleCompactIndicator(ctx);
+	});
+	pi.on("message_update", async (_event, ctx) => {
 		clearStaleCompactIndicator(ctx);
 	});
 

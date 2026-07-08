@@ -137,10 +137,12 @@ export function clearPlannerCompactionInFlight(
 }
 
 /**
- * Decide whether a resume signal (`agent_start` / `turn_start` / `message_start`)
- * should tear down the compaction indicator. Summarization blocks the agent loop,
- * so the loop only runs *between* compactions — any resume signal therefore means
- * the compaction is over and an indicator still up is stale.
+ * Decide whether a resume signal (`agent_start` / `turn_start` / `message_start`
+ * / a streaming `message_update`) should tear down the compaction indicator.
+ * Summarization blocks the agent loop, so the loop only runs *between*
+ * compactions — any resume signal therefore means the compaction is over and an
+ * indicator still up is stale. A streaming reply surfaces as message_update
+ * tokens, so it is included: the banner must not sit over the model's answer.
  *
  * We clear when EITHER our per-registration interval is live OR the shared,
  * dashboard-mirrored banner line is still showing. Gating on the timer alone

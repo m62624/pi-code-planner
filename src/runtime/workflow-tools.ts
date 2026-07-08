@@ -75,6 +75,13 @@ export interface PlannerWorkflowToolExecutionResult {
 	transition: PlannerStateTransition;
 	result: PlannerStateTransitionResult;
 	lifecycle: PlannerLifecycleDecision | null;
+	/**
+	 * The active plan's storage paths when this transition ran against a ready
+	 * plan — pure data pass-through, so the surfacing layer (the tool dispatcher)
+	 * can render the reasoning-fuel nudge for the resulting step without any
+	 * decision module importing a fuel module. Absent when no plan is ready.
+	 */
+	planPaths?: PlanStoragePaths;
 }
 
 export async function executePlannerWorkflowTool(
@@ -172,6 +179,10 @@ export async function executePlannerWorkflowTool(
 		transition,
 		result,
 		lifecycle,
+		planPaths:
+			orchestrator.preflight.context.status === "ready"
+				? orchestrator.preflight.context.planPaths
+				: undefined,
 	};
 }
 

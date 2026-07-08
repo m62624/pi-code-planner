@@ -29,6 +29,7 @@ export const PLANNER_WRAPPER_TOOLS = [
 	"planner_refactor_review",
 	"planner_doubt_review",
 	"planner_elenchus_check",
+	"planner_reason",
 	"planner_skill_create",
 	"planner_skill_update",
 	"planner_contract_scan",
@@ -141,6 +142,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_contract_read",
 			"planner_contract_upsert",
 			"planner_elenchus_check",
+			"planner_reason",
 			"planner_git_commit",
 			"planner_exec",
 		],
@@ -187,6 +189,7 @@ const STEP_ALLOWED_TOOLS = {
 		consistency_check: [
 			"planner_gate_check",
 			"planner_elenchus_check",
+			"planner_reason",
 			"planner_task_upsert",
 			"planner_contract_route",
 			"planner_contract_read",
@@ -205,6 +208,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_skill_create",
 			"planner_skill_update",
 			"planner_elenchus_check",
+			"planner_reason",
 			"planner_debug_strategy",
 			"planner_debug_probe",
 			"planner_debug_result",
@@ -264,6 +268,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_contract_check",
 			"planner_contract_upsert",
 			"planner_elenchus_check",
+			"planner_reason",
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
@@ -329,6 +334,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_git_inspect",
 			"planner_doubt_review",
 			"planner_elenchus_check",
+			"planner_reason",
 			"planner_skill_create",
 			"planner_skill_update",
 			"planner_contract_route",
@@ -379,6 +385,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_recovery_resume",
 			"planner_git_inspect",
 			"planner_elenchus_check",
+			"planner_reason",
 		],
 	},
 } as const satisfies Record<
@@ -406,7 +413,7 @@ export function getAllowedPlannerWrapperTools(
 			// diagnosis tool (in-process engine, writes only planner artifacts) —
 			// the one broken-state step where it must stay reachable.
 			...(state.stage === "recovery" && state.step === "repair_or_resume"
-				? (["planner_elenchus_check"] as const)
+				? (["planner_elenchus_check", "planner_reason"] as const)
 				: []),
 		]);
 	}

@@ -15,6 +15,7 @@ Runtime domain for planner stages, model-facing status, tool wrappers, timers, r
 - Runtime gates must never allow wrappers outside the current stage/step policy.
 - Artifacts are the durable truth after compact; chat memory is advisory only.
 - `planner_contract_upsert` may write AGENTS.md only. Other context files are read-only imports.
+- Reasoning fuel is tone-only: its level changes only the directive the model reads, never an allow/block decision. The only hard floors stay on named terminal defects (a CONFLICT verdict, an un-CONSISTENT gate). Enforced by `fuel-never-blocks.invariant.test.ts`.
 
 ### Read First
 - `status.ts`
@@ -69,11 +70,18 @@ Runtime domain for planner stages, model-facing status, tool wrappers, timers, r
 
 **SDD gates (spec-driven development)** — the deterministic verifier loop: the model authors structured artifacts, compilers in `vrf/` turn them into VRF, the elenchus engine judges, and `workflow-tools.ts` hard-gates on the verdict.
 - `elenchus-engine.ts` → thin lazy loader for the `elenchus-wasm` engine (`runElenchusCheck` with a sandboxed IMPORT resolver); degrades to a typed failure if the wasm is missing.
-- `elenchus-tools.ts` → `planner_elenchus_check` (free-form, model-authored programs) + the shared `last-check.json` record (`ElenchusLastCheckRecord`, extended with `gate`/`sourceHash` for gate runs).
+- `elenchus-tools.ts` → `planner_elenchus_check` (free-form, model-authored programs) + the shared `last-check.json` record (`ElenchusLastCheckRecord`, with `gate`/`sourceHash` for gate runs and a `repeat` counter that `writeElenchusLastCheck` increments on identical gate re-runs — the gate-thrash friction signal).
 - `spec-tools.ts` → `planner_spec_submit`: validates and persists `spec.json`/renders `spec.md` via `storage/spec-store.ts`; snapshots the previous version to `spec.prev.json` (change-request audit trail).
 - `gate-tools.ts` → `planner_gate_check` (`spec_consistency` | `plan_coverage` | `tdd_coverage`): loads durable artifacts, runs the matching deterministic compiler from `src/vrf/`, executes the engine, writes `coverage.md` sections + `last-check.json` (verdict + sha256 of the compiled source), and translates every machine gap into a concrete action or a ready-to-ask user question. Takes NO program — gate VRF is never hand-written (REQ-12).
 - `behavior-tools.ts` → `planner_behavior_upsert`: the per-task behavior board (`storage/behavior-store.ts`), the `planned → red → green` test-first toggle ladder.
 - Hard gates live in `workflow-tools.ts` (`validateSpecGatePassed`, `validatePlanCoverageGatePassed`, `validateTddCoverageGatePassed`): a gate step only advances on a CONSISTENT run whose `sourceHash` still matches the artifact on disk; legacy plans/tasks without the artifact degrade gracefully (REQ-11).
+
+**Reasoning fuel** — a tone-only nudge toward the engine where a real interacting-condition web is on the table, computed entirely from the planner's own artifacts and records (never the engine's report). See the `fuel-never-blocks` Stable Contract above.
+- `reasoning-fuel.ts` → pure math: `computeReasoningFuel({warrantedWeb, coverage, stale, friction})` (null when nothing warrants the engine), plus the warranted-web collectors (branches/spec-constraints/shared-surfaces) and the engagement/friction readers over `ElenchusLastCheckRecord`. No I/O, no store, no engine.
+- `reason-context.ts` → `loadStepReasoningFuel`: assembles the current step's fuel by loading only the planner's own artifacts (spec constraints at consistency_check, task branches at the execution reasoning steps, shared task surfaces at doubt_review). The one bridge both the reason tool and `status.ts` call.
+- `reason-directive.ts` → `renderReasoningDirective`: the tone ladder (silent when null, quiet ≥70, top-deficit in 30–69, directing below 30 or on any friction). Templated, never generative.
+- `reason-tools.ts` → `planner_reason` (assert/retract/recheck over the living `vrf/world-store.ts`): returns the verdict + the engine's raw output verbatim + the fuel directive, and writes a model-authored `last-check.json` so fuel credits the engagement. Gated exactly like `planner_elenchus_check`.
+- Surfacing: the fuel directive is rendered in `status.ts` (the `## Reasoning Fuel` section) AND on the tail of an applied workflow transition via `status.ts` `formatTransitionReasoningFuelTail`, which the tool dispatcher (`index.ts`) appends to `planner_finish_step`'s result — so the model meets the nudge in the drive loop it actually reads, not only on a rare `planner_status`. The dispatcher imports this from the surfacing layer (`status.ts`), never a fuel module, so the `fuel-never-blocks` invariant holds; `workflow-tools.ts` only passes `planPaths` through as data.
 
 **TDD** — the structured pre/post-implementation evidence form.
 - `tdd-evidence.ts` → field/section name constants for the pre-implementation proof contract, post-implementation counterexample review, and merge-scope audit; no logic.
