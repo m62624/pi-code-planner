@@ -28,6 +28,7 @@ At `planning/read_context`, load context in this order:
 4. `write_task_files`
    - Call `planner_task_upsert` once per behavioral task with semantic fields only: task id, title, objective, scope, acceptance criteria, `requirements` (the exact `REQ-n` ids from `spec.json` this task discharges **or enables** — a setup/infrastructure task cites the requirement it is a prerequisite for, e.g. a "cargo init" task cites the `REQ-n` whose code it makes buildable; **only `REQ-n` ids belong here, never `CON-n` constraints or `ASM-n` assumptions** — the coverage gate at `consistency_check` names every requirement no task covers and every task that traces to nothing), and optional Local Contract Context fields. The wrapper creates `task.json`, `task.md`, and empty TDD lifecycle artifacts; do not write task JSON manually. Upsert is keyed by task id and **replaces the whole record** — there is no delete tool, so retire a redundant task by folding its scope into another, and when editing an existing task resupply every field (an omitted `requirements` is wiped back to orphan).
    - Each `task.md` must state scope, acceptance criteria, expected files or symbols, dependency context, checks, and the relevant AGENTS.md chain when known.
+   - Before finishing this step, discharge the "Generated Artifacts" rule below: by default the plan carries a task that puts the toolchain's generated output under `.gitignore`.
    - In a follow-up planning pass, call `planner_task_upsert` only for new or still-pending revision tasks. Completed task IDs are immutable audit history.
 5. `verify_plan` — verify tasks are ordered, bounded, testable, and free of hidden broad work. Record decisions and remaining risks.
 6. `consistency_check` — run the requirement-coverage gate with `planner_gate_check` (gate: `plan_coverage`), plus `planner_elenchus_check` for any interacting-constraint web. See "Consistency Check" below.
@@ -47,12 +48,11 @@ At `planning/read_context`, load context in this order:
 
 ## Generated Artifacts (keep them out of git)
 
-Before writing task files, account for what this project's toolchain will generate that must NOT be tracked — build outputs, dependency/vendor directories, caches, coverage and test output, editor/tool scratch. Two failure modes to preempt, because either one makes `planner_git_inspect` and later commits swell with generated bulk instead of source:
+Every toolchain emits output that must NOT be tracked — build outputs, dependency/vendor directories, caches, coverage and test output, editor/tool scratch. Untracked, it swells `planner_git_inspect` and every later commit with generated bulk instead of source, and buries the real diff.
 
-- a fresh project whose `.gitignore` is missing or empty, so the first build/dependency step fills the worktree with untracked bulk;
-- an existing project adopting a new tool or technology that emits an artifact its current `.gitignore` does not yet cover.
+**Default action:** the plan carries a task that writes the correct `.gitignore` entries for what this project will generate, folded into the setup/scaffolding task that first produces the artifact when there is one, or a standalone `.gitignore` task otherwise. Do this whether the project is fresh (its `.gitignore` is missing or empty) or existing (it adopts a new tool that emits an artifact the current `.gitignore` does not yet cover). You already know the conventional artifact names for each ecosystem — apply them; there is no need to spell them out here.
 
-If the relevant ignore rules are absent, add updating `.gitignore` as an explicit task (or fold it into the setup/scaffolding task that first produces the artifact), so git inspection and commits stay to source only. You already know the conventional artifact names for each ecosystem — apply them; there is no need to spell them out here. If the repository already ignores everything the plan will generate, note that and move on.
+**The only escape:** the repository already ignores everything the plan will generate. If so, state that in one line and move on — do not add a redundant task. Never skip this silently: either the plan has the ignore task, or you have written why it is unnecessary.
 
 ## Restrictions
 
