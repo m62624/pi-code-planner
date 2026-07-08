@@ -64,18 +64,21 @@ export function renderReasoningDirective(
 	if (fuel.fuel === null) return "";
 
 	const level = fuel.fuel;
-	if (level >= 70) {
-		return `Reasoning fuel: ${level}`;
-	}
-
 	const fragments = deficitFragments(fuel, context);
-	if (level >= 30 && fuel.friction === 0) {
+
+	// Any friction (a named thinking pathology) forces the directing tone even at
+	// otherwise-high fuel — the signal must be surfaced by name.
+	const directing = fuel.friction > 0 || level < 30;
+	if (!directing) {
+		if (level >= 70) {
+			return `Reasoning fuel: ${level}`;
+		}
 		const top = fragments[0] ?? "some web is unmodeled";
 		return `Reasoning fuel: ${level} — ${top}.`;
 	}
 
-	// Low fuel or any friction: the directing tone. Name every deficit, then say
-	// what is and is not the move now.
+	// The directing tone. Name every deficit, then say what is and is not the
+	// move now.
 	const named = fragments.length > 0 ? fragments.join("; ") : "the web is thin";
 	const needed =
 		fuel.unmet > 0

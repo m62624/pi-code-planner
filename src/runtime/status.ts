@@ -8,6 +8,7 @@ import type {
 } from "../instructions/schema";
 import { loadEffectivePlannerSettings } from "../settings/manager";
 import type { PlannerFs } from "../storage/fs";
+import type { PlanStoragePaths } from "../storage/paths";
 import type {
 	PlannerStage,
 	PlannerStep,
@@ -23,6 +24,9 @@ import {
 } from "./lifecycle";
 import { filterPlannerWrapperToolsForLifecycle } from "./orchestrator-gate";
 import type { PlannerPreflightResult } from "./preflight";
+import { loadStepReasoningFuel } from "./reason-context";
+import { renderReasoningDirective } from "./reason-directive";
+import { PLANNER_REASON_TOOL_NAME } from "./reason-tools";
 import {
 	listActivePlannerSkillSummaries,
 	type PlannerSkillSummary,
@@ -952,6 +956,29 @@ export const PLANNER_STEP_RULES = {
 	}),
 } as const satisfies Record<PlannerStep, PlannerStepRule>;
 
+/**
+ * The "## Reasoning Fuel" section, or [] when nothing here warrants the engine
+ * (the directive is empty). Computed from the planner's own artifacts + records
+ * only; never reads the engine's report. Staleness is left to the reason tool's
+ * own run — status renders the lighter web-vs-engagement view.
+ */
+async function formatReasoningFuelSection(
+	fs: PlannerFs,
+	planPaths: PlanStoragePaths,
+	state: PlanStateRecord,
+): Promise<string[]> {
+	const { fuel, webNoun } = await loadStepReasoningFuel({
+		fs,
+		planPaths,
+		state,
+	});
+	const directive = renderReasoningDirective(fuel, {
+		webNoun,
+		reasonTool: PLANNER_REASON_TOOL_NAME,
+	});
+	return directive ? ["## Reasoning Fuel", directive, ""] : [];
+}
+
 export async function buildPlannerStatusText(
 	input: PlannerStatusTextInput,
 ): Promise<string> {
@@ -1021,6 +1048,12 @@ export async function buildPlannerStatusText(
 	const instructionBundle = inlineStageInstruction
 		? await readCurrentStageInstruction(input.fs, preflight)
 		: [];
+	// Reasoning fuel: how much of the interacting-condition web on the table the
+	// model has run through the engine. Only rendered when a web is warranted
+	// here (else the directive is empty and the section is dropped).
+	const reasoningFuelSection = preflight.planPaths
+		? await formatReasoningFuelSection(input.fs, preflight.planPaths, state)
+		: [];
 	lines.push(
 		"",
 		`You are in worktree \`${state.worktreePath ?? "(none)"}\` (branch \`${preflight.gitReality?.branch ?? state.currentBranch ?? "(unknown)"}\`) — work here.`,
@@ -1033,6 +1066,7 @@ export async function buildPlannerStatusText(
 		`- stepStatus: ${state.stepStatus}`,
 		`- activeTaskId: ${state.activeTaskId ?? "(none)"}`,
 		"",
+		...reasoningFuelSection,
 		"## Languages",
 		"Write each kind of generated text in the language shown here (resolved live from settings) unless the user explicitly requested another in this conversation:",
 		`- final summary and general prose — humanLanguage: ${settings.effective.metadata.humanLanguage}`,

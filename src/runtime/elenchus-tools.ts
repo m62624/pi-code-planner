@@ -79,6 +79,14 @@ export interface ElenchusLastCheckRecord {
 	/** sha256 of the compiled source artifact (e.g. spec.json), so a gate pass
 	 * is invalidated when the artifact changes after the check. */
 	sourceHash?: string;
+	/**
+	 * How many times in a row this exact gate run repeated — same gate, same
+	 * sourceHash, same outcome. Computed by {@link writeElenchusLastCheck}; used
+	 * by the reasoning-fuel layer as the gate-thrash friction signal. A real
+	 * change (new sourceHash) or a different verdict resets it to 0. Only ever
+	 * set for gate runs; model-authored checks leave it unset.
+	 */
+	repeat?: number;
 }
 
 const LAST_CHECK_FILE = "last-check.json";
@@ -103,10 +111,30 @@ export async function writeElenchusLastCheck(
 	elenchusDir: string,
 	record: ElenchusLastCheckRecord,
 ): Promise<void> {
+	// Gate thrash: re-running the SAME gate with the SAME source and the SAME
+	// verdict is spinning, not progress. Carry a repeat counter so the fuel layer
+	// can name it. A model-authored check (no gate) never accrues one; any real
+	// change (new sourceHash) or a different verdict resets it.
+	const stored = record.gate
+		? { ...record, repeat: await nextGateRepeat(fs, elenchusDir, record) }
+		: record;
 	await fs.writeTextAtomic(
 		join(elenchusDir, LAST_CHECK_FILE),
-		`${JSON.stringify(record, null, "\t")}\n`,
+		`${JSON.stringify(stored, null, "\t")}\n`,
 	);
+}
+
+async function nextGateRepeat(
+	fs: PlannerToolContext["fs"],
+	elenchusDir: string,
+	record: ElenchusLastCheckRecord,
+): Promise<number> {
+	const previous = await readElenchusLastCheck(fs, elenchusDir);
+	const same =
+		previous?.gate === record.gate &&
+		previous?.sourceHash === record.sourceHash &&
+		previous?.outcome === record.outcome;
+	return same ? (previous?.repeat ?? 0) + 1 : 0;
 }
 
 /**
