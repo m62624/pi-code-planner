@@ -15,13 +15,14 @@ describe("describeCoverageGaps", () => {
 		} as never;
 	}
 
-	it("tells an orphan setup task to cite the REQ it discharges OR enables", () => {
+	it("tells an orphan setup task to cite its REQ or declare a dependsOn", () => {
 		const [gap] = describeCoverageGaps(orphanReport("init-project"), {
 			"init-project": "Initialize Rust workspace",
 		});
 		expect(gap).toContain('Task "Initialize Rust workspace" is ORPHAN');
-		expect(gap).toContain("discharges OR enables");
-		expect(gap).toContain("prerequisite");
+		// The new structural remedy: a discharging task depends on the infra task.
+		expect(gap).toContain("dependsOn");
+		expect(gap).toContain("infrastructure");
 	});
 
 	it("names the no-delete reality and the wipe-on-omit trap", () => {
@@ -29,8 +30,19 @@ describe("describeCoverageGaps", () => {
 		// The model tried to delete; say there is none and give the real alternative.
 		expect(gap).toContain("no delete tool");
 		expect(gap).toContain("fold its scope");
-		// Omitting requirements on a re-upsert wiped coverage — warn about it.
+		// Omitting requirements/dependsOn on a re-upsert wiped it — warn about it.
 		expect(gap).toContain("resupply");
+	});
+
+	it("maps a dependency-mode is_justified block back to the orphan taskId", () => {
+		const [gap] = describeCoverageGaps(
+			{
+				warnings: [{ blocked_by: ["plan_coverage.task_stray is_justified"] }],
+			} as never,
+			{ task_stray: "stray-work" },
+		);
+		expect(gap).toContain('Task "stray-work" is ORPHAN');
+		expect(gap).toContain("dependsOn");
 	});
 
 	it("still reports a dropped requirement (uncovered) distinctly", () => {

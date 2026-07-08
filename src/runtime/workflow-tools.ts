@@ -300,7 +300,7 @@ async function validatePlanCoverageGatePassed(
 		return 'This plan has a spec, so requirement coverage is a hard gate. Call planner_gate_check with gate: "plan_coverage" at planning/consistency_check and reach CONSISTENT before advancing.';
 	}
 	if (lastCheck.outcome !== "CONSISTENT") {
-		return `The latest plan_coverage gate ended in ${lastCheck.outcome} — a requirement is dropped or a task is orphan work. Fix the tasks' \`requirements\` via planner_task_upsert (or de-scope through a recorded user decision), then re-run planner_gate_check.`;
+		return `The latest plan_coverage gate ended in ${lastCheck.outcome} — a requirement is dropped or a task is orphan work. Fix the tasks via planner_task_upsert (cite the REQ-n a task discharges, or give an infra task a \`dependsOn\` on the task that needs it; or de-scope through a recorded user decision), then re-run planner_gate_check.`;
 	}
 	if (lastCheck.sourceHash) {
 		const plan = await readPlanRecord(fs, planPaths);
@@ -315,7 +315,7 @@ async function validatePlanCoverageGatePassed(
 		}
 		const currentHash = await planCoverageSourceHash(fs, planPaths, tasks);
 		if (lastCheck.sourceHash !== currentHash) {
-			return "spec.json or a task's requirements changed after the last plan_coverage pass — the verdict is stale. Re-run planner_gate_check at planning/consistency_check.";
+			return "spec.json or a task's requirements/dependsOn changed after the last plan_coverage pass — the verdict is stale. Re-run planner_gate_check at planning/consistency_check.";
 		}
 	}
 	return null;

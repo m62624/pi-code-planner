@@ -236,6 +236,25 @@ async function runPlanCoverageGate(input: {
 			].join("\n"),
 		);
 	}
+	if (compiled.unknownDependencyRefs.length > 0) {
+		return blocked(
+			[
+				"Some tasks declare a `dependsOn` id that names no task in this plan:",
+				...compiled.unknownDependencyRefs.map(
+					(ref) => `- task ${ref.taskId} → dependsOn ${ref.dependsOn}`,
+				),
+				"Fix the task via planner_task_upsert (exact taskIds — dependsOn takes taskIds, not REQ-n), or create the missing task.",
+			].join("\n"),
+		);
+	}
+	if (compiled.dependencyCycle) {
+		return blocked(
+			[
+				`The task dependency graph has a cycle: ${compiled.dependencyCycle.join(" → ")}.`,
+				"dependsOn must form a DAG (foundations before composition). Break the cycle via planner_task_upsert — a task cannot transitively depend on itself.",
+			].join("\n"),
+		);
+	}
 	const run = await runGateProgram({
 		fs: input.fs,
 		planPaths: input.planPaths,
@@ -277,7 +296,7 @@ async function runPlanCoverageGate(input: {
 				: []),
 			consistent
 				? "CONSISTENT: every in-scope requirement is discharged and no task is orphan work. Record the conclusion in decisions.md, then call planner_finish_step."
-				: "Not CONSISTENT: the plan drops a requirement or carries orphan work. Fix the tasks (planner_task_upsert with the right `requirements`), or de-scope a requirement through a recorded user decision, then re-run planner_gate_check.",
+				: "Not CONSISTENT: the plan drops a requirement or carries orphan work. Fix the tasks (planner_task_upsert — cite the REQ-n a task discharges, or give an infra task a `dependsOn` on the task that needs it), or de-scope a requirement through a recorded user decision, then re-run planner_gate_check.",
 		].join("\n"),
 		details: {
 			gate: "plan_coverage",
@@ -339,7 +358,11 @@ export async function planCoverageSourceHash(
 ): Promise<string> {
 	const traceability = [...tasks]
 		.sort((a, b) => a.taskId.localeCompare(b.taskId))
-		.map((task) => [task.taskId, [...(task.requirements ?? [])].sort()]);
+		.map((task) => [
+			task.taskId,
+			[...(task.requirements ?? [])].sort(),
+			[...(task.dependsOn ?? [])].sort(),
+		]);
 	return sha256(
 		`${await fs.readText(planPaths.specJson)}\n${JSON.stringify(traceability)}`,
 	);
@@ -350,17 +373,24 @@ export function describeCoverageGaps(
 	taskSubjects: Record<string, string>,
 ): string[] {
 	const gaps: string[] = [];
+	const orphanMessage = (taskId: string) =>
+		`Task "${taskId}" is ORPHAN work. Either cite the REQ-n it discharges via planner_task_upsert, or — if it is infrastructure that implements no requirement — declare it as a \`dependsOn\` of the task that builds on it (foundations before composition), so a discharging task justifies it. There is no delete tool: to retire a redundant task, fold its scope into another. Upsert replaces the whole task, so resupply \`requirements\`/\`dependsOn\` every time.`;
 	for (const warning of report.warnings ?? []) {
 		for (const blocked of warning.blocked_by ?? []) {
-			const subject = blocked.split(" ")[0] ?? blocked;
+			// TOTAL warnings print a bare subject; a PREMISE blocked_by is
+			// domain-qualified (`plan_coverage.<subject> is_justified`).
+			const subject = (blocked.split(" ")[0] ?? blocked).replace(
+				/^plan_coverage\./,
+				"",
+			);
 			if (blocked.includes("no covered_by witness")) {
 				gaps.push(
 					`${specSubjectToRequirementId(subject)} is DROPPED — no task discharges it. Add it to a task's \`requirements\` via planner_task_upsert, or de-scope it through a recorded user decision.`,
 				);
 			} else if (blocked.includes("no traces witness")) {
-				gaps.push(
-					`Task "${taskSubjects[subject] ?? subject}" is ORPHAN work — it traces to no requirement. Re-run planner_task_upsert (same taskId) citing the REQ-n it discharges OR enables — a setup/infrastructure task cites the requirement it is a prerequisite for (e.g. a "cargo init" task cites the REQ whose code it makes buildable). There is no delete tool: to retire a redundant task instead, fold its scope into the task that already covers that REQ. Upsert replaces the whole task, so resupply \`requirements\` every time or it is wiped back to orphan.`,
-				);
+				gaps.push(orphanMessage(taskSubjects[subject] ?? subject));
+			} else if (blocked.includes("is_justified")) {
+				gaps.push(orphanMessage(taskSubjects[subject] ?? subject));
 			} else {
 				gaps.push(`Blocked by \`${blocked}\`.`);
 			}
