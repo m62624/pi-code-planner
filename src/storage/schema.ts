@@ -28,10 +28,17 @@ export type InitStep =
 
 export type IntakeStep = "draft_goal" | "await_goal_approval";
 
+// The window-management compact steps (compact_discovery/spec/planning/task and
+// compact_finalize) were removed from the flow: the proactive turn_end monitor
+// (index.ts) now handles context pressure on any step, so the model no longer
+// pays a finish_step round-trip to walk through a boundary that mostly no-ops
+// below the token floor. The literals are gone from these unions; a persisted
+// state.json parked at one is remapped forward by normalizePlanState
+// (state-store.ts), which matches the raw step string at the read boundary.
+// compact_before_doubt survives as a deliberate (forced) confidence reset.
 export type DiscoveryStep =
 	| "scan_project_structure"
 	| "write_questions"
-	| "compact_discovery"
 	| "enter_planning";
 
 // SDD spec stage (docs/sdd/SPEC.md §6). Note: the exit step is named
@@ -43,7 +50,6 @@ export type SpecStep =
 	| "draft_requirements"
 	| "elicit_gaps"
 	| "verify_spec"
-	| "compact_spec"
 	| "finish_spec";
 
 export type PlanningStep =
@@ -53,7 +59,6 @@ export type PlanningStep =
 	| "write_task_files"
 	| "verify_plan"
 	| "consistency_check"
-	| "compact_planning"
 	| "enter_execution";
 
 export type ExecutionStep =
@@ -67,7 +72,6 @@ export type ExecutionStep =
 	| "run_final_tests"
 	| "capture_skill"
 	| "merge_task_to_plan"
-	| "compact_task"
 	| "select_next_task";
 
 export type FinalizeStep =
@@ -75,7 +79,6 @@ export type FinalizeStep =
 	| "compact_before_doubt"
 	| "doubt_review"
 	| "write_final_summary"
-	| "compact_finalize"
 	| "enter_done";
 
 export type DoneStep =
@@ -118,19 +121,8 @@ export const PLANNER_STAGE_STEPS = {
 		"enter_intake",
 	],
 	intake: ["draft_goal", "await_goal_approval"],
-	discovery: [
-		"scan_project_structure",
-		"write_questions",
-		"compact_discovery",
-		"enter_planning",
-	],
-	spec: [
-		"draft_requirements",
-		"elicit_gaps",
-		"verify_spec",
-		"compact_spec",
-		"finish_spec",
-	],
+	discovery: ["scan_project_structure", "write_questions", "enter_planning"],
+	spec: ["draft_requirements", "elicit_gaps", "verify_spec", "finish_spec"],
 	planning: [
 		"read_context",
 		"draft_plan",
@@ -138,7 +130,6 @@ export const PLANNER_STAGE_STEPS = {
 		"write_task_files",
 		"verify_plan",
 		"consistency_check",
-		"compact_planning",
 		"enter_execution",
 	],
 	execution: [
@@ -152,7 +143,6 @@ export const PLANNER_STAGE_STEPS = {
 		"run_final_tests",
 		"capture_skill",
 		"merge_task_to_plan",
-		"compact_task",
 		"select_next_task",
 	],
 	finalize: [
@@ -160,7 +150,6 @@ export const PLANNER_STAGE_STEPS = {
 		"compact_before_doubt",
 		"doubt_review",
 		"write_final_summary",
-		"compact_finalize",
 		"enter_done",
 	],
 	done: [
@@ -271,11 +260,6 @@ export interface ManagedTaskBranchRegistry {
 
 export interface ManagedBranchRegistry {
 	tasks: Record<string, ManagedTaskBranchRegistry>;
-}
-
-export interface PlannerCompactBoundaries {
-	stage: boolean;
-	task: boolean;
 }
 
 export interface PlannerTimerCheckpoint {
@@ -394,7 +378,6 @@ export interface PlanStateRecord {
 	mergeTargets: MergeTargets;
 	questionsSubmitted: boolean;
 	questionsResolved: boolean;
-	compactBoundaries: PlannerCompactBoundaries;
 	lastPlannerToolCallAt: number | null;
 	lastIdleWakeAt: number | null;
 	idleWakeInFlight: boolean;
@@ -483,7 +466,6 @@ export function createInitialPlanState(input: {
 	baseBranch: string;
 	planBranch: string;
 	worktreePath?: string | null;
-	compactBoundaries?: PlannerCompactBoundaries;
 	creationMethod?: PlanCreationMethod;
 	compatibilityMode?: PlanCompatibilityMode;
 }): PlanStateRecord {
@@ -511,10 +493,6 @@ export function createInitialPlanState(input: {
 		},
 		questionsSubmitted: false,
 		questionsResolved: false,
-		compactBoundaries: input.compactBoundaries ?? {
-			stage: true,
-			task: false,
-		},
 		lastPlannerToolCallAt: null,
 		lastIdleWakeAt: null,
 		idleWakeInFlight: false,

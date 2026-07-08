@@ -134,7 +134,7 @@ function run(setup: { fs: unknown; projectPaths: unknown }, params: unknown) {
 }
 
 describe("planner_reason tool", () => {
-	it("asserts facts into the world and reports a CONSISTENT verdict with raw output", async () => {
+	it("reports a CONSISTENT verdict and suppresses the raw engine dump", async () => {
 		const setup = await createSetup();
 		const result = await run(setup, {
 			mode: "assert",
@@ -143,9 +143,12 @@ describe("planner_reason tool", () => {
 		});
 		expect(result.status).toBe("applied");
 		expect(result.details?.verdict).toBe("CONSISTENT");
-		// The raw engine output is present verbatim (JSON verdict body).
 		expect(result.text).toContain("CONSISTENT");
 		expect(result.text).toContain("world verdict");
+		// On CONSISTENT the raw engine report (a big non-actionable JSON body) is
+		// withheld — the verdict line already says all there is.
+		expect(result.text).not.toContain('"exit_code"');
+		expect(result.text).not.toContain('"derived"');
 	});
 
 	it("surfaces a CONFLICT with the finish_step block hint", async () => {
@@ -164,6 +167,9 @@ describe("planner_reason tool", () => {
 		expect(result.details?.verdict).toBe("CONFLICT");
 		expect(result.text).toContain("CONFLICT");
 		expect(result.text).toContain("planner_finish_step stays blocked");
+		// When NOT consistent the raw engine report IS surfaced — it names what to
+		// fix (the actionable direction the suppression must not touch).
+		expect(result.text).toContain('"exit_code"');
 	});
 
 	it("retract removes a statement and re-checks; unknown ids are reported, never thrown", async () => {

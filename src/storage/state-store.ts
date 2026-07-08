@@ -143,7 +143,39 @@ export function requireWorktreePath(
 // and tests — skipping any one breaks resume for plans saved before the
 // field was added (readJson returns the raw old object with the field
 // missing).
-function normalizePlanState(state: PlanStateRecord): PlanStateRecord {
+// The removed window-management compact steps map to the real step that followed
+// each in its old sequence. A persisted state.json parked at one (any stepStatus,
+// including a mid-compaction `blocked` + requiresCompact) resumes cleanly at the
+// successor with a fresh pending status — the boundary is moot now that the
+// proactive monitor owns context pressure. compact_before_doubt is NOT here: it
+// still exists as a live (forced) step.
+const LEGACY_COMPACT_STEP_SUCCESSORS: Record<string, PlannerStep> = {
+	compact_discovery: "enter_planning",
+	compact_spec: "finish_spec",
+	compact_planning: "enter_execution",
+	compact_task: "select_next_task",
+	compact_finalize: "enter_done",
+};
+
+function remapLegacyCompactStep(state: PlanStateRecord): PlanStateRecord {
+	// The removed steps are no longer PlannerStep values, so match the raw string
+	// a legacy state.json may still carry.
+	const successor = LEGACY_COMPACT_STEP_SUCCESSORS[state.step as string];
+	if (!successor) {
+		return state;
+	}
+	return {
+		...state,
+		step: successor,
+		stepStatus: "pending",
+		nextStep: null,
+		requiresCompact: false,
+		blockedReason: null,
+	};
+}
+
+function normalizePlanState(rawState: PlanStateRecord): PlanStateRecord {
+	const state = remapLegacyCompactStep(rawState);
 	return {
 		...state,
 		creationMethod: state.creationMethod ?? "create",
@@ -151,10 +183,6 @@ function normalizePlanState(state: PlanStateRecord): PlanStateRecord {
 		worktreeBootstrapPending: state.worktreeBootstrapPending ?? false,
 		questionsSubmitted: state.questionsSubmitted ?? false,
 		questionsResolved: state.questionsResolved ?? false,
-		compactBoundaries: state.compactBoundaries ?? {
-			stage: true,
-			task: false,
-		},
 		lastPlannerToolCallAt: state.lastPlannerToolCallAt ?? null,
 		lastIdleWakeAt: state.lastIdleWakeAt ?? null,
 		idleWakeInFlight: state.idleWakeInFlight ?? false,

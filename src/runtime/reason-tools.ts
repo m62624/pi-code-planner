@@ -163,8 +163,11 @@ async function finishRun(
 	const text = [
 		`planner_reason ${mode} → world verdict: ${run.verdict} (${run.engineVersion}).`,
 		...(opts.note ? [opts.note] : []),
-		"",
-		run.output,
+		// The raw engine report is only actionable when NOT consistent (it names
+		// the FACT/NOT to add or the conflict to fix). On CONSISTENT it is a big
+		// non-actionable derived[] dump, so withhold it — the verdict line says all
+		// there is. Never parsed (anti-Fable-5), just not shown.
+		...(consistent ? [] : ["", run.output]),
 		"",
 		consistent
 			? "CONSISTENT: the whole living world holds. Record the conclusion, then continue."

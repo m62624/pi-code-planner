@@ -15,7 +15,6 @@ describe("simplified local-model workflow", () => {
 		expect(PLANNER_STAGE_STEPS.discovery).toEqual([
 			"scan_project_structure",
 			"write_questions",
-			"compact_discovery",
 			"enter_planning",
 		]);
 	});

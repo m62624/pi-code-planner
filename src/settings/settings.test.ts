@@ -14,10 +14,6 @@ describe("planner settings", () => {
 		const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
 
 		expect(settings.effective.worktree).toEqual({ mode: "project-local" });
-		expect(settings.effective.compact).toEqual({
-			stage: true,
-			task: false,
-		});
 		expect(settings.effective.idle).toEqual({
 			enabled: true,
 			timeoutMinutes: 10,
@@ -63,7 +59,7 @@ describe("planner settings", () => {
 		expect(
 			fs.snapshot()["/agent/extensions/pi-code-planner/settings.json"],
 		).toBe(
-			'{\n  "worktree": {\n    "mode": "project-local"\n  },\n  "compact": {\n    "stage": true,\n    "task": false\n  },\n  "idle": {\n    "enabled": true,\n    "timeoutMinutes": 10\n  },\n  "metadata": {\n    "humanLanguage": "English"\n  },\n  "timer": {\n    "enabled": true,\n    "mode": "status",\n    "showCheckpoints": true,\n    "maxCheckpoints": 5,\n    "syncIntervalMinutes": 10\n  },\n  "skills": {\n    "enabled": true,\n    "maxActive": 0\n  },\n  "contracts": {\n    "enabled": true,\n    "finalPolicy": "ask",\n    "scanBatchSize": 10,\n    "statusCharBudget": 12000,\n    "readChunkChars": 6000,\n    "maxActiveChains": 3,\n    "levelBudgets": {\n      "root": 1800,\n      "ancestor": 3000,\n      "nearest": 7000\n    }\n  },\n  "workspace": {\n    "enabled": true,\n    "autoOpen": true,\n    "footerReserveRows": 3\n  }\n}\n',
+			'{\n  "worktree": {\n    "mode": "project-local"\n  },\n  "idle": {\n    "enabled": true,\n    "timeoutMinutes": 10\n  },\n  "metadata": {\n    "humanLanguage": "English"\n  },\n  "timer": {\n    "enabled": true,\n    "mode": "status",\n    "showCheckpoints": true,\n    "maxCheckpoints": 5,\n    "syncIntervalMinutes": 10\n  },\n  "skills": {\n    "enabled": true,\n    "maxActive": 0\n  },\n  "contracts": {\n    "enabled": true,\n    "finalPolicy": "ask",\n    "scanBatchSize": 10,\n    "statusCharBudget": 12000,\n    "readChunkChars": 6000,\n    "maxActiveChains": 3,\n    "levelBudgets": {\n      "root": 1800,\n      "ancestor": 3000,\n      "nearest": 7000\n    }\n  },\n  "workspace": {\n    "enabled": true,\n    "autoOpen": true,\n    "footerReserveRows": 3\n  }\n}\n',
 		);
 	});
 
@@ -147,30 +143,6 @@ describe("planner settings", () => {
 		await expect(
 			loadEffectivePlannerSettings({ fs, projectPaths }),
 		).rejects.toThrow("require a non-empty root");
-	});
-
-	it("lets project compact settings override individual global boundaries", async () => {
-		const fs = new MockPlannerFs();
-		const projectPaths = createProjectStoragePaths({
-			agentDir: "/agent",
-			projectRoot: "/repo/app",
-		});
-		await fs.writeTextAtomic(
-			"/agent/extensions/pi-code-planner/settings.json",
-			'{ "compact": { "stage": true, "task": true } }\n',
-		);
-		await fs.writeTextAtomic(
-			"/repo/app/.pi/pi-code-planner/settings.json",
-			'{ "compact": { "task": false } }\n',
-		);
-
-		const settings = await loadEffectivePlannerSettings({ fs, projectPaths });
-
-		expect(settings.effective.compact).toEqual({
-			stage: true,
-			task: false,
-		});
-		expect(settings.compactSource).toBe("project");
 	});
 
 	it("lets project idle timeout override the global default", async () => {

@@ -32,10 +32,7 @@ import {
 	type PlannerSkillSummary,
 } from "./skill-library";
 import { getPlannerStageStepBehavior } from "./stage-behavior";
-import {
-	getAllowedNextPlannerPositions,
-	isPlannerCompactEnabled,
-} from "./state-machine";
+import { getAllowedNextPlannerPositions } from "./state-machine";
 import { getAllowedPlannerStateTransitionTypes } from "./state-transition";
 
 export interface PlannerStepRule {
@@ -75,7 +72,7 @@ export const PLANNER_STATUS_INVARIANTS = [
 	"Capture planner skills by default: a verified reusable lesson OR a recurring code pattern (a trait/impl skeleton, boilerplate shape, error-enum, builder, test harness you wrote or would write again) is worth a skill. Put the snippet plus when-to-apply in the body. A planner skill is future memory for later sessions, not a substitute for current stage evidence.",
 	"Repository AGENTS.md files are planner local contracts. Prefer reading the relevant contract chain before source reads; update contracts when completed work changes a durable domain rule.",
 	"Task branch cannot merge into plan before final task checks pass.",
-	"Next task cannot start before merge_task_to_plan and compact_task.",
+	"Next task cannot start before merge_task_to_plan.",
 	"Task branch is temporary. It is deleted after it is merged into the plan branch.",
 	"Plan branch is protected. It is not deleted by managed child branch cleanup.",
 	"Done cleanup requires explicit user acceptance.",
@@ -246,18 +243,7 @@ export const PLANNER_STEP_RULES = {
 		exitCondition:
 			"questions.md is non-empty and every answer required before planning is recorded in decisions.md.",
 		nextInstruction:
-			"Call planner_finish_step to open and start compact_discovery.",
-	}),
-	compact_discovery: stepRule("discovery", "compact_discovery", {
-		objective: "Create a compact boundary after discovery.",
-		requiredActions: [
-			"Request Pi compact and preserve discovery summary and open questions.",
-		],
-		allowedNow: ["Compact flow only."],
-		forbiddenNow: ["Do not edit code while compact is required/pending."],
-		exitCondition:
-			"Compaction finished and resume context points back to planner_status.",
-		nextInstruction: "Complete compact to open enter_planning.",
+			"Call planner_finish_step to open and start enter_planning.",
 	}),
 	enter_planning: stepRule("discovery", "enter_planning", {
 		objective: "Enter the spec stage after verified discovery.",
@@ -329,18 +315,7 @@ export const PLANNER_STEP_RULES = {
 		],
 		exitCondition:
 			"The latest spec_consistency check reports CONSISTENT and every in-scope requirement is addressed.",
-		nextInstruction: "Call planner_finish_step to open compact_spec.",
-	}),
-	compact_spec: stepRule("spec", "compact_spec", {
-		objective: "Create a compact boundary after the spec stage.",
-		requiredActions: [
-			"Request Pi compact and preserve requirement ids, non-goals, assumption evidence, and the latest gate verdict.",
-		],
-		allowedNow: ["Compact flow only."],
-		forbiddenNow: ["Do not edit code while compact is required/pending."],
-		exitCondition:
-			"Compaction finished and resume context points back to planner_status.",
-		nextInstruction: "Complete compact to open finish_spec.",
+		nextInstruction: "Call planner_finish_step to open finish_spec.",
 	}),
 	finish_spec: stepRule("spec", "finish_spec", {
 		objective: "Enter planning with a verified spec.",
@@ -438,20 +413,7 @@ export const PLANNER_STEP_RULES = {
 		forbiddenNow: ["Do not edit code. Do not start execution yet."],
 		exitCondition:
 			"plan_coverage is CONSISTENT (or skipped as legacy), and any modeled constraint web reports CONSISTENT or a recorded not_applicable.",
-		nextInstruction: "Call planner_finish_step to open compact_planning.",
-	}),
-	compact_planning: stepRule("planning", "compact_planning", {
-		objective: "Create a compact boundary after planning.",
-		requiredActions: [
-			"Request Pi compact and preserve plan, task order, decisions, and artifact paths.",
-		],
-		allowedNow: ["Compact flow only."],
-		forbiddenNow: [
-			"Do not edit code or tasks while compact is required/pending.",
-		],
-		exitCondition:
-			"Compaction finished and resume context points back to planner_status.",
-		nextInstruction: "Complete compact to open enter_execution.",
+		nextInstruction: "Call planner_finish_step to open enter_execution.",
 	}),
 	enter_execution: stepRule("planning", "enter_execution", {
 		objective: "Enter task execution.",
@@ -639,35 +601,14 @@ export const PLANNER_STEP_RULES = {
 		objective: "Merge the completed task branch into the plan branch.",
 		requiredActions: [
 			"First submit the ## Task Merge Scope Audit via planner_tdd_submit (mergeScopeAudit fields: acceptance coverage, changed-file scope, tests run, cleanup, commit message fit, branch drift check) while the task is still active.",
+			"Briefly check — did the task change any component called, imported, or depended upon by code outside the task scope? If yes and it was not captured in tdd.md or AGENTS.md, add a note to tdd.md while the task context is still live.",
 			"Then use planner_git_merge_task_to_plan; extension determines task and plan branches from state.json. The merge wrapper blocks until the audit exists.",
 		],
 		allowedNow: ["Use the task-to-plan merge wrapper."],
-		forbiddenNow: [
-			"Do not use raw git merge.",
-			"Do not start next task before compact_task.",
-		],
+		forbiddenNow: ["Do not use raw git merge."],
 		exitCondition:
 			"Task branch is merged into plan branch, task branch is deleted, and tdd.md contains the merge scope audit.",
-		nextInstruction: "Call planner_finish_step to open compact_task.",
-	}),
-	compact_task: stepRule("execution", "compact_task", {
-		objective:
-			"Close the completed task boundary and verify no hidden connections were missed.",
-		// The boundary directive (request_compact vs. skip via finish_step) is
-		// resolved from settings by resolveCompactStepRule — this step only owns the
-		// connection check. Do not re-add a classify-first "if ENABLED / if DISABLED"
-		// action here; the model cannot see the setting and guesses wrong.
-		requiredActions: [
-			"Briefly check — did the task change any component called, imported, or depended upon by code outside the task scope? If yes and it was not captured in tdd.md or AGENTS.md, add a note to tdd.md.",
-		],
-		allowedNow: [
-			"Brief connection check, then the compact-or-finish flow only.",
-		],
-		forbiddenNow: ["Do not edit task code while compact is required/pending."],
-		exitCondition:
-			"Compaction finished, or the disabled boundary was skipped via finish_step. Either way state points to select_next_task.",
-		nextInstruction:
-			"Follow the resolved compact directive below (the boundary is enabled or disabled per your settings).",
+		nextInstruction: "Call planner_finish_step to open select_next_task.",
 	}),
 	select_next_task: stepRule("execution", "select_next_task", {
 		objective: "Select the next task or finish execution.",
@@ -755,21 +696,8 @@ export const PLANNER_STEP_RULES = {
 		],
 		allowedNow: ["Write final summary artifacts."],
 		forbiddenNow: ["Do not export/cleanup until user acceptance flow."],
-		exitCondition: "Final summary is ready for compact and user review.",
-		nextInstruction: "Call planner_finish_step to open compact_finalize.",
-	}),
-	compact_finalize: stepRule("finalize", "compact_finalize", {
-		objective: "Compact before user acceptance.",
-		requiredActions: [
-			"Request Pi compact preserving final summary, branch state, checks, and open risks.",
-		],
-		allowedNow: ["Compact flow only."],
-		forbiddenNow: [
-			"Do not modify code or cleanup while compact is required/pending.",
-		],
-		exitCondition:
-			"Compaction finished and resume context points back to planner_status.",
-		nextInstruction: "Complete compact to open enter_done.",
+		exitCondition: "Final summary is ready for user review.",
+		nextInstruction: "Call planner_finish_step to open enter_done.",
 	}),
 	enter_done: stepRule("finalize", "enter_done", {
 		objective: "Enter the user acceptance stage.",
@@ -1062,10 +990,7 @@ export async function buildPlannerStatusText(
 	// Resolve the compact-step boundary directive from the persisted boundaries
 	// (the same source lifecycle uses), so the rendered rule agrees with the
 	// "## Next Required Action" line instead of asking the model to classify.
-	const rule = resolveCompactStepRule(
-		getPlannerStepRule(state),
-		isPlannerCompactEnabled(state),
-	);
+	const rule = resolveCompactStepRule(getPlannerStepRule(state));
 	const behavior = getPlannerStageStepBehavior(state);
 	const allowedWrapperTools = filterPlannerWrapperToolsForLifecycle({
 		preflight,
@@ -1234,51 +1159,31 @@ export function getPlannerStepRule(input: {
 // What a compaction summary must preserve at each boundary — surfaced only when
 // the boundary is enabled (a skipped boundary generates no summary to preserve).
 const COMPACT_PRESERVE: Partial<Record<PlannerStep, string>> = {
-	compact_discovery: "the discovery summary and open questions",
-	compact_spec:
-		"requirement ids, non-goals, assumption evidence, and the latest gate verdict",
-	compact_planning: "the plan, task order, decisions, and artifact paths",
-	compact_task: "the task outcome and any cross-scope connection you noted",
 	compact_before_doubt:
 		"the artifacts needed to audit from persisted state, not chat memory",
-	compact_finalize: "the final summary, branch state, checks, and open risks",
 };
 
 /**
- * Render a compact step's boundary directive as ONE resolved instruction from
- * the effective settings, instead of a classify-first "if ENABLED / if DISABLED"
- * the model cannot evaluate (it cannot see the setting and guessed wrong — both
- * a needless request_compact on a disabled boundary and a wrong skip on an
- * enabled one showed up in a real run). Non-compact steps pass through unchanged.
- * Any genuine non-boundary work the step owns (the connection check on
- * compact_task) is kept ahead of the resolved directive.
+ * Render the compact step's boundary directive as ONE resolved instruction.
+ * compact_before_doubt is the only surviving compact step and is always forced
+ * (its purpose is a deliberate confidence reset before the doubt audit, not
+ * window relief), so there is no enabled/disabled fork to classify. Non-compact
+ * steps pass through unchanged.
  */
-export function resolveCompactStepRule(
-	rule: PlannerStepRule,
-	compactEnabled: boolean,
-): PlannerStepRule {
+export function resolveCompactStepRule(rule: PlannerStepRule): PlannerStepRule {
 	if (!rule.step.startsWith("compact_")) {
 		return rule;
 	}
 	const preserve = COMPACT_PRESERVE[rule.step];
-	// compact_task's first action is the cross-scope connection check — genuine
-	// work independent of the boundary decision, so keep it as a leading action.
-	const leadingWork =
-		rule.step === "compact_task" ? rule.requiredActions.slice(0, 1) : [];
-	const boundaryAction = compactEnabled
-		? `Create the compact boundary: call planner_request_compact${
-				preserve ? ` (preserve ${preserve})` : ""
-			}, then planner_complete_compact once it finishes.`
-		: 'This compact boundary is disabled in your settings — do NOT call planner_request_compact. Call planner_finish_step with the target shown under "## Next Required Action" to skip it and keep the state-machine checkpoint.';
+	const boundaryAction = `Create the compact boundary: call planner_request_compact${
+		preserve ? ` (preserve ${preserve})` : ""
+	}, then planner_complete_compact once it finishes.`;
 	return {
 		...rule,
-		requiredActions: [...leadingWork, boundaryAction],
-		allowedNow: compactEnabled
-			? ["Use planner_request_compact, then planner_complete_compact."]
-			: ["Use planner_finish_step to skip the disabled boundary."],
-		nextInstruction: compactEnabled
-			? "Call planner_request_compact, then planner_complete_compact."
-			: "Call planner_finish_step to skip the disabled boundary — do not call planner_request_compact.",
+		requiredActions: [boundaryAction],
+		allowedNow: ["Use planner_request_compact, then planner_complete_compact."],
+		nextInstruction:
+			"Call planner_request_compact, then planner_complete_compact.",
 	};
 }
 
@@ -1304,7 +1209,7 @@ const FORK_CRITERIA: Record<string, Record<string, string>> = {
 		implement_task: "a test still fails — go back and fix it",
 	},
 	"spec/verify_spec": {
-		compact_spec: "the spec is complete and CONSISTENT — advance",
+		finish_spec: "the spec is complete and CONSISTENT — advance",
 		elicit_gaps: "gaps or open questions remain — loop back to resolve them",
 	},
 };

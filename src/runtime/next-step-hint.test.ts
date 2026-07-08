@@ -56,28 +56,15 @@ describe("buildNextStepHint", () => {
 		);
 	});
 
-	it("guides toward request_compact on an enabled compact step", () => {
+	it("guides toward request_compact on the forced pre-doubt compact step", () => {
 		const hint = buildNextStepHint(
 			state({
-				stage: "planning",
-				step: "compact_planning",
+				stage: "finalize",
+				step: "compact_before_doubt",
 				stepStatus: "running",
 			}),
 		);
 		expect(hint).toContain("planner_request_compact");
-	});
-
-	it("skips compact guidance when the boundary is disabled", () => {
-		// compact_task uses the task boundary, which defaults to disabled.
-		const hint = buildNextStepHint(
-			state({
-				stage: "execution",
-				step: "compact_task",
-				stepStatus: "running",
-			}),
-		);
-		expect(hint).not.toContain("planner_request_compact");
-		expect(hint).toContain("select_next_task");
 	});
 });
 

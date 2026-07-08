@@ -9,7 +9,7 @@ Execute exactly one active task at a time through tests-first development, imple
 - At `prepare_task`, call `planner_status`, reread the full `plan.md`, read answered `questions.md` and `decisions.md`, read the selected `task.md`, then inspect `discovery.md` — all via `planner_artifact_read`, not the built-in read tool — and use focused project search only if needed.
 - If `task.md` lists a Local Contract Context, call `planner_contract_route/read` before source reads. AGENTS.md files are repository-owned routing memory; higher levels route, nearest levels explain.
 - During one task, reread `task.md`, `tdd.md`, `refactor.md` (via `planner_artifact_read`), and focused source files only when the current action needs details not already recorded.
-- After `compact_task`, do not carry live reasoning into the next task. Call `planner_status`, reread the full `plan.md` via `planner_artifact_read`, inspect task status, then load the next `task.md`.
+- When starting the next task at `select_next_task`, do not carry live reasoning from the previous one. Call `planner_status`, reread the full `plan.md` via `planner_artifact_read`, inspect task status, then load the next `task.md`.
 - After recovery or auto-compact, call `planner_status` before any edit or check.
 
 ## Strict Task Lifecycle
@@ -28,9 +28,8 @@ Execute exactly one active task at a time through tests-first development, imple
    - If this task produced a reusable lesson not covered by any existing skill, call `planner_skill_create`.
    - If you updated or created a skill whose body describes a runnable probe, run it now, then call `planner_git_inspect`. If dirty, call `planner_git_discard_changes` immediately — this is mandatory.
    - If no skill action is taken, write an explicit "no skill" note in `decisions.md` with the reason. Skill capture is not optional; a decision must be recorded either way.
-10. `merge_task_to_plan` — merge the task branch into the plan branch through the planner wrapper.
-11. `compact_task` — compact the completed task result if enabled.
-12. `select_next_task` — choose `execution/prepare_task` for the next task or `finalize/verify_plan_branch` when execution is complete.
+10. `merge_task_to_plan` — record the merge scope audit and, while the task context is still live, note in `tdd.md` any component outside task scope that this task touched. Then merge the task branch into the plan branch through the planner wrapper.
+11. `select_next_task` — choose `execution/prepare_task` for the next task or `finalize/verify_plan_branch` when execution is complete.
 
 ## Atomic Unit Rules
 
@@ -92,7 +91,7 @@ If a task allows more than one interpretation of mechanism or integration approa
 
 ## manual-compact
 
-Preserve the plan id, active task id, exact branch, current step, task artifact paths, TDD evidence, refactor findings, final checks, open risks, and exact next action. After compaction, call `planner_status`. For `compact_task`, reload full `plan.md` via `planner_artifact_read` before choosing the next task.
+Preserve the plan id, active task id, exact branch, current step, task artifact paths, TDD evidence, refactor findings, final checks, open risks, and exact next action. After compaction, call `planner_status`. At `select_next_task`, reload full `plan.md` via `planner_artifact_read` before choosing the next task.
 
 ## auto-compact
 

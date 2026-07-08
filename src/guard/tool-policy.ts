@@ -154,7 +154,6 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_contract_read",
 			"planner_exec",
 		],
-		compact_discovery: [],
 		enter_planning: [],
 	},
 	spec: {
@@ -169,7 +168,6 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_spec_submit",
 		],
 		verify_spec: ["planner_gate_check", "planner_spec_submit"],
-		compact_spec: [],
 		finish_spec: [],
 	},
 	planning: {
@@ -194,7 +192,6 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_contract_route",
 			"planner_contract_read",
 		],
-		compact_planning: [],
 		enter_execution: [],
 	},
 	execution: {
@@ -320,7 +317,6 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_tdd_submit",
 			"planner_git_merge_task_to_plan",
 		],
-		compact_task: [],
 		select_next_task: ["planner_git_inspect"],
 	},
 	finalize: {
@@ -330,6 +326,7 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_contract_read",
 			"planner_git_discard_changes",
 		],
+		compact_before_doubt: [],
 		doubt_review: [
 			"planner_git_inspect",
 			"planner_doubt_review",
@@ -353,7 +350,6 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_contract_upsert",
 			"planner_git_discard_changes",
 		],
-		compact_finalize: [],
 		enter_done: [],
 	},
 	done: {

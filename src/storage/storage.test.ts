@@ -195,16 +195,9 @@ describe("plan state store", () => {
 			discovery: [
 				"scan_project_structure",
 				"write_questions",
-				"compact_discovery",
 				"enter_planning",
 			],
-			spec: [
-				"draft_requirements",
-				"elicit_gaps",
-				"verify_spec",
-				"compact_spec",
-				"finish_spec",
-			],
+			spec: ["draft_requirements", "elicit_gaps", "verify_spec", "finish_spec"],
 			planning: [
 				"read_context",
 				"draft_plan",
@@ -212,7 +205,6 @@ describe("plan state store", () => {
 				"write_task_files",
 				"verify_plan",
 				"consistency_check",
-				"compact_planning",
 				"enter_execution",
 			],
 			execution: [
@@ -226,7 +218,6 @@ describe("plan state store", () => {
 				"run_final_tests",
 				"capture_skill",
 				"merge_task_to_plan",
-				"compact_task",
 				"select_next_task",
 			],
 			finalize: [
@@ -234,7 +225,6 @@ describe("plan state store", () => {
 				"compact_before_doubt",
 				"doubt_review",
 				"write_final_summary",
-				"compact_finalize",
 				"enter_done",
 			],
 			done: [
@@ -269,11 +259,11 @@ describe("plan state store", () => {
 		).toEqual({
 			init: 7,
 			intake: 2,
-			discovery: 4,
-			spec: 5,
-			planning: 8,
-			execution: 12,
-			finalize: 6,
+			discovery: 3,
+			spec: 4,
+			planning: 7,
+			execution: 11,
+			finalize: 5,
 			done: 8,
 			recovery: 6,
 		});
@@ -336,7 +326,7 @@ describe("plan state store", () => {
 		} satisfies Partial<PlanStateRecord>);
 	});
 
-	it("normalizes state files created before question and compact settings existed", async () => {
+	it("normalizes state files created before the question fields existed", async () => {
 		const fs = new MockPlannerFs();
 		const project = createProjectStoragePaths({
 			agentDir: "/agent",
@@ -350,7 +340,6 @@ describe("plan state store", () => {
 		const {
 			questionsSubmitted: _questionsSubmitted,
 			questionsResolved: _questionsResolved,
-			compactBoundaries: _compactBoundaries,
 			...legacy
 		} = state;
 		await fs.writeTextAtomic(
@@ -361,10 +350,6 @@ describe("plan state store", () => {
 		await expect(readPlanState(fs, planPaths)).resolves.toMatchObject({
 			questionsSubmitted: false,
 			questionsResolved: false,
-			compactBoundaries: {
-				stage: true,
-				task: false,
-			},
 			lastPlannerToolCallAt: null,
 			lastIdleWakeAt: null,
 			idleWakeInFlight: false,
@@ -375,6 +360,70 @@ describe("plan state store", () => {
 			debugStrategyPath: null,
 			activeDebugProbeId: null,
 			debugCleanupRequired: false,
+		});
+	});
+
+	it("remaps a legacy window compact step forward on read", async () => {
+		const fs = new MockPlannerFs();
+		const project = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(project, "legacy-compact");
+		const state = createInitialPlanState({
+			baseBranch: "main",
+			planBranch: "plan/legacy-compact",
+		});
+		// A state.json parked mid-compaction at the removed compact_planning step.
+		const legacy = {
+			...state,
+			stage: "planning",
+			step: "compact_planning",
+			stepStatus: "blocked",
+			nextStep: null,
+			requiresCompact: true,
+			blockedReason: "compact planning before execution",
+		};
+		await fs.writeTextAtomic(
+			planPaths.stateJson,
+			`${JSON.stringify(legacy)}\n`,
+		);
+
+		await expect(readPlanState(fs, planPaths)).resolves.toMatchObject({
+			stage: "planning",
+			step: "enter_execution",
+			stepStatus: "pending",
+			requiresCompact: false,
+			nextStep: null,
+			blockedReason: null,
+		});
+	});
+
+	it("leaves compact_before_doubt untouched (still a live step)", async () => {
+		const fs = new MockPlannerFs();
+		const project = createProjectStoragePaths({
+			agentDir: "/agent",
+			projectRoot: "/repo/app",
+		});
+		const planPaths = createPlanStoragePaths(project, "before-doubt");
+		const state = createInitialPlanState({
+			baseBranch: "main",
+			planBranch: "plan/before-doubt",
+		});
+		const parked = {
+			...state,
+			stage: "finalize",
+			step: "compact_before_doubt",
+			stepStatus: "running",
+		};
+		await fs.writeTextAtomic(
+			planPaths.stateJson,
+			`${JSON.stringify(parked)}\n`,
+		);
+
+		await expect(readPlanState(fs, planPaths)).resolves.toMatchObject({
+			step: "compact_before_doubt",
+			stepStatus: "running",
 		});
 	});
 

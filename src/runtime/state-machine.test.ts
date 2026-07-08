@@ -16,6 +16,7 @@ import {
 	finishPlannerStep,
 	getAllowedNextPlannerPositions,
 	getPlannerStepStage,
+	isPlannerCompactEnabled,
 	isPlannerStepInStage,
 	type PlannerPosition,
 	PlannerStateMachineError,
@@ -191,10 +192,12 @@ describe("planner state machine", () => {
 		expect(() => completePlannerStep(current)).toThrow(/implement_task/);
 	});
 
-	it("advances compact_task linearly to select_next_task", () => {
+	it("advances merge_task_to_plan linearly to select_next_task", () => {
+		// The window-management compact_task boundary was removed; merge now flows
+		// straight into task selection.
 		const current = state({
 			stage: "execution",
-			step: "compact_task",
+			step: "merge_task_to_plan",
 			stepStatus: "running",
 		});
 		expect(getAllowedNextPlannerPositions(current)).toEqual([
@@ -208,9 +211,23 @@ describe("planner state machine", () => {
 		// Finishing into the same step must be rejected (the old deadlock symptom).
 		expect(() =>
 			completePlannerStep(current, {
-				next: { stage: "execution", step: "compact_task" },
+				next: { stage: "execution", step: "merge_task_to_plan" },
 			}),
 		).toThrowStateMachine("invalid_next_step");
+	});
+
+	it("enables the compact boundary only at compact_before_doubt (forced)", () => {
+		expect(
+			isPlannerCompactEnabled(
+				state({ stage: "finalize", step: "compact_before_doubt" }),
+			),
+		).toBe(true);
+		// No other step is a compact boundary any more.
+		expect(
+			isPlannerCompactEnabled(
+				state({ stage: "execution", step: "merge_task_to_plan" }),
+			),
+		).toBe(false);
 	});
 
 	it("names the allowed positions in the invalid_next_step error", () => {
@@ -414,7 +431,7 @@ describe("planner state machine", () => {
 		});
 	});
 
-	it("lets verify_spec loop back to elicit_gaps or continue to compact_spec", () => {
+	it("lets verify_spec loop back to elicit_gaps or continue to finish_spec", () => {
 		const current = state({
 			stage: "spec",
 			step: "verify_spec",
@@ -422,7 +439,7 @@ describe("planner state machine", () => {
 		});
 
 		expect(getAllowedNextPlannerPositions(current)).toEqual([
-			{ stage: "spec", step: "compact_spec" },
+			{ stage: "spec", step: "finish_spec" },
 			{ stage: "spec", step: "elicit_gaps" },
 		] satisfies PlannerPosition[]);
 		expect(() => completePlannerStep(current)).toThrowStateMachine(
@@ -461,26 +478,28 @@ describe("planner state machine", () => {
 			),
 		).toThrowStateMachine("not_compact_step");
 
+		// compact_before_doubt is the only surviving compact step (a forced reset
+		// before the doubt audit).
 		const pendingCompact = requestPlannerCompact(
 			state({
-				stage: "discovery",
-				step: "compact_discovery",
+				stage: "finalize",
+				step: "compact_before_doubt",
 				stepStatus: "running",
 			}),
-			"compact discovery before planning",
+			"compact before doubt review",
 		);
 		expect(pendingCompact).toMatchObject({
 			stepStatus: "blocked",
 			requiresCompact: true,
-			blockedReason: "compact discovery before planning",
+			blockedReason: "compact before doubt review",
 		});
 		expect(requestPlannerCompact(pendingCompact, "retry compact")).toBe(
 			pendingCompact,
 		);
 
 		expect(completePlannerCompact(pendingCompact)).toMatchObject({
-			stage: "discovery",
-			step: "enter_planning",
+			stage: "finalize",
+			step: "doubt_review",
 			stepStatus: "running",
 			nextStep: null,
 			requiresCompact: false,

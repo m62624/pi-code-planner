@@ -3386,6 +3386,10 @@ function registerPlannerTools(
 					compactRuntime,
 					toolName,
 					transitionStatus: result.result.status,
+					// compact_before_doubt is a deliberate confidence reset before the
+					// doubt audit, not window relief, so it must run even when context
+					// sits below the token floor.
+					force: result.result.state?.step === "compact_before_doubt",
 				});
 
 				// Ride the reasoning-fuel nudge on the transition tail so the model
@@ -4173,6 +4177,8 @@ async function maybeStartPlannerControlledCompact(input: {
 	compactRuntime: PlannerCompactRuntimeState;
 	toolName: PlannerWorkflowToolName;
 	transitionStatus: "applied" | "blocked";
+	/** When true, run the compaction even below the token floor (forced reset). */
+	force?: boolean;
 }): Promise<{ text: string; customInstructions: string } | null> {
 	if (
 		input.toolName !== "planner_request_compact" ||
@@ -4186,9 +4192,11 @@ async function maybeStartPlannerControlledCompact(input: {
 	// context sits below our floor — which is driven by the model's real output
 	// budget and sits *below* Pi's own auto-compaction floor so we never race it —
 	// and when tokens are unknown (right after a compaction) there is nothing to
-	// compact, so Pi's "Nothing to compact" throw is avoided at the source.
+	// compact, so Pi's "Nothing to compact" throw is avoided at the source. A
+	// forced boundary (compact_before_doubt) bypasses the floor but still yields to
+	// the "already in flight" guard and the unknown-tokens case below.
 	const decision = evaluatePlannerContextBudget(input.ctx);
-	if (!decision.run) {
+	if (!input.force && !decision.run) {
 		await resolvePlannerCompactBoundary(input);
 		return {
 			text: formatPlannerCompactSkipped(compactSkipReasonText(decision.reason)),

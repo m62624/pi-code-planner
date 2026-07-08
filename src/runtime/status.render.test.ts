@@ -149,54 +149,30 @@ describe("buildPlannerStatusText — fork targets", () => {
 	});
 
 	it("adds no fork line on a linear step", async () => {
-		const { fs, preflight } = await makePreflight({ step: "compact_task" });
+		const { fs, preflight } = await makePreflight({
+			step: "merge_task_to_plan",
+		});
 		const text = await buildPlannerStatusText({ fs, preflight });
 		expect(text).not.toContain("This step forks");
 	});
 });
 
 describe("resolveCompactStepRule", () => {
-	const compactTask = getPlannerStepRule({
-		stage: "execution",
-		step: "compact_task",
+	const compactBeforeDoubt = getPlannerStepRule({
+		stage: "finalize",
+		step: "compact_before_doubt",
 	});
 
-	it("renders one enabled directive and keeps the connection check", () => {
-		const rule = resolveCompactStepRule(compactTask, true);
-		// The connection check (genuine non-boundary work) survives as the lead.
-		expect(rule.requiredActions[0]).toContain(
-			"did the task change any component",
-		);
+	it("renders one forced compact directive with the preserve hint", () => {
+		const rule = resolveCompactStepRule(compactBeforeDoubt);
 		const joined = rule.requiredActions.join("\n");
 		expect(joined).toContain("planner_request_compact");
 		expect(joined).toContain("planner_complete_compact");
+		expect(joined).toContain("audit from persisted state");
 		expect(rule.nextInstruction).toContain("planner_request_compact");
-		// No classify-first residue.
+		// No classify-first residue and no disabled/skip branch — it is forced.
 		expect(joined).not.toMatch(/if (task )?compaction is (ENABLED|DISABLED)/i);
-	});
-
-	it("renders one disabled directive that points at finish_step", () => {
-		const rule = resolveCompactStepRule(compactTask, false);
-		const joined = rule.requiredActions.join("\n");
-		expect(joined).toContain("disabled in your settings");
-		expect(joined).toContain("planner_finish_step");
-		expect(rule.nextInstruction).toContain(
-			"do not call planner_request_compact",
-		);
-		// The connection check still leads even when the boundary is skipped.
-		expect(rule.requiredActions[0]).toContain(
-			"did the task change any component",
-		);
-	});
-
-	it("surfaces the preserve hint only when the boundary is enabled", () => {
-		const spec = getPlannerStepRule({ stage: "spec", step: "compact_spec" });
-		expect(
-			resolveCompactStepRule(spec, true).requiredActions.join("\n"),
-		).toContain("requirement ids");
-		expect(
-			resolveCompactStepRule(spec, false).requiredActions.join("\n"),
-		).not.toContain("requirement ids");
+		expect(joined).not.toContain("disabled in your settings");
 	});
 
 	it("passes a non-compact step through unchanged", () => {
@@ -204,7 +180,6 @@ describe("resolveCompactStepRule", () => {
 			stage: "spec",
 			step: "draft_requirements",
 		});
-		expect(resolveCompactStepRule(draft, true)).toBe(draft);
-		expect(resolveCompactStepRule(draft, false)).toBe(draft);
+		expect(resolveCompactStepRule(draft)).toBe(draft);
 	});
 });

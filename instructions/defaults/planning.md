@@ -32,8 +32,7 @@ At `planning/read_context`, load context in this order:
    - In a follow-up planning pass, call `planner_task_upsert` only for new or still-pending revision tasks. Completed task IDs are immutable audit history.
 5. `verify_plan` — verify tasks are ordered, bounded, testable, and free of hidden broad work. Record decisions and remaining risks.
 6. `consistency_check` — run the requirement-coverage gate with `planner_gate_check` (gate: `plan_coverage`), plus `planner_elenchus_check` for any interacting-constraint web. See "Consistency Check" below.
-7. `compact_planning` — compact the finished plan and task list.
-8. `enter_execution` — advance to `execution/prepare_task`.
+7. `enter_execution` — advance to `execution/prepare_task`.
 
 ## Task Design Rules
 

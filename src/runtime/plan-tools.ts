@@ -22,7 +22,6 @@ import {
 	setActivePlan,
 	upsertProjectPlanSummary,
 } from "../storage/project-store";
-import type { PlannerCompactBoundaries } from "../storage/schema";
 import { createInitialPlanState, createPlanRecord } from "../storage/schema";
 import {
 	initializePlanState,
@@ -173,7 +172,6 @@ async function createPlanTool(
 		baseBranch,
 		planBranch,
 		worktreeLocation,
-		compactBoundaries: settings.effective.compact,
 	};
 
 	// The caller already determined git is unavailable (missing binary, no repo,
@@ -207,7 +205,6 @@ async function createPlanTool(
 				baseBranch,
 				planBranch: uniqueBranch,
 				worktreePath: worktreeLocation,
-				compactBoundaries: settings.effective.compact,
 			}),
 			stage: "intake",
 			step: "draft_goal",
@@ -271,7 +268,6 @@ interface PersistPendingPlanArgs {
 	baseBranch: string;
 	planBranch: string;
 	worktreeLocation: string;
-	compactBoundaries: PlannerCompactBoundaries;
 	reason: PlanDegradedReason;
 	error: unknown;
 }
@@ -291,7 +287,6 @@ async function persistPendingPlan(
 			baseBranch: args.baseBranch,
 			planBranch: args.planBranch,
 			worktreePath: args.worktreeLocation,
-			compactBoundaries: args.compactBoundaries,
 		}),
 		worktreeBootstrapPending: true,
 	} as const;

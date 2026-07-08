@@ -228,7 +228,6 @@ export function buildPlannerCompactInstructions(input: {
 		`- stepStatus: ${state?.stepStatus ?? "(none)"}`,
 		`- activeTaskId: ${state?.activeTaskId ?? "(none)"}`,
 		`- currentBranch: ${state?.currentBranch ?? "(none)"}`,
-		`- compactBoundaries: ${JSON.stringify(state?.compactBoundaries ?? null)}`,
 		`- requiresCompact: ${String(state?.requiresCompact ?? false)}`,
 		"",
 		"## Runtime Gate",

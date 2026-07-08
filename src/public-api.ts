@@ -511,7 +511,6 @@ export type {
 	FinalizeStep,
 	InitStep,
 	MergeTargets,
-	PlannerCompactBoundaries,
 	PlannerContractChainRecord,
 	PlannerContractCheckAction,
 	PlannerContractFinalDecision,

@@ -1,5 +1,4 @@
 import { DEFAULT_LANGUAGE } from "../constants";
-import type { PlannerCompactBoundaries } from "../storage/schema";
 
 export type WorktreeSettings =
 	| { mode: "project-local" }
@@ -7,7 +6,6 @@ export type WorktreeSettings =
 
 export interface PlannerSettings {
 	worktree: WorktreeSettings;
-	compact: PlannerCompactBoundaries;
 	idle: PlannerIdleSettings;
 	exec: PlannerExecSettings;
 	metadata: PlannerMetadataSettings;
@@ -20,7 +18,6 @@ export interface PlannerSettings {
 
 export interface PlannerSettingsFile {
 	worktree?: WorktreeSettings;
-	compact?: Partial<PlannerCompactBoundaries>;
 	idle?: Partial<PlannerIdleSettings>;
 	exec?: Partial<PlannerExecSettings>;
 	metadata?: Partial<PlannerMetadataSettings>;
@@ -125,10 +122,6 @@ export interface PlannerContractsSettingsFile
 
 export const DEFAULT_PLANNER_SETTINGS = {
 	worktree: { mode: "project-local" },
-	compact: {
-		stage: true,
-		task: false,
-	},
 	idle: {
 		enabled: true,
 		timeoutMinutes: 10,
