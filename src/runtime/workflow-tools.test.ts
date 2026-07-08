@@ -365,6 +365,9 @@ describe("workflowToolTransition", () => {
 			params: {},
 		});
 		expect(finished.result.status).toBe("applied");
+		// The applied result carries the plan's storage paths so the dispatcher
+		// can surface the reasoning-fuel nudge for the step it landed on.
+		expect(finished.planPaths).toBeDefined();
 	});
 
 	it("ignores an elenchus CONFLICT recorded for a different step", async () => {

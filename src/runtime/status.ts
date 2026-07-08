@@ -979,6 +979,51 @@ async function formatReasoningFuelSection(
 	return directive ? ["## Reasoning Fuel", directive, ""] : [];
 }
 
+/**
+ * The "## Reasoning Fuel" block as a single trailing string (or "" when nothing
+ * here warrants the engine). Purely presentational.
+ */
+async function formatReasoningFuelLine(input: {
+	fs: PlannerFs;
+	planPaths: PlanStoragePaths;
+	state: PlanStateRecord;
+}): Promise<string> {
+	const section = await formatReasoningFuelSection(
+		input.fs,
+		input.planPaths,
+		input.state,
+	);
+	return section.length > 0 ? section.join("\n").trimEnd() : "";
+}
+
+/**
+ * The reasoning-fuel nudge for the step a just-run workflow transition landed
+ * on, or "" when the transition did not apply, no plan was ready, or nothing
+ * here warrants the engine. Lets a transition ride the same nudge the model
+ * would otherwise only see on a rare planner_status call — surfaced on the tail
+ * of e.g. planner_finish_step, the tool the model actually reads each step.
+ *
+ * This is the sanctioned surfacing seam: it lives in the surfacing layer
+ * (status), so the tool dispatcher that calls it never imports a fuel module
+ * and the tone-only invariant holds. Presentational only — the fuel level
+ * enters no allow/block decision here or anywhere.
+ */
+export async function formatTransitionReasoningFuelTail(input: {
+	fs: PlannerFs;
+	status: string;
+	planPaths: PlanStoragePaths | undefined;
+	state: PlanStateRecord | null;
+}): Promise<string> {
+	if (input.status !== "applied" || !input.planPaths || !input.state) {
+		return "";
+	}
+	return formatReasoningFuelLine({
+		fs: input.fs,
+		planPaths: input.planPaths,
+		state: input.state,
+	});
+}
+
 export async function buildPlannerStatusText(
 	input: PlannerStatusTextInput,
 ): Promise<string> {

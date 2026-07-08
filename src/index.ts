@@ -213,6 +213,7 @@ import {
 	executePlannerSpecTool,
 	PLANNER_SPEC_TOOL_NAME,
 } from "./runtime/spec-tools";
+import { formatTransitionReasoningFuelTail } from "./runtime/status";
 import {
 	buildPlannerStuckCompactInstructions,
 	executePlannerStuckTool,
@@ -3380,11 +3381,27 @@ function registerPlannerTools(
 					transitionStatus: result.result.status,
 				});
 
+				// Ride the reasoning-fuel nudge on the transition tail so the model
+				// sees it in the drive loop (planner_finish_step), not only on a rare
+				// planner_status call. Computed for the step this transition lands on;
+				// self-silences when no interacting-condition web is warranted there.
+				// Presentational only — fuel enters no decision, and this seam calls
+				// the surfacing layer (status), never a fuel module, so the tone-only
+				// invariant holds.
+				const fuelLine = await formatTransitionReasoningFuelTail({
+					fs,
+					status: result.result.status,
+					planPaths: result.planPaths,
+					state: result.result.state,
+				});
+
 				return {
 					content: [
 						{
 							type: "text",
-							text: [result.text, compact?.text].filter(Boolean).join("\n\n"),
+							text: [result.text, compact?.text, fuelLine]
+								.filter(Boolean)
+								.join("\n\n"),
 						},
 					],
 					details: compact ? { ...result, compact } : result,
