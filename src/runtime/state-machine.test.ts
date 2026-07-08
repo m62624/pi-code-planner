@@ -222,13 +222,6 @@ describe("planner state machine", () => {
 				state({ stage: "finalize", step: "compact_before_doubt" }),
 			),
 		).toBe(true);
-		// The compactBoundaries toggles no longer gate it — it is always forced.
-		expect(
-			isPlannerCompactEnabled({
-				...state({ stage: "finalize", step: "compact_before_doubt" }),
-				compactBoundaries: { stage: false, task: false },
-			}),
-		).toBe(true);
 		// No other step is a compact boundary any more.
 		expect(
 			isPlannerCompactEnabled(

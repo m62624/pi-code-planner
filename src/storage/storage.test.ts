@@ -326,7 +326,7 @@ describe("plan state store", () => {
 		} satisfies Partial<PlanStateRecord>);
 	});
 
-	it("normalizes state files created before question and compact settings existed", async () => {
+	it("normalizes state files created before the question fields existed", async () => {
 		const fs = new MockPlannerFs();
 		const project = createProjectStoragePaths({
 			agentDir: "/agent",
@@ -340,7 +340,6 @@ describe("plan state store", () => {
 		const {
 			questionsSubmitted: _questionsSubmitted,
 			questionsResolved: _questionsResolved,
-			compactBoundaries: _compactBoundaries,
 			...legacy
 		} = state;
 		await fs.writeTextAtomic(
@@ -351,10 +350,6 @@ describe("plan state store", () => {
 		await expect(readPlanState(fs, planPaths)).resolves.toMatchObject({
 			questionsSubmitted: false,
 			questionsResolved: false,
-			compactBoundaries: {
-				stage: true,
-				task: false,
-			},
 			lastPlannerToolCallAt: null,
 			lastIdleWakeAt: null,
 			idleWakeInFlight: false,

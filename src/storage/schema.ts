@@ -262,11 +262,6 @@ export interface ManagedBranchRegistry {
 	tasks: Record<string, ManagedTaskBranchRegistry>;
 }
 
-export interface PlannerCompactBoundaries {
-	stage: boolean;
-	task: boolean;
-}
-
 export interface PlannerTimerCheckpoint {
 	stage: PlannerStage;
 	enteredAt: number;
@@ -383,7 +378,6 @@ export interface PlanStateRecord {
 	mergeTargets: MergeTargets;
 	questionsSubmitted: boolean;
 	questionsResolved: boolean;
-	compactBoundaries: PlannerCompactBoundaries;
 	lastPlannerToolCallAt: number | null;
 	lastIdleWakeAt: number | null;
 	idleWakeInFlight: boolean;
@@ -472,7 +466,6 @@ export function createInitialPlanState(input: {
 	baseBranch: string;
 	planBranch: string;
 	worktreePath?: string | null;
-	compactBoundaries?: PlannerCompactBoundaries;
 	creationMethod?: PlanCreationMethod;
 	compatibilityMode?: PlanCompatibilityMode;
 }): PlanStateRecord {
@@ -500,10 +493,6 @@ export function createInitialPlanState(input: {
 		},
 		questionsSubmitted: false,
 		questionsResolved: false,
-		compactBoundaries: input.compactBoundaries ?? {
-			stage: true,
-			task: false,
-		},
 		lastPlannerToolCallAt: null,
 		lastIdleWakeAt: null,
 		idleWakeInFlight: false,

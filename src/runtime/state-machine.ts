@@ -72,9 +72,9 @@ const COMPACT_STEPS = new Set<PlannerStep>(["compact_before_doubt"]);
 const STEP_TO_STAGE = buildStepToStageMap();
 
 export function isPlannerCompactEnabled(state: PlanStateRecord): boolean {
-	// compact_before_doubt is a forced reset — always on, never gated by the
-	// compactBoundaries toggles (which only ever governed the now-removed
-	// window-management boundaries).
+	// compact_before_doubt is a forced reset — always on. The window-management
+	// boundaries it used to sit alongside, and the compact.stage/compact.task
+	// setting that gated them, are both gone.
 	return state.step === "compact_before_doubt";
 }
 

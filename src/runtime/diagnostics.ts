@@ -269,7 +269,6 @@ export interface SanitizedPlanState {
 	brokenReasonPresent: boolean;
 	questionsSubmitted: boolean;
 	questionsResolved: boolean;
-	compactBoundaries: { stage: boolean; task: boolean };
 	activeTask: string | null;
 	managedTasks: string[];
 	branches: { base: boolean; plan: boolean; currentTask: boolean };
@@ -294,10 +293,6 @@ export function sanitizePlanState(
 		brokenReasonPresent: state.brokenReason !== null,
 		questionsSubmitted: state.questionsSubmitted,
 		questionsResolved: state.questionsResolved,
-		compactBoundaries: {
-			stage: state.compactBoundaries.stage,
-			task: state.compactBoundaries.task,
-		},
 		activeTask: pseudo.token(state.activeTaskId),
 		managedTasks: Object.keys(state.managedBranches.tasks)
 			.map((id) => pseudo.token(id))
@@ -411,7 +406,6 @@ export function buildRecoveryReport(
 		`- branches: base=${sanitized.branches.base} plan=${sanitized.branches.plan} currentTask=${sanitized.branches.currentTask}`,
 		`- merge targets: taskToPlan=${sanitized.mergeTargets.taskToPlan} planToOutput=${sanitized.mergeTargets.planToOutput}`,
 		`- gates: questionsSubmitted=${sanitized.questionsSubmitted} questionsResolved=${sanitized.questionsResolved} broken=${sanitized.broken}`,
-		`- compactBoundaries: stage=${sanitized.compactBoundaries.stage} task=${sanitized.compactBoundaries.task}`,
 		`- task statuses: ${taskStatusLine || "(none)"}`,
 		"",
 		"## Tool-call stack trace (names + status, no arguments)",

@@ -12,7 +12,6 @@ import {
 
 const DEFAULT_PLANNER_SETTINGS_FILE: PlannerSettingsFile = {
 	worktree: DEFAULT_PLANNER_SETTINGS.worktree,
-	compact: DEFAULT_PLANNER_SETTINGS.compact,
 	idle: DEFAULT_PLANNER_SETTINGS.idle,
 	metadata: {
 		humanLanguage: DEFAULT_PLANNER_SETTINGS.metadata.humanLanguage,
@@ -29,7 +28,6 @@ export interface EffectivePlannerSettings {
 	project: PlannerSettingsFile | null;
 	effective: PlannerSettings;
 	worktreeSource: "project" | "global" | "default";
-	compactSource: "project" | "global" | "default";
 	idleSource: "project" | "global" | "default";
 	execSource: "project" | "global" | "default";
 	metadataSource: "project" | "global" | "default";
@@ -70,7 +68,7 @@ export async function loadEffectivePlannerSettings(input: {
 			? []
 			: collectSettingsWarnings(projectRaw, paths.projectSettingsJson)),
 	];
-	// Unlike compact/idle/timer/skills/contracts/workspace below, `worktree` is
+	// Unlike idle/timer/skills/contracts/workspace below, `worktree` is
 	// taken wholesale from whichever level wins — not merged field-by-field.
 	// A project `worktree` block fully replaces global's, even if it only
 	// needs to override one field.
@@ -81,16 +79,6 @@ export async function loadEffectivePlannerSettings(input: {
 			: "default";
 	const worktree =
 		project?.worktree ?? global.worktree ?? DEFAULT_PLANNER_SETTINGS.worktree;
-	const compactSource = project?.compact
-		? "project"
-		: global.compact
-			? "global"
-			: "default";
-	const compact = {
-		...DEFAULT_PLANNER_SETTINGS.compact,
-		...(global.compact ?? {}),
-		...(project?.compact ?? {}),
-	};
 	const idleSource = project?.idle
 		? "project"
 		: global.idle
@@ -173,7 +161,6 @@ export async function loadEffectivePlannerSettings(input: {
 		project,
 		effective: {
 			worktree,
-			compact,
 			idle,
 			exec,
 			metadata,
@@ -184,7 +171,6 @@ export async function loadEffectivePlannerSettings(input: {
 			diagnostics,
 		},
 		worktreeSource,
-		compactSource,
 		idleSource,
 		execSource,
 		metadataSource,
@@ -204,7 +190,6 @@ export async function loadEffectivePlannerSettings(input: {
 // are intentionally not descended into here.
 const KNOWN_SETTING_KEYS: Record<string, readonly string[]> = {
 	worktree: ["mode", "root"],
-	compact: ["stage", "task"],
 	idle: ["enabled", "timeoutMinutes"],
 	exec: ["defaultTimeoutSeconds", "maxTimeoutSeconds", "maxOutputBytes"],
 	metadata: [
@@ -292,9 +277,6 @@ function normalizeSettingsFile(
 		...(record.worktree === undefined
 			? {}
 			: { worktree: normalizeWorktreeSettings(record.worktree, path) }),
-		...(record.compact === undefined
-			? {}
-			: { compact: normalizeCompactSettings(record.compact, path) }),
 		...(record.idle === undefined
 			? {}
 			: { idle: normalizeIdleSettings(record.idle, path) }),
@@ -401,27 +383,6 @@ function normalizeWorkspaceKeys(
 		result[action] = keys.map((k) => (k as string).trim());
 	}
 	return result;
-}
-
-function normalizeCompactSettings(
-	value: unknown,
-	path: string,
-): PlannerSettingsFile["compact"] {
-	if (!value || typeof value !== "object" || Array.isArray(value)) {
-		throw new TypeError(`Planner compact settings must be an object: ${path}`);
-	}
-	const record = value as Record<string, unknown>;
-	for (const key of ["stage", "task"] as const) {
-		if (record[key] !== undefined && typeof record[key] !== "boolean") {
-			throw new TypeError(
-				`Planner compact setting ${key} must be boolean: ${path}`,
-			);
-		}
-	}
-	return {
-		...(typeof record.stage === "boolean" ? { stage: record.stage } : {}),
-		...(typeof record.task === "boolean" ? { task: record.task } : {}),
-	};
 }
 
 function normalizeExecSettings(

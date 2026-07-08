@@ -183,10 +183,6 @@ function normalizePlanState(rawState: PlanStateRecord): PlanStateRecord {
 		worktreeBootstrapPending: state.worktreeBootstrapPending ?? false,
 		questionsSubmitted: state.questionsSubmitted ?? false,
 		questionsResolved: state.questionsResolved ?? false,
-		compactBoundaries: state.compactBoundaries ?? {
-			stage: true,
-			task: false,
-		},
 		lastPlannerToolCallAt: state.lastPlannerToolCallAt ?? null,
 		lastIdleWakeAt: state.lastIdleWakeAt ?? null,
 		idleWakeInFlight: state.idleWakeInFlight ?? false,

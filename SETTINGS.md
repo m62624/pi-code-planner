@@ -7,14 +7,13 @@ getAgentDir()/extensions/pi-code-planner/settings.json
 <project-root>/.pi/pi-code-planner/settings.json
 ```
 
-`worktree` and `compact` are captured at plan creation and don't change mid-plan. All other settings are read while the planner is running.
+`worktree` is captured at plan creation and doesn't change mid-plan. All other settings are read while the planner is running.
 
 ## Full Example
 
 ```json
 {
   "worktree": { "mode": "custom", "root": "/mnt/fast/pi-worktrees" },
-  "compact": { "stage": true, "task": false },
   "idle": { "enabled": true, "timeoutMinutes": 10 },
   "exec": { "defaultTimeoutSeconds": 240, "maxTimeoutSeconds": 1800, "maxOutputBytes": 262144 },
   "metadata": {
@@ -68,13 +67,6 @@ getAgentDir()/extensions/pi-code-planner/settings.json
 | --- | --- | --- |
 | `worktree.mode` | `"project-local"` | `"project-local"` stores under `<project-root>/.pi/pi-code-planner/worktrees/`. `"custom"` uses `worktree.root`. |
 | `worktree.root` | unset | Absolute path for custom worktree storage. Required when `mode` is `"custom"`. |
-
-## Compact
-
-| Setting | Default | Purpose |
-| --- | --- | --- |
-| `compact.stage` | `true` | Request planner-controlled compaction at stage boundaries. |
-| `compact.task` | `false` | Request planner-controlled compaction at task boundaries. |
 
 ## Idle Watchdog
 

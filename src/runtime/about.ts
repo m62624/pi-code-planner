@@ -23,14 +23,6 @@ const SETTING_DESCRIPTORS: SettingDescriptor[] = [
 			"Absolute root for custom worktrees; used only when worktree.mode is custom.",
 	},
 	{
-		path: "compact.stage",
-		purpose: "Request planner-controlled compaction at stage boundaries.",
-	},
-	{
-		path: "compact.task",
-		purpose: "Request planner-controlled compaction at task boundaries.",
-	},
-	{
 		path: "idle.enabled",
 		purpose:
 			"Enable the idle watchdog that wakes a running planner step after inactivity.",
@@ -297,8 +289,6 @@ function settingSource(
 	switch (group) {
 		case "worktree":
 			return settings.worktreeSource;
-		case "compact":
-			return settings.compactSource;
 		case "idle":
 			return settings.idleSource;
 		case "exec":

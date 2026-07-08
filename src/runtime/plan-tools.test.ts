@@ -150,10 +150,6 @@ describe("planner plan tools", () => {
 			},
 			worktreePath: "/repo/app/.pi/pi-code-planner/worktrees/api-audit",
 			currentBranch: "plan/api-audit",
-			compactBoundaries: {
-				stage: true,
-				task: false,
-			},
 		});
 		expect(fs.snapshot()[planPaths.planMd]).toBe("");
 		expect(fs.snapshot()[planPaths.requestMd]).toBe(
