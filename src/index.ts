@@ -3547,15 +3547,13 @@ function registerPlannerTools(
 }
 
 const PLANNER_COMPACT_WIDGET_KEY = "planner-compact";
-// Refresh cadence for the indicator's slow-moving parts (the asymptotic bar,
-// percent, and ETA). The SDK's setWidget has NO diffing — every call disposes
-// the old component and rebuilds it (interactive-mode.js `setExtensionWidget`),
-// so each push is a full teardown+repaint. A 1 Hz push of a live seconds counter
-// therefore flickers the banner every second. We keep the indicator nearly
-// static instead: no per-second elapsed in the rendered line, a coarse refresh,
-// and a content dedup (see `setCompactWidget`) that skips a push when nothing
-// visible changed — so in steady state the widget repaints only when the bar or
-// ETA actually moves, not on a fixed clock.
+// Tick cadence for the safety-deadline check only. The SDK's setWidget has NO
+// diffing — every call disposes the old component and rebuilds it
+// (interactive-mode.js `setExtensionWidget`), so each push is a full
+// teardown+repaint that reflows the editor. So the rendered line is fully STATIC
+// for the run (no elapsed, no moving percent/bar): the content dedup in
+// `setCompactWidget` pushes it once and skips every later tick, and this interval
+// only re-checks the deadline below. Nothing animates, so nothing flickers.
 const PLANNER_COMPACT_REFRESH_MS = 5000;
 // Safety deadline so a *failed* compaction can never leave the indicator up
 // forever. Pi's built-in /compact swallows a failure and never emits
@@ -3754,26 +3752,24 @@ function registerPlannerCompactEvents(
 				)
 			: PLANNER_COMPACT_MAX_MS;
 
+		// The rendered line is static (no elapsed/percent) — the same string every
+		// tick — so the widget setter's dedup pushes it once and never repaints it
+		// mid-run. The interval therefore exists only to enforce the safety
+		// deadline; it does not animate anything.
+		const text = formatCompactIndicator({ sizeLabel, reasonLabel, estimate });
 		const renderStatus = () => {
 			try {
-				const elapsedMs = Date.now() - startedAt;
-				// Self-terminating deadline: the tick that draws the elapsed seconds
-				// also enforces the cap, so a failed compaction with no completion
-				// event and no follow-up turn cannot hang the indicator (the 124m
-				// "still Compacting…" case). A separate setTimeout could be lost across
-				// suspend/resume; this cannot — if the bar is ticking, the check runs.
-				if (elapsedMs >= clearAfterMs) {
+				// Self-terminating deadline: the same tick that keeps the banner up also
+				// enforces the cap, so a failed compaction with no completion event and
+				// no follow-up turn cannot hang the indicator (the 124m "still
+				// Compacting…" case). A separate setTimeout could be lost across
+				// suspend/resume; this cannot — if the interval is live, the check runs.
+				if (Date.now() - startedAt >= clearAfterMs) {
 					// A run that never completed is not a representative timing sample.
 					pendingCompact = null;
 					stopCompactIndicator(ctx);
 					return;
 				}
-				const text = formatCompactIndicator({
-					sizeLabel,
-					reasonLabel,
-					elapsedMs,
-					estimate,
-				});
 				setCompactWidget(ctx, [ctx.ui.theme.fg("accent", text)], text);
 			} catch {
 				// Never let a redraw throw out of the interval.
@@ -3861,7 +3857,16 @@ function registerPlannerCompactEvents(
 	// the chat, and no message can stream while summarization blocks the loop. So
 	// the moment one arrives with the indicator still up, the run has ended — hide
 	// it at once rather than waiting for the next agent_start or the safety cap.
+	// We clear on BOTH message_start and every streaming message_update: a
+	// streaming assistant reply is delivered as message_update tokens (the signal
+	// the dashboard itself tracks), and message_start alone does not fire reliably
+	// for it — so keying only on message_start left the banner sitting over the
+	// model's answer as it streamed. clearStaleCompactIndicator is idempotent (a
+	// no-op once nothing is up), so a per-token call is cheap.
 	pi.on("message_start", async (_event, ctx) => {
+		clearStaleCompactIndicator(ctx);
+	});
+	pi.on("message_update", async (_event, ctx) => {
 		clearStaleCompactIndicator(ctx);
 	});
 

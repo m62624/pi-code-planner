@@ -57,8 +57,6 @@
  * (b) lowers the bar's fill target so it is less likely to overrun.
  */
 
-import { clamp } from "./num";
-
 export interface CompactTimingSample {
 	/** `tokensBefore` — the context size that was summarized. */
 	tokens: number;
@@ -106,20 +104,6 @@ const CV_STABLE = 0.25;
 const MIN_SPREAD = 1e-9;
 // Never predict a sub-second compaction — the round-trip alone costs more.
 const ETA_FLOOR_MS = 800;
-// The bar creeps from its ETA target toward this cap but never reaches 100%
-// until the real completion event fires.
-const PROGRESS_CAP = 0.99;
-// Time-constant (in units of ETA) for the post-ETA asymptotic creep.
-const PROGRESS_CREEP = 0.6;
-
-// Bar fill reached exactly at the predicted ETA, chosen by confidence: a stable
-// estimate fills close to full, a noisy or single-sample one stays conservative
-// so an overrun is less jarring.
-const FILL_AT_ETA: Record<Exclude<CompactEtaReliability, "none">, number> = {
-	stable: 0.9,
-	noisy: 0.8,
-	single: 0.75,
-};
 
 function noEstimate(): CompactEtaEstimate {
 	return {
@@ -308,36 +292,6 @@ export function estimateCompactionDuration(input: {
 }
 
 /**
- * Fraction (0..CAP) to fill the bar after `elapsedMs`, given the predicted ETA.
- *
- * Honest and monotonic: it fills linearly to `FILL_AT_ETA[reliability]` at
- * exactly the ETA, then creeps asymptotically toward — but never reaches —
- * `PROGRESS_CAP`. The real completion event is what shows 100%; the bar itself
- * never claims to be done.
- */
-export function compactionProgressFraction(input: {
-	elapsedMs: number;
-	etaMs: number;
-	reliability: CompactEtaReliability;
-}): number {
-	if (!(input.etaMs > 0) || input.reliability === "none") return 0;
-	const target = FILL_AT_ETA[input.reliability];
-	const f = Math.max(0, input.elapsedMs) / input.etaMs;
-	const p =
-		f <= 1
-			? target * f
-			: target +
-				(PROGRESS_CAP - target) * (1 - Math.exp(-(f - 1) / PROGRESS_CREEP));
-	return clamp(p, 0, PROGRESS_CAP);
-}
-
-/** Render a fixed-width block bar for the given fraction. */
-export function renderProgressBar(fraction: number, width = 10): string {
-	const filled = clamp(Math.round(fraction * width), 0, width);
-	return "█".repeat(filled) + "░".repeat(width - filled);
-}
-
-/**
  * Short human duration. Below a minute it is just seconds (`8s`, `45s`). At or
  * above a minute it always shows minutes AND seconds together, seconds
  * zero-padded (`1m05s`, `2m00s`) — never a bare `125s`, and never a `2m` that
@@ -352,32 +306,27 @@ export function formatDurationShort(ms: number): string {
 }
 
 /**
- * Compose the one-line compaction indicator. With learned history it shows an
- * honest, asymptotic bar (`… ██████░░░░ 62% · ~30s`); with no history yet it is
- * a bare label. Deliberately carries NO per-second elapsed: the SDK repaints the
- * whole widget on every push (no diffing), so a ticking seconds counter flickers
- * the banner every second. The bar/percent advance slowly off `elapsedMs` while
- * the *rendered* line changes only coarsely, so the dedup in the widget setter
- * skips most pushes and the banner stays visually still. Pure so the format is
- * unit-tested without the SDK, and shared by every surface that shows the run.
+ * Compose the one-line compaction indicator. It is STATIC for the whole run:
+ * with learned history it appends the predicted duration as a fixed hint
+ * (`Compacting 100k tok (context full) · ~30s`), otherwise a bare label. Nothing
+ * here depends on elapsed time — the SDK repaints the whole widget on every push
+ * (no diffing), so any line that changed mid-run (a ticking counter, a moving
+ * percent bar) tore the banner down and reflowed the editor on every update.
+ * A constant line lets the widget setter's content dedup skip every push after
+ * the first, so the banner is drawn once and stays put until it clears. Pure so
+ * the format is unit-tested without the SDK, and shared by every surface that
+ * shows the run.
  */
 export function formatCompactIndicator(input: {
 	sizeLabel: string;
 	reasonLabel: string;
-	elapsedMs: number;
 	estimate: CompactEtaEstimate;
 }): string {
+	const head = `Compacting ${input.sizeLabel} tok (${input.reasonLabel})`;
 	if (!input.estimate.hasEstimate) {
-		return `Compacting ${input.sizeLabel} tok (${input.reasonLabel})…`;
+		return `${head}…`;
 	}
-	const frac = compactionProgressFraction({
-		elapsedMs: input.elapsedMs,
-		etaMs: input.estimate.etaMs,
-		reliability: input.estimate.reliability,
-	});
-	const bar = renderProgressBar(frac);
-	const pct = Math.round(frac * 100);
-	return `Compacting ${input.sizeLabel} tok (${input.reasonLabel}) ${bar} ${pct}% · ${formatEtaLabel(input.estimate)}`;
+	return `${head} · ${formatEtaLabel(input.estimate)}`;
 }
 
 /**

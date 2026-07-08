@@ -1,12 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
 	type CompactTimingSample,
-	compactionProgressFraction,
 	estimateCompactionDuration,
 	formatCompactIndicator,
 	formatDurationShort,
 	formatEtaLabel,
-	renderProgressBar,
 } from "./compact-eta";
 
 function sample(
@@ -19,31 +17,21 @@ function sample(
 }
 
 describe("formatCompactIndicator", () => {
-	it("shows a static label (no ticking seconds) when there is no estimate", () => {
+	it("shows a bare static label when there is no estimate", () => {
 		const estimate = estimateCompactionDuration({
 			samples: [],
 			tokens: 118_000,
 			model: "m",
 		});
-		// The line must NOT depend on elapsedMs: a per-second counter would push a
-		// full repaint every tick and flicker the widget. Same output at 12s / 40s.
-		const at12 = formatCompactIndicator({
+		const line = formatCompactIndicator({
 			sizeLabel: "118k",
 			reasonLabel: "/compact",
-			elapsedMs: 12_000,
 			estimate,
 		});
-		const at40 = formatCompactIndicator({
-			sizeLabel: "118k",
-			reasonLabel: "/compact",
-			elapsedMs: 40_000,
-			estimate,
-		});
-		expect(at12).toBe("Compacting 118k tok (/compact)…");
-		expect(at40).toBe(at12);
+		expect(line).toBe("Compacting 118k tok (/compact)…");
 	});
 
-	it("shows a filling bar, percent and ETA once history exists — no elapsed", () => {
+	it("appends the predicted ETA as a fixed hint once history exists — no bar, no percent, no elapsed", () => {
 		const estimate = estimateCompactionDuration({
 			samples: [
 				sample(50_000, 10_000),
@@ -56,13 +44,13 @@ describe("formatCompactIndicator", () => {
 		const line = formatCompactIndicator({
 			sizeLabel: "100k",
 			reasonLabel: "context full",
-			elapsedMs: 5_000,
 			estimate,
 		});
-		// bar + percent + ETA, but no `<elapsed> /` segment before the `~`.
-		expect(line).toMatch(
-			/^Compacting 100k tok \(context full\) [█░]+ \d+% · ~/,
-		);
+		// A static ETA hint, never an animated bar/percent — nothing that moves
+		// mid-run and reflows the banner on every push.
+		expect(line).toMatch(/^Compacting 100k tok \(context full\) · ~/);
+		expect(line).not.toMatch(/[█░]/);
+		expect(line).not.toMatch(/%/);
 	});
 });
 
@@ -256,89 +244,6 @@ describe("estimateCompactionDuration", () => {
 		});
 		expect(e.hiMs).toBeGreaterThan(e.etaMs);
 		expect(e.loMs).toBeLessThan(e.etaMs);
-	});
-});
-
-describe("compactionProgressFraction", () => {
-	it("is zero at start and rises monotonically", () => {
-		const eta = 20_000;
-		const at0 = compactionProgressFraction({
-			elapsedMs: 0,
-			etaMs: eta,
-			reliability: "stable",
-		});
-		const at5 = compactionProgressFraction({
-			elapsedMs: 5_000,
-			etaMs: eta,
-			reliability: "stable",
-		});
-		const at10 = compactionProgressFraction({
-			elapsedMs: 10_000,
-			etaMs: eta,
-			reliability: "stable",
-		});
-		expect(at0).toBe(0);
-		expect(at5).toBeGreaterThan(at0);
-		expect(at10).toBeGreaterThan(at5);
-	});
-
-	it("reaches the fill target exactly at the ETA", () => {
-		const p = compactionProgressFraction({
-			elapsedMs: 20_000,
-			etaMs: 20_000,
-			reliability: "stable",
-		});
-		expect(p).toBeCloseTo(0.9, 5);
-	});
-
-	it("never reaches 100% even long past the ETA", () => {
-		const p = compactionProgressFraction({
-			elapsedMs: 10_000_000,
-			etaMs: 20_000,
-			reliability: "stable",
-		});
-		expect(p).toBeLessThan(1);
-		expect(p).toBeLessThanOrEqual(0.99);
-	});
-
-	it("fills more conservatively when noisy than when stable", () => {
-		const stable = compactionProgressFraction({
-			elapsedMs: 20_000,
-			etaMs: 20_000,
-			reliability: "stable",
-		});
-		const noisy = compactionProgressFraction({
-			elapsedMs: 20_000,
-			etaMs: 20_000,
-			reliability: "noisy",
-		});
-		expect(noisy).toBeLessThan(stable);
-	});
-
-	it("is zero for a 'none' reliability", () => {
-		expect(
-			compactionProgressFraction({
-				elapsedMs: 5_000,
-				etaMs: 0,
-				reliability: "none",
-			}),
-		).toBe(0);
-	});
-});
-
-describe("renderProgressBar", () => {
-	it("renders empty and full bars", () => {
-		expect(renderProgressBar(0, 10)).toBe("░░░░░░░░░░");
-		expect(renderProgressBar(1, 10)).toBe("██████████");
-	});
-
-	it("renders a partial bar", () => {
-		expect(renderProgressBar(0.5, 10)).toBe("█████░░░░░");
-	});
-
-	it("clamps out-of-range fractions", () => {
-		expect(renderProgressBar(-1, 4)).toBe("░░░░");
-		expect(renderProgressBar(2, 4)).toBe("████");
 	});
 });
 
