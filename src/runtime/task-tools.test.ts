@@ -98,6 +98,29 @@ describe("planner task tools", () => {
 		});
 	});
 
+	it("persists dependsOn through the upsert tool", async () => {
+		const setup = await createTaskSetup();
+		const result = await executePlannerTaskTool({
+			...setup,
+			toolName: "planner_task_upsert",
+			params: {
+				taskId: "model-task",
+				title: "Model",
+				objective: "Builds on scaffolding.",
+				scope: ["src/model.ts"],
+				acceptanceCriteria: ["Depends on setup."],
+				dependsOn: ["setup-project"],
+			},
+		});
+		expect(result.status).toBe("applied");
+		await expect(
+			readTaskRecord(
+				setup.fs,
+				createTaskStoragePaths(setup.planPaths, "model-task"),
+			),
+		).resolves.toMatchObject({ dependsOn: ["setup-project"] });
+	});
+
 	it("blocks reopening a completed task id during follow-up planning", async () => {
 		const setup = await createTaskSetup();
 		const createResult = await executePlannerTaskTool({

@@ -31,6 +31,7 @@ const TASK_UPSERT_SCHEMA = {
 		"Each criterion is one observable, testable outcome.",
 	),
 	requirements: stringArray("Cite exact REQ-n ids from spec.json."),
+	dependsOn: stringArray("taskIds this task builds on — not REQ-n ids."),
 	contractChain: stringArray(),
 	relevantContracts: stringArray(),
 	forbiddenAreas: stringArray(),
