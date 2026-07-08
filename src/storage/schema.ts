@@ -231,6 +231,12 @@ export interface TaskRecord {
 	// Spec traceability (SDD): REQ-n ids from spec.json this task discharges.
 	// Optional and defaulted to [] on read so legacy task.json files parse.
 	requirements?: string[];
+	// Build-order dependencies: taskIds this task depends on (foundations first).
+	// The plan_coverage gate justifies a non-discharging task by having a
+	// discharging task (transitively) depend on it — a setup task is not orphan
+	// because it borrows a REQ, but because real work depends on it. Optional and
+	// defaulted to [] on read so legacy task.json files parse.
+	dependsOn?: string[];
 	contractChain?: string[];
 	relevantContracts?: string[];
 	forbiddenAreas?: string[];

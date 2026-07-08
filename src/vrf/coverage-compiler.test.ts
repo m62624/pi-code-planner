@@ -40,7 +40,11 @@ function spec(input?: Partial<SpecRecordInput>) {
 	});
 }
 
-function task(taskId: string, requirements: string[]): TaskRecord {
+function task(
+	taskId: string,
+	requirements: string[],
+	dependsOn: string[] = [],
+): TaskRecord {
 	return {
 		schemaVersion: SCHEMA_VERSION,
 		taskId,
@@ -50,6 +54,7 @@ function task(taskId: string, requirements: string[]): TaskRecord {
 		scope: [],
 		acceptanceCriteria: ["c"],
 		requirements,
+		dependsOn,
 	};
 }
 
@@ -126,6 +131,66 @@ describe("plan-coverage compiler through the real engine", () => {
 			{ taskId: "alpha", requirement: "REQ-9" },
 		]);
 		expect(compiled.program).not.toContain("req_9");
+	});
+
+	it("dependency mode: an infra task that discharges nothing is justified by a dependent discharging task", async () => {
+		const compiled = compilePlanCoverage(spec(), [
+			task("setup-project", []), // discharges nothing
+			task("alpha", ["REQ-1"], ["setup-project"]),
+			task("beta", ["REQ-2"], ["setup-project"]),
+		]);
+		expect(compiled.mode).toBe("dependency");
+		// No borrowed-REQ trace: setup-project owns no requirement.
+		expect(compiled.program).not.toContain("TOTAL traces ON tasks");
+		expect(compiled.program).toContain("CLOSE depends_on TRANSITIVE");
+		const report = await run(compiled.program);
+		expect(report.status).toBe("CONSISTENT");
+	});
+
+	it("dependency mode: a truly orphan task (no discharge, nothing depends on it) is NAMED", async () => {
+		const compiled = compilePlanCoverage(spec(), [
+			task("setup-project", []),
+			task("alpha", ["REQ-1", "REQ-2"], ["setup-project"]),
+			task("stray-work", []), // nothing depends on it, discharges nothing
+		]);
+		const report = await run(compiled.program);
+		expect(report.status).toBe("WARNING");
+		const blocked = report.warnings.flatMap((w) => w.blocked_by ?? []);
+		const subject = blocked
+			.find((b) => b.includes("is_justified"))
+			?.split(" ")[0]
+			?.replace(/^plan_coverage\./, "");
+		expect(subject).toBeDefined();
+		expect(compiled.taskSubjects[subject ?? ""]).toBe("stray-work");
+	});
+
+	it("dependency mode: collects unknown dependsOn references", () => {
+		const compiled = compilePlanCoverage(spec(), [
+			task("alpha", ["REQ-1", "REQ-2"], ["ghost-task"]),
+		]);
+		expect(compiled.mode).toBe("dependency");
+		expect(compiled.unknownDependencyRefs).toEqual([
+			{ taskId: "alpha", dependsOn: "ghost-task" },
+		]);
+	});
+
+	it("dependency mode: detects a dependency cycle in TS (no engine crash)", () => {
+		const compiled = compilePlanCoverage(spec(), [
+			task("a", ["REQ-1"], ["b"]),
+			task("b", ["REQ-2"], ["a"]),
+		]);
+		expect(compiled.dependencyCycle).not.toBeNull();
+		expect(compiled.dependencyCycle).toContain("a");
+		expect(compiled.dependencyCycle).toContain("b");
+		// The cyclic CLOSE is withheld so the engine never sees an invalid program.
+		expect(compiled.program).not.toContain("CLOSE depends_on TRANSITIVE");
+	});
+
+	it("stays in legacy mode when no task declares dependsOn", () => {
+		const compiled = compilePlanCoverage(spec(), [task("alpha", ["REQ-1"])]);
+		expect(compiled.mode).toBe("legacy");
+		expect(compiled.program).toContain("TOTAL traces ON tasks");
+		expect(compiled.program).not.toContain("is_justified");
 	});
 
 	it("is deterministic and sanitizes/deduplicates task subjects", () => {

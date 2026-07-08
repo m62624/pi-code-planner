@@ -3,6 +3,7 @@ import type { GitRunner } from "../git/runner";
 import {
 	readTaskBehaviorsIfExists,
 	type TaskBehavior,
+	type TaskBehaviorsRecord,
 	validateTaskBehaviors,
 	writeTaskBehaviors,
 } from "../storage/behavior-store";
@@ -76,9 +77,12 @@ export async function executePlannerBehaviorTool(input: {
 		// cite a real, in-scope requirement that this task actually owns
 		// (task.requirements) — otherwise the coverage totality binds the wrong set.
 		const spec = await readSpecRecordIfExists(input.fs, planPaths);
+		let ownedRequirements: readonly string[] = [];
+		let coverableRequirements: ReadonlySet<string> | null = null;
 		if (spec) {
 			const task = await readTaskRecord(input.fs, taskPaths);
-			const owned = new Set(task.requirements ?? []);
+			ownedRequirements = task.requirements ?? [];
+			const owned = new Set(ownedRequirements);
 			for (const behavior of record.behaviors) {
 				if (!behavior.requirement) continue;
 				const known = spec.requirements.find(
@@ -95,7 +99,18 @@ export async function executePlannerBehaviorTool(input: {
 					);
 				}
 			}
+			coverableRequirements = new Set(
+				spec.requirements
+					.filter((req) => req.inScope && req.deferral === undefined)
+					.map((req) => req.id),
+			);
 		}
+		const nudges = computeBehaviorBoardNudges({
+			previous,
+			record,
+			ownedRequirements,
+			coverableRequirements,
+		});
 		await writeTaskBehaviors(input.fs, taskPaths, record);
 		const byStatus = { planned: 0, red: 0, green: 0 };
 		for (const behavior of record.behaviors) {
@@ -112,6 +127,7 @@ export async function executePlannerBehaviorTool(input: {
 					(behavior) =>
 						`- ${behavior.id} [${behavior.status}] (${behavior.kind}${behavior.requirement ? `, ${behavior.requirement}` : ""}) ${behavior.statement}${behavior.test ? ` — ${behavior.test.file} :: ${behavior.test.name}` : ""}`,
 				),
+				...nudges,
 				"",
 				'Any earlier tdd_coverage gate pass is now stale. Run planner_gate_check with gate: "tdd_coverage" to see what the machine still counts as uncovered.',
 			].join("\n"),
@@ -124,4 +140,51 @@ export async function executePlannerBehaviorTool(input: {
 
 function blocked(text: string) {
 	return blockedResult(PLANNER_BEHAVIOR_TOOL_NAME, text);
+}
+
+/**
+ * Break the two silent traps a behavior write can fall into. Upsert MERGES, so a
+ * resubmit that omits `requirement` re-persists an identical board — the model
+ * then reads a bare "written" and loops on the same list (seen live: 13 identical
+ * resubmits). And the tdd_coverage gate hard-blocks on any in-scope owned REQ that
+ * no behavior cites, a gap the model otherwise only discovers by round-tripping
+ * through the gate. Naming both here, on the write itself, is a nudge (never a
+ * block): the board is already saved.
+ */
+export function computeBehaviorBoardNudges(input: {
+	previous: TaskBehaviorsRecord | null;
+	record: TaskBehaviorsRecord;
+	/** task.requirements (every REQ-n the task cites), empty for legacy plans. */
+	ownedRequirements: readonly string[];
+	/** In-scope, non-deferred spec REQ-n ids; null when the plan has no spec. */
+	coverableRequirements: ReadonlySet<string> | null;
+}): string[] {
+	const lines: string[] = [];
+	const unchanged =
+		input.previous !== null &&
+		JSON.stringify(input.previous.behaviors) ===
+			JSON.stringify(input.record.behaviors);
+	if (unchanged) {
+		lines.push(
+			"",
+			"No change: this board is identical to the one already saved — resubmitting the same list will NOT advance the tdd_coverage gate. To move forward, flip a status, attach a test witness, or set `requirement` on a behavior.",
+		);
+	}
+	if (input.coverableRequirements) {
+		const cited = new Set(
+			input.record.behaviors
+				.map((behavior) => behavior.requirement)
+				.filter((req): req is string => Boolean(req)),
+		);
+		const uncoveredOwned = [...new Set(input.ownedRequirements)]
+			.filter((id) => input.coverableRequirements?.has(id) && !cited.has(id))
+			.sort();
+		if (uncoveredOwned.length > 0) {
+			lines.push(
+				"",
+				`Owned requirements no behavior cites yet: ${uncoveredOwned.join(", ")}. The tdd_coverage gate BLOCKS until each is exercised — set \`requirement\` to that single REQ-n string (e.g. "requirement": "${uncoveredOwned[0]}") on the behavior that verifies it, then resubmit the FULL list.`,
+			);
+		}
+	}
+	return lines;
 }

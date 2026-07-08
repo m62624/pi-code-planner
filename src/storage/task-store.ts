@@ -17,6 +17,7 @@ export interface UpsertTaskArtifactsInput {
 	scope: string[];
 	acceptanceCriteria: string[];
 	requirements?: string[];
+	dependsOn?: string[];
 	contractChain?: string[];
 	relevantContracts?: string[];
 	forbiddenAreas?: string[];
@@ -42,6 +43,7 @@ export async function upsertTaskArtifacts(
 			"acceptanceCriteria",
 		),
 		requirements: stringArray(input.requirements ?? [], "requirements"),
+		dependsOn: stringArray(input.dependsOn ?? [], "dependsOn"),
 		contractChain: stringArray(input.contractChain ?? [], "contractChain"),
 		relevantContracts: stringArray(
 			input.relevantContracts ?? [],
@@ -64,9 +66,13 @@ export async function readTaskRecord(
 	paths: TaskStoragePaths,
 ): Promise<TaskRecord> {
 	const record = await readJson<TaskRecord>(fs, paths.taskJson);
-	// Legacy task.json files predate spec traceability; default the field so
-	// every consumer can rely on it being an array.
-	return { ...record, requirements: record.requirements ?? [] };
+	// Legacy task.json files predate spec traceability and build-order deps;
+	// default the fields so every consumer can rely on them being arrays.
+	return {
+		...record,
+		requirements: record.requirements ?? [],
+		dependsOn: record.dependsOn ?? [],
+	};
 }
 
 export async function updateTaskStatus(
@@ -108,6 +114,10 @@ function formatTaskMarkdown(task: TaskRecord): string {
 		"## Spec Requirements",
 		"",
 		...list(task.requirements ?? [], "(no spec traceability recorded)"),
+		"",
+		"## Depends On",
+		"",
+		...list(task.dependsOn ?? [], "(no build-order dependencies)"),
 		"",
 		"## TDD Rule",
 		"",

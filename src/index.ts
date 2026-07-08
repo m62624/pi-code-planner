@@ -434,7 +434,13 @@ const TASK_UPSERT_TOOL_PARAMETERS = {
 			type: "array",
 			items: { type: "string" },
 			description:
-				"Spec traceability: the REQ-n ids from spec.json this task discharges OR enables (a setup/infrastructure task cites the requirement it is a prerequisite for). Required in practice for plans with a spec — the plan_coverage gate names every requirement no task covers and every task that traces to nothing. Upsert REPLACES the whole task record: when editing an existing task, resupply this list or it is wiped back to orphan work.",
+				"Spec traceability: the REQ-n ids from spec.json this task actually DISCHARGES (implements and proves) — never a REQ it only enables. A setup/infrastructure task that implements no requirement leaves this empty and instead earns its place through `dependsOn`. The plan_coverage gate names every requirement no task discharges. Upsert REPLACES the whole task record: resupply this list when editing or it is wiped.",
+		},
+		dependsOn: {
+			type: "array",
+			items: { type: "string" },
+			description:
+				"Build-order dependencies: taskIds this task builds on (foundations first) — NOT REQ-n ids. This is how a non-discharging setup task avoids being orphan work: a task that discharges a requirement depends on it. The plan_coverage gate justifies a task if it discharges a requirement OR a discharging task (transitively) depends on it, and rejects a dependency cycle. Upsert REPLACES the whole record: resupply this list when editing.",
 		},
 		contractChain: {
 			type: "array",
@@ -3172,7 +3178,8 @@ function registerPlannerTools(
 							},
 							requirement: {
 								type: ["string", "null"],
-								description: "Optional REQ-n this behavior exercises.",
+								description:
+									'A SINGLE REQ-n id (a string, e.g. "REQ-1") this behavior exercises, or null — never an array. Every in-scope REQ-n this task owns must be cited by at least one behavior or the tdd_coverage gate BLOCKS; set it on the behavior that verifies that requirement.',
 							},
 							test: {
 								type: ["object", "null"],
