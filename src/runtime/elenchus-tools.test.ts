@@ -231,6 +231,9 @@ describe("planner elenchus tool", () => {
 		expect(result.status).toBe("applied");
 		expect(result.details?.verdict).toBe("CONSISTENT");
 		expect(result.text).toContain("CONSISTENT (exit 0)");
+		// On CONSISTENT the raw engine report is withheld inline (still on disk at
+		// the Result: path) — only the verdict prose remains.
+		expect(result.text).not.toContain('"status":"CONSISTENT"');
 	});
 
 	it("resolves multi-file IMPORT through the elenchus dir", async () => {

@@ -266,8 +266,11 @@ async function runCheck(
 			`Source: ${sourcePath}`,
 			`Result: ${resultPath}`,
 			`Verdict: ${verdict ?? "(unrecognized)"}`,
-			"",
-			run.output.trim(),
+			// The raw engine report is only actionable when NOT consistent (its
+			// CORE/conflicts name what to fix). On CONSISTENT it is non-actionable
+			// noise — the verdict line says all there is, and the full report stays
+			// on disk at the Result: path above for on-demand reading.
+			...(consistent ? [] : ["", run.output.trim()]),
 			"",
 			consistent
 				? "CONSISTENT (exit 0): the modeled constraints hold. Record the conclusion in decisions.md, then call planner_finish_step."
