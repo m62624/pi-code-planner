@@ -2,7 +2,7 @@
 ## Planner Contracts
 
 ### Purpose
-elenchus/VRF domain: the bundled premise-template library, its sync/routing plumbing, and the deterministic SDD compilers that turn durable planner artifacts into engine-checkable programs.
+elenchus/VRF domain: the bundled premise-template library, its sync/routing plumbing, the deterministic SDD compilers that turn durable planner artifacts into engine-checkable programs, and the plan's living logical world (an accumulating registry of model-asserted statements).
 
 ### Parent
 - `../AGENTS.md`
@@ -16,6 +16,7 @@ elenchus/VRF domain: the bundled premise-template library, its sync/routing plum
 - Every compiler is unit-tested through the REAL wasm engine (`runtime/elenchus-engine.ts`), never a mock — a premise regression must fail CI with the engine's own verdict.
 - `VRF_TEMPLATE_NAMES` (schema.ts) must list every file in `vrf/defaults/`; a project override at `.pi/pi-code-planner/vrf/<name>.vrf` beats the bundled default.
 - elenchus `SET`s do not cross files: a compiler whose program needs sets (coverage, tdd-coverage) must emit a fully self-contained file, not a template import.
+- For model-authored programs (`world-store.ts`, `runtime/elenchus-tools.ts`) the planner reads only the verdict code and hands the engine's raw output on verbatim — it never parses the report body (orphans/beliefs/derivations). The narrow, bounded parse of `status`/`conflicts`/`warnings`/`goals` in `runtime/gate-tools.ts` is legitimate only because those are compiler-authored programs whose atom vocabulary the planner owns.
 
 ### Read First
 - `schema.ts`
@@ -35,6 +36,7 @@ elenchus/VRF domain: the bundled premise-template library, its sync/routing plum
 - `spec-compiler.ts` → `compileSpecConsistency`: `spec.json` → the spec_consistency gate program. Imports `vrf/defaults/spec-consistency.vrf` (the engine-verified freedom-valve arc from `docs/sdd/models/`), fully closes every requirement subject (FACT/NOT, never omitted) so `CHECK BIDIRECTIONAL` noise is zero, emits assumptions as `<atom> holds` leaves, constraint relations as PREMISE blocks, acceptance atoms as advisory PROVE goals. Claim is bound through the bare `spec_gate.spec_verified` VAR port.
 - `coverage-compiler.ts` → `compilePlanCoverage`: `spec.json` + `TaskRecord.requirements` → self-contained Skolem witness tables (`TOTAL covered_by ON requirements` names each dropped requirement; `TOTAL traces ON tasks` names each orphan task). Deferred requirements and non-goals never enter the requirement set — a freedom-valve deferral IS the discharge.
 - `tdd-coverage-compiler.ts` → `compileTddCoverage`: `behaviors.json` → per-phase witness tables (`has_red_test` at write_tests, plus `has_green_test` at run_final_tests; green still totals red so test-first stays visible).
-- Consumers: `runtime/gate-tools.ts` (the only caller of the compilers) and `runtime/elenchus-tools.ts` (free-form checks importing the templates).
+- `world-store.ts` → the living world: a persistent registry (`<planDir>/elenchus/world/world.json`) of model-asserted statements compiled into per-domain files (acyclic layer order spec → discovery → plan → task_* → scratch) and re-checked as a whole. Observations carry a file anchor; a stale hash demotes `FACT`→`BELIEVES planner` at compile time. Runs scan the verdict and return the raw output — `WorldRunRecord` holds the verdict only, never the report. Consumed by `runtime/reason-tools.ts`.
+- Consumers: `runtime/gate-tools.ts` (the only caller of the compilers), `runtime/elenchus-tools.ts` (free-form checks importing the templates), and `runtime/reason-tools.ts` (the living world).
 - `vrf.test.ts` → the engine-backed harness: every template parses bare, reaches CONSISTENT on an honest green fixture, and yields CONFLICT/WARNING on violated/omitted duties.
 <!-- pi-code-planner:contracts:end -->
