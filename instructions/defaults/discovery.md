@@ -31,8 +31,7 @@ Become familiar with the project before planning. Keep this stage cheap for a lo
    - If the project is empty or lacks test/lint/build conventions, ask how to set up testing: framework, test command, lint command, formatter, and required flags. If conventions exist but discovery could not prove exact commands or flags, ask only for the missing ones.
    - If questions exist, show them to the user verbatim, wait for answers, then call `planner_questions_resolve`.
    - If no questions remain, call `planner_questions_submit` with `hasOpenQuestions: false` and state that explicitly.
-3. `compact_discovery` — request planner-controlled compact only after `discovery.md` is useful and questions are resolved.
-4. `enter_planning`
+3. `enter_planning`
    - For normal `/planner-create` plans, advance to `planning/read_context`.
    - For `/planner-improve` plans (`creationMethod: improve`), finish with target `intake/draft_goal` so the model can write `goal.md` from discovery findings and ask for approval.
 

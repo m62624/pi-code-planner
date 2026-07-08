@@ -27,8 +27,7 @@ At `spec/draft_requirements`, load context in this order:
 3. `verify_spec`
    - Call `planner_gate_check` with `gate: "spec_consistency"`. It compiles `spec.json` to VRF deterministically, runs the elenchus engine, and writes the verdict to `coverage.md`.
    - Iterate until the verdict is **CONSISTENT**. Anything else blocks this step: a CONFLICT names contradictory requirements — fix the spec, never delete a valid requirement to force green; a WARNING/UNDERDETERMINED names the unaddressed requirement or the missing decision — formalize it, defer it with a rationale, or route it back to `elicit_gaps` as a question.
-4. `compact_spec` — compact with `spec.md`, `spec.json`, and `coverage.md` as the durable anchors.
-5. `finish_spec` — advance to `planning/read_context`. The gate refuses to advance until the latest spec check is CONSISTENT.
+4. `finish_spec` — advance to `planning/read_context`. The gate refuses to advance until the latest spec check is CONSISTENT.
 
 ## Restrictions
 

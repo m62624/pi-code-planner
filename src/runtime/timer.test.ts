@@ -90,7 +90,7 @@ describe("planner timer", () => {
 	it("counts active intake drafting and compaction (honest timing)", () => {
 		for (const position of [
 			{ stage: "intake" as const, step: "draft_goal" as const },
-			{ stage: "discovery" as const, step: "compact_discovery" as const },
+			{ stage: "finalize" as const, step: "compact_before_doubt" as const },
 		]) {
 			const initialized = reconcilePlannerTimer({
 				state: { ...state(position), requiresCompact: true },

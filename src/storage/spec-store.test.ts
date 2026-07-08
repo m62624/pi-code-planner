@@ -162,20 +162,7 @@ describe("spec store", () => {
 	});
 });
 
-describe("spec compaction durability (REQ-9)", () => {
-	it("compact_spec anchors the spec artifacts", async () => {
-		const { getPlannerStageStepBehavior } = await import(
-			"../runtime/stage-behavior"
-		);
-		const behavior = getPlannerStageStepBehavior({
-			stage: "spec",
-			step: "compact_spec",
-		});
-		expect(behavior.requiredArtifacts).toEqual([
-			"spec.md",
-			"spec.json",
-			"coverage.md",
-		]);
-		expect(behavior.compactPolicy).toBe("request_required");
-	});
-});
+// The spec-stage window compaction (compact_spec) was removed; spec durability
+// (REQ-9) no longer rides a dedicated compact step. spec.md/spec.json persist on
+// disk and survive any compaction — covered by the persistence round-trip tests
+// above and in storage.test.ts.

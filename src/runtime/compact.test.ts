@@ -74,7 +74,7 @@ describe("planner compact runtime", () => {
 		expect(bundle.text).toContain(PLANNER_COMPACT_MARKER);
 		expect(bundle.text).toContain("- planId: plan-a");
 		expect(bundle.text).toContain("- stage: execution");
-		expect(bundle.text).toContain("- step: compact_task");
+		expect(bundle.text).toContain("- step: implement_task");
 		expect(bundle.text).toContain(setup.planPaths.requestMd);
 		expect(bundle.text).toContain(setup.planPaths.goalMd);
 		expect(bundle.text).toContain(setup.planPaths.planMd);
@@ -100,7 +100,7 @@ describe("planner compact runtime", () => {
 		expect(message).toContain("Call planner_status immediately");
 		expect(message).toContain("Use discovery.md as the project summary");
 		expect(message).toContain("- planId: plan-a");
-		expect(message).toContain("- step: compact_task");
+		expect(message).toContain("- step: implement_task");
 		expect(message).toContain("Check git state before resuming.");
 	});
 
@@ -611,7 +611,7 @@ async function createCompactSetup() {
 			worktreePath,
 		}),
 		stage: "execution",
-		step: "compact_task",
+		step: "implement_task",
 		stepStatus: "blocked",
 		activeTaskId: "task-1",
 		currentBranch: "task/plan-a/task-1",

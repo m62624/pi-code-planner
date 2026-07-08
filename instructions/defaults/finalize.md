@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Verify the complete plan branch as one integrated result, write a durable user-facing summary, compact the final context, and enter the explicit acceptance stage.
+Verify the complete plan branch as one integrated result, write a durable user-facing summary, and enter the explicit acceptance stage.
 
 ## Strict Step Order
 
@@ -11,7 +11,7 @@ Verify the complete plan branch as one integrated result, write a durable user-f
    - Run project-level checks (from project instructions and task evidence) from the worktree path reported by `planner_status`.
    - Record failures, residual risks, and any checks that cannot run locally.
 2. `compact_before_doubt`
-   - Request planner-controlled compact after integrated checks and before doubt review. This deliberately clears live confidence from the previous loop.
+   - Request planner-controlled compact after integrated checks and before doubt review. This is a forced reset — it runs even when context is small, because its purpose is to clear live confidence from the previous loop, not to relieve the context window.
    - After compaction, call `planner_complete_compact`, then `planner_status`, then continue from persisted artifacts only.
 3. `doubt_review`
    - Before asking for acceptance, deliberately doubt the completed result. Reread `goal.md`, `plan.md`, task artifacts, and `verify.md` via `planner_artifact_read` (not the built-in read tool), plus the final worktree diff.
@@ -29,8 +29,7 @@ Verify the complete plan branch as one integrated result, write a durable user-f
    - Write `final_summary.md` through `planner_summary_submit`. Use `metadata.humanLanguage` unless the user explicitly requested another language.
    - Include completed scope, changed files, checks, risks, output-branch expectations, and unresolved limitations.
    - If the whole plan produced a reusable verified lesson not already captured, call `planner_skill_create` with `sourceKind=final_summary`.
-5. `compact_finalize` — request planner-controlled compact preserving summary, verification, branch state, and risks.
-6. `enter_done` — advance to `done/present_result`.
+5. `enter_done` — advance to `done/present_result`.
 
 ## Restrictions
 
@@ -101,7 +100,7 @@ Use `planner_skill_create` only for verified lessons that should improve future 
 
 ## Exit Condition
 
-Finalize is complete only when the integrated plan branch is checked, `final_summary.md` exists, final compact finishes, and state enters `done/present_result`.
+Finalize is complete only when the integrated plan branch is checked, `final_summary.md` exists, and state enters `done/present_result`.
 
 ## Diagnostics
 

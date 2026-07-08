@@ -118,10 +118,11 @@ builds on.
   templates in `vrf/defaults/`. **But the checks are ad-hoc**: the model writes
   the VRF by hand; there is no systematic spec that mechanically produces the
   premises.
-- **Compaction survival is already built**: per-stage `compact_*` steps persist
-  durable `.md` artifacts + `state.json`; post-compact the model must call
-  `planner_status` and resume from disk (`src/runtime/compact.ts`). The spec
-  artifact plugs straight into this — it is just another durable pointer.
+- **Compaction survival is already built**: every artifact is a durable `.md`/
+  `.json` on disk alongside `state.json`, so any compaction (the proactive
+  `turn_end` monitor, or Pi's own auto-compact) preserves it; post-compact the
+  model must call `planner_status` and resume from disk (`src/runtime/compact.ts`).
+  The spec artifact plugs straight into this — it is just another durable pointer.
 
 ## 4. Requirements
 
@@ -170,9 +171,9 @@ Stable IDs; tasks will later trace to these (§7 coverage check).
 - **REQ-8** — Spec authoring integrates into the stage/step machine without
   breaking the dual-gate invariant or existing tests (new steps/tools added to
   both `stage-behavior.ts` and `tool-policy.ts`; behavior matrix stays green).
-- **REQ-9** — The spec artifact is compaction-durable: it is listed in the
-  relevant `compact_*` step's `requiredArtifacts`, and the post-compact resume
-  message points at it, so the spec always survives auto-compact.
+- **REQ-9** — The spec artifact is compaction-durable: `spec.md`/`spec.json` live
+  on disk, so they survive any compaction, and the post-compact resume message
+  points at them so the model reloads the spec instead of trusting chat memory.
 - **REQ-10** — On a change request (`done/handle_change_request`) the spec is
   the thing that is amended and re-verified; requirement diffs across spec
   versions must not silently drop a requirement (orchestration keeps both
@@ -285,8 +286,7 @@ to enter `spec/draft_requirements`; a new `spec/enter_planning` enters
 | `elicit_gaps` | user_communication | ask_user | `spec.md` → `questions.md`, `decisions.md` | `planner_questions_submit`, `planner_questions_resolve` | questions come from §6.2 gaps |
 | `compile_spec_vrf` | planner_artifacts | write_artifacts | `spec.json` → spec `.vrf` | `planner_spec_submit` | deterministic spec→VRF (REQ-4) |
 | `verify_spec` | planner_artifacts | run_checks, write_artifacts | `spec.json`, `.vrf` → `coverage.md` | `planner_elenchus_check` | **blocking gate** (§6.2) |
-| `compact_spec` | none | compact | `spec.md`, `spec.json`, `coverage.md` → `state.json` | `planner_request_compact`, `planner_complete_compact` | compaction-durable (REQ-9) |
-| `enter_planning` | none | state_transition | `state.json` → `state.json` | `planner_finish_step` | requires new gate `spec_verified` |
+| `finish_spec` | none | state_transition | `state.json` → `state.json` | `planner_finish_step` | requires new gate `spec_verified`; spec artifacts stay compaction-durable on disk (REQ-9) |
 
 New behavior gate: **`spec_verified`** — set only when `verify_spec` reports the
 spec `CONSISTENT` and every in-scope requirement covered-or-de-scoped; it is the
@@ -330,8 +330,8 @@ the LLM cannot skip detail to reach the next stage.
 3. An end-to-end fixture: a spec with a deliberately dropped requirement →
    coverage check reports the exact missing REQ-n and blocks (REQ-7); adding the
    task clears it.
-4. Compaction test: the spec artifacts appear in the compact step's
-   `requiredArtifacts` and in the resume pointers (REQ-9).
+4. Compaction test: the spec artifacts persist on disk and the post-compact
+   resume pointers name them, so the spec survives any compaction (REQ-9).
 5. Release version bump follows the semver rule already recorded (a new
    user-facing capability = minor).
 

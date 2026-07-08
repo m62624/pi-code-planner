@@ -469,7 +469,7 @@ describe("workflowToolTransition", () => {
 			.digest("hex");
 		const forward = {
 			nextStage: "spec",
-			nextStep: "compact_spec",
+			nextStep: "finish_spec",
 		} as const;
 		const writeGateCheck = async (outcome: string, sourceHash = specHash) =>
 			fs.writeTextAtomic(

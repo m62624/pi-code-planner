@@ -61,33 +61,21 @@ const INIT_STEPS_BEFORE_WORKTREE = new Set<InitStep>([
 	"create_plan_worktree",
 ]);
 
-const COMPACT_STEPS = new Set<PlannerStep>([
-	"compact_discovery",
-	"compact_spec",
-	"compact_planning",
-	"compact_task",
-	"compact_before_doubt",
-	"compact_finalize",
-]);
+// The only surviving compact step. The window-management boundaries
+// (compact_discovery/spec/planning/task, compact_finalize) were removed — the
+// proactive turn_end monitor (index.ts) handles context pressure on any step.
+// compact_before_doubt stays because its purpose is not window relief but a
+// deliberate confidence reset before the doubt audit, so it fires even below the
+// token floor (forced in index.ts).
+const COMPACT_STEPS = new Set<PlannerStep>(["compact_before_doubt"]);
 
 const STEP_TO_STAGE = buildStepToStageMap();
 
 export function isPlannerCompactEnabled(state: PlanStateRecord): boolean {
-	const boundaries = state.compactBoundaries ?? {
-		stage: true,
-		task: false,
-	};
-	switch (state.step) {
-		case "compact_task":
-			return boundaries.task;
-		case "compact_discovery":
-		case "compact_spec":
-		case "compact_planning":
-		case "compact_finalize":
-			return boundaries.stage;
-		default:
-			return false;
-	}
+	// compact_before_doubt is a forced reset — always on, never gated by the
+	// compactBoundaries toggles (which only ever governed the now-removed
+	// window-management boundaries).
+	return state.step === "compact_before_doubt";
 }
 
 export function getPlannerStepStage(step: PlannerStep): PlannerStage {
@@ -144,10 +132,10 @@ export function getAllowedNextPlannerPositions(
 			: [{ stage: "spec", step: "draft_requirements" }];
 	}
 	if (input.stage === "spec" && input.step === "verify_spec") {
-		// Forward to the compact boundary, or loop back to elicit_gaps when the
-		// gate reports gaps that need user answers before the spec can pass.
+		// Forward to finish_spec, or loop back to elicit_gaps when the gate reports
+		// gaps that need user answers before the spec can pass.
 		return [
-			{ stage: "spec", step: "compact_spec" },
+			{ stage: "spec", step: "finish_spec" },
 			{ stage: "spec", step: "elicit_gaps" },
 		];
 	}

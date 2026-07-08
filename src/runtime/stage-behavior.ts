@@ -242,9 +242,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
-	compact_discovery: compactBehavior("discovery", "compact_discovery", [
-		"discovery.md",
-	]),
 	enter_planning: enterBehavior("discovery", "enter_planning", []),
 
 	draft_requirements: behavior("spec", "draft_requirements", {
@@ -289,11 +286,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
-	compact_spec: compactBehavior("spec", "compact_spec", [
-		"spec.md",
-		"spec.json",
-		"coverage.md",
-	]),
 	finish_spec: enterBehavior("spec", "finish_spec", ["spec_verified"]),
 
 	read_context: behavior("planning", "read_context", {
@@ -369,11 +361,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
-	compact_planning: compactBehavior("planning", "compact_planning", [
-		"plan.md",
-		"task.json",
-		"task.md",
-	]),
 	enter_execution: enterBehavior("planning", "enter_execution", [
 		"plan_verified",
 	]),
@@ -580,11 +567,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
-	compact_task: compactBehavior("execution", "compact_task", [
-		"task.md",
-		"tdd.md",
-		"refactor.md",
-	]),
 	select_next_task: behavior("execution", "select_next_task", {
 		projectAccess: "planner_artifacts",
 		actions: ["write_artifacts", "state_transition"],
@@ -660,10 +642,6 @@ export const PLANNER_STAGE_BEHAVIOR = {
 		commitPolicy: "forbidden",
 		compactPolicy: "not_allowed",
 	}),
-	compact_finalize: compactBehavior("finalize", "compact_finalize", [
-		"final_summary.md",
-		"verify.md",
-	]),
 	enter_done: enterBehavior("finalize", "enter_done", [
 		"final_summary_written",
 	]),
