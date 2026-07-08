@@ -66,6 +66,38 @@ describe("planner task store", () => {
 		expect((await readTaskRecord(fs, result.paths)).requirements).toEqual([]);
 	});
 
+	it("persists dependsOn, renders it, and defaults it to [] for a legacy record", async () => {
+		const fs = new MockPlannerFs();
+		const planPaths = createPlanStoragePaths(
+			createProjectStoragePaths({
+				agentDir: "/agent",
+				projectRoot: "/repo/app",
+			}),
+			"plan-a",
+		);
+		const result = await upsertTaskArtifacts(fs, planPaths, {
+			taskId: "model-task",
+			title: "Model",
+			objective: "Depends on scaffolding.",
+			scope: [],
+			acceptanceCriteria: ["Builds on setup."],
+			dependsOn: ["setup-project", "setup-project"],
+		});
+		// Deduped and rendered.
+		expect((await readTaskRecord(fs, result.paths)).dependsOn).toEqual([
+			"setup-project",
+		]);
+		const md = await fs.readText(result.paths.taskMd);
+		expect(md).toContain("## Depends On");
+		expect(md).toContain("- setup-project");
+
+		// A record written before the field existed still reads as [].
+		const raw = JSON.parse(await fs.readText(result.paths.taskJson));
+		delete raw.dependsOn;
+		await fs.writeTextAtomic(result.paths.taskJson, JSON.stringify(raw));
+		expect((await readTaskRecord(fs, result.paths)).dependsOn).toEqual([]);
+	});
+
 	it("persists requirements and renders them into task.md", async () => {
 		const fs = new MockPlannerFs();
 		const planPaths = createPlanStoragePaths(
