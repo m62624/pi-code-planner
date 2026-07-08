@@ -45,6 +45,15 @@ At `planning/read_context`, load context in this order:
 - If a task reveals additional required work, add or revise a task artifact during planning instead of silently expanding implementation scope.
 - For a change request after a completed pass, use new revision task IDs such as `fix-storage-root-revision` instead of reopening completed task IDs.
 
+## Generated Artifacts (keep them out of git)
+
+Before writing task files, account for what this project's toolchain will generate that must NOT be tracked — build outputs, dependency/vendor directories, caches, coverage and test output, editor/tool scratch. Two failure modes to preempt, because either one makes `planner_git_inspect` and later commits swell with generated bulk instead of source:
+
+- a fresh project whose `.gitignore` is missing or empty, so the first build/dependency step fills the worktree with untracked bulk;
+- an existing project adopting a new tool or technology that emits an artifact its current `.gitignore` does not yet cover.
+
+If the relevant ignore rules are absent, add updating `.gitignore` as an explicit task (or fold it into the setup/scaffolding task that first produces the artifact), so git inspection and commits stay to source only. You already know the conventional artifact names for each ecosystem — apply them; there is no need to spell them out here. If the repository already ignores everything the plan will generate, note that and move on.
+
 ## Restrictions
 
 - Do not edit production files or write tests yet.
