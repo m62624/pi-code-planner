@@ -178,6 +178,10 @@ import {
 	type PlannerQuestionToolName,
 } from "./runtime/question-tools";
 import {
+	executePlannerReasonTool,
+	PLANNER_REASON_TOOL_NAME,
+} from "./runtime/reason-tools";
+import {
 	executePlannerRecoveryReportTool,
 	executePlannerRecoveryTool,
 	PLANNER_RECOVERY_REPORT_TOOL_NAME,
@@ -2952,6 +2956,72 @@ function registerPlannerTools(
 			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
 			await recordPlannerToolActivityForProject({ fs, projectPaths });
 			const result = await executePlannerElenchusTool({
+				fs,
+				git: gitRunner,
+				projectPaths,
+				params,
+			});
+			return plannerToolResponse(result);
+		},
+	});
+
+	pi.registerTool({
+		name: PLANNER_REASON_TOOL_NAME,
+		label: "Planner Reason",
+		description:
+			"Grow and re-check the plan's living logical world with the bundled elenchus engine. Statements accumulate across stages: each assert adds facts, premises, or rules to a domain and re-checks the whole world against everything asserted before. Observations may name a source file to anchor to, so when that file later changes the knowledge demotes to a belief instead of raising a false contradiction. The engine's raw output is returned verbatim (CONSISTENT / WARNING / UNDERDETERMINED / CONFLICT and why); the tool never parses it. A reasoning-fuel line reports how much of the interacting-condition web on the table you have run through the engine.",
+		promptSnippet:
+			'At the reasoning steps, default to building the world with planner_reason instead of trusting a prose chain: mode=assert with a domain and statements (each a .vrf line; add anchor="path" for a file observation), mode=retract with ids to remove a statement, mode=recheck to re-run as-is. A CONFLICT hard-blocks planner_finish_step until a re-run improves it — apply the drop/flip the output names or retract the wrong statement, never delete a valid premise. When the decision genuinely has no interacting-constraint web, the fuel line stays silent and you may skip it. Available at the discovery scan, planning/consistency_check, execution/write_tdd_plan, execution/contract_check, finalize/doubt_review, and recovery/repair_or_resume.',
+		parameters: {
+			type: "object",
+			properties: {
+				mode: {
+					type: "string",
+					enum: ["assert", "retract", "recheck"],
+					description:
+						'"assert" adds statements to a world domain and re-checks; "retract" removes statements by id and re-checks; "recheck" re-runs the world as-is.',
+				},
+				domain: {
+					type: "string",
+					description:
+						'World domain for asserted statements: "discovery", "plan", "scratch", or "task_<slug>". Required when mode=assert.',
+				},
+				statements: {
+					type: "array",
+					items: {
+						type: "object",
+						properties: {
+							vrf: {
+								type: "string",
+								description:
+									"One elenchus statement (FACT/NOT/PREMISE/RULE/BELIEVES/SET/CLOSE/VAR), possibly multi-line. Instruments (PROVE/HENCE/TRY) are not stored.",
+							},
+							anchor: {
+								type: "string",
+								description:
+									"Optional project-root-relative file this observation is read from. The tool hashes it now; only FACT/NOT may carry an anchor.",
+							},
+						},
+						required: ["vrf"],
+						additionalProperties: false,
+					},
+					description:
+						"The statements to assert. Required and non-empty when mode=assert.",
+				},
+				ids: {
+					type: "array",
+					items: { type: "string" },
+					description:
+						'Statement ids to remove, e.g. ["w3","w7"]. Required and non-empty when mode=retract.',
+				},
+			},
+			required: ["mode"],
+			additionalProperties: false,
+		} as never,
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const { fs, projectPaths } = await resolveRuntimeContext(ctx.cwd);
+			await recordPlannerToolActivityForProject({ fs, projectPaths });
+			const result = await executePlannerReasonTool({
 				fs,
 				git: gitRunner,
 				projectPaths,

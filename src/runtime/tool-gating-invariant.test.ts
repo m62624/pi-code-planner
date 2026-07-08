@@ -90,10 +90,17 @@ describe("planner tool gating invariant", () => {
 				for (const step of stepList) {
 					const set = setFor(stage, step);
 					if (stage === "recovery" && step === "repair_or_resume") {
+						// The guard scopes in the two pure-diagnosis reasoning tools here
+						// (proving the repair decision); everything else stays fixed.
 						expect(set).toContain("planner_elenchus_check");
+						expect(set).toContain("planner_reason");
 						expect(
 							JSON.stringify(
-								set.filter((tool) => tool !== "planner_elenchus_check"),
+								set.filter(
+									(tool) =>
+										tool !== "planner_elenchus_check" &&
+										tool !== "planner_reason",
+								),
 							),
 						).toEqual(baseline);
 						continue;
