@@ -23,8 +23,10 @@ jobs:
   mirror:
     name: Push main to Tangled
     runs-on: ubuntu-latest
-    # Skip on forks: only the canonical repo holds the Tangled credentials.
-    if: github.repository == 'm62624/pi-planner'
+    # Skip on forks: only this owner's repo holds the Tangled credentials.
+    # Match on owner (not the full name) so renaming the repo can't silently
+    # turn this condition false and skip the job again.
+    if: github.repository_owner == 'm62624'
 
     steps:
       - name: Checkout main (full history + tags)
