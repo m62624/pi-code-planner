@@ -9,6 +9,10 @@ on:
   # Manual button for the first mirror, or to re-sync after fixing credentials.
   workflow_dispatch:
 
+# Limit default GITHUB_TOKEN scopes for least privilege.
+permissions:
+  contents: read
+
 # Serialize mirror runs so two pushes can't race a `git push` to Tangled. Keep
 # the newest one; an interrupted mirror is re-driven by the next push anyway.
 concurrency:
