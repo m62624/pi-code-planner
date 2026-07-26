@@ -24,6 +24,10 @@
 // anywhere. Every function here is pure and deterministic (no I/O), so the whole
 // check is unit-testable by passing plain fake `pi`/`ctx` objects.
 
+import type {
+	ExtensionAPI,
+	ExtensionCommandContext,
+} from "@earendil-works/pi-coding-agent";
 import { PLANNER_KNOWN_GOOD_PI_VERSIONS } from "../constants";
 
 export type SdkSurfaceSeverity = "critical" | "optional";
@@ -31,12 +35,20 @@ export type SdkSurfaceKind = "function" | "object" | "string";
 export type SdkSurfaceTarget = "api" | "ctx";
 export type SdkSurfaceStatus = "missing" | "wrong_type";
 
-/** One dynamic SDK surface the extension depends on at runtime. */
-export interface SdkSurfaceSpec {
-	/** Which runtime object exposes it: the `pi` API or the command `ctx`. */
-	target: SdkSurfaceTarget;
-	/** Dotted path relative to the target root, e.g. "ui.notify". */
-	path: string;
+// The probed paths are plain strings at runtime, but they are typed against the
+// real SDK interfaces so the list cannot silently drift from them. If Pi renames
+// or drops one of these members, `tsc` fails here — which is the point: the SDK
+// watch PR then goes red for the true reason instead of only at the call sites,
+// and this list (the thing the runtime advisory reads) can never point at a
+// member that no longer exists. Nesting is spelled out rather than derived
+// recursively: `ui` is the only nested root, and a generic dotted-path type would
+// also admit function internals like `on.apply`.
+type ApiSurfacePath = keyof ExtensionAPI & string;
+type CtxSurfacePath =
+	| (keyof ExtensionCommandContext & string)
+	| `ui.${keyof ExtensionCommandContext["ui"] & string}`;
+
+interface SdkSurfaceSpecBase {
 	/** Expected shape of the resolved value. */
 	kind: SdkSurfaceKind;
 	/** Critical surfaces break core flows; optional ones only degrade a feature. */
@@ -45,11 +57,22 @@ export interface SdkSurfaceSpec {
 	feature: string;
 }
 
-export interface SdkSurfaceFinding extends SdkSurfaceSpec {
+/**
+ * One dynamic SDK surface the extension depends on at runtime. `target` picks the
+ * runtime root (`pi` or the command `ctx`) and constrains `path` to members that
+ * root actually declares.
+ */
+export type SdkSurfaceSpec = SdkSurfaceSpecBase &
+	(
+		| { target: "api"; path: ApiSurfacePath }
+		| { target: "ctx"; path: CtxSurfacePath }
+	);
+
+export type SdkSurfaceFinding = SdkSurfaceSpec & {
 	status: SdkSurfaceStatus;
 	/** `typeof` of the resolved value, or "absent" when nothing was found. */
 	actualType: string;
-}
+};
 
 export interface SdkVersionAdvisory {
 	version: string | null;
@@ -60,6 +83,8 @@ export interface SdkVersionAdvisory {
 export interface SdkCompatReport {
 	sdkVersion: string | null;
 	version: SdkVersionAdvisory;
+	/** The tested major.minor prefixes this report was evaluated against. */
+	testedRange: readonly string[];
 	/** True when there are no critical findings (extension core is usable). */
 	ok: boolean;
 	criticalCount: number;
@@ -236,7 +261,14 @@ export function buildSdkCompatReport(input: {
 	sdkVersion: string | null;
 	api: unknown;
 	ctx: unknown;
+	/**
+	 * Tested major.minor prefixes. Defaults to the shipped constant; passed
+	 * explicitly by tests so their fixtures do not silently change meaning when
+	 * the SDK watcher rewrites {@link PLANNER_KNOWN_GOOD_PI_VERSIONS}.
+	 */
+	knownGood?: readonly string[];
 }): SdkCompatReport {
+	const knownGood = input.knownGood ?? PLANNER_KNOWN_GOOD_PI_VERSIONS;
 	const findings: SdkSurfaceFinding[] = [];
 	for (const spec of SDK_REQUIRED_SURFACES) {
 		const root = spec.target === "api" ? input.api : input.ctx;
@@ -253,10 +285,8 @@ export function buildSdkCompatReport(input: {
 	).length;
 	return {
 		sdkVersion: input.sdkVersion,
-		version: evaluatePiVersionAdvisory(
-			input.sdkVersion,
-			PLANNER_KNOWN_GOOD_PI_VERSIONS,
-		),
+		version: evaluatePiVersionAdvisory(input.sdkVersion, knownGood),
+		testedRange: knownGood,
 		ok: criticalCount === 0,
 		criticalCount,
 		optionalCount: findings.length - criticalCount,
@@ -264,10 +294,8 @@ export function buildSdkCompatReport(input: {
 	};
 }
 
-function testedRangeLabel(): string {
-	return PLANNER_KNOWN_GOOD_PI_VERSIONS.map((prefix) => `${prefix}.x`).join(
-		", ",
-	);
+function testedRangeLabel(report: SdkCompatReport): string {
+	return report.testedRange.map((prefix) => `${prefix}.x`).join(", ");
 }
 
 /**
@@ -295,12 +323,12 @@ export function formatSdkCompatWarning(
 				: `Planner: ${report.optionalCount} optional SDK surface(s) unavailable on this Pi build (v${versionLabel}); those features are degraded:`;
 		const tail = report.version.known
 			? ""
-			: `\nThis Pi version is outside the tested range (${testedRangeLabel()}), which is the likely cause. This is a local check — nothing was sent anywhere.`;
+			: `\nThis Pi version is outside the tested range (${testedRangeLabel(report)}), which is the likely cause. This is a local check — nothing was sent anywhere.`;
 		return { message: `${head}\n${lines.join("\n")}${tail}`, level: "warning" };
 	}
 	if (!report.version.known) {
 		return {
-			message: `Pi v${versionLabel} has not been validated with this planner build (tested: ${testedRangeLabel()}), but all required SDK surfaces are intact. If something behaves oddly, this version gap is the first thing to check.`,
+			message: `Pi v${versionLabel} has not been validated with this planner build (tested: ${testedRangeLabel(report)}), but all required SDK surfaces are intact. If something behaves oddly, this version gap is the first thing to check.`,
 			level: "info",
 		};
 	}
