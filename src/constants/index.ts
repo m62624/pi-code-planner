@@ -1,7 +1,5 @@
 // Project-wide constants, grouped by category. Existing `../constants` imports
-// resolve here unchanged. Compaction budgets keep their own module (larger,
-// self-contained); the small category constants live inline below.
-export * from "./compaction";
+// resolve here unchanged.
 
 /** Identity of this extension, used for storage paths and registration. */
 export const EXTENSION_NAME = "pi-code-planner";

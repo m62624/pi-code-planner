@@ -119,9 +119,10 @@ builds on.
   the VRF by hand; there is no systematic spec that mechanically produces the
   premises.
 - **Compaction survival is already built**: every artifact is a durable `.md`/
-  `.json` on disk alongside `state.json`, so any compaction (the proactive
-  `turn_end` monitor, or Pi's own auto-compact) preserves it; post-compact the
-  model must call `planner_status` and resume from disk (`src/runtime/compact.ts`).
+  `.json` on disk alongside `state.json`, so any compaction (Pi's auto-compact,
+  a manual `/compact`, or the `compact_before_doubt` reset) preserves it;
+  post-compact the model must call `planner_status` and resume from disk
+  (`src/runtime/compact.ts`).
   The spec artifact plugs straight into this — it is just another durable pointer.
 
 ## 4. Requirements
