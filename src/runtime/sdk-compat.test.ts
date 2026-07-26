@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PLANNER_KNOWN_GOOD_PI_VERSIONS } from "../constants";
 import {
 	buildSdkCompatReport,
 	evaluatePiVersionAdvisory,
@@ -34,7 +35,27 @@ function goodCtx(): Record<string, unknown> {
 	};
 }
 
-const KNOWN = "0.80.3";
+// `buildSdkCompatReport` reads PLANNER_KNOWN_GOOD_PI_VERSIONS from the module
+// scope, so these two fixtures are only meaningful *relative* to that constant.
+// Derive them instead of hardcoding literals: the SDK watcher rewrites the
+// constant on every Pi bump, and a hardcoded "in range" version silently turns
+// into an out-of-range one, failing tests that have nothing to do with the SDK.
+const KNOWN = `${PLANNER_KNOWN_GOOD_PI_VERSIONS[0]}.0`;
+// A major that no Pi release will plausibly reach, so it stays out of range.
+const UNKNOWN = "999.0.0";
+
+describe("version fixtures", () => {
+	// Guards the derivation above: if either fixture stops meaning what its name
+	// says, fail here rather than in a dozen unrelated assertions below.
+	it("KNOWN is in the tested range and UNKNOWN is outside it", () => {
+		expect(
+			evaluatePiVersionAdvisory(KNOWN, PLANNER_KNOWN_GOOD_PI_VERSIONS).known,
+		).toBe(true);
+		expect(
+			evaluatePiVersionAdvisory(UNKNOWN, PLANNER_KNOWN_GOOD_PI_VERSIONS).known,
+		).toBe(false);
+	});
+});
 
 describe("evaluatePiVersionAdvisory", () => {
 	it("treats a matching major.minor prefix as known", () => {
@@ -173,20 +194,20 @@ describe("formatSdkCompatWarning", () => {
 
 	it("emits an info notice for an unknown-but-intact version", () => {
 		const report = buildSdkCompatReport({
-			sdkVersion: "0.99.0",
+			sdkVersion: UNKNOWN,
 			api: goodApi(),
 			ctx: goodCtx(),
 		});
 		const warning = formatSdkCompatWarning(report);
 		expect(warning?.level).toBe("info");
-		expect(warning?.message).toContain("0.99.0");
+		expect(warning?.message).toContain(UNKNOWN);
 	});
 
 	it("emits a warning listing critical findings and the version context", () => {
 		const ctx = goodCtx();
 		delete ctx.compact;
 		const report = buildSdkCompatReport({
-			sdkVersion: "0.99.0",
+			sdkVersion: UNKNOWN,
 			api: goodApi(),
 			ctx,
 		});
@@ -250,7 +271,7 @@ describe("sdkCompatReportSignature", () => {
 			ctx: goodCtx(),
 		});
 		const unknown = buildSdkCompatReport({
-			sdkVersion: "0.99.0",
+			sdkVersion: UNKNOWN,
 			api: goodApi(),
 			ctx: goodCtx(),
 		});
