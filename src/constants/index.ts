@@ -20,7 +20,14 @@ export const MS_PER_MINUTE = 60_000;
 // this range is flagged as "not validated" (informational), because a newer Pi is
 // usually still compatible; the real compatibility signal is the SDK surface probe
 // in `runtime/sdk-compat.ts`, not the version number.
-export const PLANNER_KNOWN_GOOD_PI_VERSIONS: readonly string[] = ["0.82"];
+// Each entry is a Pi minor line this planner build was actually run against in
+// CI. The SDK watcher appends, never replaces: dropping a line that CI did pass
+// would tell users on it that their Pi is "not validated" when it is. Prune by
+// hand when a line is genuinely no longer supported.
+export const PLANNER_KNOWN_GOOD_PI_VERSIONS: readonly string[] = [
+	"0.80",
+	"0.82",
+];
 
 /**
  * Default natural language for generated content (goal, title, commit
