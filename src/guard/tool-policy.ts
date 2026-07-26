@@ -206,10 +206,6 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_skill_update",
 			"planner_elenchus_check",
 			"planner_reason",
-			"planner_debug_strategy",
-			"planner_debug_probe",
-			"planner_debug_result",
-			"planner_debug_cleanup",
 			"planner_exec",
 		],
 		write_tests: [
@@ -221,10 +217,6 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
-			"planner_debug_strategy",
-			"planner_debug_probe",
-			"planner_debug_result",
-			"planner_debug_cleanup",
 			"planner_exec",
 		],
 		run_failing_tests: [
@@ -235,10 +227,6 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
-			"planner_debug_strategy",
-			"planner_debug_probe",
-			"planner_debug_result",
-			"planner_debug_cleanup",
 			"planner_exec",
 		],
 		implement_task: [
@@ -250,10 +238,6 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
-			"planner_debug_strategy",
-			"planner_debug_probe",
-			"planner_debug_result",
-			"planner_debug_cleanup",
 			"planner_exec",
 		],
 		contract_check: [
@@ -285,10 +269,6 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
-			"planner_debug_strategy",
-			"planner_debug_probe",
-			"planner_debug_result",
-			"planner_debug_cleanup",
 			"planner_exec",
 		],
 		run_final_tests: [
@@ -300,10 +280,6 @@ const STEP_ALLOWED_TOOLS = {
 			"planner_report_stuck",
 			"planner_skill_create",
 			"planner_skill_update",
-			"planner_debug_strategy",
-			"planner_debug_probe",
-			"planner_debug_result",
-			"planner_debug_cleanup",
 			"planner_exec",
 		],
 		capture_skill: [
@@ -422,7 +398,10 @@ export function getAllowedPlannerWrapperTools(
 		Record<PlannerStep, readonly PlannerWrapperTool[]>
 	> = STEP_ALLOWED_TOOLS[state.stage];
 	const stepRules = stageRules[state.step] ?? [];
-	return withAlwaysAllowed(filterDebugToolsForState(stepRules, state));
+	return withAlwaysAllowed([
+		...stepRules,
+		...debugToolsForState(stepRules, state),
+	]);
 }
 
 /**
@@ -547,18 +526,27 @@ function withAlwaysAllowed(
 	);
 }
 
-// Debug tools stay listed in STEP_ALLOWED_TOOLS for execution steps but are
-// hidden unless a debug session is actually open (debugArtifactsDir set), so
-// the model isn't offered debug wrappers it can't yet call.
-function filterDebugToolsForState(
-	tools: readonly PlannerWrapperTool[],
+/**
+ * The debug wrappers a step may use right now.
+ *
+ * They are DERIVED, not listed per step, because they are the second half of one
+ * flow: `planner_report_stuck` unconditionally opens a debug session
+ * (`initializePlannerDebugSession` in `runtime/debug-tools.ts`), and that session
+ * can only be driven — and closed — with these four. Maintaining the two lists by
+ * hand let them drift: `contract_check` allowed the stuck report but not the
+ * wrappers, so a model that reported stuck there opened a session it could not
+ * touch, and `planner_git_commit` stayed blocked by
+ * `assertNoPlannerDebugArtifactsBeforeCommit` while telling it to run a
+ * `planner_debug_cleanup` the step would refuse.
+ *
+ * So the rule is the invariant, and the lists cannot drift again: offer them
+ * exactly when a session is open AND this step could have opened one.
+ */
+function debugToolsForState(
+	stepTools: readonly PlannerWrapperTool[],
 	state: Pick<PlanStateRecord, "debugArtifactsDir">,
 ): readonly PlannerWrapperTool[] {
-	if (state.debugArtifactsDir) {
-		return tools;
-	}
-	return tools.filter(
-		(tool) =>
-			!(DEBUG_WRAPPER_TOOLS as readonly PlannerWrapperTool[]).includes(tool),
-	);
+	if (!state.debugArtifactsDir) return [];
+	if (!stepTools.includes("planner_report_stuck")) return [];
+	return DEBUG_WRAPPER_TOOLS;
 }

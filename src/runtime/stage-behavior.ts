@@ -486,6 +486,15 @@ export const PLANNER_STAGE_BEHAVIOR = {
 			"planner_reason",
 			"planner_git_commit",
 			"planner_report_stuck",
+			// Listed wherever planner_report_stuck is: the stuck report opens a debug
+			// session unconditionally, and without these the step can open one it
+			// cannot drive or close — which also leaves planner_git_commit blocked by
+			// assertNoPlannerDebugArtifactsBeforeCommit. Kept in sync by
+			// runtime/tool-gating-invariant.test.ts.
+			"planner_debug_strategy",
+			"planner_debug_probe",
+			"planner_debug_result",
+			"planner_debug_cleanup",
 			"planner_skill_create",
 			"planner_skill_update",
 			"planner_exec",

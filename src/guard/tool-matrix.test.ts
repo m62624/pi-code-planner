@@ -515,28 +515,17 @@ describe("tools that appear and disappear with run state", () => {
 		for (const tool of DEBUG_TOOLS) expect(after).not.toContain(tool);
 	});
 
-	// `filterDebugToolsForState` only *removes* debug wrappers from a step whose
-	// list already contains them — it never adds one. So "a debug session is open"
-	// is necessary but not sufficient: the step must list them too. These two
-	// expectations pin which steps do, and they do NOT match the steps that allow
-	// planner_report_stuck. contract_check can report stuck (opening a session)
-	// yet cannot call a single planner_debug_* tool, including the cleanup that
-	// closes it. Nothing gates on the leftover session, so this strands the debug
-	// loop rather than deadlocking the run — but it is a gap, not a design.
+	// The debug wrappers are derived, not listed per step: they are offered exactly
+	// when a session is open AND the step could have opened one (it allows
+	// planner_report_stuck). Pinned as an equality over the whole stage so the two
+	// halves of the stuck flow cannot drift apart again — they did once, and
+	// contract_check ended up able to open a session it could not close.
 	const STUCK_STEPS = [
 		"write_tdd_plan",
 		"write_tests",
 		"run_failing_tests",
 		"implement_task",
 		"contract_check",
-		"refactor_task",
-		"run_final_tests",
-	] as const;
-	const DEBUG_CAPABLE_STEPS = [
-		"write_tdd_plan",
-		"write_tests",
-		"run_failing_tests",
-		"implement_task",
 		"refactor_task",
 		"run_final_tests",
 	] as const;
@@ -548,7 +537,7 @@ describe("tools that appear and disappear with run state", () => {
 		expect(actual).toEqual([...STUCK_STEPS]);
 	});
 
-	it("drives the debug loop on exactly these execution steps", () => {
+	it("drives the debug loop on exactly the steps that can report stuck", () => {
 		const withDebug = (step: string) =>
 			getAllowedPlannerWrapperTools({
 				...runningAt("execution", step),
@@ -557,11 +546,28 @@ describe("tools that appear and disappear with run state", () => {
 		const actual = Object.keys(STAGE_STEP_MATRIX.execution).filter((step) =>
 			withDebug(step).includes("planner_debug_probe"),
 		);
-		expect(actual).toEqual([...DEBUG_CAPABLE_STEPS]);
-		// The gap, stated as a fact so it cannot widen unnoticed.
-		expect(STUCK_STEPS.filter((s) => !DEBUG_CAPABLE_STEPS.includes(s))).toEqual(
-			["contract_check"],
-		);
+		expect(actual).toEqual([...STUCK_STEPS]);
+	});
+
+	it("can always close a session it was able to open", () => {
+		// The failure this replaces: report stuck at contract_check, then find
+		// planner_git_commit blocked by the leftover artifacts and planner_debug_cleanup
+		// refused by the step.
+		for (const step of STUCK_STEPS) {
+			const open = getAllowedPlannerWrapperTools({
+				...runningAt("execution", step),
+				debugArtifactsDir: "/w/dbg",
+			} as never);
+			expect(open).toContain("planner_debug_cleanup");
+		}
+	});
+
+	it("offers no debug wrapper on a step that cannot report stuck", () => {
+		const open = getAllowedPlannerWrapperTools({
+			...runningAt("execution", "prepare_task"),
+			debugArtifactsDir: "/w/dbg",
+		} as never);
+		for (const tool of DEBUG_TOOLS) expect(open).not.toContain(tool);
 	});
 
 	it("collapses to recovery tools while broken", () => {
