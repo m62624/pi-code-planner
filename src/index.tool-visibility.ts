@@ -161,25 +161,95 @@ export function resetPlanActiveCache(pi: ExtensionAPI): void {
 	updateToolVisibility(pi);
 }
 
+/**
+ * The active tool list to apply, as a SUBTRACTION from what is already active
+ * rather than a fresh statement of the whole world.
+ *
+ * `setActiveTools` is a global setter with no notion of whose tools are whose:
+ * whoever writes last wins the entire list. We used to rebuild it from
+ * `getAllTools()` on every provider request — and so does at least one other
+ * extension in the same session. Two extensions each declaring the world, on
+ * every request, resurrect each other's hidden tools and change the head of the
+ * prompt between two calls of one turn. The head is where the tool schemas live,
+ * and a prefix cache reuses exactly one thing: bytes it has already read. Change
+ * byte zero and the whole prompt is re-read.
+ *
+ * So we state only our own invariants and leave everyone else's decisions alone:
+ *
+ *   next = (active now  ∪  what we claim)  \  what we hide
+ *
+ * This converges: our claim/hide sets are a pure function of planner state, so
+ * repeating the computation yields the same list — a stable set of tools, which
+ * is a stable head. Order is part of those bytes, so the result is built by
+ * walking the registry, whose order does not move.
+ *
+ * The contract gate is the exception, and deliberately so: it is a SANDBOX, not
+ * a subtraction. While it is up the model must not reach project reads at all,
+ * so the list is exactly the allowlist and other extensions' tools go with it.
+ */
+export function computePlannerActiveTools(input: {
+	allToolNames: readonly string[];
+	activeNow: readonly string[];
+	planActive: boolean;
+	contractGate: boolean;
+	recoveryReportUnlocked: boolean;
+}): string[] {
+	if (input.planActive && input.contractGate) {
+		return input.allToolNames.filter((name) => CONTRACT_GATE_ALLOWED.has(name));
+	}
+
+	const claimed = new Set<string>();
+	const hidden = new Set<string>();
+	if (!input.planActive) {
+		// No plan: none of our tools belong in the prompt.
+		for (const name of plannerNames) hidden.add(name);
+	} else {
+		for (const name of plannerNames) claimed.add(name);
+		if (!input.recoveryReportUnlocked) {
+			claimed.delete(PLANNER_RECOVERY_REPORT_TOOL_NAME);
+			hidden.add(PLANNER_RECOVERY_REPORT_TOOL_NAME);
+		}
+	}
+
+	const active = new Set(input.activeNow);
+	return input.allToolNames.filter(
+		(name) => (active.has(name) || claimed.has(name)) && !hidden.has(name),
+	);
+}
+
+/**
+ * The world as it was before the contract-gate sandbox went up.
+ *
+ * While the sandbox is up the live list IS the sandbox, so "subtract from what is
+ * active" would have almost nothing to subtract from: come out of the gate
+ * reading the live list and every other extension's tools would stay hidden for
+ * good. So the world is remembered on the way in and restored on the way out.
+ */
+let worldBeforeContractGate: string[] | null = null;
+
 /** Update the list of active tools in the Pi extension API. */
 export function updateToolVisibility(pi: ExtensionAPI): void {
-	const allTools = pi.getAllTools();
-	let toolNames: string[];
-	if (!planActiveCache) {
-		toolNames = filterPlannerTools(allTools).map((t) => t.name);
-	} else if (contractGateActive) {
-		toolNames = allTools
-			.map((t) => t.name)
-			.filter((name) => CONTRACT_GATE_ALLOWED.has(name));
-	} else {
-		toolNames = allTools
-			.map((t) => t.name)
-			.filter(
-				(name) =>
-					name !== PLANNER_RECOVERY_REPORT_TOOL_NAME || recoveryReportUnlocked,
-			);
+	const allToolNames = pi.getAllTools().map((tool) => tool.name);
+	const sandboxed = planActiveCache && contractGateActive;
+	if (sandboxed) {
+		worldBeforeContractGate ??= pi.getActiveTools();
 	}
-	pi.setActiveTools(toolNames);
+	const activeNow = sandboxed
+		? []
+		: (worldBeforeContractGate ?? pi.getActiveTools());
+	if (!sandboxed) {
+		worldBeforeContractGate = null;
+	}
+
+	pi.setActiveTools(
+		computePlannerActiveTools({
+			allToolNames,
+			activeNow,
+			planActive: planActiveCache,
+			contractGate: contractGateActive,
+			recoveryReportUnlocked,
+		}),
+	);
 }
 
 function restorePlannerToolVisibilityFromSession(ctx?: ExtensionContext): void {
