@@ -7,16 +7,7 @@ import {
 	VERSION as PI_SDK_VERSION,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import {
-	DEFAULT_LANGUAGE,
-	MS_PER_MINUTE,
-	PLANNER_MAX_FLOOR_RATIO,
-	PLANNER_MAX_OUTPUT_RESERVE_RATIO,
-	PLANNER_MIN_FLOOR_RATIO,
-	PLANNER_MIN_OUTPUT_RESERVE,
-	PLANNER_TOOL_HEADROOM_RATIO,
-	PLANNER_TURN_GROWTH_ALPHA,
-} from "./constants";
+import { DEFAULT_LANGUAGE, MS_PER_MINUTE } from "./constants";
 import { errorMessage, gitErrorMessage } from "./errors";
 import { probeGitAvailability } from "./git/git-availability";
 import { NodeGitRunner } from "./git/node-runner";
@@ -80,13 +71,9 @@ import {
 	isPlannerCompactNothingToCompactError,
 	markPlannerCompactionInFlight,
 	markPlannerControlledCompactStarted,
-	observeTurnGrowth,
 	type PlannerCompactRuntimeState,
-	type PlannerContextBudgetDecision,
-	projectPlannerContextBudget,
 	shouldCancelOverlappingCompaction,
 	shouldClearStaleCompactIndicator,
-	shouldProactivelyCompact,
 } from "./runtime/compact";
 import {
 	type CompactEtaEstimate,
@@ -3386,10 +3373,6 @@ function registerPlannerTools(
 					compactRuntime,
 					toolName,
 					transitionStatus: result.result.status,
-					// compact_before_doubt is a deliberate confidence reset before the
-					// doubt audit, not window relief, so it must run even when context
-					// sits below the token floor.
-					force: result.result.state?.step === "compact_before_doubt",
 				});
 
 				// Ride the reasoning-fuel nudge on the transition tail so the model
@@ -3880,95 +3863,6 @@ function registerPlannerCompactEvents(
 	pi.on("message_update", async (_event, ctx) => {
 		clearStaleCompactIndicator(ctx);
 	});
-
-	// Proactive monitor: at every turn boundary, project the context budget from
-	// the model's real output budget and compact *before* the window fills, so a
-	// mid-execution burst (injected instructions + tool output) cannot squeeze the
-	// generation budget to zero — the "length + output===0" overflow. Runs between
-	// turns like Pi's own reactive check, but ahead of it and with planner-
-	// preserving instructions, so it also covers steps that are not compact steps.
-	pi.on("turn_end", async (_event, ctx) => {
-		if (compactRuntime.compactionInFlight || !isPlanActive()) {
-			return;
-		}
-		// Track this turn's context growth so the budget can pre-empt one typical
-		// turn before the floor (velocity heuristic), then fold that estimate into
-		// the decision. Runs every turn_end — including the ones we do not compact —
-		// so the EWMA stays live.
-		const expectedGrowth = observeTurnGrowth(
-			compactRuntime,
-			ctx.getContextUsage()?.tokens ?? null,
-			PLANNER_TURN_GROWTH_ALPHA,
-		);
-		const decision = evaluatePlannerContextBudget(ctx, 0, expectedGrowth);
-		if (!decision.run) {
-			return;
-		}
-
-		const fs = createNodeFs();
-		let projectPaths: ProjectStoragePaths;
-		try {
-			projectPaths = await resolveProjectStoragePaths({
-				fs,
-				agentDir: getAgentDir(),
-				cwd: ctx.cwd,
-			});
-		} catch {
-			return;
-		}
-
-		const preflight = await runPlannerPreflight({
-			fs,
-			git: gitRunner,
-			projectPaths,
-		});
-		if (preflight.context.status !== "ready") {
-			return;
-		}
-		const state = preflight.context.state;
-		if (
-			!shouldProactivelyCompact({
-				stage: state.stage,
-				run: decision.run,
-				compactionInFlight: compactRuntime.compactionInFlight,
-				requiresCompact: state.requiresCompact,
-				requiresUserDecision: state.requiresUserDecision,
-				broken: state.broken,
-			})
-		) {
-			return;
-		}
-
-		const bundle = await buildPlannerCompactInstructionBundle({
-			fs,
-			projectPaths,
-			preflight,
-			sectionName: "auto-compact",
-		});
-
-		// Close the window between here and `session_before_compact` so a second
-		// turn_end cannot start a duplicate compaction; onError/session_compact
-		// clear it, and session_before_compact re-sets it idempotently.
-		markPlannerControlledCompactStarted(compactRuntime);
-		markPlannerCompactionInFlight(compactRuntime);
-		ctx.compact({
-			customInstructions: bundle.text,
-			onComplete: () => {
-				ctx.ui.notify("Planner proactively compacted context.", "info");
-			},
-			onError: (error) => {
-				clearPlannerControlledCompact(compactRuntime);
-				clearPlannerCompactionInFlight(compactRuntime);
-				ctx.ui.notify(
-					formatPlannerCompactFailure(error),
-					isPlannerCompactNothingToCompactError(error) ||
-						isPlannerCompactConcurrencyError(error)
-						? "info"
-						: "error",
-				);
-			},
-		});
-	});
 }
 
 function registerPlannerIdleWatchdog(
@@ -4177,8 +4071,6 @@ async function maybeStartPlannerControlledCompact(input: {
 	compactRuntime: PlannerCompactRuntimeState;
 	toolName: PlannerWorkflowToolName;
 	transitionStatus: "applied" | "blocked";
-	/** When true, run the compaction even below the token floor (forced reset). */
-	force?: boolean;
 }): Promise<{ text: string; customInstructions: string } | null> {
 	if (
 		input.toolName !== "planner_request_compact" ||
@@ -4187,27 +4079,17 @@ async function maybeStartPlannerControlledCompact(input: {
 		return null;
 	}
 
-	// Decide whether compaction is worth running at all before touching the Pi
-	// compact API. The output-aware budget skips (and resolves the boundary) when
-	// context sits below our floor — which is driven by the model's real output
-	// budget and sits *below* Pi's own auto-compaction floor so we never race it —
-	// and when tokens are unknown (right after a compaction) there is nothing to
-	// compact, so Pi's "Nothing to compact" throw is avoided at the source. A
-	// forced boundary (compact_before_doubt) bypasses the floor but still yields to
-	// the "already in flight" guard and the unknown-tokens case below.
-	const decision = evaluatePlannerContextBudget(input.ctx);
-	if (!input.force && !decision.run) {
-		await resolvePlannerCompactBoundary(input);
-		return {
-			text: formatPlannerCompactSkipped(compactSkipReasonText(decision.reason)),
-			customInstructions: "",
-		};
-	}
+	// No token-budget gate here on purpose. `planner_request_compact` only applies
+	// on a compact step, and the sole compact step left is `compact_before_doubt`,
+	// whose purpose is a deliberate confidence reset — not window relief. Window
+	// management belongs to Pi's own auto-compaction, which sees `reserveTokens`
+	// (an extension cannot read it) and therefore cannot race itself.
 
-	// A compaction is already running (a prior request, or the proactive monitor):
-	// starting a second ctx.compact() would overlap and hit the SDK's shared-
-	// AbortController crash. The running compaction already shrinks the context, so
-	// resolve this boundary without compacting again and let the model continue.
+	// A compaction is already running (Pi's auto-compaction, a manual /compact, or
+	// a prior request): starting a second ctx.compact() would overlap and hit the
+	// SDK's shared-AbortController crash. The running compaction already shrinks
+	// the context, so resolve this boundary without compacting again and let the
+	// model continue.
 	if (isPlannerCompactionInFlight(input.compactRuntime)) {
 		await resolvePlannerCompactBoundary(input);
 		return {
@@ -4251,44 +4133,6 @@ async function maybeStartPlannerControlledCompact(input: {
 		text: "Planner-controlled compact was requested through the Pi compact API. Do not continue until compaction finishes; then call planner_complete_compact followed by planner_status.",
 		customInstructions: bundle.text,
 	};
-}
-
-function compactSkipReasonText(
-	reason: PlannerContextBudgetDecision["reason"],
-): string {
-	switch (reason) {
-		case "below_threshold":
-			return "context below the compaction threshold";
-		default:
-			return "not needed";
-	}
-}
-
-/**
- * Evaluate the planner's output-aware compaction budget from the live session:
- * confirmed context tokens and window from `getContextUsage()`, the model's real
- * generation budget from `ctx.model.maxTokens`, and any instruction block we are
- * about to inject. All knobs are ratios of these live values, so the decision
- * self-adapts across models and context windows.
- */
-function evaluatePlannerContextBudget(
-	ctx: ExtensionContext,
-	pendingInstructionTokens = 0,
-	expectedGrowthTokens = 0,
-): PlannerContextBudgetDecision {
-	const usage = ctx.getContextUsage();
-	return projectPlannerContextBudget({
-		tokens: usage?.tokens ?? null,
-		contextWindow: usage?.contextWindow ?? 0,
-		maxOutputTokens: ctx.model?.maxTokens ?? 0,
-		pendingInstructionTokens,
-		expectedGrowthTokens,
-		toolHeadroomRatio: PLANNER_TOOL_HEADROOM_RATIO,
-		maxOutputReserveRatio: PLANNER_MAX_OUTPUT_RESERVE_RATIO,
-		minOutputReserve: PLANNER_MIN_OUTPUT_RESERVE,
-		minFloorRatio: PLANNER_MIN_FLOOR_RATIO,
-		maxFloorRatio: PLANNER_MAX_FLOOR_RATIO,
-	});
 }
 
 /**

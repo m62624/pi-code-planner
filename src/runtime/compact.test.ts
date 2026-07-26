@@ -1,13 +1,5 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-	PLANNER_MAX_FLOOR_RATIO,
-	PLANNER_MAX_OUTPUT_RESERVE_RATIO,
-	PLANNER_MIN_FLOOR_RATIO,
-	PLANNER_MIN_OUTPUT_RESERVE,
-	PLANNER_TOOL_HEADROOM_RATIO,
-	PLANNER_TURN_GROWTH_ALPHA,
-} from "../constants";
 import { syncInstructionFiles } from "../instructions/manager";
 import { createInstructionPaths } from "../instructions/paths";
 import {
@@ -26,7 +18,6 @@ import {
 	consumePlannerControlledCompact,
 	createPlannerCompactRuntimeState,
 	enqueuePlannerPostCompactMessage,
-	estimatePlannerInstructionTokens,
 	formatPlannerCompactFailure,
 	formatPlannerCompactSkipped,
 	isPlannerCompactConcurrencyError,
@@ -35,13 +26,10 @@ import {
 	isPlannerCompactTimeoutError,
 	markPlannerCompactionInFlight,
 	markPlannerControlledCompactStarted,
-	observeTurnGrowth,
 	PLANNER_COMPACT_MARKER,
 	PLANNER_SYSTEM_INSTRUCTIONS_HEADER,
-	projectPlannerContextBudget,
 	shouldCancelOverlappingCompaction,
 	shouldClearStaleCompactIndicator,
-	shouldProactivelyCompact,
 } from "./compact";
 import type { PlannerPreflightResult } from "./preflight";
 
@@ -361,231 +349,6 @@ describe("planner compact runtime", () => {
 					bannerVisible: false,
 				}),
 			).toBe(false);
-		});
-	});
-
-	describe("estimatePlannerInstructionTokens", () => {
-		it("mirrors Pi's conservative chars/4 heuristic", () => {
-			expect(estimatePlannerInstructionTokens("")).toBe(0);
-			expect(estimatePlannerInstructionTokens("a".repeat(4000))).toBe(1000);
-			expect(estimatePlannerInstructionTokens("abc")).toBe(1);
-		});
-	});
-
-	describe("projectPlannerContextBudget", () => {
-		const knobs = {
-			toolHeadroomRatio: PLANNER_TOOL_HEADROOM_RATIO,
-			maxOutputReserveRatio: PLANNER_MAX_OUTPUT_RESERVE_RATIO,
-			minOutputReserve: PLANNER_MIN_OUTPUT_RESERVE,
-			minFloorRatio: PLANNER_MIN_FLOOR_RATIO,
-			maxFloorRatio: PLANNER_MAX_FLOOR_RATIO,
-		};
-		// 131k window like the user's config; maxOutputTokens=32768 (clamped to
-		// 25% = 32768), toolHeadroom = 131072*0.06 ≈ 7864 → floor ≈ 90440.
-		const base = { ...knobs, contextWindow: 131_072, maxOutputTokens: 32_768 };
-
-		it("reserves the model's real output budget in the floor", () => {
-			const decision = projectPlannerContextBudget({ ...base, tokens: 60_000 });
-			// floor sits well below the window by (outputReserve + toolHeadroom).
-			expect(decision.floor).toBeLessThan(base.contextWindow - 32_768);
-			expect(decision.run).toBe(false);
-			expect(decision.reason).toBe("below_threshold");
-		});
-
-		it("runs once projected tokens cross the floor", () => {
-			const decision = projectPlannerContextBudget({ ...base, tokens: 95_000 });
-			expect(decision.run).toBe(true);
-			expect(decision.reason).toBe("output_budget");
-			expect(decision.headroom).toBeLessThan(0);
-		});
-
-		it("fires earlier than Pi (below Pi's window − reserveTokens floor)", () => {
-			// Pi (reserveTokens 24576) would wait until tokens > 106496. Our floor is
-			// lower, so at 95k we compact while Pi still would not.
-			const piFloor = base.contextWindow - 24_576;
-			expect(
-				projectPlannerContextBudget({ ...base, tokens: 95_000 }).floor,
-			).toBeLessThan(piFloor);
-			expect(95_000).toBeLessThan(piFloor);
-			expect(projectPlannerContextBudget({ ...base, tokens: 95_000 }).run).toBe(
-				true,
-			);
-		});
-
-		it("folds a pending instruction block into the projection", () => {
-			const withoutPending = projectPlannerContextBudget({
-				...base,
-				tokens: 88_000,
-			});
-			const withPending = projectPlannerContextBudget({
-				...base,
-				tokens: 88_000,
-				pendingInstructionTokens: 8_000,
-			});
-			expect(withoutPending.run).toBe(false);
-			expect(withPending.run).toBe(true);
-		});
-
-		it("clamps the floor when the model reports maxTokens ≈ window", () => {
-			const decision = projectPlannerContextBudget({
-				...base,
-				maxOutputTokens: 131_072,
-				tokens: 70_000,
-			});
-			// Output reserve is capped at 25% of the window, and the floor never
-			// drops below MIN_FLOOR_RATIO of the window → no thrashing.
-			expect(decision.floor).toBeGreaterThanOrEqual(
-				base.contextWindow * PLANNER_MIN_FLOOR_RATIO,
-			);
-		});
-
-		it("self-adapts to window size (32k vs 1M give proportional floors)", () => {
-			const tiny = projectPlannerContextBudget({
-				...knobs,
-				contextWindow: 32_768,
-				maxOutputTokens: 4_096,
-				tokens: 0,
-			});
-			const huge = projectPlannerContextBudget({
-				...knobs,
-				contextWindow: 1_000_000,
-				maxOutputTokens: 4_096,
-				tokens: 0,
-			});
-			expect(tiny.floor).toBeLessThan(32_768);
-			expect(huge.floor).toBeGreaterThan(900_000);
-			expect(tiny.floor / 32_768).toBeLessThan(huge.floor / 1_000_000);
-		});
-
-		it("does not run when tokens are unknown (post-compaction)", () => {
-			expect(projectPlannerContextBudget({ ...base, tokens: null }).run).toBe(
-				false,
-			);
-		});
-
-		it("pre-empts one typical turn before the floor (growth margin)", () => {
-			// 88k is under the ≈90.4k floor → no run on its own. But if a typical turn
-			// grows the context by 5k, the next turn would cross it, so compact now.
-			const idle = projectPlannerContextBudget({ ...base, tokens: 88_000 });
-			expect(idle.run).toBe(false);
-			const withGrowth = projectPlannerContextBudget({
-				...base,
-				tokens: 88_000,
-				expectedGrowthTokens: 5_000,
-			});
-			expect(withGrowth.run).toBe(true);
-			expect(withGrowth.reason).toBe("growth_margin");
-			// Still-under-floor: headroom stays positive (we pre-empted, not overran).
-			expect(withGrowth.headroom).toBeGreaterThan(0);
-		});
-
-		it("does not pre-empt when a typical turn stays under the floor", () => {
-			const decision = projectPlannerContextBudget({
-				...base,
-				tokens: 70_000,
-				expectedGrowthTokens: 1_000,
-			});
-			expect(decision.run).toBe(false);
-			expect(decision.reason).toBe("below_threshold");
-		});
-
-		it("prefers output_budget over growth_margin once already over the floor", () => {
-			const decision = projectPlannerContextBudget({
-				...base,
-				tokens: 95_000,
-				expectedGrowthTokens: 5_000,
-			});
-			expect(decision.run).toBe(true);
-			expect(decision.reason).toBe("output_budget");
-		});
-	});
-
-	describe("observeTurnGrowth", () => {
-		it("seeds on the first growth then folds later turns via EWMA", () => {
-			const state = createPlannerCompactRuntimeState();
-			// First observation only baselines (no prior tokens) — no growth yet.
-			expect(observeTurnGrowth(state, 40_000, PLANNER_TURN_GROWTH_ALPHA)).toBe(
-				0,
-			);
-			// First positive delta seeds the EWMA directly (10k).
-			expect(observeTurnGrowth(state, 50_000, PLANNER_TURN_GROWTH_ALPHA)).toBe(
-				10_000,
-			);
-			// Next delta (2k) is blended: 0.3*2000 + 0.7*10000 = 7600.
-			expect(observeTurnGrowth(state, 52_000, PLANNER_TURN_GROWTH_ALPHA)).toBe(
-				7_600,
-			);
-		});
-
-		it("ignores a drop (a compaction reset is not turn growth) and re-baselines", () => {
-			const state = createPlannerCompactRuntimeState();
-			observeTurnGrowth(state, 90_000, PLANNER_TURN_GROWTH_ALPHA);
-			observeTurnGrowth(state, 95_000, PLANNER_TURN_GROWTH_ALPHA); // ewma = 5000
-			// A compaction drops tokens: fold nothing, keep the EWMA, re-baseline.
-			expect(observeTurnGrowth(state, 30_000, PLANNER_TURN_GROWTH_ALPHA)).toBe(
-				5_000,
-			);
-			expect(state.lastContextTokens).toBe(30_000);
-			// Growth measured from the new (compacted) baseline, not the pre-drop peak.
-			expect(observeTurnGrowth(state, 34_000, PLANNER_TURN_GROWTH_ALPHA)).toBe(
-				0.3 * 4_000 + 0.7 * 5_000,
-			);
-		});
-
-		it("is a no-op on unknown tokens", () => {
-			const state = createPlannerCompactRuntimeState();
-			observeTurnGrowth(state, 40_000, PLANNER_TURN_GROWTH_ALPHA);
-			observeTurnGrowth(state, 50_000, PLANNER_TURN_GROWTH_ALPHA);
-			const before = state.turnGrowthEwma;
-			expect(observeTurnGrowth(state, null, PLANNER_TURN_GROWTH_ALPHA)).toBe(
-				before,
-			);
-			// The baseline is untouched, so the next real turn measures from 50k.
-			expect(state.lastContextTokens).toBe(50_000);
-		});
-	});
-
-	describe("shouldProactivelyCompact", () => {
-		const active = {
-			stage: "execution" as const,
-			run: true,
-			compactionInFlight: false,
-			requiresCompact: false,
-			requiresUserDecision: false,
-			broken: false,
-		};
-
-		it("compacts an active execution plan over budget", () => {
-			expect(shouldProactivelyCompact(active)).toBe(true);
-		});
-
-		it("stays quiet when the budget says not to run", () => {
-			expect(shouldProactivelyCompact({ ...active, run: false })).toBe(false);
-		});
-
-		it("never double-compacts while one is in flight", () => {
-			expect(
-				shouldProactivelyCompact({ ...active, compactionInFlight: true }),
-			).toBe(false);
-		});
-
-		it("defers a pending compact boundary to the compact step", () => {
-			expect(
-				shouldProactivelyCompact({ ...active, requiresCompact: true }),
-			).toBe(false);
-		});
-
-		it("does not disturb broken or user-decision states", () => {
-			expect(shouldProactivelyCompact({ ...active, broken: true })).toBe(false);
-			expect(
-				shouldProactivelyCompact({ ...active, requiresUserDecision: true }),
-			).toBe(false);
-		});
-
-		it("skips stages without meaningful context (init/intake/done)", () => {
-			for (const stage of ["init", "intake", "done", "recovery"] as const) {
-				expect(shouldProactivelyCompact({ ...active, stage })).toBe(false);
-			}
 		});
 	});
 });
