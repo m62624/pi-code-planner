@@ -27,6 +27,7 @@ import {
 	isPlanActive,
 	markPlannerToolVisibilityActive,
 	persistPlannerToolVisibilityActiveToSession,
+	plannerLastSetToolNames,
 	registerPlannerToolVisibility,
 	resetPlanActiveCache,
 	setContractGateActive,
@@ -158,6 +159,7 @@ import {
 	PLANNER_PLAN_TOOL_NAMES,
 	type PlannerPlanToolName,
 } from "./runtime/plan-tools";
+import { formatHeadChurnWarning, PrefixWatch } from "./runtime/prefix-watch";
 import { runPlannerPreflight } from "./runtime/preflight";
 import {
 	executePlannerQuestionTool,
@@ -1426,6 +1428,45 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 	registerPlannerSkillResources(pi);
 	registerInstructionDefaultsSync(pi);
 	registerPlannerToolVisibility(pi);
+	registerPlannerPrefixWatch(pi);
+}
+
+/**
+ * Watch the head of every provider request and name it when something rewrites it
+ * mid-run.
+ *
+ * The tool schemas sit at the front of the prompt, and a prefix cache reuses one
+ * thing: bytes it has already read. Between runs a changed head is expected; a
+ * head rewritten between two calls of ONE run means the backend threw away
+ * everything it had read for nothing. This is measurement first — narrowing the
+ * active tool list per stage is a deliberate head change, and deciding that
+ * without numbers is how the previous context mechanism here was built and then
+ * had to be removed.
+ *
+ * Local only: `ctx.ui.notify`, nothing is ever sent anywhere. One notice per run,
+ * so an alarm firing on every call cannot drown the session it is reporting on.
+ */
+/** One watcher per extension load; a reload starts a fresh history. */
+const plannerPrefixWatch = new PrefixWatch();
+
+function registerPlannerPrefixWatch(pi: ExtensionAPI): void {
+	let notifiedThisRun = false;
+	pi.on("agent_start", async () => {
+		plannerPrefixWatch.runStarted();
+		notifiedThisRun = false;
+	});
+	pi.on("before_provider_request", async (event, ctx) => {
+		const churn = plannerPrefixWatch.record(
+			event.payload,
+			plannerLastSetToolNames(),
+		);
+		// Only a mid-run change we did not make is a defect: our own deliberate
+		// moves are a cost chosen with open eyes, and an alarm that cannot
+		// recognise its owner's footsteps is one nobody keeps armed.
+		if (!churn?.midRun || !churn.foreign || notifiedThisRun) return;
+		notifiedThisRun = true;
+		ctx.ui.notify(formatHeadChurnWarning(churn), "warning");
+	});
 }
 
 type RegisterToolFn = ExtensionAPI["registerTool"];

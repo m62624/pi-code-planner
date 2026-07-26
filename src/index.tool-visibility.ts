@@ -227,6 +227,22 @@ export function computePlannerActiveTools(input: {
  */
 let worldBeforeContractGate: string[] | null = null;
 
+/**
+ * The exact list we last wrote, or `null` before the first refresh — our own
+ * footprint on a global setter.
+ *
+ * `setActiveTools` has no notion of whose tools are whose, so a tool list
+ * arriving at the provider is not self-evidently ours: another extension may have
+ * written after us. Only the writer can answer "is this what WE decided?", and
+ * `runtime/prefix-watch.ts` needs the answer to tell a head we rewrote from a
+ * head somebody else did.
+ */
+let lastSetToolNames: string[] | null = null;
+
+export function plannerLastSetToolNames(): readonly string[] | null {
+	return lastSetToolNames;
+}
+
 /** Update the list of active tools in the Pi extension API. */
 export function updateToolVisibility(pi: ExtensionAPI): void {
 	const allToolNames = pi.getAllTools().map((tool) => tool.name);
@@ -241,15 +257,15 @@ export function updateToolVisibility(pi: ExtensionAPI): void {
 		worldBeforeContractGate = null;
 	}
 
-	pi.setActiveTools(
-		computePlannerActiveTools({
-			allToolNames,
-			activeNow,
-			planActive: planActiveCache,
-			contractGate: contractGateActive,
-			recoveryReportUnlocked,
-		}),
-	);
+	const next = computePlannerActiveTools({
+		allToolNames,
+		activeNow,
+		planActive: planActiveCache,
+		contractGate: contractGateActive,
+		recoveryReportUnlocked,
+	});
+	lastSetToolNames = next;
+	pi.setActiveTools(next);
 }
 
 function restorePlannerToolVisibilityFromSession(ctx?: ExtensionContext): void {
