@@ -76,9 +76,15 @@ export function evaluatePlannerIdleWake(input: {
 	};
 }
 
-// A pending compact boundary with no compaction in flight, at a normal (not
-// broken / user-decision) position — the exact shape a failed or hung
-// compaction leaves behind.
+// A pending compact boundary with no compaction in flight, at a normal position —
+// the exact shape a failed or hung compaction leaves behind.
+//
+// The rescue bypasses the whole idle gate, so every reason that gate would have
+// refused for has to be restated here or it is silently lost. It used to name
+// only `broken` and `requiresUserDecision`, which left out the rest of "the next
+// move is the user's" — the done stage, goal approval, unanswered questions. A
+// boundary that happened to be pending at one of those would have woken the
+// model while the user was the one expected to act.
 function isStuckCompactBoundary(
 	state: PlanStateRecord,
 	compactionInFlight: boolean,
@@ -87,7 +93,7 @@ function isStuckCompactBoundary(
 		state.requiresCompact &&
 		!compactionInFlight &&
 		!state.broken &&
-		!state.requiresUserDecision
+		!isPlannerWaitingOnUser(state)
 	);
 }
 

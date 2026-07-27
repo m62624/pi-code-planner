@@ -110,6 +110,93 @@ describe("workflowToolTransition", () => {
 		expect(result.text).toContain("Call planner_status");
 	});
 
+	describe("the compact boundary while a compaction runs", () => {
+		// finalize/compact_before_doubt with the boundary pending — the exact shape
+		// planner_request_compact leaves behind.
+		async function pendingCompactBoundary() {
+			const fs = new MockPlannerFs();
+			const git = new MockGitRunner();
+			const projectPaths = createProjectStoragePaths({
+				agentDir: "/agent",
+				projectRoot: "/repo/app",
+			});
+			const planPaths = createPlanStoragePaths(projectPaths, "plan-a");
+			const worktreePath = "/repo/app/.pi/pi-code-planner/worktrees/plan-a";
+			await ensureProjectRecord(fs, projectPaths);
+			await initializePlanFiles(
+				fs,
+				planPaths,
+				createPlanRecord({ planId: "plan-a", title: "Plan A" }),
+			);
+			await fs.mkdirp(worktreePath);
+			await initializePlanState(fs, planPaths, {
+				...createInitialPlanState({
+					baseBranch: "main",
+					planBranch: "plan/plan-a",
+					worktreePath,
+				}),
+				stage: "finalize",
+				step: "compact_before_doubt",
+				stepStatus: "blocked",
+				requiresCompact: true,
+				blockedReason: "Planner compact boundary is required.",
+				currentBranch: "plan/plan-a",
+			});
+			await setActivePlan(fs, projectPaths, "plan-a");
+			return { fs, git, projectPaths };
+		}
+
+		it("refuses to clear the boundary while the compaction is still running", async () => {
+			// One measured session cleared it at once and then walked the whole of
+			// finalize on the context the boundary exists to drop.
+			const { fs, git, projectPaths } = await pendingCompactBoundary();
+
+			const result = await executePlannerWorkflowTool({
+				fs,
+				git,
+				projectPaths,
+				toolName: "planner_complete_compact",
+				params: {},
+				compactionInFlight: true,
+			});
+
+			expect(result.result.status).toBe("blocked");
+			expect(result.text).toContain("still running");
+		});
+
+		it("clears the boundary once the compaction has finished", async () => {
+			const { fs, git, projectPaths } = await pendingCompactBoundary();
+
+			const result = await executePlannerWorkflowTool({
+				fs,
+				git,
+				projectPaths,
+				toolName: "planner_complete_compact",
+				params: {},
+				compactionInFlight: false,
+			});
+
+			expect(result.result.status).toBe("applied");
+		});
+
+		it("lets a caller that omits the flag resolve the boundary anyway", async () => {
+			// The planner's own recovery paths run precisely when a compaction is in
+			// flight or has just failed, and must be able to release the boundary
+			// rather than leave the session frozen on it.
+			const { fs, git, projectPaths } = await pendingCompactBoundary();
+
+			const result = await executePlannerWorkflowTool({
+				fs,
+				git,
+				projectPaths,
+				toolName: "planner_complete_compact",
+				params: {},
+			});
+
+			expect(result.result.status).toBe("applied");
+		});
+	});
+
 	it("blocks discovery finish until discovered contracts are routed and read", async () => {
 		const fs = new MockPlannerFs();
 		const git = new MockGitRunner();
