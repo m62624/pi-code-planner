@@ -67,8 +67,18 @@ export type PlannerWorkflowToolName =
 
 type PlannerTargetPosition = { stage: PlannerStage; step: PlannerStep };
 
-export type PlannerWorkflowToolExecutionInput =
-	PlannerToolExecutionInput<PlannerWorkflowToolName>;
+export interface PlannerWorkflowToolExecutionInput
+	extends PlannerToolExecutionInput<PlannerWorkflowToolName> {
+	/**
+	 * True while a compaction this extension asked for is between the request and
+	 * its completion. Passed in rather than read from anywhere, because whether a
+	 * compaction is running is runtime knowledge that lives in the extension host,
+	 * and because the planner's own recovery paths must be able to resolve a
+	 * boundary precisely when one *is* in flight — they call this without the flag
+	 * and say so on purpose.
+	 */
+	compactionInFlight?: boolean;
+}
 
 export interface PlannerWorkflowToolExecutionResult {
 	text: string;
@@ -136,6 +146,7 @@ export async function executePlannerWorkflowTool(
 		...input,
 		orchestrator,
 		transition,
+		compactionInFlight: input.compactionInFlight === true,
 	});
 	if (exitBlock) {
 		const state =
@@ -373,7 +384,21 @@ async function validateWorkflowExit(input: {
 	git: GitRunner;
 	orchestrator: Awaited<ReturnType<typeof runPlannerOrchestrator>>;
 	transition: PlannerStateTransition;
+	compactionInFlight?: boolean;
 }): Promise<string | null> {
+	// The compact boundary has to hold, or it means nothing. Nothing used to
+	// check that the compaction the model asked for had actually happened: the
+	// tool result asked it to wait, and one measured session shows it did not —
+	// it cleared the boundary at once and walked the whole of finalize (doubt
+	// review, verification, final summary) while summarization was still running.
+	// compact_before_doubt exists so the audit reads persisted artifacts instead
+	// of live confidence; run that way it achieves the exact opposite.
+	if (
+		input.transition.type === "complete_compact" &&
+		input.compactionInFlight
+	) {
+		return "The compaction you requested is still running. Wait for it to finish — the boundary cannot be cleared while the context it exists to drop is still in the conversation. When it completes you will be told to call planner_status; call planner_complete_compact after that.";
+	}
 	if (
 		input.transition.type !== "finish_step" ||
 		input.orchestrator.preflight.context.status !== "ready"

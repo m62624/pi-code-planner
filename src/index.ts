@@ -3414,6 +3414,11 @@ function registerPlannerTools(
 					projectPaths,
 					toolName,
 					params,
+					// The model may not clear a compact boundary while the compaction
+					// it asked for is still running. The planner's own resolve paths
+					// omit this deliberately — they run when the boundary must be
+					// released without compacting.
+					compactionInFlight: isPlannerCompactionInFlight(compactRuntime),
 				});
 				const compact = await maybeStartPlannerControlledCompact({
 					pi,
