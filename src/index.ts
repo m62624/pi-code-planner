@@ -551,6 +551,16 @@ const CONTRACT_CHECK_TOOL_PARAMETERS = {
 			description:
 				"Nearest meaningful AGENTS.md path when action is upsert_existing or create_new.",
 		},
+		coverageCursor: {
+			type: "number",
+			description:
+				"First directory of the coverage listing to show, 0-based. The result names the next cursor when more remain. Re-send the same fields; paging does not record a second check.",
+		},
+		coveragePath: {
+			type: "string",
+			description:
+				"Show only one place in the coverage listing: a directory, or a file (the directory holding it is shown). Use instead of paging when only one domain matters.",
+		},
 	},
 	required: [
 		"action",

@@ -464,7 +464,7 @@ async function contractRead(
 	);
 }
 
-interface DirectoryCoverageEntry {
+export interface DirectoryCoverageEntry {
 	dir: string;
 	files: string[];
 	agentsMdPath: string | null;
@@ -542,33 +542,183 @@ export async function buildDirCoverageMap(input: {
 	return entries;
 }
 
-function formatCoverageMap(
-	entries: DirectoryCoverageEntry[],
-	root: string,
-): string[] {
-	if (entries.length === 0) return ["No committed files detected in HEAD."];
-	const lines: string[] = ["Touched directories (from git HEAD commit):"];
-	for (const entry of entries) {
-		const relDir = relative(root, entry.dir) || ".";
-		const badge =
-			entry.agentsMdLevel === "exact"
-				? "[AGENTS.md ✓]"
-				: entry.agentsMdLevel === "parent"
-					? `[AGENTS.md at parent: ${relative(root, dirname(entry.agentsMdPath ?? ""))}]`
-					: "[NO AGENTS.md]";
-		lines.push(`  ${relDir}/ ${badge}`);
-		for (const f of entry.files) {
-			lines.push(`    - ${relative(root, f)}`);
-		}
-		const rule =
-			entry.agentsMdLevel === "exact"
-				? "→ default: upsert_existing (prove no_update if nothing durable changed)"
-				: entry.agentsMdLevel === "parent"
-					? "→ default: upsert_existing or create_new at this dir (prove no_update if subdomain is trivial)"
-					: "→ default: create_new (prove no_update if change is fully self-contained)";
-		lines.push(`    ${rule}`);
+/**
+ * How much of the coverage map one tool result may carry.
+ *
+ * The listing is unbounded by nature — it is one line per file in the HEAD
+ * commit — and a repository that committed its build output turns that into a
+ * single tool result larger than everything else the model reads. One measured
+ * session: 8 calls, 215 211 characters, 31.5% of all tool output, the worst of
+ * them 79 802 characters (39 directories, 580 files, nearly all of them
+ * `target/`). A result of that size cannot be re-read, cannot be summarized
+ * away, and dominates the next compaction's cut point.
+ *
+ * So the map is paged instead of truncated silently: the model is told what it
+ * is not seeing and given the exact call that shows it. Paging is the model's
+ * decision — a listing this large is usually noise, and the one directory it
+ * actually needs is reachable directly through `coveragePath`.
+ */
+const COVERAGE_PAGE_DIRS = 8;
+const COVERAGE_DIR_FILES = 10;
+/** A single selected directory earns a larger budget, but not an unbounded one. */
+const COVERAGE_SELECTED_DIR_FILES = 200;
+
+export interface CoverageMapPage {
+	/** Index of the first directory listed, 0-based. */
+	cursor: number;
+	/** Cursor for the next page, or null when the listing ends here. */
+	nextCursor: number | null;
+	/** Directories listed in this page. */
+	shown: number;
+	/** Directories in the whole map. */
+	total: number;
+	/** The directory the caller selected, relative to root, or null. */
+	selected: string | null;
+}
+
+export interface CoverageMapView {
+	lines: string[];
+	page: CoverageMapPage;
+}
+
+function coverageBadge(entry: DirectoryCoverageEntry, root: string): string {
+	if (entry.agentsMdLevel === "exact") return "[AGENTS.md ✓]";
+	if (entry.agentsMdLevel === "parent") {
+		const parent = relative(root, dirname(entry.agentsMdPath ?? "")) || ".";
+		return `[AGENTS.md at parent: ${parent}]`;
 	}
-	return lines;
+	return "[NO AGENTS.md]";
+}
+
+function coverageRule(entry: DirectoryCoverageEntry): string {
+	if (entry.agentsMdLevel === "exact") {
+		return "→ default: upsert_existing (prove no_update if nothing durable changed)";
+	}
+	if (entry.agentsMdLevel === "parent") {
+		return "→ default: upsert_existing or create_new at this dir (prove no_update if subdomain is trivial)";
+	}
+	return "→ default: create_new (prove no_update if change is fully self-contained)";
+}
+
+/**
+ * Find the entry a caller's `coveragePath` points at. A directory selects
+ * itself; a file selects the directory holding it, because that is the unit the
+ * map is keyed by and the unit an AGENTS.md covers. Absolute and root-relative
+ * paths both work — the model has seen both shapes in earlier results.
+ */
+function selectCoverageEntry(
+	entries: readonly DirectoryCoverageEntry[],
+	root: string,
+	path: string,
+): DirectoryCoverageEntry | null {
+	const absolute = isAbsolute(path) ? normalize(path) : join(root, path);
+	const trimmed = absolute.replace(/[/\\]+$/, "");
+	const byDir = entries.find(
+		(entry) => entry.dir.replace(/[/\\]+$/, "") === trimmed,
+	);
+	if (byDir) return byDir;
+	return (
+		entries.find((entry) => entry.files.some((file) => file === trimmed)) ??
+		null
+	);
+}
+
+/**
+ * The coverage map as one page of lines plus the cursor that reaches the rest.
+ *
+ * Pure: it takes the whole map and returns the slice, so the paging rules are
+ * testable without git, a filesystem, or a plan.
+ */
+export function formatCoverageMapPage(input: {
+	entries: readonly DirectoryCoverageEntry[];
+	root: string;
+	cursor?: number;
+	selectPath?: string | null;
+}): CoverageMapView {
+	const { entries, root } = input;
+	const total = entries.length;
+	if (total === 0) {
+		return {
+			lines: ["No committed files detected in HEAD."],
+			page: { cursor: 0, nextCursor: null, shown: 0, total: 0, selected: null },
+		};
+	}
+
+	const totalFiles = entries.reduce(
+		(sum, entry) => sum + entry.files.length,
+		0,
+	);
+	const selected = input.selectPath
+		? selectCoverageEntry(entries, root, input.selectPath)
+		: null;
+	const missSelection = Boolean(input.selectPath) && selected === null;
+
+	const cursor = missSelection ? 0 : Math.min(input.cursor ?? 0, total);
+	const page = selected
+		? [selected]
+		: entries.slice(cursor, cursor + COVERAGE_PAGE_DIRS);
+	const nextCursor =
+		selected || cursor + page.length >= total ? null : cursor + page.length;
+	const fileBudget = selected
+		? COVERAGE_SELECTED_DIR_FILES
+		: COVERAGE_DIR_FILES;
+
+	const lines: string[] = [];
+	if (missSelection) {
+		lines.push(
+			`No touched directory matches coveragePath "${input.selectPath}" — showing the first page instead.`,
+		);
+	}
+	lines.push(
+		`Touched directories (from git HEAD commit): ${total} directories, ${totalFiles} files.`,
+	);
+	lines.push(
+		selected
+			? `Showing the directory selected by coveragePath.`
+			: `Showing directories ${cursor + 1}-${cursor + page.length} of ${total}.`,
+	);
+
+	for (const entry of page) {
+		const relDir = relative(root, entry.dir) || ".";
+		lines.push(`  ${relDir}/ ${coverageBadge(entry, root)}`);
+		for (const file of entry.files.slice(0, fileBudget)) {
+			lines.push(`    - ${relative(root, file)}`);
+		}
+		const hidden = entry.files.length - fileBudget;
+		if (hidden > 0) {
+			lines.push(
+				`    … ${hidden} more files here — pass coveragePath "${relDir}/" to list this directory alone.`,
+			);
+		}
+		lines.push(`    ${coverageRule(entry)}`);
+	}
+
+	if (nextCursor !== null) {
+		lines.push("");
+		lines.push(
+			`${total - (cursor + page.length)} more directories are not shown. This listing is paged so one commit cannot fill the context.`,
+		);
+		lines.push(
+			`- Next page: call planner_contract_check again with the same fields plus coverageCursor: ${nextCursor}.`,
+		);
+		lines.push(
+			`- One place instead: pass coveragePath with a directory ("src/") or a file ("src/main.rs" — the directory holding it is shown).`,
+		);
+		lines.push(
+			"- Paging does not record a second check: the recorded action is the one already stored.",
+		);
+	}
+
+	return {
+		lines,
+		page: {
+			cursor,
+			nextCursor,
+			shown: page.length,
+			total,
+			selected: selected ? relative(root, selected.dir) || "." : null,
+		},
+	};
 }
 
 async function contractCheck(input: {
@@ -599,6 +749,22 @@ async function contractCheck(input: {
 	const domainImpact = requiredString(params, "domainImpact");
 	const evidence = stringArray(params.evidence, "evidence", true);
 	const recommendedPath = optionalString(params.recommendedPath);
+	const coverageCursor = positiveIntegerOrUndefined(
+		params.coverageCursor,
+		"coverageCursor",
+	);
+	const coveragePath = optionalString(params.coveragePath);
+	// A page turn re-sends the same fields, because the guard requires them and
+	// the model already holds them. That makes it indistinguishable from a real
+	// second check except by what is already stored, so the stored check decides:
+	// identical task, action and summary means this call is a page of the check
+	// that was already recorded, and appending it to tdd.md again would write the
+	// same evidence twice under the same heading.
+	const alreadyRecorded =
+		state.contracts.lastCheck !== null &&
+		state.contracts.lastCheck.taskId === taskId &&
+		state.contracts.lastCheck.action === action &&
+		state.contracts.lastCheck.summary === outcomeSummary;
 	const initialContractReason = initialWritableContractRequired({
 		state,
 		action,
@@ -631,17 +797,19 @@ async function contractCheck(input: {
 					reason: outcomeSummary,
 					taskId,
 				};
-	await appendContractCheckToTask({
-		fs: input.fs,
-		planPaths,
-		taskId,
-		action,
-		outcomeSummary,
-		domainImpact,
-		changedFiles,
-		evidence,
-		recommendedPath: pendingUpsert?.path ?? null,
-	});
+	if (!alreadyRecorded) {
+		await appendContractCheckToTask({
+			fs: input.fs,
+			planPaths,
+			taskId,
+			action,
+			outcomeSummary,
+			domainImpact,
+			changedFiles,
+			evidence,
+			recommendedPath: pendingUpsert?.path ?? null,
+		});
+	}
 	const root = requireWorktreePath(
 		state,
 		"Planner contract tools require state.worktreePath.",
@@ -667,21 +835,28 @@ async function contractCheck(input: {
 			},
 		},
 	}));
-	const coverageLines = formatCoverageMap(coverageEntries, root);
+	const coverage = formatCoverageMapPage({
+		entries: coverageEntries,
+		root,
+		cursor: coverageCursor,
+		selectPath: coveragePath,
+	});
 	return applied(
 		input.toolName,
 		[
-			`Planner contract check recorded for task: ${taskId ?? "(none)"}.`,
+			alreadyRecorded
+				? `Planner contract check already recorded for task: ${taskId ?? "(none)"} — this call only pages the coverage map.`
+				: `Planner contract check recorded for task: ${taskId ?? "(none)"}.`,
 			`Action: ${action}`,
 			pendingUpsert
 				? `Contract update required: call planner_contract_upsert for ${pendingUpsert.path}.`
 				: "No contract update is required for this task.",
 			"",
-			...coverageLines,
+			...coverage.lines,
 			"",
 			"Call planner_status before choosing the next planner action.",
 		].join("\n"),
-		{ taskId, action, pendingUpsert, coverageEntries },
+		{ taskId, action, pendingUpsert, coverage: coverage.page },
 	);
 }
 
@@ -2145,7 +2320,7 @@ function positiveIntegerOrUndefined(
 	key: string,
 ): number | undefined {
 	if (value === undefined) return undefined;
-	const minimum = key === "cursor" ? 0 : 1;
+	const minimum = key.toLowerCase().endsWith("cursor") ? 0 : 1;
 	if (
 		typeof value !== "number" ||
 		!Number.isInteger(value) ||

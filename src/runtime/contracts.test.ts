@@ -25,7 +25,9 @@ import { initializePlanState } from "../storage/state-store";
 import { MockPlannerFs } from "../test/mock-fs";
 import {
 	buildDirCoverageMap,
+	type DirectoryCoverageEntry,
 	executePlannerContractTool,
+	formatCoverageMapPage,
 	formatPlannerContractBlock,
 	formatPlannerContractsStatus,
 	initialWritableContractRequired,
@@ -95,6 +97,117 @@ describe("buildDirCoverageMap gitignore filtering", () => {
 		const dirs = entries.map((e) => e.dir);
 		expect(dirs).toContain(join(root, "src"));
 		expect(dirs).toContain(join(root, "target/debug"));
+	});
+});
+
+describe("coverage map paging", () => {
+	const root = "/repo/app";
+	const entry = (
+		dir: string,
+		fileCount: number,
+		level: DirectoryCoverageEntry["agentsMdLevel"] = "none",
+	): DirectoryCoverageEntry => ({
+		dir: join(root, dir),
+		files: Array.from({ length: fileCount }, (_, i) =>
+			join(root, dir, `f${i}.rs`),
+		),
+		agentsMdPath: level === "none" ? null : join(root, dir, "AGENTS.md"),
+		agentsMdLevel: level,
+	});
+	const many = (count: number) =>
+		Array.from({ length: count }, (_, i) => entry(`d${i}`, 1));
+
+	it("says so when the commit touched nothing", () => {
+		const view = formatCoverageMapPage({ entries: [], root });
+		expect(view.lines).toEqual(["No committed files detected in HEAD."]);
+		expect(view.page.nextCursor).toBeNull();
+	});
+
+	it("shows everything and offers no next page when the map is small", () => {
+		const view = formatCoverageMapPage({ entries: many(3), root });
+		expect(view.page).toMatchObject({ shown: 3, total: 3, nextCursor: null });
+		expect(view.lines.join("\n")).not.toContain("coverageCursor");
+	});
+
+	it("caps a large map and names the cursor that continues it", () => {
+		const view = formatCoverageMapPage({ entries: many(39), root });
+		expect(view.page).toMatchObject({ cursor: 0, shown: 8, nextCursor: 8 });
+		const text = view.lines.join("\n");
+		expect(text).toContain("39 directories, 39 files");
+		expect(text).toContain("Showing directories 1-8 of 39");
+		expect(text).toContain("coverageCursor: 8");
+		expect(text).toContain("31 more directories are not shown");
+	});
+
+	it("keeps the whole listing far below one uncapped result", () => {
+		// The defect this exists for: a committed build directory produced a single
+		// 79 802-character result. Same shape, paged.
+		const huge = Array.from({ length: 39 }, (_, i) => entry(`d${i}`, 15));
+		const uncapped = huge.reduce((sum, e) => sum + e.files.length, 0);
+		const view = formatCoverageMapPage({ entries: huge, root });
+		expect(uncapped).toBe(585);
+		expect(view.lines.join("\n").length).toBeLessThan(4000);
+	});
+
+	it("continues from a cursor and ends without offering another page", () => {
+		const view = formatCoverageMapPage({ entries: many(10), root, cursor: 8 });
+		expect(view.page).toMatchObject({ cursor: 8, shown: 2, nextCursor: null });
+		expect(view.lines.join("\n")).toContain("Showing directories 9-10 of 10");
+	});
+
+	it("truncates the files inside one directory and says how to see them", () => {
+		const view = formatCoverageMapPage({ entries: [entry("src", 25)], root });
+		const text = view.lines.join("\n");
+		expect(text).toContain("… 15 more files here");
+		expect(text).toContain('coveragePath "src/"');
+	});
+
+	it("selects a single directory by path", () => {
+		const entries = [...many(20), entry("src", 25, "exact")];
+		const view = formatCoverageMapPage({
+			entries,
+			root,
+			selectPath: "src",
+		});
+		expect(view.page).toMatchObject({
+			shown: 1,
+			selected: "src",
+			nextCursor: null,
+		});
+		const text = view.lines.join("\n");
+		expect(text).toContain("[AGENTS.md ✓]");
+		// The selected directory earns the larger budget, so nothing is hidden.
+		expect(text).not.toContain("more files here");
+	});
+
+	it("selects the directory holding a named file", () => {
+		const entries = [...many(20), entry("src", 3)];
+		const view = formatCoverageMapPage({
+			entries,
+			root,
+			selectPath: "src/f1.rs",
+		});
+		expect(view.page.selected).toBe("src");
+	});
+
+	it("accepts an absolute path as well as a root-relative one", () => {
+		const entries = [...many(20), entry("src", 3)];
+		const view = formatCoverageMapPage({
+			entries,
+			root,
+			selectPath: join(root, "src"),
+		});
+		expect(view.page.selected).toBe("src");
+	});
+
+	it("falls back to the first page when the path matches nothing", () => {
+		const view = formatCoverageMapPage({
+			entries: many(39),
+			root,
+			selectPath: "nowhere/",
+		});
+		expect(view.page).toMatchObject({ selected: null, cursor: 0, shown: 8 });
+		expect(view.lines[0]).toContain("No touched directory matches");
 	});
 });
 
