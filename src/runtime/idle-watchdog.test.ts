@@ -220,6 +220,26 @@ describe("planner idle watchdog", () => {
 		).toMatchObject({ action: "disabled" });
 	});
 
+	it("does not rescue a pending compact where the next move is the user's", () => {
+		// The rescue bypasses the whole idle gate, so it has to restate every reason
+		// that gate would have refused for. `done` sets no requiresUserDecision flag
+		// — it has to be recognised through isPlannerWaitingOnUser, or a boundary
+		// left pending here would wake the model while the user is the one to act.
+		for (const position of [
+			{ stage: "done" as const, step: "await_user_acceptance" as const },
+			{ stage: "intake" as const, step: "await_goal_approval" as const },
+		]) {
+			expect(
+				evaluatePlannerIdleWake({
+					state: { ...stuckCompact(), ...position },
+					settings,
+					now: 601_000,
+					compactionInFlight: false,
+				}),
+			).toMatchObject({ action: "disabled" });
+		}
+	});
+
 	it("waits for the timeout before rescuing a stuck compact", () => {
 		expect(
 			evaluatePlannerIdleWake({
