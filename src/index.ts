@@ -59,6 +59,7 @@ import {
 import {
 	buildPlannerCompactInstructionBundle,
 	buildPlannerPostCompactMessage,
+	choosePlannerMessageDelivery,
 	clearPlannerCompactionInFlight,
 	clearPlannerControlledCompact,
 	collectAutoCompactInstructionSections,
@@ -1414,6 +1415,18 @@ interface PlannerIdleRuntimeState {
 	latestCwd: string | null;
 	checking: boolean;
 	timer: ReturnType<typeof setInterval> | null;
+	/**
+	 * Whether the agent is running, read from the most recent event context.
+	 *
+	 * The watchdog ticks on a timer and has no context of its own, but it must
+	 * know: a wake sent as a follow-up while nothing is running is never
+	 * delivered, it just sits in the input queue. Refreshed wherever `latestCwd`
+	 * is, so it is exactly as current as the cwd the tick already relies on, and
+	 * null before the first event — which the caller reads as "assume running",
+	 * the safe direction, since a follow-up sent too early is delivered late
+	 * rather than lost.
+	 */
+	isIdle: (() => boolean) | null;
 }
 
 export default function piCodePlannerExtension(pi: ExtensionAPI): void {
@@ -1422,6 +1435,7 @@ export default function piCodePlannerExtension(pi: ExtensionAPI): void {
 		latestCwd: null,
 		checking: false,
 		timer: null,
+		isIdle: null,
 	};
 	const timerRuntime = createPlannerTimerRuntimeState();
 	installPlannerToolErrorBoundary(pi);
@@ -3882,13 +3896,21 @@ function registerPlannerCompactEvents(
 			preflight,
 		});
 		const message = buildPlannerPostCompactMessage({ preflight, sections });
-		enqueuePlannerPostCompactMessage({
-			message,
-			isIdle: ctx.isIdle(),
-			hasPendingMessages: ctx.hasPendingMessages(),
-			sendUserMessage: (content, options) =>
-				pi.sendUserMessage(content, options as never),
-		});
+		// Deliver on the next macrotask, not from inside this handler. `compact()`
+		// disconnects the session from agent events for its whole duration and
+		// reconnects in a `finally` that has not run yet when `session_compact` is
+		// emitted — a turn started here would run against a session that is not
+		// listening, which is how four minutes of real work went missing from a
+		// measured session file. The same deferral `ctx.compact()` itself uses.
+		// Idle is re-read at that point because it is only then that it matters.
+		setTimeout(() => {
+			enqueuePlannerPostCompactMessage({
+				message,
+				isIdle: ctx.isIdle(),
+				sendUserMessage: (content, options) =>
+					pi.sendUserMessage(content, options as never),
+			});
+		}, 0);
 	});
 
 	// The agent resuming work is our only extension-visible signal that a
@@ -3928,9 +3950,11 @@ function registerPlannerIdleWatchdog(
 ): void {
 	pi.on("session_start", async (_event, ctx) => {
 		runtime.latestCwd = ctx.cwd;
+		runtime.isIdle = () => ctx.isIdle();
 	});
 	pi.on("tool_call", async (_event, ctx) => {
 		runtime.latestCwd = ctx.cwd;
+		runtime.isIdle = () => ctx.isIdle();
 	});
 
 	if (runtime.timer) {
@@ -3982,7 +4006,21 @@ async function runPlannerIdleWatchdogTick(
 			markPlannerIdleWakeQueued(state, decision.timestamp),
 		);
 		try {
-			pi.sendUserMessage(decision.message, FOLLOW_UP_MESSAGE_OPTIONS as never);
+			// A wake exists to reach a model that stopped, so it is normally sent
+			// into an idle session — and a follow-up queued with nothing running is
+			// never delivered. Unknown idleness (no event seen yet) is treated as
+			// running: a follow-up that arrives late still arrives.
+			const delivery = choosePlannerMessageDelivery({
+				isIdle: runtime.isIdle?.() === true,
+			});
+			if (delivery === "turn") {
+				pi.sendUserMessage(decision.message);
+			} else {
+				pi.sendUserMessage(
+					decision.message,
+					FOLLOW_UP_MESSAGE_OPTIONS as never,
+				);
+			}
 		} catch (error) {
 			await updatePlanState(fs, context.planPaths, (state) => ({
 				...state,
@@ -4237,14 +4275,24 @@ async function handlePlannerCompactError(input: {
 		formatPlannerCompactFailure(input.error, { boundaryResolved: resolved }),
 		benign ? "info" : "error",
 	);
-	if (resolved) {
-		input.pi.sendUserMessage(
-			formatPlannerCompactSkipped(
-				benign ? "session too small to compact" : "compaction failed",
-			),
-			FOLLOW_UP_MESSAGE_OPTIONS,
-		);
-	}
+	if (!resolved) return;
+	const message = formatPlannerCompactSkipped(
+		benign ? "session too small to compact" : "compaction failed",
+	);
+	// A failing ctx.compact() aborts the run on its way in, so this usually lands
+	// on an idle session — where a follow-up is never delivered. Deferred for the
+	// same reason the post-compact message is: compact() reconnects the session to
+	// the agent in a `finally` that has not run yet.
+	setTimeout(() => {
+		const delivery = choosePlannerMessageDelivery({
+			isIdle: input.ctx.isIdle(),
+		});
+		if (delivery === "turn") {
+			input.pi.sendUserMessage(message);
+		} else {
+			input.pi.sendUserMessage(message, FOLLOW_UP_MESSAGE_OPTIONS);
+		}
+	}, 0);
 }
 
 async function maybeStartPlannerStuckCompact(input: {

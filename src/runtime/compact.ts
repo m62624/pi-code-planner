@@ -42,7 +42,39 @@ export interface PlannerCompactInstructionSection {
 	appendPath: string | null;
 }
 
-export type PlannerPostCompactDelivery = "followUp";
+/**
+ * How a planner message reaches the model.
+ *
+ * `followUp` queues behind a run that is still going; `turn` starts one. They
+ * are not interchangeable, and picking the wrong one loses the message — see
+ * {@link choosePlannerMessageDelivery}.
+ */
+export type PlannerPostCompactDelivery = "followUp" | "turn";
+
+/**
+ * Which delivery a message needs right now.
+ *
+ * `deliverAs: "followUp"` is a *streaming* mode. The agent loop drains the
+ * follow-up queue only where it would otherwise stop, so a follow-up queued
+ * while a run is going is delivered at the end of it — which is exactly what
+ * this wants, and why the mode was introduced: a compaction that finished late
+ * used to drop its instruction into a turn that had already moved on.
+ *
+ * But with no run in flight there is nothing to queue behind. The message sits
+ * in the input queue as if the user had typed it and never pressed enter. That
+ * is the observed failure: a planner-controlled compaction aborts the run, so
+ * by the time `session_compact` fires the agent is idle, the post-compact
+ * instruction is queued, and the session waits — one measured session sat two
+ * hours that way.
+ *
+ * Idle is therefore the whole question, and `sendUserMessage` with no options
+ * always starts a turn.
+ */
+export function choosePlannerMessageDelivery(input: {
+	isIdle: boolean;
+}): PlannerPostCompactDelivery {
+	return input.isIdle ? "turn" : "followUp";
+}
 
 export function createPlannerCompactRuntimeState(): PlannerCompactRuntimeState {
 	return {
@@ -251,12 +283,22 @@ export function buildPlannerPostCompactMessage(input: {
 export function enqueuePlannerPostCompactMessage(input: {
 	message: string;
 	isIdle: boolean;
-	hasPendingMessages: boolean;
 	sendUserMessage: (
 		message: string,
 		options?: { deliverAs: "followUp" },
 	) => void;
 }): PlannerPostCompactDelivery {
+	const delivery = choosePlannerMessageDelivery({ isIdle: input.isIdle });
+	if (delivery === "turn") {
+		try {
+			input.sendUserMessage(input.message);
+			return "turn";
+		} catch {
+			// Idle was read a moment ago and a run may have started since. Starting a
+			// turn into a live run is the one case that throws instead of queueing,
+			// so fall back to the queue: delivered late beats not delivered.
+		}
+	}
 	input.sendUserMessage(input.message, { deliverAs: "followUp" });
 	return "followUp";
 }

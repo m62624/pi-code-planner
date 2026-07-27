@@ -92,7 +92,12 @@ describe("planner compact runtime", () => {
 		expect(message).toContain("Check git state before resuming.");
 	});
 
-	it("queues post-compact instructions behind pending user messages", () => {
+	it("starts a turn when nothing is running, because a follow-up would not be delivered", () => {
+		// The defect this replaces: the post-compact instruction was always queued
+		// as a follow-up, and the agent loop drains that queue only where it would
+		// otherwise stop. A planner-controlled compaction aborts the run, so the
+		// message landed in an idle session and sat in the input queue — one
+		// measured session waited two hours for a keypress.
 		const calls: Array<{
 			message: string;
 			options?: { deliverAs: "followUp" };
@@ -102,45 +107,22 @@ describe("planner compact runtime", () => {
 			enqueuePlannerPostCompactMessage({
 				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
 				isIdle: true,
-				hasPendingMessages: true,
 				sendUserMessage(message, options) {
 					calls.push({ message, options });
 				},
 			}),
-		).toBe("followUp");
+		).toBe("turn");
 		expect(calls).toEqual([
 			{
 				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
-				options: { deliverAs: "followUp" },
-			},
-		]);
-	});
-
-	it("queues post-compact instructions even when Pi reports idle", () => {
-		const calls: Array<{
-			message: string;
-			options?: { deliverAs: "followUp" };
-		}> = [];
-
-		expect(
-			enqueuePlannerPostCompactMessage({
-				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
-				isIdle: true,
-				hasPendingMessages: false,
-				sendUserMessage(message, options) {
-					calls.push({ message, options });
-				},
-			}),
-		).toBe("followUp");
-		expect(calls).toEqual([
-			{
-				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
-				options: { deliverAs: "followUp" },
+				options: undefined,
 			},
 		]);
 	});
 
 	it("queues post-compact instructions while Pi is still processing", () => {
+		// The reason follow-up delivery exists and stays: a compaction that finishes
+		// late must not interrupt the run it landed in.
 		const calls: Array<{
 			message: string;
 			options?: { deliverAs: "followUp" };
@@ -150,7 +132,6 @@ describe("planner compact runtime", () => {
 			enqueuePlannerPostCompactMessage({
 				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
 				isIdle: false,
-				hasPendingMessages: false,
 				sendUserMessage(message, options) {
 					calls.push({ message, options });
 				},
@@ -165,6 +146,8 @@ describe("planner compact runtime", () => {
 	});
 
 	it("falls back to follow-up when idle state races with active processing", () => {
+		// Idle was read a moment earlier; a run may have started since. Starting a
+		// turn into a live run is the one case that throws rather than queueing.
 		const calls: Array<{
 			message: string;
 			options?: { deliverAs: "followUp" };
@@ -174,7 +157,6 @@ describe("planner compact runtime", () => {
 			enqueuePlannerPostCompactMessage({
 				message: "[SYSTEM_INSTRUCTIONS]\nCall planner_status.",
 				isIdle: true,
-				hasPendingMessages: false,
 				sendUserMessage(message, options) {
 					if (!options) {
 						throw new Error(
