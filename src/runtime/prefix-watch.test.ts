@@ -120,7 +120,6 @@ describe("PrefixWatch", () => {
 		const watch = new PrefixWatch();
 		watch.record(payload({ turns: 1 }), OURS);
 		expect(watch.record(payload({ turns: 2 }), OURS)).toBeNull();
-		expect(watch.history()).toEqual([]);
 	});
 
 	it("marks a change within one run as mid-run", () => {
@@ -139,16 +138,14 @@ describe("PrefixWatch", () => {
 		watch.runStarted();
 		const churn = watch.record(payload({ tools: ["a", "b"] }), ["a", "b"]);
 		expect(churn?.midRun).toBe(false);
-		expect(watch.defects()).toEqual([]);
 	});
 
-	it("recognises its own footsteps and does not report them as a defect", () => {
+	it("recognises its own footsteps and does not report them as foreign", () => {
 		const watch = new PrefixWatch();
 		watch.runStarted();
 		watch.record(payload({ tools: ["a"] }), ["a"]);
 		const churn = watch.record(payload({ tools: ["a", "b"] }), ["a", "b"]);
 		expect(churn?.foreign).toBe(false);
-		expect(watch.defects()).toEqual([]);
 	});
 
 	it("reports a mid-run head somebody else wrote", () => {
@@ -158,8 +155,7 @@ describe("PrefixWatch", () => {
 		watch.runStarted();
 		watch.record(payload({ tools: ["a"] }), ["a"]);
 		const churn = watch.record(payload({ tools: ["a", "stranger"] }), ["a"]);
-		expect(churn?.foreign).toBe(true);
-		expect(watch.defects()).toHaveLength(1);
+		expect(churn).toMatchObject({ midRun: true, foreign: true });
 	});
 
 	it("accuses nobody when it does not know what it last set", () => {
@@ -170,21 +166,16 @@ describe("PrefixWatch", () => {
 		expect(churn?.foreign).toBe(false);
 	});
 
-	it("keeps only the newest churns", () => {
-		const watch = new PrefixWatch(() => 0, 2);
+	it("compares each request against the one before it, not against the first", () => {
+		// Nothing accumulates: the watch holds one shape, so a churn is always the
+		// step just taken and never a replay of an older one.
+		const watch = new PrefixWatch(() => 0);
 		watch.runStarted();
-		for (const tools of [["a"], ["b"], ["c"], ["d"]]) {
-			watch.record(payload({ tools }), tools);
-		}
-		expect(watch.history()).toHaveLength(2);
-		expect(watch.history()[0]?.shape.toolNames).toEqual(["d"]);
-	});
-
-	it("remembers the last shape it saw", () => {
-		const watch = new PrefixWatch();
-		expect(watch.current()).toBeNull();
 		watch.record(payload({ tools: ["a"] }), ["a"]);
-		expect(watch.current()?.toolNames).toEqual(["a"]);
+		watch.record(payload({ tools: ["b"] }), ["b"]);
+		const churn = watch.record(payload({ tools: ["c"] }), ["c"]);
+		expect(churn?.delta.toolsRemoved).toEqual(["b"]);
+		expect(churn?.delta.toolsAdded).toEqual(["c"]);
 	});
 });
 

@@ -5,25 +5,25 @@
  * prompt: the system prompt Pi builds and the tool schemas it sends. On a local backend
  * those are not a footnote — the chat template renders the tool list INTO the system
  * message, so the tools sit at the very front of the prompt, ahead of every word anyone
- * has said. Measured on this project's own session: 68 tool schemas ≈ 15.8k tokens plus a
- * ~7.9k system prompt, i.e. ~18% of a 131072 window that no compaction can ever reclaim.
+ * has said. Measured on a real planner session: a 32 197-character system prompt plus
+ * 61 023 characters of schemas for 65 tools, 52 015 of them the planner's own 54 — about
+ * 23 300 tokens, ~18% of a 131072 window that no compaction can ever reclaim.
  *
  * Which makes the head the one thing that must not change without a reason. Every serving
  * backend (llama.cpp, vLLM, SGLang, Anthropic's cache) reuses exactly one thing: a prefix
  * of bytes it has already read. Change byte zero and the whole prompt is re-read — the
  * tokens are the same, the seconds are not.
  *
- * This exists because narrowing the active tool list per stage is under consideration, and
- * that is a deliberate head change. Deciding it without measuring is how the last
- * context-management mechanism in this extension was built, and it had to be removed. So:
- * measure first. A head change between RUNS is expected — the tool set legitimately
- * differs. Between two calls of ONE run, nothing about the model's situation changed and
- * the backend threw away everything it had read; that is the defect.
+ * A head change between RUNS is expected: the tool set legitimately differs. Between two
+ * calls of ONE run, nothing about the model's situation changed and the backend threw away
+ * everything it had read; that is the defect this names.
  *
- * Ported from pi-telegram-manager's `core/payload-probe.ts`, which found the class of bug
- * this extension was on the wrong side of: two extensions each rebuilding the whole active
- * tool list on every request, resurrecting each other's hidden tools and rewriting the
- * head mid-turn.
+ * It stays armed because `setActiveTools` is a global setter and this extension is not the
+ * only one writing it — the same session runs pi-telegram-manager, confirmed by four
+ * compactions it answered through `session_before_compact`. Ported from that extension's
+ * `core/payload-probe.ts`, which found the class of bug this one was on the wrong side of:
+ * two extensions each rebuilding the whole active tool list on every request, resurrecting
+ * each other's hidden tools and rewriting the head mid-turn.
  *
  * Structural typing, no SDK import: a payload is whatever the provider was handed. Every
  * function here is pure, so the whole probe is testable with plain objects.
@@ -176,7 +176,7 @@ function sameTools(a: readonly string[], b: readonly string[]): boolean {
 }
 
 /**
- * Watches every provider request and remembers when the head changed.
+ * Watches every provider request and reports the ones whose head changed.
  *
  * Two questions decide whether a head change is worth reporting, and they are
  * different questions:
@@ -188,22 +188,20 @@ function sameTools(a: readonly string[], b: readonly string[]): boolean {
  *    change may be a stranger's — the thing worth naming — or it may be ours,
  *    which is a cost we chose with our eyes open, not news.
  *
- * Only a change we did not make counts as a defect. An alarm that cannot
- * recognise its owner's footsteps is one nobody keeps armed. Hence
- * {@link record} takes the list WE set, and {@link defects} counts only what is
- * both mid-run and foreign.
+ * Only a change we did not make is worth an alarm, and an alarm that cannot
+ * recognise its owner's footsteps is one nobody keeps armed — so {@link record}
+ * takes the list WE set and reports both answers to the caller, which decides.
+ *
+ * It keeps only the previous shape. Nothing here accumulates a history: a
+ * session-long log of head changes would be a reporting surface, and this
+ * module has exactly one caller, which reads each churn once and then notifies.
  */
 export class PrefixWatch {
 	private last: PayloadShape | null = null;
-	private churns: HeadChurn[] = [];
 	/** Requests seen since the current run began — 0 means the next one opens a run. */
 	private requestsThisRun = 0;
 
-	constructor(
-		private readonly now: () => number = Date.now,
-		/** How many churn events to keep. The newest are the ones anybody reads. */
-		private readonly keep = 8,
-	) {}
+	constructor(private readonly now: () => number = Date.now) {}
 
 	/** A run started: the next request is its first, so a change there is not mid-run. */
 	runStarted(): void {
@@ -228,24 +226,7 @@ export class PrefixWatch {
 		const delta = comparePayloads(previous, shape);
 		if (delta.headStable) return null;
 		const foreign = ours != null && !sameTools(shape.toolNames, ours);
-		const churn: HeadChurn = { at: this.now(), midRun, foreign, delta, shape };
-		this.churns = [churn, ...this.churns].slice(0, this.keep);
-		return churn;
-	}
-
-	/** The last request's shape, or null before the first one. */
-	current(): PayloadShape | null {
-		return this.last;
-	}
-
-	/** Head changes seen this session, newest first — ours and everyone else's. */
-	history(): readonly HeadChurn[] {
-		return this.churns;
-	}
-
-	/** A head rewritten mid-run by something outside this extension. */
-	defects(): readonly HeadChurn[] {
-		return this.churns.filter((churn) => churn.midRun && churn.foreign);
+		return { at: this.now(), midRun, foreign, delta, shape };
 	}
 }
 
