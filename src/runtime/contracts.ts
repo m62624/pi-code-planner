@@ -601,6 +601,23 @@ function coverageRule(entry: DirectoryCoverageEntry): string {
 }
 
 /**
+ * Drop trailing path separators, by scanning rather than by pattern.
+ *
+ * `/[/\\]+$/` says the same thing and is the obvious way to write it, but a
+ * repeated character class anchored at the end has to backtrack from every
+ * position when the match fails, so a path that is mostly separators costs
+ * quadratic time. `coveragePath` arrives from a tool argument, which is exactly
+ * the input this must not be quadratic in.
+ */
+function stripTrailingSeparators(value: string): string {
+	let end = value.length;
+	while (end > 0 && (value[end - 1] === "/" || value[end - 1] === "\\")) {
+		end -= 1;
+	}
+	return value.slice(0, end);
+}
+
+/**
  * Find the entry a caller's `coveragePath` points at. A directory selects
  * itself; a file selects the directory holding it, because that is the unit the
  * map is keyed by and the unit an AGENTS.md covers. Absolute and root-relative
@@ -612,9 +629,9 @@ function selectCoverageEntry(
 	path: string,
 ): DirectoryCoverageEntry | null {
 	const absolute = isAbsolute(path) ? normalize(path) : join(root, path);
-	const trimmed = absolute.replace(/[/\\]+$/, "");
+	const trimmed = stripTrailingSeparators(absolute);
 	const byDir = entries.find(
-		(entry) => entry.dir.replace(/[/\\]+$/, "") === trimmed,
+		(entry) => stripTrailingSeparators(entry.dir) === trimmed,
 	);
 	if (byDir) return byDir;
 	return (

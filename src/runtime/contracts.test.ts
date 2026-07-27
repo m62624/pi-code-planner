@@ -200,6 +200,19 @@ describe("coverage map paging", () => {
 		expect(view.page.selected).toBe("src");
 	});
 
+	it("resolves a path buried in trailing separators", () => {
+		// The separators are stripped by scanning, not by /[/\\]+$/ — the pattern
+		// backtracks quadratically on exactly this shape, and the path comes in as a
+		// tool argument.
+		const entries = [entry("src", 3)];
+		const view = formatCoverageMapPage({
+			entries,
+			root,
+			selectPath: `src${"/".repeat(2000)}`,
+		});
+		expect(view.page.selected).toBe("src");
+	});
+
 	it("falls back to the first page when the path matches nothing", () => {
 		const view = formatCoverageMapPage({
 			entries: many(39),
