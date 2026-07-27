@@ -6,6 +6,7 @@ import {
 } from "./guard/tool-policy";
 import {
 	activatePlannerToolVisibility,
+	computePlannerActiveTools,
 	filterPlannerTools,
 	persistPlannerToolVisibilityActive,
 	persistPlannerToolVisibilityActiveToSession,
@@ -170,6 +171,7 @@ describe("updateToolVisibility", () => {
 		const activeTools: string[][] = [];
 		const mockPi = {
 			getAllTools: () => mockTools,
+			getActiveTools: () => mockTools.map((t) => t.name),
 			setActiveTools: (names: string[]) => {
 				activeTools.push(names);
 			},
@@ -184,6 +186,7 @@ describe("updateToolVisibility", () => {
 		const activeTools: string[][] = [];
 		const mockPi = {
 			getAllTools: () => mockTools,
+			getActiveTools: () => mockTools.map((t) => t.name),
 			setActiveTools: (names: string[]) => {
 				activeTools.push(names);
 			},
@@ -201,6 +204,7 @@ describe("updateToolVisibility", () => {
 		const handlers: Record<string, () => Promise<void>> = {};
 		const mockPi = {
 			getAllTools: () => mockTools,
+			getActiveTools: () => mockTools.map((t) => t.name),
 			setActiveTools: (names: string[]) => {
 				activeTools.push(names);
 			},
@@ -228,6 +232,7 @@ describe("updateToolVisibility", () => {
 		> = {};
 		const mockPi = {
 			getAllTools: () => mockTools,
+			getActiveTools: () => mockTools.map((t) => t.name),
 			setActiveTools: (names: string[]) => {
 				activeTools.push(names);
 			},
@@ -308,6 +313,7 @@ describe("contract gate tool visibility", () => {
 		let captured: string[] = [];
 		const mockPi = {
 			getAllTools: () => tools,
+			getActiveTools: () => tools.map((t) => t.name),
 			setActiveTools: (names: string[]) => {
 				captured = names;
 			},
@@ -363,6 +369,7 @@ describe("recovery report tool visibility", () => {
 		let captured: string[] = [];
 		const mockPi = {
 			getAllTools: () => tools,
+			getActiveTools: () => tools.map((t) => t.name),
 			setActiveTools: (names: string[]) => {
 				captured = names;
 			},
@@ -399,5 +406,155 @@ describe("recovery report tool visibility", () => {
 		expect(setRecoveryReportUnlocked(false)).toBe(false);
 		setRecoveryReportUnlocked(true);
 		expect(setRecoveryReportUnlocked(true)).toBe(false);
+	});
+});
+
+describe("computePlannerActiveTools", () => {
+	// Registry order, and it does not move — the result is built by walking it, so
+	// a stable decision produces byte-identical tool schemas at the head of the
+	// prompt. `manager_reply` stands in for another extension's tool.
+	const ALL = [
+		"bash",
+		"read",
+		"manager_reply",
+		"planner_status",
+		"planner_contract_scan",
+		"planner_git_commit",
+		"planner_recovery_report",
+		"planner_finish_step",
+	];
+
+	const compute = (
+		over: Partial<Parameters<typeof computePlannerActiveTools>[0]>,
+	) =>
+		computePlannerActiveTools({
+			allToolNames: ALL,
+			activeNow: ALL,
+			planActive: true,
+			contractGate: false,
+			recoveryReportUnlocked: false,
+			...over,
+		});
+
+	it("leaves another extension's hidden tool hidden", () => {
+		// The bug this replaces: we rebuilt the list from getAllTools(), which
+		// resurrected every tool anyone else had just hidden — and changed the head
+		// of the prompt between two calls of one turn.
+		const activeNow = ALL.filter((name) => name !== "manager_reply");
+		expect(compute({ activeNow })).not.toContain("manager_reply");
+	});
+
+	it("hides every planner tool when no plan is active, and touches nothing else", () => {
+		expect(compute({ planActive: false })).toEqual([
+			"bash",
+			"read",
+			"manager_reply",
+		]);
+	});
+
+	it("claims planner tools back even when they are not currently active", () => {
+		// Ours must be reachable whatever anyone else decided the world should be.
+		const activeNow = ["bash"];
+		const result = compute({ activeNow });
+		expect(result).toContain("planner_status");
+		expect(result).toContain("planner_finish_step");
+	});
+
+	it("keeps the recovery report hidden until stuck-detection unlocks it", () => {
+		expect(compute({})).not.toContain("planner_recovery_report");
+		expect(compute({ recoveryReportUnlocked: true })).toContain(
+			"planner_recovery_report",
+		);
+	});
+
+	it("is a fixed point: recomputing over its own output changes nothing", () => {
+		// A stable set of tools is a stable head, which is a prompt the backend does
+		// not have to read twice. Convergence is the property that buys that.
+		const once = compute({});
+		expect(compute({ activeNow: once })).toEqual(once);
+	});
+
+	it("preserves registry order, since order is part of the head's bytes", () => {
+		const result = compute({ activeNow: [...ALL].reverse() });
+		expect(result).toEqual(ALL.filter((n) => n !== "planner_recovery_report"));
+	});
+
+	it("closes the world down to the allowlist while the contract gate is up", () => {
+		// A sandbox, not a subtraction: project reads must be unreachable, so other
+		// extensions' tools go too.
+		expect(compute({ contractGate: true })).toEqual([
+			"planner_status",
+			"planner_contract_scan",
+			"planner_finish_step",
+		]);
+	});
+});
+
+describe("contract-gate sandbox entry and exit", () => {
+	const ALL = [
+		"bash",
+		"manager_reply",
+		"planner_status",
+		"planner_contract_scan",
+		"planner_git_commit",
+		"planner_finish_step",
+	];
+
+	function driver() {
+		let world = ALL.filter((name) => name !== "manager_reply");
+		const mockPi = {
+			getAllTools: () => ALL.map((name) => ({ name })),
+			getActiveTools: () => world,
+			setActiveTools: (names: string[]) => {
+				world = names;
+			},
+		} as unknown as ExtensionAPI;
+		return {
+			run: () => {
+				updateToolVisibility(mockPi);
+				return world;
+			},
+		};
+	}
+
+	beforeEach(() => {
+		setPlanActive(true);
+		setContractGateActive(false);
+		setRecoveryReportUnlocked(false);
+	});
+
+	afterEach(() => {
+		setContractGateActive(false);
+		setPlanActive(false);
+	});
+
+	it("restores the pre-sandbox world on the way out, not the sandbox", () => {
+		// Subtracting from the live list on the way out would leave everyone else's
+		// tools hidden for good: while the gate is up the live list IS the sandbox,
+		// so there is nothing left to subtract from.
+		const { run } = driver();
+		run();
+		setContractGateActive(true);
+		expect(run()).toEqual([
+			"planner_status",
+			"planner_contract_scan",
+			"planner_finish_step",
+		]);
+		setContractGateActive(false);
+		const after = run();
+		expect(after).toContain("bash");
+		expect(after).toContain("planner_git_commit");
+		// Still respected: another extension hid this before the gate went up.
+		expect(after).not.toContain("manager_reply");
+	});
+
+	it("remembers the world once, not on every refresh inside the gate", () => {
+		const { run } = driver();
+		run();
+		setContractGateActive(true);
+		run();
+		run();
+		setContractGateActive(false);
+		expect(run()).toContain("bash");
 	});
 });
