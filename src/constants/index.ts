@@ -25,6 +25,7 @@ export const MS_PER_MINUTE = 60_000;
 export const PLANNER_KNOWN_GOOD_PI_VERSIONS: readonly string[] = [
 	"0.80",
 	"0.82",
+	"0.83",
 ];
 
 /**
